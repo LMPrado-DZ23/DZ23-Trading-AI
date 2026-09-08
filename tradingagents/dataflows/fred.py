@@ -8,7 +8,9 @@ A free API key (https://fred.stlouisfed.org/docs/api/api_key.html) is read from
 ``FRED_API_KEY``; if it is unset the vendor raises ``FredNotConfiguredError`` so
 the routing layer treats it as "unavailable" rather than a hard crash.
 """
+import json
 import logging
+import math
 import os
 from datetime import datetime, timedelta
 
@@ -16,6 +18,7 @@ import pytz
 import requests
 
 from .errors import VendorNotConfiguredError
+from .http_limits import read_bounded_response
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +33,8 @@ FRED_TZ = pytz.timezone("America/Chicago")
 # Network timeout (seconds) so a stalled request can't hang the agents,
 # mirroring the Alpha Vantage client.
 REQUEST_TIMEOUT = 30
+MAX_RESPONSE_BYTES = 2_000_000
+MAX_OBSERVATIONS = 5_000
 
 # Default trailing window when the caller does not specify one. A year captures
 # the trend and the year-over-year base for most monthly/quarterly series.
@@ -143,9 +148,18 @@ def _request(path: str, params: dict) -> dict:
     (#security-fase0).
     """
     api_params = {**params, "api_key": get_api_key(), "file_type": "json"}
+    response = None
     try:
         response = requests.get(
-            f"{FRED_API_BASE}/{path}", params=api_params, timeout=REQUEST_TIMEOUT
+            f"{FRED_API_BASE}/{path}",
+            params=api_params,
+            timeout=REQUEST_TIMEOUT,
+            stream=True,
+        )
+        body = read_bounded_response(
+            response,
+            max_bytes=MAX_RESPONSE_BYTES,
+            vendor="FRED",
         )
     except requests.RequestException as exc:
         # exc's str() can embed the full prepared URL (with key); re-raise
@@ -153,14 +167,21 @@ def _request(path: str, params: dict) -> dict:
         raise ConnectionError(
             f"FRED request failed: {type(exc).__name__} on /{path}"
         ) from None
+    finally:
+        if response is not None:
+            getattr(response, "close", lambda: None)()
+    try:
+        document = json.loads(body)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        document = None
     # FRED returns 400 with a JSON {"error_message": ...} for unknown series IDs
     # or malformed params; turn that into a clear, actionable error. The body
     # never contains the key.
     if response.status_code == 400:
         try:
-            message = response.json().get("error_message", response.text)
-        except ValueError:
-            message = response.text
+            message = document.get("error_message", "invalid request")
+        except AttributeError:
+            message = "invalid request"
         # Remote-controlled text that flows into logs and agent prompts.
         # Order matters (rodada-3 condition): redact secrets FIRST — a body
         # echoing the prepared URL would carry the key inside the first bytes
@@ -178,7 +199,9 @@ def _request(path: str, params: dict) -> dict:
         raise ValueError(
             f"FRED request failed: HTTP {response.status_code} on /{path}"
         )
-    return response.json()
+    if not isinstance(document, dict):
+        raise ValueError("FRED returned malformed JSON")
+    return document
 
 
 def get_macro_data(
@@ -240,7 +263,7 @@ def get_macro_data(
     frequency = info.get("frequency", "")
     seasonal = info.get("seasonal_adjustment_short", "")
 
-    observations = _request(
+    raw_observations = _request(
         "series/observations",
         {
             "series_id": series_id,
@@ -251,12 +274,43 @@ def get_macro_data(
         },
     ).get("observations", [])
 
-    # FRED encodes a missing observation as ".".
-    points = [
-        (o["date"], o["value"])
-        for o in observations
-        if o.get("value") not in (".", None, "")
-    ]
+    # A pinned request is necessary but not sufficient: cached, malformed or
+    # compromised responses must not smuggle observations beyond the requested
+    # cutoff. Accept only unique, schema-valid rows inside the exact window.
+    if not isinstance(raw_observations, list):
+        raise ValueError("FRED returned an invalid observations collection")
+    if len(raw_observations) > MAX_OBSERVATIONS:
+        raise ValueError("FRED returned too many observations")
+
+    points: list[tuple[str, str]] = []
+    seen_dates: set[str] = set()
+    start_day = datetime.strptime(start_date, "%Y-%m-%d").date()
+    for observation in raw_observations:
+        if not isinstance(observation, dict):
+            raise ValueError("FRED returned a non-object observation")
+        date_value = observation.get("date")
+        value = observation.get("value")
+        if not isinstance(date_value, str) or not isinstance(value, str):
+            raise ValueError("FRED returned an observation with an invalid schema")
+        try:
+            parsed_date = datetime.strptime(date_value, "%Y-%m-%d").date()
+        except ValueError:
+            raise ValueError("FRED returned an invalid observation date") from None
+        if parsed_date < start_day or parsed_date > end_dt.date():
+            raise ValueError("FRED returned an observation outside the requested window")
+        if date_value in seen_dates:
+            raise ValueError("FRED returned duplicate observation dates")
+        seen_dates.add(date_value)
+        if value in (".", ""):
+            continue
+        try:
+            numeric_value = float(value)
+        except ValueError:
+            raise ValueError("FRED returned a non-numeric observation value") from None
+        if not math.isfinite(numeric_value):
+            raise ValueError("FRED returned a non-finite observation value")
+        points.append((date_value, value))
+    points.sort(key=lambda item: item[0])
 
     header = (
         f"## FRED: {title} ({series_id})\n"

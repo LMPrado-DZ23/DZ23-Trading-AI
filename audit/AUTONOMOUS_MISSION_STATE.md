@@ -54,11 +54,13 @@
 - [x] Papel PostgreSQL `tradingagents_app` confirmado sem superuser, `CREATEDB`, `CREATEROLE`, herança ou `BYPASSRLS`.
 - [x] M2 congelado no commit `6f3fc5384464fc9b7eadfd5f4faf358e24602f00`.
 - [x] M3 implementou fila PostgreSQL com lease/heartbeat/retry/cancel, processo worker separado, quotas e reservas atômicas por tenant.
-- [x] M3 vinculou `AnalysisRunContext` imutável, calendário/sessão, `decision_at`, digests e `workflow_schema_version=3` ao job, checkpoint e manifesto.
+- [x] M3 vinculou `AnalysisRunContext` imutável, calendário/sessão, `decision_at`, digests e `workflow_schema_version=7` ao job, checkpoint e manifesto.
 - [x] M3 removeu o fallback global de configuração do caminho worker isolado e separou capacidades OpenBao para corretoras e LLMs.
 - [x] M3 aplicou limites PIT antes de rede, incluindo símbolo/data/range e exclusão fail-closed de fundamentals, notícias atuais e Polymarket em backtest.
-- [x] M3 adicionou medição e limites fail-closed de tokens/custo, preservando uso faturado em timeout, lease perdido e resultado excessivo.
-- [x] Migrations locais 0007–0013 validadas com PostgreSQL real e role de aplicação incapaz de inserir/alterar/apagar auditoria de credenciais LLM.
+- [x] M3 adicionou medição e limites fail-closed de tokens/custo, com reserva conservadora em resultado de subprocesso ausente, inválido ou interrompido.
+- [x] M3 restringiu jobs da plataforma ao analista `market`; fontes sem proveniência temporal verificável permanecem excluídas em todos os modos.
+- [x] M3 executa cada tentativa em subprocesso, encerra a árvore em cancelamento/deadline, limita disco e persiste journal parcial de evidência.
+- [x] Migrations locais 0007–0017 validadas com PostgreSQL real; downgrade completo e re-upgrade também foram reproduzidos.
 
 ## Pending tasks
 
@@ -82,6 +84,7 @@
 ## Current failure
 
 - Nenhuma falha de código ativa no M3; Google/Apple dependem da configuração dos respectivos provedores OAuth no painel do Supabase para o smoke externo.
+- Fontes fundamentals/news/macro/social/Polymarket continuam deliberadamente indisponíveis na plataforma; não há alegação de cobertura PIT para elas.
 - O primeiro `.venv` ficou incompleto após interrupção do instalador; foi substituído por `.venv-a5` criado com `--no-compile` e instalação concluída com exit 0.
 
 ## Files modified
@@ -120,9 +123,9 @@
 - Secret scan textual por padrões de chaves privadas/JWT/provider: **0 arquivos**; `gitleaks` indisponível e permanece gate de CI M9.
 - Supabase advisor pós-migration: **0 achados de segurança**, **0 FKs sem índice**, **0 políticas com init-plan por linha**; 21 índices novos/necessários aparecem apenas como ainda não usados porque o banco está vazio.
 - Revalidação focal PostgreSQL/Redis/Supabase após migrations 0004–0005: **46 passed**.
-- M3 integral: **1119 passed, 11 skipped, 71 subtests**, zero falhas/erros; ruff e compileall verdes.
+- M3 integral com PostgreSQL e Redis reais: **1182 passed, 1 skipped, 71 subtests**, zero falhas/erros; ruff e compileall verdes.
 - M3 integração PostgreSQL 17 + Redis 7.4 com URLs reais locais: **9 passed**, zero skips.
-- Evidência M3: `audit/m3-final-junit.xml` SHA-256 `7aad41b55f31d416066e1beca020be028b4ec12e42a89703ec749a8230d58220`; `audit/m3-integration-junit.xml` SHA-256 `1f876cfdbed6f584207014c5efe9d5ab1d4156a601a4d27f351b1f1c5b49227a`.
+- Evidência M3: `audit/m3-final-junit.xml` SHA-256 `c2a382a18b4178b201da396a70e67db72412fb28288647c9b60909d3798f0dc5`; `audit/m3-integration-junit.xml` SHA-256 `7c962cc7be893ab38eb8d585fc4f8eb8835bc6cfb171546d797b24544e09122d`.
 
 ## Commits
 

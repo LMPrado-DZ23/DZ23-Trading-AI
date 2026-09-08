@@ -1,6 +1,9 @@
 import re
+from functools import cached_property
 from typing import Any
 
+import anthropic
+import httpx2
 from langchain_anthropic import ChatAnthropic
 
 from .base_client import BaseLLMClient, normalize_content
@@ -8,7 +11,7 @@ from .validators import validate_model
 
 _PASSTHROUGH_KWARGS = (
     "timeout", "max_retries", "api_key", "max_tokens", "temperature",
-    "callbacks", "http_client", "http_async_client", "effort",
+    "callbacks", "effort",
 )
 
 # Anthropic's extended-thinking ``effort`` parameter is accepted by Opus 4.5+,
@@ -50,6 +53,41 @@ class NormalizedChatAnthropic(ChatAnthropic):
         return normalize_content(super().invoke(input, config, **kwargs))
 
 
+class HardenedChatAnthropic(NormalizedChatAnthropic):
+    """ChatAnthropic whose native SDK transport ignores ambient networking.
+
+    The installed ``langchain-anthropic`` version does not expose an injected
+    httpx client as a model field.  Passing one as a constructor keyword would
+    silently move it to ``model_kwargs`` and send it in the API request body.
+    Override the two cached SDK clients instead so the transport actually used
+    by Anthropic has redirects and environment proxy/CA discovery disabled.
+    """
+
+    @cached_property
+    def _client(self) -> anthropic.Client:
+        timeout = self._client_params.get("timeout", 120.0)
+        return anthropic.Client(
+            **self._client_params,
+            http_client=httpx2.Client(
+                follow_redirects=False,
+                trust_env=False,
+                timeout=timeout,
+            ),
+        )
+
+    @cached_property
+    def _async_client(self) -> anthropic.AsyncClient:
+        timeout = self._client_params.get("timeout", 120.0)
+        return anthropic.AsyncClient(
+            **self._client_params,
+            http_client=httpx2.AsyncClient(
+                follow_redirects=False,
+                trust_env=False,
+                timeout=timeout,
+            ),
+        )
+
+
 class AnthropicClient(BaseLLMClient):
     """Client for Anthropic Claude models."""
 
@@ -60,15 +98,16 @@ class AnthropicClient(BaseLLMClient):
         """Return configured ChatAnthropic instance."""
         self.warn_if_unknown_model()
         llm_kwargs = {"model": self.model}
-        if self.kwargs.get("platform_strict_credentials") and not self.kwargs.get(
-            "api_key"
-        ):
+        strict = bool(self.kwargs.get("platform_strict_credentials"))
+        if strict and not self.kwargs.get("api_key"):
             raise ValueError("API key for provider 'anthropic' is not set.")
-        if self.kwargs.get("platform_strict_credentials") and self.base_url:
+        if strict and self.base_url:
             raise ValueError("Custom Anthropic endpoints are forbidden in platform mode.")
 
-        if self.base_url:
-            llm_kwargs["base_url"] = self.base_url
+        if strict:
+            llm_kwargs["anthropic_api_url"] = "https://api.anthropic.com"
+        elif self.base_url:
+            llm_kwargs["anthropic_api_url"] = self.base_url
 
         for key in _PASSTHROUGH_KWARGS:
             if key not in self.kwargs:
@@ -77,7 +116,8 @@ class AnthropicClient(BaseLLMClient):
                 continue
             llm_kwargs[key] = self.kwargs[key]
 
-        return NormalizedChatAnthropic(**llm_kwargs)
+        llm_class = HardenedChatAnthropic if strict else NormalizedChatAnthropic
+        return llm_class(**llm_kwargs)
 
     def validate_model(self) -> bool:
         """Validate model for Anthropic."""

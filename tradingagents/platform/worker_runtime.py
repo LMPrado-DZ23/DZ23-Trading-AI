@@ -18,16 +18,10 @@ from tradingagents.platform.llm_connections import LlmConnectionService
 from tradingagents.platform.settings import (
     BrokerCredentialProvider,
     Environment,
-    PlatformSettings,
+    WorkerSettings,
 )
 from tradingagents.platform.usage import PricingCatalog
 from tradingagents.platform.worker import ProductionGraphExecutor, WorkerConfig, WorkerRunner
-
-
-def _derive_secret(master: bytes, purpose: str) -> bytes:
-    if len(master) < 32:
-        raise ValueError("master identity secret must contain at least 32 bytes")
-    return hmac.new(master, purpose.encode("ascii"), hashlib.sha256).digest()
 
 
 @dataclass(slots=True)
@@ -44,8 +38,8 @@ class WorkerRuntime:
         self.engine.dispose()
 
 
-def create_worker_runtime(settings: PlatformSettings | None = None) -> WorkerRuntime:
-    effective = settings or PlatformSettings()
+def create_worker_runtime(settings: WorkerSettings | None = None) -> WorkerRuntime:
+    effective = settings or WorkerSettings()
     # This is a dedicated worker process. Restrictive umask ensures every
     # checkpoint/report/cache file created by legacy libraries remains private.
     if os.name == "posix":
@@ -65,49 +59,64 @@ def create_worker_runtime(settings: PlatformSettings | None = None) -> WorkerRun
         cursor = dbapi_connection.cursor()
         try:
             cursor.execute(
-                "SELECT current_user, rolsuper, rolbypassrls "
+                "SELECT current_user, rolsuper, rolcreatedb, rolcreaterole, rolreplication, "
+                "rolbypassrls, "
+                "EXISTS (SELECT 1 FROM pg_roles candidate "
+                "WHERE candidate.rolname <> current_user "
+                "AND pg_has_role(current_user, candidate.oid, 'MEMBER')) "
                 "FROM pg_roles WHERE rolname = current_user"
             )
             row = cursor.fetchone()
         finally:
             cursor.close()
-        if row is None or row[0] != "tradingagents_worker" or row[1] or row[2]:
+        if row is None or row[0] != "tradingagents_worker" or any(row[1:]):
             raise RuntimeError("worker database role is unsafe")
 
     factory = sessionmaker(engine, expire_on_commit=False)
-    master = effective.session_token_pepper.get_secret_value().encode("utf-8")
+    worker_job_auth = effective.worker_job_auth_key.get_secret_value().encode("utf-8")
     if effective.broker_credential_provider is BrokerCredentialProvider.OPENBAO_TRANSIT:
         crypto = TransitCredentialKeyring(
             base_url=effective.broker_transit_url,
             key_name=effective.llm_transit_key_name,
-            token=effective.llm_transit_token.get_secret_value(),
+            token=effective.llm_transit_decrypt_token.get_secret_value(),
             namespace=effective.broker_transit_namespace or None,
         )
     else:
         crypto = CredentialKeyring(
-            keys={"development-llm-v1": _derive_secret(master, "llm-credentials")},
+            keys={
+                "development-llm-v1": hmac.new(
+                    worker_job_auth,
+                    b"llm-credentials",
+                    hashlib.sha256,
+                ).digest()
+            },
             active_key_id="development-llm-v1",
         )
     llm_connections = LlmConnectionService(
         factory,
         keyring=crypto,
-        idempotency_digest_key=_derive_secret(master, "llm-idempotency-digest"),
+        idempotency_digest_key=None,
     )
+    pricing_catalog = PricingCatalog(effective.llm_pricing)
     jobs = JobService(
         factory,
-        idempotency_digest_key=_derive_secret(master, "analysis-job-idempotency"),
+        idempotency_digest_key=worker_job_auth,
         llm_reference_validator=llm_connections,
         max_active_jobs_per_tenant=effective.max_active_jobs_per_tenant,
         monthly_token_quota=effective.monthly_token_quota,
         monthly_cost_quota_microusd=effective.monthly_cost_quota_microusd,
+        pricing_catalog_version=pricing_catalog.version,
+        pricing_catalog=pricing_catalog,
     )
     runner = WorkerRunner(
         jobs=jobs,
         credentials=llm_connections,
         executor=ProductionGraphExecutor(
             runtime_root=Path(effective.worker_runtime_root),
-            pricing=PricingCatalog(effective.llm_pricing),
+            pricing=pricing_catalog,
             request_timeout_seconds=effective.llm_request_timeout_seconds,
+            max_attempt_bytes=effective.worker_max_attempt_bytes,
+            max_tenant_bytes=effective.worker_max_tenant_bytes,
         ),
         config=WorkerConfig(
             worker_id=effective.worker_id,

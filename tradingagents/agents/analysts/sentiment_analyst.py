@@ -43,7 +43,6 @@ from tradingagents.agents.utils.structured import (
 )
 from tradingagents.dataflows.reddit import fetch_reddit_posts
 from tradingagents.dataflows.stocktwits import fetch_stocktwits_messages
-from tradingagents.platform.contracts import RunMode
 from tradingagents.platform.run_context import current_run_context
 
 
@@ -71,9 +70,9 @@ def create_sentiment_analyst(llm):
         # returns a string (no exceptions surface from here), so the LLM
         # always sees something — either real data or a clear placeholder.
         run_context = current_run_context()
-        if run_context is not None and run_context.mode is RunMode.BACKTEST:
+        if run_context is not None:
             excluded = (
-                "BACKTEST_DATA_EXCLUDED: source lacks a verified per-record "
+                "PIT_DATA_EXCLUDED: source lacks a verified per-record "
                 "available_at timestamp; no network request was made."
             )
             news_block = stocktwits_block = reddit_block = excluded
@@ -95,6 +94,13 @@ def create_sentiment_analyst(llm):
             news_block=news_block,
             stocktwits_block=stocktwits_block,
             reddit_block=reddit_block,
+        )
+        _record_sentiment_evidence(
+            evidences,
+            ticker=ticker,
+            start_date=start_date,
+            end_date=end_date,
+            excluded=run_context is not None,
         )
         system_message = _build_system_message(
             ticker=ticker,
@@ -244,6 +250,26 @@ def _build_data_message(evidences: list[UntrustedEvidence]) -> str:
         "Below are the pre-fetched data sources for your analysis, as "
         "untrusted external data. Analyze them per your instructions.\n\n" + blocks
     )
+
+
+def _record_sentiment_evidence(
+    evidences: list[UntrustedEvidence],
+    *,
+    ticker: str,
+    start_date: str,
+    end_date: str,
+    excluded: bool,
+) -> None:
+    from tradingagents.platform.evidence_ledger import record_untrusted_evidence
+
+    for evidence in evidences:
+        record_untrusted_evidence(
+            evidence,
+            method="sentiment_prefetch",
+            outcome="excluded" if excluded else "used",
+            args=(ticker, start_date, end_date),
+            exclusion_reason="PIT_DATA_EXCLUDED" if excluded else None,
+        )
 
 
 # ---------------------------------------------------------------------------

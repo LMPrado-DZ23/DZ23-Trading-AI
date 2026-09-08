@@ -57,6 +57,41 @@ class StaleGuardUnitTests(unittest.TestCase):
 
 @pytest.mark.unit
 class StaleGuardPropagationTests(unittest.TestCase):
+    def test_local_session_date_is_inclusive_for_nyse_and_bvmf(self):
+        for timezone in ("America/New_York", "America/Sao_Paulo"):
+            rows = pd.DataFrame(
+                {
+                    "Open": [100.0, 101.0, 102.0],
+                    "High": [102.0, 103.0, 104.0],
+                    "Low": [99.0, 100.0, 101.0],
+                    "Close": [101.0, 102.0, 103.0],
+                    "Volume": [1000, 1100, 1200],
+                },
+                index=pd.DatetimeIndex(
+                    [
+                        pd.Timestamp("2024-01-01", tz=timezone),
+                        pd.Timestamp("2024-01-02", tz=timezone),
+                        pd.Timestamp("2024-01-03", tz=timezone),
+                    ],
+                    name="Date",
+                ),
+            )
+
+            class DummyTicker:
+                def __init__(self, _symbol):
+                    pass
+
+                def history(self, _rows=rows, **_kwargs):
+                    return _rows
+
+            with mock.patch.object(y_finance.yf, "Ticker", DummyTicker):
+                result = y_finance.get_YFin_data_online(
+                    "AAPL", "2024-01-01", "2024-01-02"
+                )
+            self.assertIn("# Total records: 2", result)
+            self.assertIn("2024-01-02", result)
+            self.assertNotIn("2024-01-03,", result)
+
     def test_get_yfin_data_online_raises_on_stale_frame(self):
         stale = pd.DataFrame(
             {
@@ -73,7 +108,7 @@ class StaleGuardPropagationTests(unittest.TestCase):
             def __init__(self, symbol):
                 pass
 
-            def history(self, start, end):
+            def history(self, start, end, **_kwargs):
                 return stale
 
         with (

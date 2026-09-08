@@ -91,6 +91,8 @@ def build_verified_market_snapshot(
         "",
         f"- Requested analysis date: {curr_date}",
         f"- Latest trading row used: {latest_date}",
+        "- Price policy: raw OHLCV (auto_adjust=False); future corporate-action "
+        "adjustments are not applied.",
         "- Rows after the requested analysis date are excluded before verification.",
         "",
         "### Latest verified OHLCV row",

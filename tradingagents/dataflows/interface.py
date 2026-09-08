@@ -80,6 +80,7 @@ VENDOR_LIST = [
 # key, or a network blip should not crash an analysis over flavour data). Core
 # categories (prices, fundamentals, news) still raise so a broken primary is loud.
 OPTIONAL_CATEGORIES = {"macro_data", "prediction_markets"}
+MAX_PLATFORM_RANGE_DAYS = {"get_stock_data": 3660, "get_news": 90}
 
 # Mapping of methods to their vendor-specific implementations
 VENDOR_METHODS = {
@@ -161,32 +162,57 @@ def get_vendor(category: str, method: str = None) -> str:
 def route_to_vendor(method: str, *args, **kwargs):
     """Route method calls to appropriate vendor implementation with fallback support."""
     category = get_category_for_method(method)
-    from tradingagents.platform.contracts import RunMode
     from tradingagents.platform.run_context import current_run_context
 
     run_context = current_run_context()
     platform_run = run_context is not None
+
+    def delivered(value, vendor: str):
+        if platform_run:
+            _record_platform_evidence(
+                method,
+                vendor,
+                "delivered",
+                args,
+                kwargs,
+                value,
+            )
+        return value
     if run_context is not None:
         assert_platform_tool_request(method, args, run_context=run_context)
-    if run_context is not None and run_context.mode is RunMode.BACKTEST:
+    if run_context is not None:
         if category == "prediction_markets":
-            return (
-                "BACKTEST_DATA_EXCLUDED: prediction-market snapshots are live-only and "
-                "have no verified historical available_at timestamp. No network request "
-                "was made; do not estimate or fabricate a probability."
+            result = (
+                "PIT_DATA_EXCLUDED: prediction-market snapshots have no verified "
+                "available_at timestamp at or before this decision cutoff. No network "
+                "request was made; do not estimate or fabricate a probability."
             )
+            _record_platform_evidence(method, "polymarket", "excluded", args, kwargs, result)
+            return delivered(result, "polymarket")
         if category == "fundamental_data":
-            return (
-                "BACKTEST_DATA_EXCLUDED: this fundamentals source does not expose a "
-                "verified public filing timestamp for point-in-time reconstruction. No "
-                "network request was made; do not estimate or use current fundamentals."
+            result = (
+                "PIT_DATA_EXCLUDED: this fundamentals source does not expose a verified "
+                "public filing timestamp at or before this decision cutoff. No network "
+                "request was made; do not estimate or use current fundamentals."
             )
+            _record_platform_evidence(method, "configured", "excluded", args, kwargs, result)
+            return delivered(result, "configured")
         if category == "news_data":
-            return (
-                "BACKTEST_DATA_EXCLUDED: this aggregated news source does not preserve "
-                "a verified available_at timestamp for every record. No network request "
+            result = (
+                "PIT_DATA_EXCLUDED: this aggregated news source does not preserve a "
+                "verified available_at timestamp for every record. No network request "
                 "was made; do not estimate or use current news."
             )
+            _record_platform_evidence(method, "configured", "excluded", args, kwargs, result)
+            return delivered(result, "configured")
+        if category == "macro_data":
+            result = (
+                "PIT_DATA_EXCLUDED: macro observations do not preserve a verified "
+                "publication timestamp precise enough for this decision cutoff. No network "
+                "request was made; do not estimate or use a current-vintage value."
+            )
+            _record_platform_evidence(method, "fred", "excluded", args, kwargs, result)
+            return delivered(result, "fred")
     vendor_config = get_vendor(category, method)
     primary_vendors = [v.strip() for v in vendor_config.split(",")]
 
@@ -218,16 +244,31 @@ def route_to_vendor(method: str, *args, **kwargs):
         impl_func = vendor_impl[0] if isinstance(vendor_impl, list) else vendor_impl
 
         try:
-            return impl_func(*args, **kwargs)
+            result = impl_func(*args, **kwargs)
+            if platform_run:
+                _record_platform_evidence(method, vendor, "used", args, kwargs, result)
+            return delivered(result, vendor)
         except VendorRateLimitError:
+            if platform_run:
+                _record_platform_evidence(
+                    method, vendor, "failed", args, kwargs, "VendorRateLimitError"
+                )
             logger.warning("Vendor %r rate-limited for %s; trying next vendor.", vendor, method)
             continue
         except VendorNotConfiguredError as e:
+            if platform_run:
+                _record_platform_evidence(
+                    method, vendor, "failed", args, kwargs, "VendorNotConfiguredError"
+                )
             logger.warning("Vendor %r not configured for %s; trying next vendor.", vendor, method)
             if first_error is None:
                 first_error = e  # Surface it if no other vendor can serve the call.
             continue
         except NoMarketDataError as e:
+            if platform_run:
+                _record_platform_evidence(
+                    method, vendor, "no_data", args, kwargs, "NoMarketDataError"
+                )
             last_no_data = e  # No data here; another configured vendor may have it
             continue
         except Exception as e:
@@ -235,6 +276,8 @@ def route_to_vendor(method: str, *args, **kwargs):
             # serve it, but never swallow silently: a broken primary must be
             # visible in the logs (#989), not hidden behind a fallback's verdict.
             safe_error = type(e).__name__ if platform_run else redact_secrets(str(e))
+            if platform_run:
+                _record_platform_evidence(method, vendor, "failed", args, kwargs, safe_error)
             logger.warning("Vendor %r failed for %s: %s", vendor, method, safe_error)
             if first_error is None:
                 first_error = e
@@ -260,12 +303,12 @@ def route_to_vendor(method: str, *args, **kwargs):
         # stale") so the agent sees the specific reason — invalid symbol, no
         # coverage, or stale data — not just a generic "unavailable".
         reason = f" ({redact_secrets(last_no_data.detail)})" if last_no_data.detail else ""
-        return (
+        return delivered((
             f"NO_DATA_AVAILABLE: No usable market data for '{sym}'{resolved} from "
             f"any configured vendor{reason}. The symbol may be invalid, delisted, "
             f"not covered, or the vendor returned stale data. Do not estimate or "
             f"fabricate values — report that data is unavailable for this symbol."
-        )
+        ), "router")
 
     # No vendor returned data and none reported clean "no data" — surface the
     # first real error (e.g. the primary vendor's network failure). Optional
@@ -277,15 +320,51 @@ def route_to_vendor(method: str, *args, **kwargs):
                 type(first_error).__name__ if platform_run else redact_secrets(str(first_error))
             )
             logger.warning("Optional %s unavailable for %s: %s", category, method, safe_error)
-            return (
+            return delivered((
                 f"DATA_UNAVAILABLE: optional {category} could not be retrieved "
                 f"({safe_error}). Proceed without it; do not fabricate values."
-            )
+            ), "router")
         if platform_run:
             raise RuntimeError(f"VENDOR_REQUEST_FAILED:{type(first_error).__name__}") from None
         raise first_error
 
     raise RuntimeError(f"No available vendor for '{method}'")
+
+
+def _record_platform_evidence(
+    method: str,
+    vendor: str,
+    outcome: str,
+    args: tuple,
+    kwargs: dict,
+    content,
+) -> None:
+    from tradingagents.platform.evidence_ledger import record_evidence
+    from tradingagents.platform.run_context import current_run_context
+
+    context = current_run_context()
+    if context is None:
+        return
+    record_evidence(
+        method=method,
+        vendor=vendor,
+        outcome=outcome,
+        args=args,
+        kwargs=kwargs,
+        decision_at=context.decision_at.isoformat(),
+        available_at=(
+            context.decision_at.isoformat()
+            if outcome == "used" and method in {"get_stock_data", "get_indicators"}
+            else None
+        ),
+        availability_basis=(
+            "validated_exchange_session_window"
+            if outcome == "used" and method in {"get_stock_data", "get_indicators"}
+            else None
+        ),
+        content=content,
+        exclusion_reason=(str(content).split(":", 1)[0] if outcome == "excluded" else None),
+    )
 
 
 def assert_platform_tool_request(method: str, args: tuple, *, run_context=None) -> None:
@@ -343,6 +422,13 @@ def assert_platform_tool_request(method: str, args: tuple, *, run_context=None) 
         and parsed_dates[0] > parsed_dates[1]
     ):
         raise ValueError("PLATFORM_TOOL_DATE_RANGE_INVALID")
+    max_range = MAX_PLATFORM_RANGE_DAYS.get(method)
+    if (
+        max_range is not None
+        and len(parsed_dates) == 2
+        and (parsed_dates[1] - parsed_dates[0]).days > max_range
+    ):
+        raise ValueError("PLATFORM_TOOL_DATE_RANGE_TOO_LARGE")
     lookback_positions = {
         "get_indicators": 3,
         "get_verified_market_snapshot": 2,

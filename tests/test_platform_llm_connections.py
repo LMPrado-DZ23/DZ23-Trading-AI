@@ -20,6 +20,7 @@ from tradingagents.platform.llm_connections import (
     LlmConnectionService,
     LlmCredential,
     LlmCredentialAccessEvent,
+    llm_provider_catalog,
 )
 
 
@@ -60,6 +61,10 @@ def _stack():
         idempotency_digest_key=b"i" * 32,
     )
     return factory, principal, service
+
+
+def test_platform_catalog_does_not_advertise_bedrock_without_persisted_region() -> None:
+    assert "bedrock" not in {provider.slug for provider in llm_provider_catalog()}
 
 
 def test_llm_credential_is_encrypted_versioned_resolved_and_audited() -> None:
@@ -174,6 +179,7 @@ def test_llm_connection_identity_is_immutable_and_secret_rotation_is_versioned()
             connection_id=connection_id,
             credential_version=1,
             provider="deepseek",
+            model="deepseek-chat",
         )
     second = service.resolve_for_worker(
         tenant_id=principal.tenant_id,

@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -849,9 +849,16 @@ def create_platform_app(
     async def list_analysis_jobs(
         request: Request,
         context: Annotated[TenantRequestContext, Depends(require_session)],
-        limit: int = 50,
+        limit: Annotated[int, Query(ge=1, le=100)] = 50,
     ) -> list[AnalysisJobResponse]:
         require_verified(context)
+        await enforce_rate(
+            request=request,
+            scope="analysis-job-list",
+            identity=f"{context.tenant_id}:{context.principal.user_id}",
+            limit=60,
+            window=60,
+        )
         try:
             rows = await analysis_jobs().list_jobs(
                 token=request.cookies[SESSION_COOKIE],
@@ -869,6 +876,13 @@ def create_platform_app(
         context: Annotated[TenantRequestContext, Depends(require_session)],
     ) -> AnalysisJobDetailResponse:
         require_verified(context)
+        await enforce_rate(
+            request=request,
+            scope="analysis-job-detail",
+            identity=f"{context.tenant_id}:{context.principal.user_id}",
+            limit=30,
+            window=60,
+        )
         try:
             detail = await analysis_jobs().get_job(
                 token=request.cookies[SESSION_COOKIE],

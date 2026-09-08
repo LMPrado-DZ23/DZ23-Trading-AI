@@ -28,19 +28,28 @@ class GoogleClient(BaseLLMClient):
         self.warn_if_unknown_model()
         llm_kwargs = {"model": self.model}
 
-        if self.kwargs.get("platform_strict_credentials") and self.base_url:
+        strict = bool(self.kwargs.get("platform_strict_credentials"))
+        if strict and self.base_url:
             raise ValueError("Custom Google endpoints are forbidden in platform mode.")
-        if self.base_url:
+        if strict:
+            llm_kwargs["base_url"] = "https://generativelanguage.googleapis.com"
+            llm_kwargs["client_args"] = {
+                "follow_redirects": False,
+                "trust_env": False,
+            }
+        elif self.base_url:
             llm_kwargs["base_url"] = self.base_url
 
         for key in ("timeout", "max_retries", "temperature", "max_output_tokens",
                     "callbacks", "http_client", "http_async_client"):
             if key in self.kwargs:
+                if strict and key in {"http_client", "http_async_client"}:
+                    continue
                 llm_kwargs[key] = self.kwargs[key]
 
         # Unified api_key maps to provider-specific google_api_key
         google_api_key = self.kwargs.get("api_key") or self.kwargs.get("google_api_key")
-        if self.kwargs.get("platform_strict_credentials") and not google_api_key:
+        if strict and not google_api_key:
             raise ValueError("API key for provider 'google' is not set.")
         if google_api_key:
             llm_kwargs["google_api_key"] = google_api_key

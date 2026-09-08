@@ -54,9 +54,44 @@ def test_invalid_key_not_mislabeled_as_rate_limit(monkeypatch):
     monkeypatch.setattr(av.requests, "get", _patched_get(body))
     with pytest.raises(av.AlphaVantageNotConfiguredError):
         av._make_api_request("TIME_SERIES_DAILY", {"symbol": "AAPL"})
-    with pytest.raises(av.AlphaVantageRateLimitError):  # sanity: rate-limit path still distinct
-        monkeypatch.setattr(av.requests, "get", _patched_get('{"Note": "API call frequency is 5 calls per minute."}'))
+    with pytest.raises(av.AlphaVantageRateLimitError):
+        monkeypatch.setattr(
+            av.requests,
+            "get",
+            _patched_get('{"Note": "API call frequency is 5 calls per minute."}'),
+        )
         av._make_api_request("TIME_SERIES_DAILY", {"symbol": "AAPL"})
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("bad_row", "message"),
+    [
+        ("not-a-date,1,2,3,4,5", "invalid OHLCV timestamp"),
+        ("2024-01-02,secret,2,3,4,5", "OHLCV open contains a non-finite value"),
+        ("2024-01-02,1,2,3,nan,5", "OHLCV close contains a non-finite value"),
+    ],
+)
+def test_ohlcv_mixed_malformed_rows_fail_closed(bad_row, message):
+    csv_data = (
+        "timestamp,open,high,low,close,volume\n"
+        "2024-01-01,1,2,0.5,1.5,100\n"
+        f"{bad_row}\n"
+    )
+    with pytest.raises(ValueError, match=message):
+        av._filter_csv_by_date_range(csv_data, "2024-01-01", "2024-01-02")
+
+
+@pytest.mark.unit
+def test_ohlcv_valid_out_of_window_rows_are_filtered_after_full_validation():
+    csv_data = (
+        "timestamp,open,high,low,close,volume\n"
+        "2024-01-01,1,2,0.5,1.5,100\n"
+        "2024-01-03,2,3,1.5,2.5,200\n"
+    )
+    output = av._filter_csv_by_date_range(csv_data, "2024-01-01", "2024-01-01")
+    assert "2024-01-01" in output
+    assert "2024-01-03" not in output
 
 
 _FUNDAMENTALS_JSON = json.dumps({

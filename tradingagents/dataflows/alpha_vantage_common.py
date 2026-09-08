@@ -7,12 +7,16 @@ import pandas as pd
 import requests
 
 from .errors import VendorNotConfiguredError, VendorRateLimitError
+from .http_limits import read_bounded_response
+from .ohlcv_validation import OhlcvValidationError, validate_ohlcv_frame
 
 API_BASE_URL = "https://www.alphavantage.co/query"
 
 # Network timeout (seconds) so a stalled Alpha Vantage request can't hang the
 # CLI/agents indefinitely (#990).
 REQUEST_TIMEOUT = 30
+MAX_RESPONSE_BYTES = 5_000_000
+MAX_CSV_ROWS = 5_000
 
 
 class AlphaVantageNotConfiguredError(VendorNotConfiguredError):
@@ -83,10 +87,30 @@ def _make_api_request(function_name: str, params: dict) -> dict | str:
         # Remove entitlement if it's None or empty
         api_params.pop("entitlement", None)
 
-    response = requests.get(API_BASE_URL, params=api_params, timeout=REQUEST_TIMEOUT)
-    response.raise_for_status()
-
-    response_text = response.text
+    response = None
+    try:
+        response = requests.get(
+            API_BASE_URL,
+            params=api_params,
+            timeout=REQUEST_TIMEOUT,
+            stream=True,
+        )
+        response_text = read_bounded_response(
+            response,
+            max_bytes=MAX_RESPONSE_BYTES,
+            vendor="Alpha Vantage",
+        ).decode("utf-8")
+    except requests.RequestException as exc:
+        raise ConnectionError(
+            f"Alpha Vantage request failed: {type(exc).__name__}"
+        ) from None
+    finally:
+        if response is not None:
+            getattr(response, "close", lambda: None)()
+    if getattr(response, "status_code", 200) >= 400:
+        raise ValueError(
+            f"Alpha Vantage request failed: HTTP {response.status_code}"
+        )
 
     # Error responses are JSON; data responses are usually CSV (or data-keyed
     # JSON). A non-JSON body is normal data.
@@ -129,23 +153,50 @@ def _filter_csv_by_date_range(csv_data: str, start_date: str, end_date: str) -> 
         return csv_data
 
     try:
-        # Parse CSV data
-        df = pd.read_csv(StringIO(csv_data))
-
-        # Assume the first column is the date column (timestamp)
-        date_col = df.columns[0]
-        df[date_col] = pd.to_datetime(df[date_col])
-
-        # Filter by date range
-        start_dt = pd.to_datetime(start_date)
-        end_dt = pd.to_datetime(end_date)
-
-        filtered_df = df[(df[date_col] >= start_dt) & (df[date_col] <= end_dt)]
-
-        # Convert back to CSV string
-        return filtered_df.to_csv(index=False)
-
-    except Exception as e:
-        # If filtering fails, return original data with a warning
-        print(f"Warning: Failed to filter CSV data by date range: {e}")
-        return csv_data
+        start_dt = pd.Timestamp(start_date, tz="UTC")
+        end_dt = pd.Timestamp(end_date, tz="UTC")
+    except (TypeError, ValueError):
+        raise ValueError("Alpha Vantage date range is invalid") from None
+    if start_dt > end_dt:
+        raise ValueError("Alpha Vantage date range is reversed")
+    try:
+        frame = pd.read_csv(StringIO(csv_data), nrows=MAX_CSV_ROWS + 1)
+    except Exception:
+        raise ValueError("Alpha Vantage returned malformed CSV") from None
+    if frame.empty or not len(frame.columns):
+        raise ValueError("Alpha Vantage returned no rows")
+    if len(frame) > MAX_CSV_ROWS:
+        raise ValueError("Alpha Vantage returned too many OHLCV rows")
+    date_col = frame.columns[0]
+    normalized_columns = {str(column).strip().casefold() for column in frame.columns}
+    if str(date_col).strip().casefold() not in {"timestamp", "date", "datetime"} or not {
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+    }.issubset(normalized_columns):
+        raise ValueError("Alpha Vantage returned an unexpected OHLCV schema")
+    parsed_dates = pd.to_datetime(frame[date_col], errors="coerce", utc=True)
+    if parsed_dates.isna().any():
+        raise ValueError("Alpha Vantage returned an invalid OHLCV timestamp")
+    if parsed_dates.duplicated().any():
+        raise ValueError("Alpha Vantage returned duplicate OHLCV timestamps")
+    normalized_lookup = {
+        str(column).strip().casefold(): column for column in frame.columns
+    }
+    try:
+        frame = validate_ohlcv_frame(
+            frame,
+            column_map=normalized_lookup,
+            max_rows=MAX_CSV_ROWS,
+        )
+    except OhlcvValidationError as exc:
+        raise ValueError(f"Alpha Vantage returned invalid OHLCV: {exc}") from None
+    valid = parsed_dates.notna() & (parsed_dates >= start_dt) & (parsed_dates <= end_dt)
+    filtered = frame.loc[valid].copy()
+    if filtered.empty:
+        raise ValueError("Alpha Vantage returned no valid rows in the requested range")
+    filtered[date_col] = parsed_dates.loc[valid].dt.strftime("%Y-%m-%d")
+    filtered = filtered.sort_values(date_col, kind="stable")
+    return filtered.to_csv(index=False)

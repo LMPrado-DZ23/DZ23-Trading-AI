@@ -1,4 +1,5 @@
 import os
+from copy import deepcopy
 
 _TRADINGAGENTS_HOME = os.path.join(os.path.expanduser("~"), ".tradingagents")
 
@@ -69,7 +70,7 @@ def _apply_env_overrides(config: dict) -> dict:
     return config
 
 
-DEFAULT_CONFIG = _apply_env_overrides({
+_BASE_CONFIG = {
     "project_dir": os.path.abspath(os.path.join(os.path.dirname(__file__), ".")),
     "results_dir": os.getenv("TRADINGAGENTS_RESULTS_DIR", os.path.join(_TRADINGAGENTS_HOME, "logs")),
     "data_cache_dir": os.getenv("TRADINGAGENTS_CACHE_DIR", os.path.join(_TRADINGAGENTS_HOME, "cache")),
@@ -168,4 +169,10 @@ DEFAULT_CONFIG = _apply_env_overrides({
         ".SZ":  "399001.SZ",   # Shenzhen (SZSE Component)
         "":     "SPY",         # default for US-listed tickers (no suffix)
     },
-})
+}
+
+# Platform workers use this immutable-by-convention source and therefore never
+# inherit ambient tuning from the process. DEFAULT_CONFIG preserves the legacy
+# CLI/library environment overlay for backward compatibility.
+PLATFORM_DEFAULT_CONFIG = deepcopy(_BASE_CONFIG)
+DEFAULT_CONFIG = _apply_env_overrides(deepcopy(_BASE_CONFIG))

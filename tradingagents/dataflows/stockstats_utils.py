@@ -1,6 +1,10 @@
+import hashlib
 import logging
 import os
+import tempfile
+import threading
 import time
+from contextlib import suppress
 from typing import Annotated
 
 import pandas as pd
@@ -9,6 +13,7 @@ from stockstats import wrap
 from yfinance.exceptions import YFRateLimitError
 
 from .config import get_config
+from .ohlcv_validation import OhlcvValidationError, validate_ohlcv_frame
 from .symbol_utils import NoMarketDataError, normalize_symbol
 from .utils import safe_ticker_component
 
@@ -24,6 +29,40 @@ MAX_OHLCV_STALE_DAYS = 10
 # up today's close soon after it publishes, long enough that a day with no bar
 # at all (weekend, holiday) cannot trigger a download on every call.
 OHLCV_CACHE_TTL_SECONDS = 900
+MAX_OHLCV_ROWS = 5_000
+MAX_OHLCV_CACHE_BYTES = 10_000_000
+_CACHE_LOCKS = tuple(threading.Lock() for _ in range(64))
+
+
+def _cache_lock(path: str) -> threading.Lock:
+    digest = hashlib.sha256(os.fsencode(os.path.abspath(path))).digest()
+    return _CACHE_LOCKS[int.from_bytes(digest[:2], "big") % len(_CACHE_LOCKS)]
+
+
+def _atomic_write_csv(frame: pd.DataFrame, destination: str) -> None:
+    """Publish a complete validated cache file without exposing partial bytes."""
+
+    temporary_name: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            newline="",
+            prefix=".ohlcv-",
+            suffix=".tmp",
+            dir=os.path.dirname(destination),
+            delete=False,
+        ) as handle:
+            temporary_name = handle.name
+            frame.to_csv(handle, index=False)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_name, destination)
+        temporary_name = None
+    finally:
+        if temporary_name is not None:
+            with suppress(FileNotFoundError):
+                os.unlink(temporary_name)
 
 
 def yf_retry(func, max_retries=3, base_delay=2.0):
@@ -100,16 +139,6 @@ def _clean_dataframe(data: pd.DataFrame) -> pd.DataFrame:
     return data
 
 
-def _fill_price_gaps(data: pd.DataFrame) -> pd.DataFrame:
-    """Drop rows with no close and forward/back-fill remaining price gaps so
-    indicators compute on a continuous series."""
-    price_cols = [c for c in ["Open", "High", "Low", "Close", "Volume"] if c in data.columns]
-    # copy() so a filtered (sliced) input is written to safely, not via a view.
-    data = data.dropna(subset=["Close"]).copy()
-    data[price_cols] = data[price_cols].ffill().bfill()
-    return data
-
-
 def _coerce_ohlcv_dates(data: pd.DataFrame) -> pd.Series:
     """Return parsed dates from an OHLCV frame, whether Date is a column or the index."""
     if "Date" in data.columns:
@@ -155,6 +184,13 @@ def _assert_ohlcv_not_stale(
         return
     latest = dates.max().normalize()
     stale_days = (requested - latest).days
+    if stale_days < 0:
+        raise NoMarketDataError(
+            symbol,
+            canonical,
+            f"latest row is {latest.date()}, after the requested {requested.date()} "
+            "(look-ahead) — refusing to use it",
+        )
     if stale_days > max_stale_days:
         raise NoMarketDataError(
             symbol,
@@ -184,9 +220,9 @@ def _needs_same_day_refresh(data_file, curr_date_dt, today_date) -> bool:
 def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
     """Fetch OHLCV data with caching, filtered to prevent look-ahead bias.
 
-    Downloads 5 years of data up to today and caches per symbol. On
-    subsequent calls the cache is reused. Rows after curr_date are
-    filtered out so backtests never see future prices.
+    Downloads the five-year window ending at ``curr_date`` and caches that
+    immutable cutoff-specific window. This preserves enough pre-decision data
+    for long indicators in historical runs without downloading future rows.
     """
     # Resolve broker/forex symbols (XAUUSD+ -> GC=F) to Yahoo's convention,
     # then reject values that would escape the cache directory when
@@ -197,69 +233,68 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
     config = get_config()
     curr_date_dt = pd.to_datetime(curr_date).normalize()
 
-    # Cache uses a fixed window (5y to today) so one file per symbol.
+    # Derive the request from the decision date, never from wall-clock today.
     today_date = pd.Timestamp.today()
-    start_date = today_date - pd.DateOffset(years=5)
+    start_date = curr_date_dt - pd.DateOffset(years=5)
     start_str = start_date.strftime("%Y-%m-%d")
     # yfinance ``end`` is EXCLUSIVE; request tomorrow so today's row is included
     # when curr_date is the current day (#986). Look-ahead is still prevented by
     # the curr_date filter below.
-    end_str = (today_date + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+    end_str = (curr_date_dt + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
 
     os.makedirs(config["data_cache_dir"], exist_ok=True)
     data_file = os.path.join(
         config["data_cache_dir"],
-        f"{safe_symbol}-YFin-data-{start_str}-{end_str}.csv",
+        f"{safe_symbol}-YFin-raw-v1-{start_str}-{end_str}.csv",
     )
 
-    # A cached file may be empty if a prior fetch failed (unknown symbol,
-    # transient rate limit). Treat an empty/columnless cache as a miss and
-    # re-fetch rather than serving the poisoned file forever.
-    data = None
-    if os.path.exists(data_file):
-        cached = pd.read_csv(data_file, on_bad_lines="skip", encoding="utf-8")
-        # Serve the cache only when it is usable and not a stale snapshot of the
-        # day being requested (#1150); otherwise fall through and refetch.
-        if (
-            not cached.empty
-            and "Close" in cached.columns
-            and not _needs_same_day_refresh(data_file, curr_date_dt, today_date)
-        ):
-            data = cached
-
-    if data is None:
-        downloaded = yf_retry(lambda: yf.download(
-            canonical,
-            start=start_str,
-            end=end_str,
-            multi_level_index=False,
-            progress=False,
-            auto_adjust=True,
-        ))
-        downloaded = _ensure_date_column(downloaded.reset_index())
-        # Only cache real data — never persist an empty frame.
-        if downloaded.empty or "Close" not in downloaded.columns:
-            raise NoMarketDataError(
-                symbol, canonical, "Yahoo Finance returned no rows"
+    with _cache_lock(data_file):
+        # A cached file may be empty if a prior fetch failed. Treat it as a
+        # miss. The per-key lock prevents in-process readers from observing a
+        # concurrent refresh; atomic replacement protects other processes.
+        data = None
+        if os.path.exists(data_file):
+            if os.path.getsize(data_file) > MAX_OHLCV_CACHE_BYTES:
+                raise NoMarketDataError(symbol, canonical, "OHLCV cache exceeds the byte limit")
+            cached = pd.read_csv(
+                data_file,
+                on_bad_lines="error",
+                encoding="utf-8",
+                nrows=MAX_OHLCV_ROWS + 1,
             )
-        downloaded.to_csv(data_file, index=False, encoding="utf-8")
-        data = downloaded
+            if len(cached) > MAX_OHLCV_ROWS:
+                raise NoMarketDataError(symbol, canonical, "OHLCV cache exceeds the row limit")
+            if (
+                not cached.empty
+                and "Close" in cached.columns
+                and not _needs_same_day_refresh(data_file, curr_date_dt, today_date)
+            ):
+                data = cached
 
-    data = _clean_dataframe(data)
+        downloaded_new = data is None
+        if downloaded_new:
+            data = yf_retry(lambda: yf.download(
+                canonical,
+                start=start_str,
+                end=end_str,
+                multi_level_index=False,
+                progress=False,
+                auto_adjust=False,
+            ))
+            data = _ensure_date_column(data.reset_index())
+            if data.empty or "Close" not in data.columns:
+                raise NoMarketDataError(symbol, canonical, "Yahoo Finance returned no rows")
+            if len(data) > MAX_OHLCV_ROWS:
+                raise NoMarketDataError(symbol, canonical, "Yahoo Finance returned too many rows")
 
-    # Filter to curr_date to prevent look-ahead bias in backtesting.
-    data = data[data["Date"] <= curr_date_dt]
-
-    # Guard the latest in-range bar before dropping incomplete rows: a newest bar
-    # with no close is "not settled yet", not "does not exist". Silently dropping
-    # it would make the previous trading day look like the latest (#1201); raise
-    # instead so the router surfaces it rather than fabricating a fallback.
-    if not data.empty and pd.isna(data["Close"].iloc[-1]):
-        raise NoMarketDataError(
-            symbol, canonical, "latest in-range OHLCV bar has no closing price"
-        )
-
-    data = _fill_price_gaps(data)
+        data = _clean_dataframe(data)
+        data = data[data["Date"] <= curr_date_dt]
+        try:
+            data = validate_ohlcv_frame(data, max_rows=MAX_OHLCV_ROWS)
+        except OhlcvValidationError as exc:
+            raise NoMarketDataError(symbol, canonical, str(exc)) from None
+        if downloaded_new:
+            _atomic_write_csv(data, data_file)
 
     # Reject a stale frame (latest row far older than curr_date) rather than
     # feeding year-old prices into indicators (#1021).

@@ -21,11 +21,17 @@ from tradingagents.platform.identity import (
 )
 from tradingagents.platform.jobs import AnalysisJob, AnalysisJobCommand, JobError, JobService
 from tradingagents.platform.llm_connections import LlmConnectionService
+from tradingagents.platform.llm_provenance import build_llm_reference_snapshot
 from tradingagents.platform.worker import ExecutionOutcome, WorkerConfig, WorkerRunner
 
 APP_URL = os.environ.get("TRADINGAGENTS_TEST_POSTGRES_URL")
 WORKER_URL = os.environ.get("TRADINGAGENTS_TEST_WORKER_POSTGRES_URL")
 pytestmark = pytest.mark.integration
+
+
+def _reference(**kwargs):
+    kwargs.pop("tenant_id", None)
+    return build_llm_reference_snapshot(base_url=None, **kwargs)
 
 
 @pytest.mark.skipif(
@@ -61,7 +67,7 @@ def test_postgres_jobs_enforce_tenants_and_claim_once_under_concurrency() -> Non
             )
         )
 
-    references = SimpleNamespace(assert_reference=lambda **_kwargs: None)
+    references = SimpleNamespace(assert_reference=_reference)
     app_service = JobService(
         app_factory,
         idempotency_digest_key=b"a" * 32,
@@ -77,8 +83,8 @@ def test_postgres_jobs_enforce_tenants_and_claim_once_under_concurrency() -> Non
                 command=AnalysisJobCommand(
                     symbol=("BTC/USDT", "ETH/USDT")[index],
                     asset_type="crypto",
-                    trade_date="2026-09-08",
-                    mode=RunMode.SHADOW,
+                    trade_date="2024-01-02",
+                    mode=RunMode.BACKTEST,
                     provider="openai",
                     model="gpt-5",
                     llm_connection_id=connection_id,
@@ -118,6 +124,7 @@ def test_postgres_jobs_enforce_tenants_and_claim_once_under_concurrency() -> Non
     )
     for claim in claims:
         assert claim is not None
+        cleanup.start(claim)
         cleanup.complete(
             claim,
             result={"signal": "hold"},
@@ -156,7 +163,7 @@ def test_postgres_tenant_admission_quota_is_atomic_under_concurrency() -> None:
         service = JobService(
             factory,
             idempotency_digest_key=b"q" * 32,
-            llm_reference_validator=SimpleNamespace(assert_reference=lambda **_kwargs: None),
+            llm_reference_validator=SimpleNamespace(assert_reference=_reference),
             max_active_jobs_per_tenant=1,
         )
         barrier.wait()
@@ -167,8 +174,8 @@ def test_postgres_tenant_admission_quota_is_atomic_under_concurrency() -> None:
                 command=AnalysisJobCommand(
                     symbol=("BTC/USDT", "ETH/USDT")[index],
                     asset_type="crypto",
-                    trade_date="2026-09-08",
-                    mode=RunMode.SHADOW,
+                    trade_date="2024-01-02",
+                    mode=RunMode.BACKTEST,
                     provider="openai",
                     model="gpt-5",
                     llm_connection_id=uuid4(),
@@ -186,7 +193,7 @@ def test_postgres_tenant_admission_quota_is_atomic_under_concurrency() -> None:
     cleanup = JobService(
         factory,
         idempotency_digest_key=b"q" * 32,
-        llm_reference_validator=SimpleNamespace(assert_reference=lambda **_kwargs: None),
+        llm_reference_validator=SimpleNamespace(assert_reference=_reference),
         max_active_jobs_per_tenant=1,
     )
     for job in cleanup.list_jobs(principal=principal):
@@ -246,8 +253,8 @@ def test_postgres_worker_resolves_only_bound_tenant_credential_and_completes() -
         command=AnalysisJobCommand(
             symbol="BTC/USDT",
             asset_type="crypto",
-            trade_date="2026-09-08",
-            mode=RunMode.SHADOW,
+            trade_date="2024-01-02",
+            mode=RunMode.BACKTEST,
             provider="openai",
             model="gpt-5",
             llm_connection_id=connection_id,

@@ -52,6 +52,7 @@ from tradingagents.platform.supabase_auth import (
     SupabaseJwtVerifier,
     SupabaseUserVerifier,
 )
+from tradingagents.platform.usage import PricingCatalog
 
 
 def _derive_secret(master: bytes, purpose: str) -> bytes:
@@ -76,7 +77,11 @@ def create_production_app(settings: PlatformSettings | None = None) -> FastAPI:
         cursor = dbapi_connection.cursor()
         try:
             cursor.execute(
-                "SELECT current_user, rolsuper, rolbypassrls "
+                "SELECT current_user, rolsuper, rolcreatedb, rolcreaterole, rolreplication, "
+                "rolbypassrls, "
+                "EXISTS (SELECT 1 FROM pg_roles candidate "
+                "WHERE candidate.rolname <> current_user "
+                "AND pg_has_role(current_user, candidate.oid, 'MEMBER')) "
                 "FROM pg_roles WHERE rolname = current_user"
             )
             row = cursor.fetchone()
@@ -86,7 +91,7 @@ def create_production_app(settings: PlatformSettings | None = None) -> FastAPI:
             row is None
             or row[0] != effective.database_expected_role
             or row[1] is not False
-            or row[2] is not False
+            or any(value is not False for value in row[1:])
         ):
             raise RuntimeError("database runtime role is unsafe or does not match configuration")
 
@@ -142,7 +147,7 @@ def create_production_app(settings: PlatformSettings | None = None) -> FastAPI:
         llm_crypto = TransitCredentialKeyring(
             base_url=effective.broker_transit_url,
             key_name=effective.llm_transit_key_name,
-            token=effective.llm_transit_token.get_secret_value(),
+            token=effective.llm_transit_write_token.get_secret_value(),
             namespace=effective.broker_transit_namespace or None,
         )
     else:
@@ -161,7 +166,12 @@ def create_production_app(settings: PlatformSettings | None = None) -> FastAPI:
             active_key_id=active_broker_key,
         )
         llm_crypto = CredentialKeyring(
-            keys={"development-llm-v1": _derive_secret(master, "llm-credentials")},
+            keys={
+                "development-llm-v1": _derive_secret(
+                    effective.worker_job_auth_key.get_secret_value().encode("utf-8"),
+                    "llm-credentials",
+                )
+            },
             active_key_id="development-llm-v1",
         )
     connection_service = ConnectionService(
@@ -177,13 +187,16 @@ def create_production_app(settings: PlatformSettings | None = None) -> FastAPI:
         keyring=llm_crypto,
         idempotency_digest_key=_derive_secret(master, "llm-idempotency-digest"),
     )
+    pricing_catalog = PricingCatalog(effective.llm_pricing)
     job_service = JobService(
         factory,
-        idempotency_digest_key=_derive_secret(master, "analysis-job-idempotency"),
+        idempotency_digest_key=effective.worker_job_auth_key.get_secret_value().encode("utf-8"),
         llm_reference_validator=llm_connection_service,
         max_active_jobs_per_tenant=effective.max_active_jobs_per_tenant,
         monthly_token_quota=effective.monthly_token_quota,
         monthly_cost_quota_microusd=effective.monthly_cost_quota_microusd,
+        pricing_catalog_version=pricing_catalog.version,
+        pricing_catalog=pricing_catalog,
     )
     redis = Redis.from_url(
         effective.redis_url.get_secret_value(),

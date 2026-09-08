@@ -402,7 +402,12 @@ class TradingAgentsGraph:
         if updates:
             self.memory_log.batch_update_with_outcomes(updates)
 
-    def resolve_instrument_context(self, ticker: str, asset_type: str = "stock") -> str:
+    def resolve_instrument_context(
+        self,
+        ticker: str,
+        asset_type: str = "stock",
+        run_context: AnalysisRunContext | None = None,
+    ) -> str:
         """Resolve ticker identity once and return the full instrument context.
 
         Deterministic yfinance lookup (cached, fail-open) injected into a
@@ -411,7 +416,12 @@ class TradingAgentsGraph:
         path and the CLI call this so the resolved identity reaches the whole
         graph regardless of entry point.
         """
-        identity = resolve_instrument_identity(ticker)
+        # yfinance ``Ticker.info`` is current, unversioned metadata. It has no
+        # defensible available_at timestamp and is also an uncontrolled network
+        # call outside the routed data-source contract. Platform jobs therefore
+        # use only the immutable symbol/asset identity. The legacy interactive
+        # library path keeps its best-effort convenience lookup.
+        identity = {} if run_context is not None else resolve_instrument_identity(ticker)
         return build_instrument_context(ticker, asset_type, identity)
 
     def _memory_as_of(self, trade_date) -> str | None:
@@ -495,8 +505,11 @@ class TradingAgentsGraph:
             stack.enter_context(use_config(self.config))
             if run_context is not None:
                 stack.enter_context(activate_run_context(run_context))
-            # Resolve pending memory-log entries before the pipeline runs.
-            self._resolve_pending_entries(company_name)
+            # Tenant platform runs keep reflection disabled until M6/P6 moves it
+            # behind the same durable budget and fencing boundary. Legacy CLI
+            # runs retain the deferred memory behavior.
+            if run_context is None:
+                self._resolve_pending_entries(company_name)
 
             with self.checkpoint_scope(
                 company_name,
@@ -634,7 +647,11 @@ class TradingAgentsGraph:
         past_context = self.memory_log.get_past_context(
             company_name, as_of=self._memory_as_of(trade_date)
         )
-        instrument_context = self.resolve_instrument_context(company_name, asset_type)
+        instrument_context = self.resolve_instrument_context(
+            company_name,
+            asset_type,
+            run_context=run_context,
+        )
         init_agent_state = self.propagator.create_initial_state(
             company_name,
             trade_date,
@@ -695,12 +712,14 @@ class TradingAgentsGraph:
         # Log state to disk.
         self._log_state(trade_date, final_state)
 
-        # Store decision for deferred reflection on the next same-ticker run.
-        self.memory_log.store_decision(
-            ticker=company_name,
-            trade_date=trade_date,
-            final_trade_decision=final_state["final_trade_decision"],
-        )
+        # Platform memory/reflection is deliberately deferred to P6, where it
+        # will have transactional provenance and the same cost/lease controls.
+        if run_context is None:
+            self.memory_log.store_decision(
+                ticker=company_name,
+                trade_date=trade_date,
+                final_trade_decision=final_state["final_trade_decision"],
+            )
 
         # Clear checkpoint on successful completion to avoid stale state.
         self.clear_checkpoint_on_success(

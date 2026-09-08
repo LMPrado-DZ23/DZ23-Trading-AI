@@ -55,9 +55,12 @@ e não pode reutilizar chaves publicadas em chat.
 - [x] RunContext imutável e workflow schema version;
 - [x] remover mutação de `os.environ` e configuração global no caminho concorrente;
 - [x] checkpoint com tenant/config/provider/schema digests;
-- [x] fundamentals filtrados por publicação disponível;
+- [ ] fundamentals filtrados por publicação disponível; no M3 a plataforma os
+  exclui em todos os modos, em vez de fingir histórico point-in-time;
 - [x] Polymarket histórico ou fail-closed;
-- [x] `available_at` obrigatório nas fontes usadas historicamente;
+- [x] `available_at` obrigatório para toda evidência efetivamente entregue pelo
+  único analista habilitado na plataforma (`market`); demais analistas seguem
+  desabilitados até suas fontes fornecerem proveniência temporal verificável;
 - [x] manifesto reprodutível da análise.
 
 **Gate:** restart recupera jobs; dois tenants executam simultaneamente sem estado cruzado; suite PIT adversarial verde.

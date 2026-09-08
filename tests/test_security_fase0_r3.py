@@ -4,6 +4,7 @@ caplog and tool return) and the Fase-0 UntrustedEvidence contract."""
 
 import logging
 import os
+import json
 from unittest import mock
 
 import pytest
@@ -54,7 +55,10 @@ class TestFredRedactionAcceptance:
         resp = mock.MagicMock()
         resp.status_code = 400
         resp.text = body_text
+        resp.headers = {}
         resp.json.return_value = {"error_message": body_text}
+        payload = json.dumps({"error_message": body_text}).encode("utf-8")
+        resp.iter_content.side_effect = lambda chunk_size: [payload]
         return resp
 
     def test_sentinel_in_remote_body_is_redacted(self, caplog):

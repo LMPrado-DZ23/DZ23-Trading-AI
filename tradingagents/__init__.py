@@ -1,27 +1,10 @@
 import contextlib
-import os
 import warnings
 
-# Load .env files at package import so DEFAULT_CONFIG's env-var overlay
-# (and every llm_clients consumer) sees the user's keys regardless of
-# which entry point started the process. find_dotenv(usecwd=True) walks
-# from the CWD, so the installed `tradingagents` console script picks up
-# the project's .env instead of stepping up from site-packages.
-# load_dotenv defaults to override=False, so it never clobbers values
-# the caller has already exported.
-try:
-    from dotenv import find_dotenv, load_dotenv
-
-    if os.environ.get("TRADINGAGENTS_DISABLE_DOTENV", "").strip().lower() not in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }:
-        load_dotenv(find_dotenv(usecwd=True))
-        load_dotenv(find_dotenv(".env.enterprise", usecwd=True), override=False)
-except ImportError:
-    pass
+# Importing the library must never read files from the caller's working
+# directory. In particular, a .env file cannot self-authorize loading inside
+# the API/worker process. The interactive CLI opts in explicitly before it
+# imports runtime modules.
 
 # langchain-core 1.3.3 calls surface_langchain_deprecation_warnings() in
 # its own __init__, which prepends default-action filters for its

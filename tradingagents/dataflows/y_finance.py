@@ -5,14 +5,18 @@ import pandas as pd
 import yfinance as yf
 from dateutil.relativedelta import relativedelta
 
+from .ohlcv_validation import OhlcvValidationError, validate_ohlcv_frame
 from .stockstats_utils import (
     StockstatsUtils,
     _assert_ohlcv_not_stale,
+    _normalize_dates,
     filter_financials_by_date,
     load_ohlcv,
     yf_retry,
 )
 from .symbol_utils import NoMarketDataError, normalize_symbol
+
+MAX_OHLCV_ROWS = 5_000
 
 
 def get_YFin_data_online(
@@ -32,7 +36,13 @@ def get_YFin_data_online(
     # end_date row (and the current day when end_date is today). Request one day
     # past end_date so the requested range is actually inclusive (#986/#987).
     end_inclusive = (end_dt + relativedelta(days=1)).strftime("%Y-%m-%d")
-    data = yf_retry(lambda: ticker.history(start=start_date, end=end_inclusive))
+    data = yf_retry(
+        lambda: ticker.history(
+            start=start_date,
+            end=end_inclusive,
+            auto_adjust=False,
+        )
+    )
 
     # Empty result means the symbol is unknown/delisted. Raise a typed error
     # instead of returning prose: the routing layer turns it into a single
@@ -41,6 +51,35 @@ def get_YFin_data_online(
         raise NoMarketDataError(
             symbol, canonical, f"no rows between {start_date} and {end_date}"
         )
+    if len(data) > MAX_OHLCV_ROWS:
+        raise NoMarketDataError(symbol, canonical, "vendor returned too many OHLCV rows")
+
+    try:
+        data = validate_ohlcv_frame(data, max_rows=MAX_OHLCV_ROWS)
+    except OhlcvValidationError as exc:
+        raise NoMarketDataError(symbol, canonical, str(exc)) from None
+    # Daily vendor bars are labelled by the exchange-local session date.  Do
+    # not convert them to UTC before applying an inclusive date cutoff: a NYSE
+    # bar at local midnight becomes 05:00 UTC and would be incorrectly dropped
+    # by a YYYY-MM-DD 00:00 UTC bound.
+    local_dates = _normalize_dates(data.index)
+    if local_dates.isna().any():
+        raise NoMarketDataError(symbol, canonical, "vendor returned an invalid OHLCV timestamp")
+    start_bound = pd.Timestamp(start_date)
+    end_bound = pd.Timestamp(end_date)
+    within = (local_dates >= start_bound) & (local_dates <= end_bound)
+    mask = within.to_numpy()
+    data = data.loc[mask].copy()
+    local_dates = local_dates.loc[mask]
+    if data.empty:
+        raise NoMarketDataError(
+            symbol, canonical, f"no valid rows between {start_date} and {end_date}"
+        )
+    if local_dates.duplicated().any():
+        raise NoMarketDataError(symbol, canonical, "vendor returned duplicate OHLCV timestamps")
+    data.index = pd.DatetimeIndex(local_dates)
+    data = data.sort_index(kind="stable")
+    data = data.drop(columns=["Adj Close"], errors="ignore")
 
     # Remove timezone info from index for cleaner output
     if data.index.tz is not None:
@@ -52,7 +91,7 @@ def get_YFin_data_online(
     _assert_ohlcv_not_stale(data, end_date, symbol, canonical)
 
     # Round numerical values to 2 decimal places for cleaner display
-    numeric_columns = ["Open", "High", "Low", "Close", "Adj Close"]
+    numeric_columns = ["Open", "High", "Low", "Close"]
     for col in numeric_columns:
         if col in data.columns:
             data[col] = data[col].round(2)
@@ -64,6 +103,7 @@ def get_YFin_data_online(
     # agent (and user) can see which instrument was actually priced.
     label = canonical if canonical == symbol.upper() else f"{canonical} (from {symbol})"
     header = f"# Stock data for {label} from {start_date} to {end_date}\n"
+    header += "# Price policy: raw OHLCV (auto_adjust=False); Adj Close is not used\n"
     header += f"# Total records: {len(data)}\n"
     header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
 

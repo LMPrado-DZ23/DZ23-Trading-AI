@@ -1,4 +1,4 @@
-from tradingagents.platform.jobs.models import AnalysisJob, JobStatus
+from tradingagents.platform.jobs.models import AnalysisJob, JobStatus, JobUsageRecord
 from tradingagents.platform.jobs.service import (
     AnalysisJobCommand,
     ClaimedJob,
@@ -6,6 +6,7 @@ from tradingagents.platform.jobs.service import (
     JobError,
     JobService,
     JobView,
+    effective_analysis_config,
 )
 
 __all__ = [
@@ -16,5 +17,7 @@ __all__ = [
     "JobDetail",
     "JobService",
     "JobStatus",
+    "JobUsageRecord",
     "JobView",
+    "effective_analysis_config",
 ]

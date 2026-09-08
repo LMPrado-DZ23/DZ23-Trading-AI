@@ -226,3 +226,36 @@ def test_connection_api_fails_without_idempotency_key_and_never_downgrades_testn
     )
     assert response.status_code == 400
     assert response.json()["detail"]["code"] == "TESTNET_UNAVAILABLE"
+
+
+def test_connection_validation_never_echoes_any_credential_field() -> None:
+    client, mailbox, _factory = _stack()
+    _register_verify_and_step_up(client, mailbox)
+    cases = (
+        ("api_key", "SEK"),
+        ("secret", "S" * 4097),
+        ("passphrase", ""),
+        ("uid", ""),
+    )
+    for field, sensitive_value in cases:
+        payload = {
+            "label": "Invalid credential test",
+            "exchange_slug": "binance",
+            "environment": "testnet",
+            "api_key": "valid-api-key",
+            "secret": "valid-secret",
+            field: sensitive_value,
+        }
+        response = client.post(
+            "/v1/connections",
+            headers={
+                "x-csrf-token": _csrf(client),
+                "idempotency-key": f"invalid-secret-field-{field}",
+            },
+            json=payload,
+        )
+        assert response.status_code == 422
+        assert response.json()["detail"]["code"] == "INVALID_REQUEST"
+        if sensitive_value:
+            assert sensitive_value not in response.text
+        assert "input" not in response.text

@@ -15,6 +15,7 @@ from sqlalchemy import (
     Index,
     String,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -44,6 +45,7 @@ class AnalysisJob(Base):
     idempotency_key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     request_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     workflow_schema_version: Mapped[int] = mapped_column(nullable=False)
+    provider_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     run_context: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     run_context_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
     result: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
@@ -56,6 +58,7 @@ class AnalysisJob(Base):
     unmetered_llm_requests: Mapped[int] = mapped_column(nullable=False, default=0)
     estimated_cost_microusd: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     pricing_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    pricing_catalog_version: Mapped[str] = mapped_column(String(16), nullable=False)
     reserved_token_budget: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     reserved_cost_budget_microusd: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     attempts: Mapped[int] = mapped_column(nullable=False, default=0)
@@ -80,6 +83,7 @@ class AnalysisJob(Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint("tenant_id", "idempotency_key_hash", name="uq_job_tenant_idem"),
+        UniqueConstraint("tenant_id", "id", name="uq_analysis_job_tenant_id"),
         CheckConstraint(
             "status IN ('queued','leased','running','cancel_requested','succeeded',"
             "'failed','cancelled')",
@@ -100,6 +104,10 @@ class AnalysisJob(Base):
         ),
         CheckConstraint("reserved_token_budget > 0", name="ck_analysis_job_token_budget"),
         CheckConstraint(
+            "length(pricing_catalog_version) = 16",
+            name="ck_analysis_job_pricing_catalog_version",
+        ),
+        CheckConstraint(
             "reserved_cost_budget_microusd IS NULL OR reserved_cost_budget_microusd > 0",
             name="ck_analysis_job_cost_budget",
         ),
@@ -111,4 +119,54 @@ class AnalysisJob(Base):
         Index("ix_analysis_job_tenant_created", "tenant_id", "created_at"),
         Index("ix_analysis_job_claim", "status", "available_at", "created_at"),
         Index("ix_analysis_job_lease", "lease_expires_at"),
+    )
+
+
+class JobUsageRecord(Base):
+    """Append-only billed usage for one fenced worker attempt."""
+
+    __tablename__ = "analysis_job_usage_records"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(nullable=False)
+    job_id: Mapped[UUID] = mapped_column(nullable=False)
+    run_id: Mapped[UUID] = mapped_column(nullable=False)
+    attempt_number: Mapped[int] = mapped_column(nullable=False)
+    lease_id: Mapped[UUID] = mapped_column(nullable=False)
+    usage_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    total_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    llm_requests: Mapped[int] = mapped_column(nullable=False)
+    unmetered_llm_requests: Mapped[int] = mapped_column(nullable=False)
+    estimated_cost_microusd: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    pricing_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["tenant_id", "job_id"],
+            ["analysis_jobs.tenant_id", "analysis_jobs.id"],
+            name="fk_job_usage_tenant_job",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("job_id", "attempt_number", name="uq_job_usage_attempt"),
+        CheckConstraint("attempt_number > 0", name="ck_job_usage_attempt"),
+        CheckConstraint(
+            "input_tokens >= 0 AND output_tokens >= 0 "
+            "AND total_tokens = input_tokens + output_tokens",
+            name="ck_job_usage_tokens",
+        ),
+        CheckConstraint(
+            "llm_requests >= 0 AND unmetered_llm_requests BETWEEN 0 AND llm_requests",
+            name="ck_job_usage_requests",
+        ),
+        CheckConstraint(
+            "estimated_cost_microusd IS NULL OR estimated_cost_microusd >= 0",
+            name="ck_job_usage_cost",
+        ),
+        CheckConstraint("length(usage_digest) = 64", name="ck_job_usage_digest"),
+        Index("ix_job_usage_tenant_occurred", "tenant_id", "occurred_at"),
     )

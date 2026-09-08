@@ -14,6 +14,12 @@ from tradingagents.platform.api.jobs_adapter import SqlAlchemyAnalysisJobAdapter
 from tradingagents.platform.api.security import InMemorySlidingWindowRateLimiter
 from tradingagents.platform.identity import Base, IdentityService, TokenHasher
 from tradingagents.platform.jobs import JobService
+from tradingagents.platform.llm_provenance import build_llm_reference_snapshot
+
+
+def _reference(**kwargs):
+    kwargs.pop("tenant_id", None)
+    return build_llm_reference_snapshot(base_url=None, **kwargs)
 
 
 class Mailbox:
@@ -53,7 +59,7 @@ def _stack() -> tuple[TestClient, Mailbox]:
             jobs=JobService(
                 factory,
                 idempotency_digest_key=b"j" * 32,
-                llm_reference_validator=SimpleNamespace(assert_reference=lambda **_kwargs: None),
+                llm_reference_validator=SimpleNamespace(assert_reference=_reference),
             ),
         ),
         security=ApiSecuritySettings(csrf_secret=b"jobs-api-csrf-secret-value-32-bytes"),
@@ -95,13 +101,13 @@ def test_analysis_jobs_api_enqueue_replay_list_and_cancel() -> None:
     payload = {
         "symbol": "BTC/USDT",
         "asset_type": "crypto",
-        "trade_date": "2026-09-08",
-        "mode": "shadow",
+        "trade_date": "2024-01-02",
+        "mode": "backtest",
         "provider": "openai",
         "model": "gpt-5",
         "llm_connection_id": str(uuid4()),
         "llm_credential_version": 1,
-        "selected_analysts": ["market", "news"],
+        "selected_analysts": ["market"],
         "config": {"output_language": "Português"},
     }
     headers = {

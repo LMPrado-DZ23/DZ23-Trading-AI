@@ -190,3 +190,22 @@ def test_llm_connection_api_rejects_custom_endpoint_for_official_key() -> None:
     )
     assert response.status_code == 400
     assert "tenant-llm-secret" not in response.text
+
+
+def test_llm_connection_validation_never_echoes_api_key() -> None:
+    client, mailbox, _factory = _stack()
+    _onboard(client, mailbox)
+    _step_up(client)
+    for index, secret in enumerate(("SEK", "X" * 4097), start=1):
+        response = client.post(
+            "/v1/llm/connections",
+            headers={
+                "x-csrf-token": _csrf(client),
+                "idempotency-key": f"llm-invalid-secret-{index:02d}",
+            },
+            json={"label": "Invalid key", "provider": "openai", "api_key": secret},
+        )
+        assert response.status_code == 422
+        assert response.json()["detail"]["code"] == "INVALID_REQUEST"
+        assert secret not in response.text
+        assert "input" not in response.text

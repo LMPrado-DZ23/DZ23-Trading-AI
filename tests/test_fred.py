@@ -5,6 +5,7 @@ All API access is mocked, so these run without a network connection or a key.
 """
 
 import unittest
+from datetime import date, timedelta
 from unittest import mock
 
 import pytest
@@ -109,6 +110,23 @@ class FredFormattingTests(unittest.TestCase):
         # the "." observation must not appear as a row
         self.assertNotIn("2025-08-01", out)
 
+    def test_response_rows_outside_cutoff_or_malformed_fail_closed(self):
+        hostile = {
+            "observations": [
+                {"date": "2025-09-01", "value": "4.4"},
+                {"date": "2025-10-01", "value": "future-secret"},
+                {"date": "not-a-date", "value": "malformed-secret"},
+                {"date": "2025-09-02", "value": {"nested": "bad"}},
+                {"date": "2025-09-01", "value": "duplicate-secret"},
+                "not-an-observation",
+            ]
+        }
+        with (
+            mock.patch.object(fred, "_request", side_effect=_request_stub(obs=hostile)),
+            self.assertRaisesRegex(ValueError, "outside the requested window"),
+        ):
+            fred.get_macro_data("unemployment", "2025-09-30", 365)
+
     def test_empty_window_reports_no_observations(self):
         empty = {"observations": []}
         with mock.patch.object(fred, "_request", side_effect=_request_stub(obs=empty)):
@@ -127,7 +145,10 @@ class FredFormattingTests(unittest.TestCase):
         # Build > MAX_ROWS observations deterministically.
         obs = {
             "observations": [
-                {"date": f"2025-01-{(i % 28) + 1:02d}", "value": str(i)}
+                {
+                    "date": (date(2025, 1, 1) + timedelta(days=i)).isoformat(),
+                    "value": str(i),
+                }
                 for i in range(fred.MAX_ROWS + 10)
             ]
         }
@@ -145,7 +166,7 @@ class FredFormattingTests(unittest.TestCase):
 
         def _capture(path, params):
             captured[path] = params
-            return _META if path == "series" else _OBS
+            return _META if path == "series" else {"observations": []}
 
         with mock.patch.object(fred, "_request", side_effect=_capture):
             fred.get_macro_data("unemployment", "2025-09-30", 90)
@@ -162,7 +183,7 @@ class FredFormattingTests(unittest.TestCase):
 
         def _capture(path, params):
             captured[path] = params
-            return _META if path == "series" else _OBS
+            return _META if path == "series" else {"observations": []}
 
         with (
             mock.patch.object(fred, "_fred_today", return_value="2026-01-01"),
@@ -184,7 +205,7 @@ class FredFormattingTests(unittest.TestCase):
 
         def _capture(path, params):
             captured[path] = params
-            return _META if path == "series" else _OBS
+            return _META if path == "series" else {"observations": []}
 
         with (
             mock.patch.object(fred, "_fred_today", return_value="2026-08-31"),

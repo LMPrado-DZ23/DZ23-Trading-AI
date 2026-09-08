@@ -55,6 +55,25 @@ class BedrockClient(BaseLLMClient):
         chat_cls = _bedrock_class()
 
         strict_credentials = bool(self.kwargs.get("platform_strict_credentials"))
+        if strict_credentials:
+            forbidden_ambient = (
+                "AWS_ENDPOINT_URL",
+                "AWS_ENDPOINT_URL_BEDROCK_RUNTIME",
+                "AWS_CA_BUNDLE",
+                "REQUESTS_CA_BUNDLE",
+                "AWS_CONFIG_FILE",
+                "BOTO_CONFIG",
+                "HTTP_PROXY",
+                "HTTPS_PROXY",
+                "ALL_PROXY",
+                "http_proxy",
+                "https_proxy",
+                "all_proxy",
+                "aws_ca_bundle",
+                "requests_ca_bundle",
+            )
+            if any(os.environ.get(name) for name in forbidden_ambient):
+                raise ValueError("ambient Bedrock endpoint, proxy or CA is forbidden in platform mode")
         region = self.kwargs.get("region_name") or (
             None
             if strict_credentials
@@ -62,6 +81,11 @@ class BedrockClient(BaseLLMClient):
         )
         region = region or _DEFAULT_REGION
         llm_kwargs = {"model": self.model, "region_name": region}
+        if strict_credentials:
+            from botocore.config import Config
+
+            llm_kwargs["endpoint_url"] = f"https://bedrock-runtime.{region}.amazonaws.com"
+            llm_kwargs["config"] = Config(proxies={})
         # A Bedrock API key authenticates without AWS access keys. Passing it as
         # api_key makes langchain-aws prefer bearer auth, so an ambient
         # AWS_PROFILE / SigV4 credentials can't override it (#1103).

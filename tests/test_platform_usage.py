@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 
-from tradingagents.platform.usage import LlmUsageCallback, PricingCatalog
+from tradingagents.platform.usage import JobUsage, LlmUsageCallback, PricingCatalog
 
 
 def _response(*, usage=None, fallback=None):
@@ -51,6 +52,29 @@ def test_usage_callback_falls_back_and_marks_unknown_or_failed_calls_unmetered()
     assert usage.pricing_version is None
 
 
+def test_provider_error_consumes_reserved_upper_bound_without_month_long_poison() -> None:
+    pricing = PricingCatalog(
+        {"openai:m": {"input_usd_per_million": 1, "output_usd_per_million": 2}}
+    )
+    callback = LlmUsageCallback(
+        provider="openai",
+        model="m",
+        pricing=pricing,
+        max_total_tokens=10_000,
+        max_output_tokens_per_request=7,
+    )
+    run_id = uuid4()
+    callback.on_llm_start(None, ["hello"], run_id=run_id)
+    callback.on_llm_error(TimeoutError("ambiguous provider timeout"), run_id=run_id)
+
+    usage = callback.snapshot()
+    assert usage.llm_requests == 1
+    assert usage.unmetered_llm_requests == 0
+    assert usage.input_tokens > 0
+    assert usage.output_tokens == 7
+    assert usage.estimated_cost_microusd is not None
+
+
 @pytest.mark.parametrize(
     "catalog",
     [
@@ -77,12 +101,12 @@ def test_usage_callback_fails_closed_when_token_or_cost_budget_cannot_be_proved(
                 _response(usage={"input_tokens": 8, "output_tokens": 3, "total_tokens": 11})
             )
 
-    unpriced = LlmUsageCallback(
-        provider="openai", model="unknown", pricing=pricing, max_cost_microusd=100
-    )
     with pytest.raises(RuntimeError, match="COST_UNMETERED"):
-        unpriced.on_llm_end(
-            _response(usage={"input_tokens": 1, "output_tokens": 1, "total_tokens": 2})
+        LlmUsageCallback(
+            provider="openai",
+            model="unknown",
+            pricing=pricing,
+            max_cost_microusd=100,
         )
 
     unmetered = LlmUsageCallback(
@@ -90,3 +114,110 @@ def test_usage_callback_fails_closed_when_token_or_cost_budget_cannot_be_proved(
     )
     with pytest.raises(RuntimeError, match="USAGE_UNMETERED"):
         unmetered.on_llm_end(SimpleNamespace(generations=[], llm_output={}))
+
+
+def test_preflight_reserves_prompt_and_output_before_any_provider_call() -> None:
+    pricing = PricingCatalog(
+        {"openai:m": {"input_usd_per_million": 1, "output_usd_per_million": 1}}
+    )
+    callback = LlmUsageCallback(
+        provider="openai",
+        model="m",
+        pricing=pricing,
+        max_total_tokens=10,
+        max_output_tokens_per_request=3,
+    )
+    with pytest.raises(RuntimeError, match="TOKEN_BUDGET_PRECHECK_FAILED"):
+        callback.on_llm_start(None, ["prompt-is-already-too-large"], run_id=uuid4())
+    assert callback.snapshot().llm_requests == 0
+
+
+def test_preflight_counts_prior_attempt_usage_and_concurrent_reservations() -> None:
+    pricing = PricingCatalog(
+        {"openai:m": {"input_usd_per_million": 1, "output_usd_per_million": 1}}
+    )
+    exhausted = LlmUsageCallback(
+        provider="openai",
+        model="m",
+        pricing=pricing,
+        max_total_tokens=10,
+        max_output_tokens_per_request=2,
+        prior_usage=JobUsage(
+            input_tokens=6,
+            output_tokens=3,
+            total_tokens=9,
+            llm_requests=1,
+        ),
+    )
+    with pytest.raises(RuntimeError, match="TOKEN_BUDGET_PRECHECK_FAILED"):
+        exhausted.on_llm_start(None, ["x"], run_id=uuid4())
+
+    concurrent = LlmUsageCallback(
+        provider="openai",
+        model="m",
+        pricing=pricing,
+        max_total_tokens=600,
+        max_output_tokens_per_request=3,
+    )
+    concurrent.on_llm_start(None, ["x"], run_id=uuid4())
+    concurrent.on_llm_start(None, ["y"], run_id=uuid4())
+    with pytest.raises(RuntimeError, match="TOKEN_BUDGET_PRECHECK_FAILED"):
+        concurrent.on_llm_start(None, ["z"], run_id=uuid4())
+
+
+def test_preflight_counts_tool_schema_even_when_prompt_is_tiny() -> None:
+    pricing = PricingCatalog(
+        {"openai:m": {"input_usd_per_million": 1, "output_usd_per_million": 1}}
+    )
+    callback = LlmUsageCallback(
+        provider="openai",
+        model="m",
+        pricing=pricing,
+        max_total_tokens=150,
+        max_output_tokens_per_request=3,
+    )
+    serialized = {
+        "tools": [
+            {
+                "name": "large-tool",
+                "description": "schema-bytes-" * 20,
+                "parameters": {"type": "object", "properties": {}},
+            }
+        ]
+    }
+    with pytest.raises(RuntimeError, match="TOKEN_BUDGET_PRECHECK_FAILED"):
+        callback.on_chat_model_start(serialized, [["x"]], run_id=uuid4())
+
+
+def test_cost_preflight_rejects_unpriced_or_over_budget_without_request() -> None:
+    pricing = PricingCatalog(
+        {"openai:m": {"input_usd_per_million": 1, "output_usd_per_million": 1}}
+    )
+    callback = LlmUsageCallback(
+        provider="openai",
+        model="m",
+        pricing=pricing,
+        max_cost_microusd=9,
+        max_output_tokens_per_request=5,
+    )
+    with pytest.raises(RuntimeError, match="COST_BUDGET_PRECHECK_FAILED"):
+        callback.on_llm_start(None, ["12345"], run_id=uuid4())
+    assert callback.snapshot().llm_requests == 0
+
+
+def test_each_llm_call_requires_enough_remaining_deadline_window(monkeypatch) -> None:
+    import tradingagents.platform.usage as usage_module
+
+    clock = {"now": 90.0}
+    monkeypatch.setattr(usage_module.time, "monotonic", lambda: clock["now"])
+    callback = LlmUsageCallback(
+        provider="openai",
+        model="m",
+        pricing=PricingCatalog(),
+        deadline_monotonic=100.0,
+        minimum_request_window_seconds=5.0,
+    )
+    callback.on_llm_start(None, ["first"], run_id=uuid4())
+    clock["now"] = 96.0
+    with pytest.raises(RuntimeError, match="DEADLINE_WINDOW_INSUFFICIENT"):
+        callback.on_llm_start(None, ["blocked"], run_id=uuid4())

@@ -6,6 +6,7 @@ minimal environment: pytest + requests + pytz only.
 """
 
 import os
+import json
 from unittest import mock
 
 import pytest
@@ -89,10 +90,14 @@ def _response(status, json_body=None, text=""):
     resp = mock.MagicMock()
     resp.status_code = status
     resp.text = text
+    resp.headers = {}
     if json_body is None:
         resp.json.side_effect = ValueError("no json")
+        payload = text.encode("utf-8")
     else:
         resp.json.return_value = json_body
+        payload = json.dumps(json_body).encode("utf-8")
+    resp.iter_content.side_effect = lambda chunk_size: [payload]
     return resp
 
 

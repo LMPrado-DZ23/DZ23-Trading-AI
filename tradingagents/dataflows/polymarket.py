@@ -15,23 +15,47 @@ from datetime import datetime, timezone
 
 import requests
 
+from .http_limits import read_bounded_response
+
 logger = logging.getLogger(__name__)
 
 GAMMA_BASE = "https://gamma-api.polymarket.com"
 
 # Network timeout (seconds), consistent with the other vendors.
 REQUEST_TIMEOUT = 30
+MAX_RESPONSE_BYTES = 2_000_000
+MAX_EVENTS = 100
+MAX_MARKETS_PER_EVENT = 100
 
 # Default number of markets to return, ranked by traded volume.
 DEFAULT_LIMIT = 6
 
 
 def _request(path: str, params: dict) -> dict:
-    response = requests.get(
-        f"{GAMMA_BASE}/{path}", params=params, timeout=REQUEST_TIMEOUT
-    )
-    response.raise_for_status()
-    return response.json()
+    response = None
+    try:
+        response = requests.get(
+            f"{GAMMA_BASE}/{path}",
+            params=params,
+            timeout=REQUEST_TIMEOUT,
+            stream=True,
+        )
+        response.raise_for_status()
+        document = json.loads(
+            read_bounded_response(
+                response,
+                max_bytes=MAX_RESPONSE_BYTES,
+                vendor="Polymarket",
+            )
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise ValueError("Polymarket returned malformed JSON") from None
+    finally:
+        if response is not None:
+            getattr(response, "close", lambda: None)()
+    if not isinstance(document, dict):
+        raise ValueError("Polymarket returned an invalid response")
+    return document
 
 
 def _parse_json_list(value) -> list:
@@ -92,9 +116,19 @@ def get_prediction_markets(topic: str, limit: int | None = None) -> str:
         )
 
     now = datetime.now(timezone.utc)
+    events = data.get("events", [])
+    if not isinstance(events, list) or len(events) > MAX_EVENTS:
+        raise ValueError("Polymarket returned an invalid or oversized event collection")
+    if any(
+        not isinstance(event, dict)
+        or not isinstance(event.get("markets", []), list)
+        or len(event.get("markets", [])) > MAX_MARKETS_PER_EVENT
+        for event in events
+    ):
+        raise ValueError("Polymarket returned an invalid or oversized market collection")
     candidates = [
         m
-        for event in data.get("events", [])
+        for event in events
         for m in event.get("markets", [])
         if _is_forward_looking(m, now)
     ]

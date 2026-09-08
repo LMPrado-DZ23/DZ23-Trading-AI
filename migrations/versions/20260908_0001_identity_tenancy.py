@@ -269,6 +269,13 @@ def downgrade() -> None:
             sa.text("DROP TRIGGER IF EXISTS identity_audit_no_mutation ON identity_audit_events")
         )
         op.execute(sa.text("DROP FUNCTION IF EXISTS identity_reject_audit_mutation()"))
+        # The user policy references identity_memberships.  PostgreSQL will not
+        # drop that table while the policy still exists, even though both are
+        # owned by this revision.  Remove the cross-table policy before the
+        # dependency teardown below.
+        op.execute(
+            sa.text('DROP POLICY IF EXISTS "identity_users_isolation" ON "identity_users"')
+        )
     elif dialect == "sqlite":
         op.execute(sa.text("DROP TRIGGER IF EXISTS identity_audit_no_update"))
         op.execute(sa.text("DROP TRIGGER IF EXISTS identity_audit_no_delete"))

@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
+from cryptography.exceptions import InvalidTag
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
@@ -21,6 +22,10 @@ from tradingagents.platform.llm_connections.models import (
     LlmConnection,
     LlmCredential,
     LlmCredentialAccessEvent,
+)
+from tradingagents.platform.llm_provenance import (
+    LlmReferenceSnapshot,
+    build_llm_reference_snapshot,
 )
 
 
@@ -52,7 +57,6 @@ _PROVIDERS = tuple(
         ("kimi", "Moonshot Kimi", False),
         ("nvidia", "NVIDIA NIM", False),
         ("azure", "Azure OpenAI", True),
-        ("bedrock", "Amazon Bedrock (Bearer)", False),
     )
 )
 _PROVIDER_BY_SLUG = {item.slug: item for item in _PROVIDERS}
@@ -86,6 +90,15 @@ class ResolvedLlmCredential:
             return (f"{parsed.scheme}://{parsed.hostname}{port}",)
         return ()
 
+    def provenance(self, *, model: str) -> LlmReferenceSnapshot:
+        return build_llm_reference_snapshot(
+            provider=self.provider,
+            model=model,
+            connection_id=self.connection_id,
+            credential_version=self.version,
+            base_url=self.base_url,
+        )
+
 
 def llm_provider_catalog() -> tuple[LlmProviderCapability, ...]:
     return _PROVIDERS
@@ -97,9 +110,9 @@ class LlmConnectionService:
         session_factory: sessionmaker[Session],
         *,
         keyring: CredentialCryptoPort,
-        idempotency_digest_key: bytes,
+        idempotency_digest_key: bytes | None,
     ) -> None:
-        if len(idempotency_digest_key) < 32:
+        if idempotency_digest_key is not None and len(idempotency_digest_key) < 32:
             raise ValueError("LLM idempotency digest key must contain at least 32 bytes")
         self._sessions = session_factory
         self._keyring = keyring
@@ -169,6 +182,8 @@ class LlmConnectionService:
         api_key: str,
         base_url: str | None = None,
     ) -> UUID:
+        if self._digest_key is None:
+            raise LlmConnectionError("LLM_CONNECTION_WRITE_CAPABILITY_UNAVAILABLE")
         self._authorize(principal, write=True)
         provider = provider.strip().lower()
         endpoint = self._endpoint(provider, base_url)
@@ -338,11 +353,12 @@ class LlmConnectionService:
         connection_id: UUID,
         credential_version: int,
         provider: str,
-    ) -> None:
+        model: str,
+    ) -> LlmReferenceSnapshot:
         with self._sessions() as db, db.begin():
             self._set_tenant_scope(db, tenant_id)
-            exists = db.scalar(
-                select(LlmCredential.id)
+            reference = db.execute(
+                select(LlmCredential.id, LlmConnection.base_url)
                 .join(
                     LlmConnection,
                     (LlmConnection.id == LlmCredential.connection_id)
@@ -356,9 +372,19 @@ class LlmConnectionService:
                     LlmConnection.status == "ready",
                     LlmConnection.active_credential_version == credential_version,
                 )
-            )
-            if exists is None:
+            ).one_or_none()
+            if reference is None:
                 raise LlmConnectionError("LLM_CREDENTIAL_NOT_FOUND")
+            try:
+                return build_llm_reference_snapshot(
+                    provider=provider,
+                    model=model,
+                    connection_id=connection_id,
+                    credential_version=credential_version,
+                    base_url=reference.base_url,
+                )
+            except ValueError as exc:
+                raise LlmConnectionError("LLM_PROVENANCE_UNAVAILABLE") from exc
 
     def resolve_for_worker(
         self,
@@ -369,7 +395,8 @@ class LlmConnectionService:
         expected_provider: str,
         actor_user_id: UUID,
     ) -> ResolvedLlmCredential:
-        denied_version: int | None = None
+        denied = False
+        active_version: int | None = None
         with self._sessions() as db, db.begin():
             connection = db.scalar(
                 select(LlmConnection).where(
@@ -392,7 +419,8 @@ class LlmConnectionService:
                 or connection.active_credential_version != credential_version
             ):
                 if connection is not None:
-                    denied_version = connection.active_credential_version
+                    denied = True
+                    active_version = connection.active_credential_version
             else:
                 envelope = CredentialEnvelope(
                     credential.key_id,
@@ -403,14 +431,15 @@ class LlmConnectionService:
                 )
                 resolved_provider = connection.provider
                 resolved_base_url = connection.base_url
-        if denied_version is not None:
+        if denied:
             self._record_access(
                 tenant_id=tenant_id,
                 connection_id=connection_id,
-                credential_version=denied_version,
+                credential_version=credential_version,
                 actor_user_id=actor_user_id,
                 outcome="denied",
                 provider=expected_provider,
+                extra_details={"active_credential_version": active_version},
             )
             raise LlmConnectionError("LLM_CREDENTIAL_NOT_FOUND")
         if connection is None or credential is None:
@@ -421,7 +450,7 @@ class LlmConnectionService:
             api_key = payload["api_key"]
             if not isinstance(api_key, str) or not api_key:
                 raise ValueError
-        except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+        except (InvalidTag, ValueError, KeyError, TypeError, json.JSONDecodeError):
             self._record_access(
                 tenant_id=tenant_id,
                 connection_id=connection_id,
@@ -456,7 +485,10 @@ class LlmConnectionService:
         actor_user_id: UUID,
         outcome: str,
         provider: str,
+        extra_details: dict[str, object] | None = None,
     ) -> None:
+        details: dict[str, object] = {"provider": provider}
+        details.update(extra_details or {})
         with self._sessions() as db, db.begin():
             db.add(
                 LlmCredentialAccessEvent(
@@ -466,12 +498,14 @@ class LlmConnectionService:
                     actor_user_id=actor_user_id,
                     purpose="analysis",
                     outcome=outcome,
-                    details={"provider": provider},
+                    details=details,
                     occurred_at=datetime.now(UTC),
                 )
             )
 
     def disable(self, *, principal: IdentityPrincipal, connection_id: UUID) -> None:
+        if self._digest_key is None:
+            raise LlmConnectionError("LLM_CONNECTION_WRITE_CAPABILITY_UNAVAILABLE")
         self._authorize(principal, write=True)
         with self._sessions() as db, db.begin():
             self._set_tenant_scope(db, principal.tenant_id)

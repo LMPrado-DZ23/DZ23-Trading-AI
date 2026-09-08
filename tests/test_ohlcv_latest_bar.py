@@ -70,12 +70,19 @@ def test_clean_dataframe_keeps_nan_close_for_the_caller_to_inspect():
 
 
 @pytest.mark.unit
-def test_fill_price_gaps_drops_nan_close_rows():
-    df = pd.DataFrame({"Date": pd.to_datetime(["2026-05-07", "2026-05-08"]),
-                       "Close": [float("nan"), 100.0]})
-    filled = su._fill_price_gaps(df)
-    assert len(filled) == 1
-    assert filled["Close"].iloc[0] == 100.0
+def test_incomplete_ohlcv_is_never_imputed():
+    df = pd.DataFrame(
+        {
+            "Date": pd.to_datetime(["2026-05-07", "2026-05-08"]),
+            "Open": [99.0, 99.0],
+            "High": [101.0, 101.0],
+            "Low": [98.0, 98.0],
+            "Close": [float("nan"), 100.0],
+            "Volume": [1000, 1000],
+        }
+    )
+    with pytest.raises(ValueError, match="non-finite"):
+        su.validate_ohlcv_frame(df)
 
 
 # --- load_ohlcv end-to-end (with a mocked cache read) -----------------------
@@ -87,7 +94,9 @@ def _run_load(monkeypatch, tmp_path, frame, curr_date):
     monkeypatch.setattr(su.pd.Timestamp, "today", staticmethod(lambda: today))
     start = (today - pd.DateOffset(years=5)).strftime("%Y-%m-%d")
     end = (today + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
-    (tmp_path / f"AAPL-YFin-data-{start}-{end}.csv").write_text(frame.to_csv(index=False))
+    (tmp_path / f"AAPL-YFin-raw-v1-{start}-{end}.csv").write_text(
+        frame.to_csv(index=False)
+    )
 
     def _fail_download(*a, **k):
         raise AssertionError("should use the seeded cache, not download")
@@ -104,22 +113,21 @@ def test_latest_in_range_nan_close_raises_not_silent_fallback(monkeypatch, tmp_p
         "Open": [100.0, 101.0], "High": [101.0, 102.0], "Low": [99.0, 100.0],
         "Close": [100.5, float("nan")], "Volume": [1_000_000, 1_000_000],
     })
-    with pytest.raises(NoMarketDataError, match="no closing price"):
+    with pytest.raises(NoMarketDataError, match="non-finite"):
         _run_load(monkeypatch, tmp_path, frame, "2026-05-08")
 
 
 @pytest.mark.unit
-def test_older_nan_close_row_is_still_dropped(monkeypatch, tmp_path):
-    # A stale gap mid-series is dropped; the valid latest bar is served.
+def test_older_nan_close_row_is_rejected_not_hidden(monkeypatch, tmp_path):
+    # Any malformed raw row is rejected; silently dropping it changes indicators.
     frame = pd.DataFrame({
         "Date": ["2026-05-06", "2026-05-07", "2026-05-08"],
         "Open": [100.0, 101.0, 102.0], "High": [101.0, 102.0, 103.0],
         "Low": [99.0, 100.0, 101.0],
         "Close": [100.5, float("nan"), 102.5], "Volume": [1_000_000, 1_000_000, 1_000_000],
     })
-    out = _run_load(monkeypatch, tmp_path, frame, "2026-05-08")
-    assert out["Close"].iloc[-1] == 102.5
-    assert (out["Date"] == pd.Timestamp("2026-05-07")).sum() == 0  # the NaN row is gone
+    with pytest.raises(NoMarketDataError, match="non-finite"):
+        _run_load(monkeypatch, tmp_path, frame, "2026-05-08")
 
 
 @pytest.mark.unit

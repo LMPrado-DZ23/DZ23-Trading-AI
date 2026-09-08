@@ -232,10 +232,7 @@ class AnalysisJobRequest(ApiModel):
     model: str = Field(min_length=1, max_length=160)
     llm_connection_id: UUID
     llm_credential_version: int = Field(ge=1)
-    selected_analysts: tuple[Literal["market", "social", "news", "fundamentals"], ...] = (
-        "market",
-        "news",
-    )
+    selected_analysts: tuple[Literal["market"], ...] = ("market",)
     config: dict[str, Any] = Field(default_factory=dict)
     token_budget: int = Field(default=250_000, ge=1_000, le=2_000_000)
     cost_budget_microusd: int | None = Field(default=None, ge=1_000, le=1_000_000_000)

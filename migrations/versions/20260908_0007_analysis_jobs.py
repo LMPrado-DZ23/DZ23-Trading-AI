@@ -92,14 +92,24 @@ def _install_postgres_guards() -> None:
     op.execute(
         sa.text(
             "DO $$ DECLARE role_row record; BEGIN "
-            "SELECT rolsuper, rolcreatedb, rolcreaterole, rolbypassrls INTO role_row "
+            "SELECT rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls "
+            "INTO role_row "
             "FROM pg_roles WHERE rolname = 'tradingagents_worker'; "
             "IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'tradingagents_worker') THEN "
             "CREATE ROLE tradingagents_worker LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE "
-            "NOINHERIT NOBYPASSRLS; "
+            "NOREPLICATION NOINHERIT NOBYPASSRLS; "
             "ELSIF role_row.rolsuper OR role_row.rolcreatedb OR role_row.rolcreaterole "
-            "OR role_row.rolbypassrls THEN RAISE EXCEPTION "
+            "OR role_row.rolreplication OR role_row.rolbypassrls THEN RAISE EXCEPTION "
             "'existing tradingagents_worker role has unsafe attributes'; END IF; END $$"
+        )
+    )
+    op.execute(
+        sa.text(
+            "DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles candidate "
+            "WHERE candidate.rolname <> 'tradingagents_worker' "
+            "AND pg_has_role('tradingagents_worker', candidate.oid, 'MEMBER')) THEN "
+            "RAISE EXCEPTION 'tradingagents_worker must not be a member of any role'; "
+            "END IF; END $$"
         )
     )
     op.execute(
@@ -134,6 +144,9 @@ def _install_postgres_guards() -> None:
 
 def downgrade() -> None:
     if op.get_bind().dialect.name == "postgresql":
+        # PostgreSQL records the policy's TO-role as a dependency. Remove the
+        # policy before dropping the worker role or rollback fails midway.
+        op.execute(sa.text("DROP POLICY IF EXISTS analysis_jobs_worker ON analysis_jobs"))
         op.execute(sa.text("REVOKE ALL ON analysis_jobs FROM tradingagents_worker"))
         op.execute(sa.text("REVOKE USAGE ON SCHEMA public FROM tradingagents_worker"))
         op.execute(

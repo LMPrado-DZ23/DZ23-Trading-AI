@@ -13,6 +13,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_instrument_context_from_state,
     resolve_instrument_identity,
 )
+from tradingagents.graph.trading_graph import TradingAgentsGraph
 
 
 @pytest.mark.unit
@@ -63,6 +64,21 @@ class ResolveInstrumentIdentityTests(unittest.TestCase):
             second = resolve_instrument_identity("TOTDY")
         mock.assert_called_once()  # second call served from cache
         self.assertEqual(first, second)
+
+    def test_platform_context_never_calls_current_unversioned_metadata(self):
+        with patch(
+            "tradingagents.graph.trading_graph.resolve_instrument_identity",
+            side_effect=AssertionError("platform attempted current yfinance metadata"),
+        ) as resolver:
+            context = TradingAgentsGraph.resolve_instrument_context(
+                object(),
+                "AAPL",
+                "stock",
+                run_context=object(),
+            )
+        resolver.assert_not_called()
+        self.assertIn("AAPL", context)
+        self.assertNotIn("Resolved identity", context)
 
 
 @pytest.mark.unit

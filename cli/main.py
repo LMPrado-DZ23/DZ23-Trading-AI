@@ -7,6 +7,7 @@ from functools import wraps
 from pathlib import Path
 
 import typer
+from dotenv import find_dotenv, load_dotenv
 from rich import box
 from rich.align import Align
 from rich.console import Console
@@ -18,6 +19,17 @@ from rich.rule import Rule
 from rich.spinner import Spinner
 from rich.table import Table
 from rich.text import Text
+
+# Dotenv is a CLI convenience only. Library, API and worker imports never read
+# caller-controlled files implicitly.
+if os.environ.get("TRADINGAGENTS_DISABLE_DOTENV", "").strip().lower() not in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}:
+    load_dotenv(find_dotenv(usecwd=True))
+    load_dotenv(find_dotenv(".env.enterprise", usecwd=True), override=False)
 
 from cli.announcements import display_announcements, fetch_announcements
 from cli.stats_handler import StatsCallbackHandler

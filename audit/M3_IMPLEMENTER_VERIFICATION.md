@@ -10,37 +10,44 @@ Base M2: `6f3fc5384464fc9b7eadfd5f4faf358e24602f00`
 
 - fila PostgreSQL com claim por lease, heartbeat, retry, cancelamento e fencing;
 - API e worker separados;
-- `AnalysisRunContext` imutável com `decision_at`, calendário, digests e schema 3;
+- `AnalysisRunContext` imutável com `decision_at`, calendário, digests e schema 7;
 - checkpoint e manifesto vinculados ao contexto;
 - isolamento de configuração, credenciais LLM por tenant e capacidades OpenBao separadas;
 - limites e contabilização de tokens/custo;
-- validação point-in-time antes de chamadas de rede;
-- migrations 0007–0013, privilégios mínimos e auditoria append-only.
+- validação point-in-time antes de chamadas de rede, com apenas o analista de
+  mercado habilitado até as outras famílias terem `available_at` confiável;
+- isolamento físico de cada attempt em subprocesso, deadline, encerramento da
+  árvore, quota de disco e journal parcial durável;
+- digest das fontes e do ambiente de dependências que vincula API, job e worker;
+- migrations 0007–0017, privilégios mínimos, fencing e auditoria append-only.
 
 ## Reprodução local
 
 - Ruff: verde.
 - `compileall`: verde.
-- Suíte integral: 1201 casos JUnit; 0 falhas, 0 erros, 11 skips. O resumo pytest é
-  1119 passed, 11 skipped e 71 subtests passed.
+- Suíte integral com PostgreSQL e Redis reais: 0 falhas, 0 erros, 1 skip. O
+  resumo pytest é 1182 passed, 1 skipped e 71 subtests passed.
 - Integração PostgreSQL 17 + Redis 7.4: 9 passed, 0 skipped.
 
 ## Evidências
 
 | Arquivo | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `audit/m3-final-junit.xml` | 154739 | `7aad41b55f31d416066e1beca020be028b4ec12e42a89703ec749a8230d58220` |
-| `audit/m3-integration-junit.xml` | 1608 | `1f876cfdbed6f584207014c5efe9d5ab1d4156a601a4d27f351b1f1c5b49227a` |
+| `audit/m3-final-junit.xml` | 159739 | `c2a382a18b4178b201da396a70e67db72412fb28288647c9b60909d3798f0dc5` |
+| `audit/m3-integration-junit.xml` | 1608 | `7c962cc7be893ab38eb8d585fc4f8eb8835bc6cfb171546d797b24544e09122d` |
 
 ## Limites honestos
 
-- Os 11 skips da suíte integral incluem integrações que foram executadas em uma
-  segunda invocação com PostgreSQL e Redis reais, além de Bedrock e DeepSeek live,
-  que dependem de credenciais externas e não são promoção de venue.
+- O único skip é DeepSeek live, que depende de uma credencial externa não
+  comprometida. Bedrock foi removido do catálogo da plataforma até existir rota
+  persistida de região; continua disponível apenas no cliente CLI opcional.
 - Timeout menor que metade do lease e fencing reduzem duplicação após partição,
   mas uma chamada LLM externa não oferece exatamente-uma-vez. Cobrança e retries
   permanecem observáveis e limitados; execução de capital não pertence ao M3.
-- Migrations remotas 0006–0013 só serão aplicadas depois do schema congelado e da
+- Fundamentals, notícias, macro, social e Polymarket não são tratados como
+  temporalmente corretos: estão excluídos de todos os jobs da plataforma. Isso
+  reduz a análise a mercado/indicadores até o marco que implementar as fontes PIT.
+- Migrations remotas 0006–0017 só serão aplicadas depois do schema congelado e da
   revisão independente.
 - Esta é evidência do implementador, não aprovação. O gate só fecha após auditoria
   independente sobre o commit congelado.

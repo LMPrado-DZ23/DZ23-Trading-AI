@@ -6,7 +6,7 @@ import hashlib
 import json
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -14,19 +14,60 @@ import exchange_calendars as xcals
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from tradingagents.platform.contracts import RunMode
+from tradingagents.platform.llm_provenance import LlmReferenceSnapshot
 
-WORKFLOW_SCHEMA_VERSION = 3
+WORKFLOW_SCHEMA_VERSION = 7
+DAILY_BAR_SETTLEMENT_LAG = timedelta(minutes=15)
 
 
-def decision_cutoff(*, trade_date: str, asset_type: str, market_calendar: str) -> datetime:
+def calendar_schedule_digest(
+    *, market_calendar: str, trade_date: str, decision_at: datetime
+) -> str:
+    return hashlib.sha256(
+        (
+            f"{market_calendar}:{trade_date}:"
+            f"{decision_at.astimezone(UTC).isoformat()}"
+        ).encode()
+    ).hexdigest()
+
+
+def decision_cutoff(
+    *,
+    trade_date: str,
+    asset_type: str,
+    market_calendar: str,
+    mode: RunMode = RunMode.BACKTEST,
+    observed_at: datetime | None = None,
+) -> datetime:
     """Return the immutable market cutoff for the supported v1 asset classes."""
 
     try:
         calendar = xcals.get_calendar(market_calendar)
-        cutoff = calendar.session_close(trade_date)
+        cutoff = calendar.session_close(trade_date).to_pydatetime()
     except (KeyError, ValueError) as exc:
         raise ValueError("trade_date is not a session in the selected market calendar") from exc
-    return cutoff.to_pydatetime()
+    now = (observed_at or datetime.now(UTC)).astimezone(UTC)
+    # A daily bar is not decision-usable at the exchange's closing instant.
+    # The immutable decision timestamp is when the completed bar is considered
+    # settled by policy; next-open execution still occurs strictly afterwards.
+    available_at = cutoff + DAILY_BAR_SETTLEMENT_LAG
+    if mode is RunMode.BACKTEST:
+        if available_at > now:
+            raise ValueError("backtest requires a settled market session")
+        return available_at
+    if mode not in {RunMode.SHADOW, RunMode.PAPER}:
+        raise ValueError("analysis mode is not supported")
+    local_date = now.astimezone(calendar.tz).date()
+    latest_session = calendar.date_to_session(local_date, direction="previous")
+    if (
+        calendar.session_close(latest_session).to_pydatetime()
+        + DAILY_BAR_SETTLEMENT_LAG
+        > now
+    ):
+        latest_session = calendar.previous_session(latest_session)
+    if latest_session.date().isoformat() != trade_date or available_at > now:
+        raise ValueError("paper and shadow require the latest settled market session")
+    return available_at
 
 
 class AnalysisRunContext(BaseModel):
@@ -50,9 +91,21 @@ class AnalysisRunContext(BaseModel):
     workflow_schema_version: int = WORKFLOW_SCHEMA_VERSION
     config_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     provider_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    provider_endpoint: str = Field(min_length=1, max_length=2048)
+    provider_allowed_origins: tuple[str, ...] = Field(max_length=16)
+    transport_policy_version: str = Field(min_length=1, max_length=80)
+    provider_adapter_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    application_build_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    calendar_engine_version: str = Field(min_length=1, max_length=80)
+    calendar_schedule_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    token_budget: int = Field(ge=1_000, le=2_000_000)
+    cost_budget_microusd: int | None = Field(default=None, ge=1_000, le=1_000_000_000)
+    pricing_catalog_version: str = Field(pattern=r"^[0-9a-f]{16}$")
+    max_execution_seconds: int = Field(ge=30, le=3600)
+    deadline_at: datetime
     created_at: datetime
 
-    @field_validator("created_at", "decision_at")
+    @field_validator("created_at", "decision_at", "deadline_at")
     @classmethod
     def aware_created_at(cls, value: datetime) -> datetime:
         if value.tzinfo is None or value.utcoffset() is None:
@@ -72,8 +125,33 @@ class AnalysisRunContext(BaseModel):
             trade_date=self.trade_date,
             asset_type=self.asset_type,
             market_calendar=self.market_calendar,
+            mode=self.mode,
+            observed_at=self.created_at,
         ):
             raise ValueError("decision_at does not match the market cutoff contract")
+        if self.deadline_at != self.created_at + timedelta(seconds=self.max_execution_seconds):
+            raise ValueError("deadline_at does not match the execution deadline contract")
+        snapshot = LlmReferenceSnapshot(
+            provider=self.provider,
+            model=self.model,
+            connection_id=str(self.llm_connection_id),
+            credential_version=self.llm_credential_version,
+            endpoint=self.provider_endpoint,
+            allowed_origins=self.provider_allowed_origins,
+            transport_policy_version=self.transport_policy_version,
+            adapter_build_digest=self.provider_adapter_digest,
+            application_build_digest=self.application_build_digest,
+            calendar_engine_version=self.calendar_engine_version,
+        )
+        if snapshot.digest != self.provider_digest:
+            raise ValueError("provider provenance digest does not match its snapshot")
+        expected_schedule = calendar_schedule_digest(
+            market_calendar=self.market_calendar,
+            trade_date=self.trade_date,
+            decision_at=self.decision_at,
+        )
+        if expected_schedule != self.calendar_schedule_digest:
+            raise ValueError("calendar schedule digest does not match the decision cutoff")
         return self
 
     @property

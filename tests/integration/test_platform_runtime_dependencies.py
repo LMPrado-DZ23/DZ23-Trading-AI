@@ -22,7 +22,6 @@ def test_runtime_readiness_checks_restricted_postgres_role_and_real_redis() -> N
         environment="production",
         database_url=database_url,
         database_expected_role=make_url(database_url).username or "",
-        worker_database_url=os.environ.get("TRADINGAGENTS_TEST_WORKER_POSTGRES_URL", ""),
         public_url="https://trading.example.test",
         allowed_origins=["https://trading.example.test"],
         session_token_pepper="integration-runtime-master-secret-32-bytes-long",
@@ -38,7 +37,15 @@ def test_runtime_readiness_checks_restricted_postgres_role_and_real_redis() -> N
         broker_credential_provider="openbao_transit",
         broker_transit_url="https://openbao:8200",
         broker_transit_token="test-only-transit-token",
-        llm_transit_token="test-only-llm-transit-token",
+        llm_transit_write_token="test-only-llm-write-token",
+        worker_job_auth_key="test-only-worker-job-auth-key-32-bytes",
+        llm_pricing={
+            "openai:gpt-5": {
+                "input_usd_per_million": "1",
+                "output_usd_per_million": "2",
+            }
+        },
+        monthly_cost_quota_microusd=1_000_000,
     )
 
     with TestClient(create_production_app(settings), base_url=settings.public_url) as client:
