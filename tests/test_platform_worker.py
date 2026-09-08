@@ -618,6 +618,54 @@ def test_attempt_supervisor_physically_terminates_a_blocked_process_tree(tmp_pat
             os.kill(descendant_pid, 0)
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows taskkill failure path")
+def test_taskkill_timeout_is_terminal_and_never_escapes_supervisor(monkeypatch) -> None:
+    class Process:
+        pid = 424242
+
+        def __init__(self) -> None:
+            self.returncode = None
+
+        def poll(self):
+            return self.returncode
+
+        def wait(self, timeout):
+            if self.returncode is None:
+                raise subprocess.TimeoutExpired("attempt", timeout)
+            return self.returncode
+
+        def kill(self):
+            self.returncode = -9
+
+    monkeypatch.setattr(
+        "tradingagents.platform.worker.subprocess.run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            subprocess.TimeoutExpired("taskkill", 5)
+        ),
+    )
+    code = _supervise_attempt_process(
+        Process(),
+        ExecutionControl(threading.Event(), time.monotonic() - 1),
+    )
+    assert code == "WORKER_TERMINATION_UNCONFIRMED"
+
+
+def test_unexpected_terminator_error_never_enters_retry_path(monkeypatch) -> None:
+    class Process:
+        def poll(self):
+            return None
+
+    monkeypatch.setattr(
+        "tradingagents.platform.worker._terminate_process_tree",
+        lambda _process: (_ for _ in ()).throw(RuntimeError("os containment failure")),
+    )
+    code = _supervise_attempt_process(
+        Process(),
+        ExecutionControl(threading.Event(), time.monotonic() - 1),
+    )
+    assert code == "WORKER_TERMINATION_UNCONFIRMED"
+
+
 def test_runtime_root_canonical_alias_cannot_select_the_working_tree() -> None:
     alias = Path.cwd() / ".." / Path.cwd().name
     with pytest.raises(RuntimeError, match="dedicated subdirectory"):

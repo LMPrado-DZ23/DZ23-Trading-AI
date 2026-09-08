@@ -123,9 +123,9 @@
 - Secret scan textual por padrões de chaves privadas/JWT/provider: **0 arquivos**; `gitleaks` indisponível e permanece gate de CI M9.
 - Supabase advisor pós-migration: **0 achados de segurança**, **0 FKs sem índice**, **0 políticas com init-plan por linha**; 21 índices novos/necessários aparecem apenas como ainda não usados porque o banco está vazio.
 - Revalidação focal PostgreSQL/Redis/Supabase após migrations 0004–0005: **46 passed**.
-- M3 integral com PostgreSQL e Redis reais: **1182 passed, 1 skipped, 71 subtests**, zero falhas/erros; ruff e compileall verdes.
+- M3 integral com PostgreSQL e Redis reais: **1184 passed, 1 skipped, 71 subtests**, zero falhas/erros; ruff e compileall verdes.
 - M3 integração PostgreSQL 17 + Redis 7.4 com URLs reais locais: **9 passed**, zero skips.
-- Evidência M3: `audit/m3-final-junit.xml` SHA-256 `c2a382a18b4178b201da396a70e67db72412fb28288647c9b60909d3798f0dc5`; `audit/m3-integration-junit.xml` SHA-256 `7c962cc7be893ab38eb8d585fc4f8eb8835bc6cfb171546d797b24544e09122d`.
+- Evidência M3: `audit/m3-final-junit.xml` SHA-256 `baa78e902647dbbf33162137a788d3573f4abd585b0b1743bc983fd8b90944db`; `audit/m3-integration-junit.xml` SHA-256 `7c962cc7be893ab38eb8d585fc4f8eb8835bc6cfb171546d797b24544e09122d`.
 
 ## Commits
 

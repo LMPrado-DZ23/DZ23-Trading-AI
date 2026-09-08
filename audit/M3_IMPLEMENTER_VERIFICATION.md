@@ -26,14 +26,14 @@ Base M2: `6f3fc5384464fc9b7eadfd5f4faf358e24602f00`
 - Ruff: verde.
 - `compileall`: verde.
 - Suíte integral com PostgreSQL e Redis reais: 0 falhas, 0 erros, 1 skip. O
-  resumo pytest é 1182 passed, 1 skipped e 71 subtests passed.
+  resumo pytest é 1184 passed, 1 skipped e 71 subtests passed.
 - Integração PostgreSQL 17 + Redis 7.4: 9 passed, 0 skipped.
 
 ## Evidências
 
 | Arquivo | Bytes | SHA-256 |
 | --- | ---: | --- |
-| `audit/m3-final-junit.xml` | 159739 | `c2a382a18b4178b201da396a70e67db72412fb28288647c9b60909d3798f0dc5` |
+| `audit/m3-final-junit.xml` | 160001 | `baa78e902647dbbf33162137a788d3573f4abd585b0b1743bc983fd8b90944db` |
 | `audit/m3-integration-junit.xml` | 1608 | `7c962cc7be893ab38eb8d585fc4f8eb8835bc6cfb171546d797b24544e09122d` |
 
 ## Limites honestos

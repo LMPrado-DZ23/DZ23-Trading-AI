@@ -152,7 +152,16 @@ def _supervise_attempt_process(
             next_storage_check = now + 0.5
         time.sleep(min(0.1, max(0.01, control.remaining_seconds())))
     if failure_code is not None:
-        _terminate_process_tree(process)
+        try:
+            terminated = _terminate_process_tree(process)
+        except Exception:
+            # The terminator is a containment boundary: even an unforeseen OS
+            # or subprocess failure must not enter the generic retry path.
+            terminated = False
+        if not terminated:
+            # The caller converts this terminal protocol failure into the
+            # conservative remaining-budget charge.
+            failure_code = "WORKER_TERMINATION_UNCONFIRMED"
     return failure_code
 
 
@@ -178,30 +187,50 @@ def _directory_size(root: Path, *, stop_after: int) -> int:
     return total
 
 
-def _terminate_process_tree(process: subprocess.Popen[str]) -> None:
+def _terminate_process_tree(process: subprocess.Popen[str]) -> bool:
+    """Best-effort tree termination which never leaks a supervisor exception."""
+
     if process.poll() is not None:
-        return
+        return True
+    tree_signal_confirmed = False
     if os.name == "nt":
-        subprocess.run(
-            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            creationflags=subprocess.CREATE_NO_WINDOW,
-            timeout=5,
-        )
+        try:
+            result = subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+                timeout=5,
+            )
+            tree_signal_confirmed = result.returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            tree_signal_confirmed = False
     else:
-        with suppress(ProcessLookupError):
+        try:
             os.killpg(process.pid, signal.SIGTERM)
+            tree_signal_confirmed = True
+        except ProcessLookupError:
+            tree_signal_confirmed = process.poll() is not None
+        except OSError:
+            tree_signal_confirmed = False
     try:
         process.wait(timeout=5)
     except subprocess.TimeoutExpired:
-        if os.name == "nt":
-            process.kill()
-        else:
-            with suppress(ProcessLookupError):
+        try:
+            if os.name == "nt":
+                process.kill()
+            else:
                 os.killpg(process.pid, signal.SIGKILL)
-        process.wait(timeout=5)
+        except (OSError, ProcessLookupError):
+            pass
+        try:
+            process.wait(timeout=5)
+        except (OSError, subprocess.SubprocessError):
+            return False
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return tree_signal_confirmed and process.poll() is not None
 
 
 def _read_evidence_journal(path: Path) -> list[dict[str, Any]]:
