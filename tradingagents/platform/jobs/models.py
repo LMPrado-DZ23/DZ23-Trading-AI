@@ -141,6 +141,7 @@ class JobUsageRecord(Base):
     unmetered_llm_requests: Mapped[int] = mapped_column(nullable=False)
     estimated_cost_microusd: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     pricing_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    accounting_basis: Mapped[str] = mapped_column(String(32), nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), nullable=False, server_default=func.now()
     )
@@ -168,5 +169,9 @@ class JobUsageRecord(Base):
             name="ck_job_usage_cost",
         ),
         CheckConstraint("length(usage_digest) = 64", name="ck_job_usage_digest"),
+        CheckConstraint(
+            "accounting_basis IN ('measured','conservative_reservation')",
+            name="ck_job_usage_accounting_basis",
+        ),
         Index("ix_job_usage_tenant_occurred", "tenant_id", "occurred_at"),
     )

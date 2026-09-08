@@ -10,7 +10,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -23,7 +23,12 @@ from tradingagents.platform.identity import (
     MembershipRole,
     TokenHasher,
 )
-from tradingagents.platform.jobs import AnalysisJob, AnalysisJobCommand, JobService
+from tradingagents.platform.jobs import (
+    AnalysisJob,
+    AnalysisJobCommand,
+    JobService,
+    JobUsageRecord,
+)
 from tradingagents.platform.llm_connections import LlmConnectionService
 from tradingagents.platform.usage import JobUsage
 from tradingagents.platform.worker import (
@@ -33,8 +38,12 @@ from tradingagents.platform.worker import (
     ProductionGraphExecutor,
     WorkerConfig,
     WorkerRunner,
+    _directory_size,
+    _load_attempt_result,
     _protocol_failure,
+    _read_evidence_journal,
     _supervise_attempt_process,
+    _terminate_remaining_posix_group,
 )
 
 
@@ -86,6 +95,30 @@ def _stack():
         llm_reference_validator=llm,
     )
     return factory, principal, llm, jobs, connection_id
+
+
+def _leased_claim(*, key: str = "worker-protocol-claim"):
+    _factory, principal, llm, jobs, connection_id = _stack()
+    jobs.enqueue(
+        principal=principal,
+        idempotency_key=key,
+        command=AnalysisJobCommand(
+            symbol="BTC/USDT",
+            asset_type="crypto",
+            trade_date="2024-01-02",
+            mode=RunMode.BACKTEST,
+            provider="openai",
+            model="gpt-5",
+            llm_connection_id=connection_id,
+            llm_credential_version=1,
+            selected_analysts=("market",),
+            token_budget=4321,
+            cost_budget_microusd=7654,
+        ),
+    )
+    claim = jobs.claim_next(worker_id="protocol-test-worker")
+    assert claim is not None
+    return principal, llm, jobs, claim
 
 
 def test_worker_executes_with_resolved_tenant_secret_and_persists_safe_projection() -> None:
@@ -205,7 +238,7 @@ def test_worker_heartbeats_before_potentially_slow_credential_resolution() -> No
 
 
 def test_worker_persists_partial_usage_and_does_not_retry_failed_graph() -> None:
-    _factory, principal, llm, jobs, connection_id = _stack()
+    factory, principal, llm, jobs, connection_id = _stack()
     job_id = jobs.enqueue(
         principal=principal,
         idempotency_key="worker-partial-usage-failure",
@@ -244,6 +277,10 @@ def test_worker_persists_partial_usage_and_does_not_retry_failed_graph() -> None
     assert detail.job.attempts == 1
     assert detail.job.total_tokens == 10
     assert detail.job.llm_requests == 1
+    with factory() as db:
+        usage_record = db.scalar(select(JobUsageRecord))
+        assert usage_record is not None
+        assert usage_record.accounting_basis == "measured"
 
 
 def test_worker_rejects_job_created_by_a_different_application_build(monkeypatch) -> None:
@@ -477,7 +514,11 @@ def test_retry_attempts_use_distinct_checkpoint_roots(monkeypatch, tmp_path) -> 
     claim = jobs.claim_next(worker_id="checkpoint-worker")
     assert claim is not None
     credential = llm.resolve_for_worker(
+        job_id=claim.id,
         tenant_id=claim.tenant_id,
+        lease_id=claim.lease_id,
+        lease_owner=claim.lease_owner,
+        attempt_number=claim.attempts,
         connection_id=connection_id,
         credential_version=1,
         expected_provider="openai",
@@ -530,7 +571,11 @@ def test_failed_graph_retains_partial_evidence_manifest(monkeypatch, tmp_path) -
     claim = jobs.claim_next(worker_id="partial-evidence-worker")
     assert claim is not None
     credential = llm.resolve_for_worker(
+        job_id=claim.id,
         tenant_id=claim.tenant_id,
+        lease_id=claim.lease_id,
+        lease_owner=claim.lease_owner,
+        attempt_number=claim.attempts,
         connection_id=connection_id,
         credential_version=1,
         expected_provider="openai",
@@ -666,6 +711,26 @@ def test_unexpected_terminator_error_never_enters_retry_path(monkeypatch) -> Non
     assert code == "WORKER_TERMINATION_UNCONFIRMED"
 
 
+def test_posix_terminator_kills_surviving_descendants_after_leader_exit(monkeypatch) -> None:
+    from tradingagents.platform import worker as worker_module
+
+    signals = []
+    survivor = True
+
+    def kill_group(process_group_id, sent_signal):
+        nonlocal survivor
+        assert process_group_id == 4242
+        signals.append(sent_signal)
+        if sent_signal == worker_module._POSIX_SIGKILL:
+            survivor = False
+        elif sent_signal == 0 and not survivor:
+            raise ProcessLookupError
+
+    monkeypatch.setattr(worker_module.os, "killpg", kill_group, raising=False)
+    assert _terminate_remaining_posix_group(4242) is True
+    assert signals == [0, worker_module._POSIX_SIGKILL, 0]
+
+
 def test_runtime_root_canonical_alias_cannot_select_the_working_tree() -> None:
     alias = Path.cwd() / ".." / Path.cwd().name
     with pytest.raises(RuntimeError, match="dedicated subdirectory"):
@@ -703,6 +768,62 @@ def test_attempt_supervisor_fails_closed_when_storage_quota_is_crossed(tmp_path)
     assert process.poll() is not None
 
 
+def test_storage_inspection_failure_terminates_child_and_returns_terminal_code(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    class Process:
+        def poll(self):
+            return None
+
+    terminated = []
+    monkeypatch.setattr(
+        "tradingagents.platform.worker._directory_size",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(PermissionError("denied")),
+    )
+    monkeypatch.setattr(
+        "tradingagents.platform.worker._terminate_process_tree",
+        lambda process: terminated.append(process) or True,
+    )
+    process = Process()
+    code = _supervise_attempt_process(
+        process,
+        ExecutionControl(threading.Event(), time.monotonic() + 5),
+        attempt_root=tmp_path,
+        max_attempt_bytes=1024,
+    )
+    assert code == "WORKER_STORAGE_INSPECTION_FAILED"
+    assert terminated == [process]
+
+
+def test_directory_size_tolerates_an_entry_disappearing_mid_scan(monkeypatch, tmp_path) -> None:
+    class VanishedEntry:
+        def is_symlink(self):
+            return False
+
+        def is_dir(self, *, follow_symlinks):
+            assert follow_symlinks is False
+            return False
+
+        def is_file(self, *, follow_symlinks):
+            assert follow_symlinks is False
+            return True
+
+        def stat(self, *, follow_symlinks):
+            assert follow_symlinks is False
+            raise FileNotFoundError("entry replaced")
+
+    class Entries:
+        def __enter__(self):
+            return iter((VanishedEntry(),))
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr("tradingagents.platform.worker.os.scandir", lambda _path: Entries())
+    assert _directory_size(tmp_path, stop_after=1024) == 0
+
+
 def test_protocol_failure_charges_remaining_budget_and_retains_durable_evidence(
     tmp_path,
 ) -> None:
@@ -735,10 +856,155 @@ def test_protocol_failure_charges_remaining_budget_and_retains_durable_evidence(
     assert failure.retryable is False
     assert failure.usage.total_tokens == 4321
     assert failure.usage.estimated_cost_microusd == 7654
+    assert failure.usage.accounting_basis == "conservative_reservation"
     assert failure.partial_manifest is not None
     serialized = str(failure.partial_manifest)
     assert "get_stock_data" in serialized
     assert "hidden123456" not in serialized
+
+
+@pytest.mark.parametrize(
+    ("method_name", "error"),
+    (
+        ("exists", PermissionError("result existence denied")),
+        ("stat", OSError("result stat failed")),
+        ("read_text", UnicodeDecodeError("utf-8", b"x", 0, 1, "invalid")),
+    ),
+)
+def test_result_inspection_io_failures_are_terminal_and_conservatively_charged(
+    monkeypatch,
+    tmp_path,
+    method_name,
+    error,
+) -> None:
+    _principal, _llm, _jobs, claim = _leased_claim(key=f"result-{method_name}-failure")
+    result_path = tmp_path / "attempt-result.json"
+    result_path.write_text(
+        '{"kind":"success","usage":{},"result":{},"manifest":{}}',
+        encoding="utf-8",
+    )
+    evidence_path = tmp_path / "attempt-evidence.jsonl"
+    original = getattr(Path, method_name)
+
+    def fail_result_only(self, *args, **kwargs):
+        if self == result_path:
+            raise error
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, method_name, fail_result_only)
+    with pytest.raises(GraphExecutionFailure) as captured:
+        _load_attempt_result(claim, result_path, evidence_path)
+    assert captured.value.code == "WORKER_RESULT_INSPECTION_FAILED"
+    assert captured.value.retryable is False
+    assert captured.value.usage.total_tokens == 4321
+    assert captured.value.usage.estimated_cost_microusd == 7654
+
+
+def test_result_cleanup_failure_never_overrides_valid_result(monkeypatch, tmp_path) -> None:
+    _principal, _llm, _jobs, claim = _leased_claim(key="result-cleanup-failure")
+    result_path = tmp_path / "attempt-result.json"
+    result_path.write_text(
+        (
+            '{"kind":"success","usage":{"output_tokens":7,"total_tokens":7},'
+            '"result":{},"manifest":{}}'
+        ),
+        encoding="utf-8",
+    )
+    original_unlink = Path.unlink
+
+    def fail_result_unlink(self, *args, **kwargs):
+        if self == result_path:
+            raise PermissionError("result cleanup denied")
+        return original_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", fail_result_unlink)
+    response, usage = _load_attempt_result(
+        claim,
+        result_path,
+        tmp_path / "attempt-evidence.jsonl",
+    )
+    assert response["kind"] == "success"
+    assert usage.total_tokens == 7
+
+
+@pytest.mark.parametrize(
+    ("method_name", "error"),
+    (
+        ("stat", PermissionError("journal stat denied")),
+        ("read_text", OSError("journal read failed")),
+        ("read_text", UnicodeDecodeError("utf-8", b"x", 0, 1, "invalid")),
+    ),
+)
+def test_evidence_journal_io_failure_never_cancels_conservative_accounting(
+    monkeypatch,
+    tmp_path,
+    method_name,
+    error,
+) -> None:
+    _principal, _llm, _jobs, claim = _leased_claim(key=f"journal-{method_name}-{type(error).__name__}")
+    evidence_path = tmp_path / "attempt-evidence.jsonl"
+    evidence_path.write_text("{}\n", encoding="utf-8")
+    original = getattr(Path, method_name)
+
+    def fail_evidence_only(self, *args, **kwargs):
+        if self == evidence_path:
+            raise error
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, method_name, fail_evidence_only)
+    assert _read_evidence_journal(evidence_path) == []
+    failure = _protocol_failure(claim, evidence_path)
+    assert failure.retryable is False
+    assert failure.usage.total_tokens == 4321
+
+
+def test_worker_preserves_attempt_workspace_when_failure_cannot_be_persisted(
+    monkeypatch,
+) -> None:
+    _factory, principal, llm, jobs, connection_id = _stack()
+    jobs.enqueue(
+        principal=principal,
+        idempotency_key="worker-preserve-uncommitted-evidence",
+        command=AnalysisJobCommand(
+            symbol="BTC/USDT",
+            asset_type="crypto",
+            trade_date="2024-01-02",
+            mode=RunMode.BACKTEST,
+            provider="openai",
+            model="gpt-5",
+            llm_connection_id=connection_id,
+            llm_credential_version=1,
+            selected_analysts=("market",),
+        ),
+    )
+
+    class Executor:
+        cleanup_calls = 0
+
+        def __call__(self, _claim, _credential, _control):
+            raise GraphExecutionFailure(
+                JobUsage(output_tokens=5, total_tokens=5, llm_requests=1),
+                "WORKER_RESULT_INSPECTION_FAILED",
+                retryable=False,
+            )
+
+        def cleanup_attempt(self, _claim):
+            self.cleanup_calls += 1
+
+    executor = Executor()
+    monkeypatch.setattr(
+        jobs,
+        "fail",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("database unavailable")),
+    )
+    worker = WorkerRunner(
+        jobs=jobs,
+        credentials=llm,
+        executor=executor,
+        config=WorkerConfig(worker_id="worker-preserve-evidence"),
+    )
+    assert worker.run_once() is True
+    assert executor.cleanup_calls == 0
 
 
 def test_attempt_cleanup_removes_only_the_exact_fenced_attempt(tmp_path) -> None:
@@ -797,7 +1063,11 @@ def test_real_attempt_subprocess_starts_with_runtime_root_outside_its_cwd(tmp_pa
     claim = jobs.claim_next(worker_id="real-child-worker")
     assert claim is not None
     credential = llm.resolve_for_worker(
+        job_id=claim.id,
         tenant_id=claim.tenant_id,
+        lease_id=claim.lease_id,
+        lease_owner=claim.lease_owner,
+        attempt_number=claim.attempts,
         connection_id=connection_id,
         credential_version=1,
         expected_provider="openai",

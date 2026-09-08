@@ -15,7 +15,6 @@ import sys
 import threading
 import time
 from collections.abc import Mapping
-from contextlib import suppress
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -46,6 +45,7 @@ from tradingagents.platform.usage import (
 )
 
 logger = logging.getLogger(__name__)
+_POSIX_SIGKILL = getattr(signal, "SIGKILL", 9)
 
 
 class GraphExecutor(Protocol):
@@ -133,21 +133,27 @@ def _supervise_attempt_process(
             break
         now = time.monotonic()
         if now >= next_storage_check:
-            if (
-                attempt_root is not None
-                and max_attempt_bytes is not None
-                and _directory_size(attempt_root, stop_after=max_attempt_bytes)
-                > max_attempt_bytes
-            ):
-                failure_code = "WORKER_ATTEMPT_STORAGE_EXCEEDED"
-                break
-            if (
-                tenant_root is not None
-                and max_tenant_bytes is not None
-                and _directory_size(tenant_root, stop_after=max_tenant_bytes)
-                > max_tenant_bytes
-            ):
-                failure_code = "WORKER_TENANT_STORAGE_EXCEEDED"
+            try:
+                if (
+                    attempt_root is not None
+                    and max_attempt_bytes is not None
+                    and _directory_size(attempt_root, stop_after=max_attempt_bytes)
+                    > max_attempt_bytes
+                ):
+                    failure_code = "WORKER_ATTEMPT_STORAGE_EXCEEDED"
+                    break
+                if (
+                    tenant_root is not None
+                    and max_tenant_bytes is not None
+                    and _directory_size(tenant_root, stop_after=max_tenant_bytes)
+                    > max_tenant_bytes
+                ):
+                    failure_code = "WORKER_TENANT_STORAGE_EXCEEDED"
+                    break
+            except Exception:
+                # A failed quota inspection cannot leave an uncontained child
+                # running or enter the retry path after billable work may occur.
+                failure_code = "WORKER_STORAGE_INSPECTION_FAILED"
                 break
             next_storage_check = now + 0.5
         time.sleep(min(0.1, max(0.01, control.remaining_seconds())))
@@ -168,22 +174,26 @@ def _supervise_attempt_process(
 def _directory_size(root: Path, *, stop_after: int) -> int:
     """Bounded, no-follow size walk for a private runtime directory."""
 
-    if not root.exists():
-        return 0
     total = 0
     pending = [root]
     while pending:
         current = pending.pop()
-        with os.scandir(current) as entries:
-            for entry in entries:
-                if entry.is_symlink():
-                    return stop_after + 1
-                if entry.is_dir(follow_symlinks=False):
-                    pending.append(Path(entry.path))
-                elif entry.is_file(follow_symlinks=False):
-                    total += entry.stat(follow_symlinks=False).st_size
-                    if total > stop_after:
-                        return total
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
+                    try:
+                        if entry.is_symlink():
+                            return stop_after + 1
+                        if entry.is_dir(follow_symlinks=False):
+                            pending.append(Path(entry.path))
+                        elif entry.is_file(follow_symlinks=False):
+                            total += entry.stat(follow_symlinks=False).st_size
+                            if total > stop_after:
+                                return total
+                    except FileNotFoundError:
+                        continue
+        except FileNotFoundError:
+            continue
     return total
 
 
@@ -230,26 +240,60 @@ def _terminate_process_tree(process: subprocess.Popen[str]) -> bool:
             return False
     except (OSError, subprocess.SubprocessError):
         return False
-    return tree_signal_confirmed and process.poll() is not None
+    leader_terminated = process.poll() is not None
+    if os.name != "nt":
+        return leader_terminated and _terminate_remaining_posix_group(process.pid)
+    return tree_signal_confirmed and leader_terminated
+
+
+def _terminate_remaining_posix_group(process_group_id: int) -> bool:
+    """Confirm that no descendant remains after the process-group leader exits."""
+
+    try:
+        os.killpg(process_group_id, 0)
+    except ProcessLookupError:
+        return True
+    except OSError:
+        return False
+    try:
+        os.killpg(process_group_id, _POSIX_SIGKILL)
+    except ProcessLookupError:
+        return True
+    except OSError:
+        return False
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        try:
+            os.killpg(process_group_id, 0)
+        except ProcessLookupError:
+            return True
+        except OSError:
+            return False
+        time.sleep(0.05)
+    return False
 
 
 def _read_evidence_journal(path: Path) -> list[dict[str, Any]]:
-    if not path.exists() or path.is_symlink():
+    try:
+        if not path.exists() or path.is_symlink():
+            return []
+        metadata = path.stat()
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 2_000_000:
+            return []
+        records: list[dict[str, Any]] = []
+        for line in path.read_text(encoding="utf-8", errors="strict").splitlines():
+            if not line or len(line.encode()) > 100_000:
+                continue
+            try:
+                record = json.loads(redact_secrets(line))
+            except json.JSONDecodeError:
+                continue
+            if isinstance(record, dict):
+                records.append(record)
+        return records[:1000]
+    except (OSError, UnicodeError):
+        # Advisory evidence must never cancel conservative accounting.
         return []
-    metadata = path.stat()
-    if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 2_000_000:
-        return []
-    records: list[dict[str, Any]] = []
-    for line in path.read_text(encoding="utf-8", errors="strict").splitlines():
-        if not line or len(line.encode()) > 100_000:
-            continue
-        try:
-            record = json.loads(redact_secrets(line))
-        except json.JSONDecodeError:
-            continue
-        if isinstance(record, dict):
-            records.append(record)
-    return records[:1000]
 
 
 def _conservative_attempt_usage(claim: ClaimedJob) -> JobUsage:
@@ -271,6 +315,7 @@ def _conservative_attempt_usage(claim: ClaimedJob) -> JobUsage:
             if remaining_cost is not None
             else None
         ),
+        accounting_basis="conservative_reservation",
     )
 
 
@@ -290,6 +335,37 @@ def _protocol_failure(
             _read_evidence_journal(evidence_path),
         ),
     )
+
+
+def _load_attempt_result(
+    claim: ClaimedJob,
+    result_path: Path,
+    evidence_path: Path,
+) -> tuple[dict[str, Any], JobUsage]:
+    """Consume one child result without allowing local I/O to escape fail-closed."""
+
+    try:
+        if not result_path.exists() or result_path.is_symlink():
+            raise _protocol_failure(claim, evidence_path)
+        metadata = result_path.stat()
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 4_000_000:
+            raise _protocol_failure(claim, evidence_path)
+        response = json.loads(result_path.read_text(encoding="utf-8", errors="strict"))
+        usage = JobUsage(**response["usage"])
+        return response, usage
+    except GraphExecutionFailure:
+        raise
+    except (KeyError, TypeError, ValueError, OSError, UnicodeError, json.JSONDecodeError):
+        raise _protocol_failure(
+            claim,
+            evidence_path,
+            "WORKER_RESULT_INSPECTION_FAILED",
+        ) from None
+    finally:
+        try:
+            result_path.unlink(missing_ok=True)
+        except OSError:
+            logger.error("could not remove worker result file")
 
 
 class ProductionGraphExecutor:
@@ -444,19 +520,9 @@ class ProductionGraphExecutor:
         )
         if failure_code is not None:
             raise _protocol_failure(claim, evidence_path, failure_code)
-        if process.returncode != 0 or not result_path.exists() or result_path.is_symlink():
+        if process.returncode != 0:
             raise _protocol_failure(claim, evidence_path)
-        metadata = result_path.stat()
-        if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 4_000_000:
-            raise _protocol_failure(claim, evidence_path)
-        try:
-            response = json.loads(result_path.read_text(encoding="utf-8"))
-            usage = JobUsage(**response["usage"])
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
-            raise _protocol_failure(claim, evidence_path) from None
-        finally:
-            with suppress(FileNotFoundError):
-                result_path.unlink()
+        response, usage = _load_attempt_result(claim, result_path, evidence_path)
         if response.get("kind") == "failure":
             raise GraphExecutionFailure(
                 usage,
@@ -682,11 +748,17 @@ class WorkerRunner:
             daemon=True,
         )
         usage_persisted = False
+        provider_execution_started = False
+        disposition_persisted = False
         try:
             self._jobs.start(claim)
             heartbeat.start()
             credential = self._credentials.resolve_for_worker(
+                job_id=claim.id,
                 tenant_id=claim.tenant_id,
+                lease_id=claim.lease_id,
+                lease_owner=claim.lease_owner,
+                attempt_number=claim.attempts,
                 connection_id=claim.command.llm_connection_id,
                 credential_version=claim.command.llm_credential_version,
                 expected_provider=claim.command.provider,
@@ -714,6 +786,7 @@ class WorkerRunner:
                     retryable=False,
                 )
             control.assert_active()
+            provider_execution_started = True
             outcome = self._executor(claim, credential, control)
             if lease_lost.is_set():
                 raise GraphExecutionFailure(
@@ -741,47 +814,56 @@ class WorkerRunner:
                 manifest=outcome.manifest,
                 usage=outcome.usage,
             )
+            disposition_persisted = True
         except JobError as exc:
-            if str(exc) != "JOB_CANCELLED":
-                self._safe_fail(
-                    claim,
-                    "WORKER_JOB_STATE_FAILED",
-                    retryable=not usage_persisted,
-                )
+            disposition_persisted = self._safe_fail(
+                claim,
+                (
+                    "WORKER_JOB_CANCELLED"
+                    if str(exc) == "JOB_CANCELLED"
+                    else "WORKER_JOB_STATE_FAILED"
+                ),
+                retryable=str(exc) != "JOB_CANCELLED" and not usage_persisted,
+            )
         except LlmConnectionError:
-            self._safe_fail(claim, "WORKER_CREDENTIAL_FAILED", retryable=False)
+            disposition_persisted = self._safe_fail(
+                claim, "WORKER_CREDENTIAL_FAILED", retryable=False
+            )
         except GraphExecutionFailure as exc:
-            try:
-                self._jobs.record_usage(claim, usage=exc.usage)
-            except JobError:
-                logger.error("could not persist worker usage", extra={"job_id": str(claim.id)})
             retryable_without_billed_work = (
                 exc.retryable
                 and exc.usage.total_tokens == 0
                 and exc.usage.llm_requests == 0
                 and exc.usage.unmetered_llm_requests == 0
             )
-            self._safe_fail(
+            disposition_persisted = self._safe_fail(
                 claim,
                 exc.code,
                 retryable=retryable_without_billed_work,
                 partial_manifest=exc.partial_manifest,
+                usage=exc.usage,
             )
         except Exception:
             # Provider exceptions can echo request headers or URLs. Persist and
             # log only a fixed code; never the exception text or traceback.
             logger.error("analysis worker failed", extra={"job_id": str(claim.id)})
-            self._safe_fail(
+            conservative_usage = (
+                _conservative_attempt_usage(claim)
+                if provider_execution_started and not usage_persisted
+                else None
+            )
+            disposition_persisted = self._safe_fail(
                 claim,
                 "WORKER_EXECUTION_FAILED",
-                retryable=not usage_persisted,
+                retryable=not provider_execution_started and not usage_persisted,
+                usage=conservative_usage,
             )
         finally:
             stop.set()
             if heartbeat.is_alive():
                 heartbeat.join(timeout=5)
             cleanup = getattr(self._executor, "cleanup_attempt", None)
-            if callable(cleanup):
+            if disposition_persisted and callable(cleanup):
                 try:
                     cleanup(claim)
                 except Exception:
@@ -842,16 +924,20 @@ class WorkerRunner:
         *,
         retryable: bool = True,
         partial_manifest: dict[str, Any] | None = None,
-    ) -> None:
+        usage: JobUsage | None = None,
+    ) -> bool:
         try:
             self._jobs.fail(
                 claim,
                 error_code=code,
                 retryable=retryable,
                 partial_manifest=partial_manifest,
+                usage=usage,
             )
+            return True
         except Exception:
             logger.error("could not persist worker failure", extra={"job_id": str(claim.id)})
+            return False
 
     def run_forever(
         self,

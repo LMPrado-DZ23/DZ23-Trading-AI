@@ -127,6 +127,27 @@ class LlmConnectionService:
             )
 
     @staticmethod
+    def _set_worker_job_scope(
+        db: Session,
+        *,
+        job_id: UUID,
+        tenant_id: UUID,
+        lease_id: UUID,
+        lease_owner: str,
+    ) -> None:
+        if db.bind is not None and db.bind.dialect.name == "postgresql":
+            for setting, value in (
+                ("app.worker_job_id", job_id),
+                ("app.worker_tenant_id", tenant_id),
+                ("app.worker_lease_id", lease_id),
+                ("app.worker_lease_owner", lease_owner),
+            ):
+                db.execute(
+                    text(f"SELECT set_config('{setting}', :value, true)"),
+                    {"value": str(value)},
+                )
+
+    @staticmethod
     def _authorize(principal: IdentityPrincipal, *, write: bool) -> None:
         allowed = {"owner", "admin"} if write else {"owner", "admin", "operator", "auditor"}
         if principal.role.value not in allowed:
@@ -389,7 +410,11 @@ class LlmConnectionService:
     def resolve_for_worker(
         self,
         *,
+        job_id: UUID,
         tenant_id: UUID,
+        lease_id: UUID,
+        lease_owner: str,
+        attempt_number: int,
         connection_id: UUID,
         credential_version: int,
         expected_provider: str,
@@ -398,6 +423,13 @@ class LlmConnectionService:
         denied = False
         active_version: int | None = None
         with self._sessions() as db, db.begin():
+            self._set_worker_job_scope(
+                db,
+                job_id=job_id,
+                tenant_id=tenant_id,
+                lease_id=lease_id,
+                lease_owner=lease_owner,
+            )
             connection = db.scalar(
                 select(LlmConnection).where(
                     LlmConnection.id == connection_id,
@@ -434,6 +466,10 @@ class LlmConnectionService:
         if denied:
             self._record_access(
                 tenant_id=tenant_id,
+                job_id=job_id,
+                lease_id=lease_id,
+                lease_owner=lease_owner,
+                attempt_number=attempt_number,
                 connection_id=connection_id,
                 credential_version=credential_version,
                 actor_user_id=actor_user_id,
@@ -453,6 +489,10 @@ class LlmConnectionService:
         except (InvalidTag, ValueError, KeyError, TypeError, json.JSONDecodeError):
             self._record_access(
                 tenant_id=tenant_id,
+                job_id=job_id,
+                lease_id=lease_id,
+                lease_owner=lease_owner,
+                attempt_number=attempt_number,
                 connection_id=connection_id,
                 credential_version=credential_version,
                 actor_user_id=actor_user_id,
@@ -462,6 +502,10 @@ class LlmConnectionService:
             raise LlmConnectionError("LLM_CREDENTIAL_DECRYPTION_FAILED") from None
         self._record_access(
             tenant_id=tenant_id,
+            job_id=job_id,
+            lease_id=lease_id,
+            lease_owner=lease_owner,
+            attempt_number=attempt_number,
             connection_id=connection_id,
             credential_version=credential_version,
             actor_user_id=actor_user_id,
@@ -480,6 +524,10 @@ class LlmConnectionService:
         self,
         *,
         tenant_id: UUID,
+        job_id: UUID,
+        lease_id: UUID,
+        lease_owner: str,
+        attempt_number: int,
         connection_id: UUID,
         credential_version: int,
         actor_user_id: UUID,
@@ -490,11 +538,21 @@ class LlmConnectionService:
         details: dict[str, object] = {"provider": provider}
         details.update(extra_details or {})
         with self._sessions() as db, db.begin():
+            self._set_worker_job_scope(
+                db,
+                job_id=job_id,
+                tenant_id=tenant_id,
+                lease_id=lease_id,
+                lease_owner=lease_owner,
+            )
             db.add(
                 LlmCredentialAccessEvent(
                     tenant_id=tenant_id,
                     connection_id=connection_id,
                     credential_version=credential_version,
+                    job_id=job_id,
+                    lease_id=lease_id,
+                    attempt_number=attempt_number,
                     actor_user_id=actor_user_id,
                     purpose="analysis",
                     outcome=outcome,

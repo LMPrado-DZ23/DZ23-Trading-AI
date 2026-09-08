@@ -55,6 +55,8 @@ e não pode reutilizar chaves publicadas em chat.
 - [x] RunContext imutável e workflow schema version;
 - [x] remover mutação de `os.environ` e configuração global no caminho concorrente;
 - [x] checkpoint com tenant/config/provider/schema digests;
+- [x] credencial LLM append-only e resolução do worker limitada ao job/tenant/lease/conexão/versão exatos;
+- [x] ledger de uso e auditoria de acesso vinculados ao lease/run/attempt/ator por RLS;
 - [ ] fundamentals filtrados por publicação disponível; no M3 a plataforma os
   exclui em todos os modos, em vez de fingir histórico point-in-time;
 - [x] Polymarket histórico ou fail-closed;
@@ -63,7 +65,10 @@ e não pode reutilizar chaves publicadas em chat.
   desabilitados até suas fontes fornecerem proveniência temporal verificável;
 - [x] manifesto reprodutível da análise.
 
-**Gate:** restart recupera jobs; dois tenants executam simultaneamente sem estado cruzado; suite PIT adversarial verde.
+**Gate:** restart recupera a fila durável; dois tenants executam simultaneamente
+sem estado cruzado; suite PIT adversarial verde. Cada retry usa novo root e
+reinicia a tentativa — não promete retomar um nó do grafo. Tentativa interrompida
+depois de possível chamada externa é terminal e recebe cobrança conservadora.
 
 **Verificação do implementador:** concluída e registrada em
 `audit/M3_IMPLEMENTER_VERIFICATION.md`. A promoção depende de auditoria

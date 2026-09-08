@@ -31,6 +31,7 @@ class JobUsage:
     unmetered_llm_requests: int = 0
     estimated_cost_microusd: int | None = None
     pricing_version: str | None = None
+    accounting_basis: str = "measured"
 
     def __post_init__(self) -> None:
         numeric = (
@@ -48,10 +49,12 @@ class JobUsage:
             raise ValueError("unmetered requests cannot exceed total requests")
         if self.estimated_cost_microusd is not None and self.estimated_cost_microusd < 0:
             raise ValueError("estimated cost cannot be negative")
+        if self.accounting_basis not in {"measured", "conservative_reservation"}:
+            raise ValueError("usage accounting basis is invalid")
 
     def as_dict(self) -> dict[str, Any]:
         return {
-            "schema": "llm-usage/1",
+            "schema": "llm-usage/2",
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
             "total_tokens": self.total_tokens,
@@ -60,6 +63,7 @@ class JobUsage:
             "estimated_cost_microusd": self.estimated_cost_microusd,
             "currency": "USD",
             "pricing_version": self.pricing_version,
+            "accounting_basis": self.accounting_basis,
         }
 
 

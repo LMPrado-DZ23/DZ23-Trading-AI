@@ -434,10 +434,20 @@ class JobService:
     def _set_worker_claim_scope(
         db: Session,
         *,
+        job_id: UUID,
+        tenant_id: UUID,
         lease_id: UUID,
         lease_owner: str,
     ) -> None:
         if db.bind is not None and db.bind.dialect.name == "postgresql":
+            db.execute(
+                text("SELECT set_config('app.worker_job_id', :job_id, true)"),
+                {"job_id": str(job_id)},
+            )
+            db.execute(
+                text("SELECT set_config('app.worker_tenant_id', :tenant_id, true)"),
+                {"tenant_id": str(tenant_id)},
+            )
             db.execute(
                 text("SELECT set_config('app.worker_lease_id', :lease_id, true)"),
                 {"lease_id": str(lease_id)},
@@ -669,6 +679,25 @@ class JobService:
             job = db.scalar(statement)
             if job is None:
                 return None
+            # Fence the row before parsing any candidate-owned payload. A
+            # malformed queued job must still be terminalizable without a
+            # special unfenced queued->failed transition in PostgreSQL.
+            lease_id = uuid4()
+            provisional_expiry = now + timedelta(seconds=lease_seconds)
+            self._set_worker_claim_scope(
+                db,
+                job_id=job.id,
+                tenant_id=job.tenant_id,
+                lease_id=lease_id,
+                lease_owner=worker_id,
+            )
+            job.status = JobStatus.LEASED.value
+            job.lease_id = lease_id
+            job.lease_owner = worker_id
+            job.lease_expires_at = provisional_expiry
+            job.heartbeat_at = now
+            job.attempts += 1
+            db.flush()
             try:
                 command = self._validated_command(job)
                 context = self._load_or_create_context(job, command, now)
@@ -677,29 +706,20 @@ class JobService:
                 job.error_code = str(exc)
                 job.completed_at = now
                 self._clear_lease(job)
+                db.flush()
                 return None
-            lease_id = uuid4()
             if context.deadline_at <= now:
                 job.status = JobStatus.FAILED.value
                 job.error_code = "JOB_DEADLINE_EXCEEDED"
                 job.completed_at = now
                 self._clear_lease(job)
+                db.flush()
                 return None
             expires_at = min(
-                now + timedelta(seconds=lease_seconds),
+                provisional_expiry,
                 context.deadline_at,
             )
-            self._set_worker_claim_scope(
-                db,
-                lease_id=lease_id,
-                lease_owner=worker_id,
-            )
-            job.status = JobStatus.LEASED.value
-            job.lease_id = lease_id
-            job.lease_owner = worker_id
             job.lease_expires_at = expires_at
-            job.heartbeat_at = now
-            job.attempts += 1
             job.run_context = context.model_dump(mode="json")
             job.run_context_digest = context.digest
             return ClaimedJob(
@@ -795,14 +815,16 @@ class JobService:
         """Persist billed usage before a retry/failure loses the worker process."""
 
         with self._sessions() as db, db.begin():
-            job = db.scalar(select(AnalysisJob).where(AnalysisJob.id == claim.id).with_for_update())
-            if job is None:
-                raise JobError("JOB_NOT_FOUND")
             self._set_worker_claim_scope(
                 db,
+                job_id=claim.id,
+                tenant_id=claim.tenant_id,
                 lease_id=claim.lease_id,
                 lease_owner=claim.lease_owner,
             )
+            job = db.scalar(select(AnalysisJob).where(AnalysisJob.id == claim.id).with_for_update())
+            if job is None:
+                raise JobError("JOB_NOT_FOUND")
             self._record_usage(db, job, claim, usage)
 
     def fail(
@@ -812,12 +834,15 @@ class JobService:
         error_code: str,
         retryable: bool = True,
         partial_manifest: dict[str, Any] | None = None,
+        usage: JobUsage | None = None,
     ) -> None:
         if not error_code or len(error_code) > 80 or not error_code.replace("_", "").isalnum():
             raise JobError("ERROR_CODE_INVALID")
         with self._sessions() as db, db.begin():
             now = self._db_now(db)
             job = self._locked_claim(db, claim, now=now)
+            if usage is not None:
+                self._record_usage(db, job, claim, usage)
             if partial_manifest is not None:
                 self._bounded_json(partial_manifest, "manifest")
                 prior_attempts: list[dict[str, Any]] = []
@@ -909,6 +934,13 @@ class JobService:
         *,
         now: datetime | None = None,
     ) -> AnalysisJob:
+        self._set_worker_claim_scope(
+            db,
+            job_id=claim.id,
+            tenant_id=claim.tenant_id,
+            lease_id=claim.lease_id,
+            lease_owner=claim.lease_owner,
+        )
         job = db.scalar(select(AnalysisJob).where(AnalysisJob.id == claim.id).with_for_update())
         now = now or self._db_now(db)
         if (
@@ -919,11 +951,6 @@ class JobService:
             or job.lease_expires_at <= now
         ):
             raise JobError("JOB_LEASE_INVALID")
-        self._set_worker_claim_scope(
-            db,
-            lease_id=claim.lease_id,
-            lease_owner=claim.lease_owner,
-        )
         return job
 
     def _validated_command(self, job: AnalysisJob) -> AnalysisJobCommand:
@@ -1163,6 +1190,7 @@ class JobService:
                 unmetered_llm_requests=usage.unmetered_llm_requests,
                 estimated_cost_microusd=usage.estimated_cost_microusd,
                 pricing_version=usage.pricing_version,
+                accounting_basis=usage.accounting_basis,
             )
         )
         job.input_tokens += usage.input_tokens
@@ -1178,6 +1206,11 @@ class JobService:
                 job.pricing_version = usage.pricing_version
             elif job.pricing_version != usage.pricing_version:
                 job.pricing_version = "mixed"
+        # Persist the usage fact while the lease is still active. Completion
+        # clears the lease later in the same transaction; without this fence,
+        # ORM flush ordering could make the RLS policy observe a terminal job
+        # before the append-only usage row is inserted.
+        db.flush()
 
     def _requeue_expired(self, db: Session, now: datetime) -> None:
         # Bound cleanup work inside a claim transaction so a large outage does
@@ -1201,6 +1234,15 @@ class JobService:
             )
         )
         for job in expired:
+            if job.lease_id is None or job.lease_owner is None:
+                raise JobError("EXPIRED_JOB_LEASE_INVALID")
+            self._set_worker_claim_scope(
+                db,
+                job_id=job.id,
+                tenant_id=job.tenant_id,
+                lease_id=job.lease_id,
+                lease_owner=job.lease_owner,
+            )
             integrity_error: str | None = None
             try:
                 command = self._validated_command(job)
@@ -1221,6 +1263,11 @@ class JobService:
                 job.error_code = integrity_error or "LEASE_EXPIRED_BUDGET_CONSUMED"
                 job.completed_at = now
             JobService._clear_lease(job)
+            # Each expired row has its own transaction-local lease scope. Flush
+            # its terminal transition before switching the GUCs to the next
+            # expired row, otherwise ORM autoflush would evaluate it under the
+            # wrong job identity.
+            db.flush()
 
     @staticmethod
     def _record_expired_reservation(db: Session, job: AnalysisJob) -> None:
@@ -1244,6 +1291,7 @@ class JobService:
                 if job.reserved_cost_budget_microusd is not None
                 else None
             ),
+            accounting_basis="conservative_reservation",
         )
         canonical = json.dumps(usage.as_dict(), sort_keys=True, separators=(",", ":"))
         db.add(
@@ -1261,6 +1309,7 @@ class JobService:
                 unmetered_llm_requests=usage.unmetered_llm_requests,
                 estimated_cost_microusd=usage.estimated_cost_microusd,
                 pricing_version=usage.pricing_version,
+                accounting_basis=usage.accounting_basis,
             )
         )
         job.input_tokens += usage.input_tokens
@@ -1272,3 +1321,6 @@ class JobService:
                 (job.estimated_cost_microusd or 0) + usage.estimated_cost_microusd
             )
             job.pricing_version = usage.pricing_version
+        # The subsequent reap clears the lease. Persist the conservative usage
+        # charge while the expired lease identity is still present for RLS.
+        db.flush()

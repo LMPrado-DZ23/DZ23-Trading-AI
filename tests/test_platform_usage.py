@@ -10,6 +10,18 @@ from langchain_core.outputs import ChatGeneration, LLMResult
 from tradingagents.platform.usage import JobUsage, LlmUsageCallback, PricingCatalog
 
 
+def test_usage_accounting_basis_is_explicit_and_fail_closed() -> None:
+    assert JobUsage().as_dict()["accounting_basis"] == "measured"
+    assert (
+        JobUsage(accounting_basis="conservative_reservation").as_dict()[
+            "accounting_basis"
+        ]
+        == "conservative_reservation"
+    )
+    with pytest.raises(ValueError, match="accounting basis"):
+        JobUsage(accounting_basis="unknown")
+
+
 def _response(*, usage=None, fallback=None):
     return LLMResult(
         generations=[[ChatGeneration(message=AIMessage(content="ok", usage_metadata=usage))]],

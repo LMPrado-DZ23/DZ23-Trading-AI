@@ -7,7 +7,7 @@
 - **started_at:** 2026-09-08 America/Sao_Paulo
 - **last_heartbeat:** 2026-09-08
 - **last_progress_at:** 2026-09-08
-- **current_task:** congelar M3 em commit, obter auditoria independente e corrigir qualquer achado antes de iniciar M4.
+- **current_task:** congelar o segundo fix de auditoria do M3 e obter reauditoria independente antes de iniciar M4.
 
 ## Acceptance criteria
 
@@ -60,7 +60,12 @@
 - [x] M3 adicionou medição e limites fail-closed de tokens/custo, com reserva conservadora em resultado de subprocesso ausente, inválido ou interrompido.
 - [x] M3 restringiu jobs da plataforma ao analista `market`; fontes sem proveniência temporal verificável permanecem excluídas em todos os modos.
 - [x] M3 executa cada tentativa em subprocesso, encerra a árvore em cancelamento/deadline, limita disco e persiste journal parcial de evidência.
-- [x] Migrations locais 0007–0017 validadas com PostgreSQL real; downgrade completo e re-upgrade também foram reproduzidos.
+- [x] Migrations locais 0007–0018 validadas com PostgreSQL real; downgrade completo e re-upgrade também foram reproduzidos.
+- [x] M3 tornou cada versão de credencial LLM append-only e revogou UPDATE/DELETE da função de aplicação.
+- [x] M3 vinculou leitura/decriptação de credencial, evento de acesso e uso faturável ao job/tenant/lease/run/attempt exatos por RLS PostgreSQL.
+- [x] Vetores PostgreSQL reais recusaram mutação/remoção de credencial, leitura cross-tenant, uso com lease falso e evento com ator falso.
+- [x] Falhas de quota/result/journal encerram subprocessos, não reenfileiram trabalho possivelmente faturado e preservam o workspace se o banco não confirmar o estado.
+- [x] Ledger de uso diferencia medição real de reserva conservadora; no POSIX a confirmação abrange descendentes do grupo, não apenas o líder.
 
 ## Pending tasks
 
@@ -83,7 +88,7 @@
 
 ## Current failure
 
-- Nenhuma falha de código ativa no M3; Google/Apple dependem da configuração dos respectivos provedores OAuth no painel do Supabase para o smoke externo.
+- Nenhuma falha de código conhecida ativa no M3 após os fixes; o commit ainda depende de reauditoria independente. Google/Apple dependem da configuração dos respectivos provedores OAuth no painel do Supabase para o smoke externo.
 - Fontes fundamentals/news/macro/social/Polymarket continuam deliberadamente indisponíveis na plataforma; não há alegação de cobertura PIT para elas.
 - O primeiro `.venv` ficou incompleto após interrupção do instalador; foi substituído por `.venv-a5` criado com `--no-compile` e instalação concluída com exit 0.
 
@@ -126,6 +131,8 @@
 - M3 integral com PostgreSQL e Redis reais: **1184 passed, 1 skipped, 71 subtests**, zero falhas/erros; ruff e compileall verdes.
 - M3 integração PostgreSQL 17 + Redis 7.4 com URLs reais locais: **9 passed**, zero skips.
 - Evidência M3: `audit/m3-final-junit.xml` SHA-256 `baa78e902647dbbf33162137a788d3573f4abd585b0b1743bc983fd8b90944db`; `audit/m3-integration-junit.xml` SHA-256 `7c962cc7be893ab38eb8d585fc4f8eb8835bc6cfb171546d797b24544e09122d`.
+- Revalidação após credential/worker fencing: **1197 passed, 1 skipped, 71 subtests**; integração PostgreSQL/Redis **10 passed**.
+- Evidência revalidada: `audit/m3-fenced-final-junit.xml` SHA-256 `6c9c2a8058b4bb33003bf19e3d8961a85fd8aa2c7712bba2fb37051d87565ff2`; `audit/m3-credential-fencing-integration-junit.xml` SHA-256 `1d67e11688014d848084f6443d6a788d2585e779536f40056b9bff76d6021e44`.
 
 ## Commits
 

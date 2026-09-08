@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from tradingagents.platform.connections import CredentialKeyring
+from tradingagents.platform.contracts import RunMode
 from tradingagents.platform.identity import (
     Base,
     IdentityPrincipal,
@@ -15,6 +16,7 @@ from tradingagents.platform.identity import (
     MembershipRole,
     TokenHasher,
 )
+from tradingagents.platform.jobs import AnalysisJobCommand, JobService
 from tradingagents.platform.llm_connections import (
     LlmConnectionError,
     LlmConnectionService,
@@ -63,6 +65,41 @@ def _stack():
     return factory, principal, service
 
 
+def _claim_for_connection(
+    factory,
+    principal,
+    service,
+    *,
+    connection_id,
+    provider: str,
+    credential_version: int,
+    key: str,
+):
+    jobs = JobService(
+        factory,
+        idempotency_digest_key=b"j" * 32,
+        llm_reference_validator=service,
+    )
+    jobs.enqueue(
+        principal=principal,
+        idempotency_key=key,
+        command=AnalysisJobCommand(
+            symbol="BTC/USDT",
+            asset_type="crypto",
+            trade_date="2024-01-02",
+            mode=RunMode.BACKTEST,
+            provider=provider,
+            model="gpt-5" if provider == "openai" else "deepseek-chat",
+            llm_connection_id=connection_id,
+            llm_credential_version=credential_version,
+            selected_analysts=("market",),
+        ),
+    )
+    claim = jobs.claim_next(worker_id="llm-unit-worker")
+    assert claim is not None
+    return claim
+
+
 def test_platform_catalog_does_not_advertise_bedrock_without_persisted_region() -> None:
     assert "bedrock" not in {provider.slug for provider in llm_provider_catalog()}
 
@@ -89,8 +126,21 @@ def test_llm_credential_is_encrypted_versioned_resolved_and_audited() -> None:
     )
     [view] = service.list_connections(principal=principal)
     assert view.provider == "openai" and view.credential_version == 1
+    claim = _claim_for_connection(
+        factory,
+        principal,
+        service,
+        connection_id=connection_id,
+        provider="openai",
+        credential_version=1,
+        key="llm-resolution-job-0001",
+    )
     resolved = service.resolve_for_worker(
+        job_id=claim.id,
         tenant_id=principal.tenant_id,
+        lease_id=claim.lease_id,
+        lease_owner=claim.lease_owner,
+        attempt_number=claim.attempts,
         connection_id=connection_id,
         credential_version=1,
         expected_provider="openai",
@@ -136,7 +186,11 @@ def test_llm_connection_rejects_credential_redirects_and_cross_tenant_resolution
     )
     with pytest.raises(LlmConnectionError, match="LLM_CREDENTIAL_NOT_FOUND"):
         service.resolve_for_worker(
+            job_id=uuid4(),
             tenant_id=uuid4(),
+            lease_id=uuid4(),
+            lease_owner="unit-worker",
+            attempt_number=1,
             connection_id=connection_id,
             credential_version=1,
             expected_provider="azure",
@@ -145,7 +199,7 @@ def test_llm_connection_rejects_credential_redirects_and_cross_tenant_resolution
 
 
 def test_llm_connection_identity_is_immutable_and_secret_rotation_is_versioned() -> None:
-    _factory, principal, service = _stack()
+    factory, principal, service = _stack()
     connection_id = service.upsert(
         principal=principal,
         idempotency_key="llm-rotate-version-one",
@@ -166,14 +220,6 @@ def test_llm_connection_identity_is_immutable_and_secret_rotation_is_versioned()
     [view] = service.list_connections(principal=principal)
     assert view.credential_version == 2
     with pytest.raises(LlmConnectionError, match="LLM_CREDENTIAL_NOT_FOUND"):
-        service.resolve_for_worker(
-            tenant_id=principal.tenant_id,
-            connection_id=connection_id,
-            credential_version=1,
-            expected_provider="deepseek",
-            actor_user_id=principal.user_id,
-        )
-    with pytest.raises(LlmConnectionError, match="LLM_CREDENTIAL_NOT_FOUND"):
         service.assert_reference(
             tenant_id=principal.tenant_id,
             connection_id=connection_id,
@@ -181,8 +227,21 @@ def test_llm_connection_identity_is_immutable_and_secret_rotation_is_versioned()
             provider="deepseek",
             model="deepseek-chat",
         )
+    claim = _claim_for_connection(
+        factory,
+        principal,
+        service,
+        connection_id=connection_id,
+        provider="deepseek",
+        credential_version=2,
+        key="llm-rotation-resolution-job",
+    )
     second = service.resolve_for_worker(
+        job_id=claim.id,
         tenant_id=principal.tenant_id,
+        lease_id=claim.lease_id,
+        lease_owner=claim.lease_owner,
+        attempt_number=claim.attempts,
         connection_id=connection_id,
         credential_version=2,
         expected_provider="deepseek",

@@ -105,6 +105,9 @@ class LlmCredentialAccessEvent(Base):
     tenant_id: Mapped[UUID] = mapped_column(nullable=False)
     connection_id: Mapped[UUID] = mapped_column(nullable=False)
     credential_version: Mapped[int] = mapped_column(nullable=False)
+    job_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    lease_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    attempt_number: Mapped[int | None] = mapped_column(nullable=True)
     actor_user_id: Mapped[UUID] = mapped_column(nullable=False)
     purpose: Mapped[str] = mapped_column(String(24), nullable=False)
     outcome: Mapped[str] = mapped_column(String(16), nullable=False)
@@ -119,6 +122,12 @@ class LlmCredentialAccessEvent(Base):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
+            ["tenant_id", "job_id"],
+            ["analysis_jobs.tenant_id", "analysis_jobs.id"],
+            name="fk_llm_access_tenant_job",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
             ["tenant_id", "actor_user_id"],
             ["identity_memberships.tenant_id", "identity_memberships.user_id"],
             name="fk_llm_access_actor_membership",
@@ -127,6 +136,7 @@ class LlmCredentialAccessEvent(Base):
         CheckConstraint("purpose IN ('analysis','rotation')", name="ck_llm_access_purpose"),
         CheckConstraint("outcome IN ('allowed','denied','failed')", name="ck_llm_access_outcome"),
         Index("ix_llm_access_tenant_time", "tenant_id", "occurred_at"),
+        Index("ix_llm_access_job_attempt", "job_id", "attempt_number"),
     )
 
 
