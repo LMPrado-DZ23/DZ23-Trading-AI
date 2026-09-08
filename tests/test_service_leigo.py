@@ -43,3 +43,47 @@ class TestPanelHonesty:
         i_save = html.find("/v1/config'", html.find("async function brokerTest"))
         i_stat = html.find("/v1/broker/status", html.find("async function brokerTest"))
         assert 0 < i_save < i_stat  # salva ANTES de testar
+
+
+class TestFreeProviders:
+    def _resolve(self, tmp_path, monkeypatch, cfg):
+        m = _load_app(tmp_path, monkeypatch)
+        return m.resolve_llm(cfg)
+
+    def test_groq_maps_to_compatible_with_own_credential(self, tmp_path, monkeypatch):
+        conf, env = self._resolve(tmp_path, monkeypatch,
+            {"TRADINGAGENTS_LLM_PROVIDER": "groq", "GROQ_API_KEY": "gsk-x"})
+        assert conf["llm_provider"] == "openai_compatible"
+        assert conf["backend_url"] == "https://api.groq.com/openai/v1"
+        assert conf["deep_think_llm"] and conf["quick_think_llm"]
+        assert env == {"OPENAI_COMPATIBLE_API_KEY": "gsk-x"}
+        assert "OPENAI_API_KEY" not in env  # chave OpenAI real jamais vaza p/ backend alheio
+
+    def test_mistral_and_openrouter(self, tmp_path, monkeypatch):
+        for prov, key, url in [("mistral", "MISTRAL_API_KEY", "https://api.mistral.ai/v1"),
+                               ("openrouter", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1")]:
+            conf, env = self._resolve(tmp_path, monkeypatch,
+                {"TRADINGAGENTS_LLM_PROVIDER": prov, key: "k1"})
+            assert conf["backend_url"] == url
+            assert env["OPENAI_COMPATIBLE_API_KEY"] == "k1"
+
+    def test_missing_free_key_fails_with_plain_portuguese(self, tmp_path, monkeypatch):
+        with pytest.raises(ValueError, match="grátis"):
+            self._resolve(tmp_path, monkeypatch, {"TRADINGAGENTS_LLM_PROVIDER": "groq"})
+
+    def test_ollama_requires_address_and_uses_native_provider(self, tmp_path, monkeypatch):
+        with pytest.raises(ValueError, match="Endereço"):
+            self._resolve(tmp_path, monkeypatch, {"TRADINGAGENTS_LLM_PROVIDER": "ollama"})
+        conf, env = self._resolve(tmp_path, monkeypatch,
+            {"TRADINGAGENTS_LLM_PROVIDER": "ollama",
+             "TRADINGAGENTS_BACKEND_URL": "http://10.0.0.5:11434/v1"})
+        assert conf["llm_provider"] == "ollama"
+        assert conf["backend_url"] == "http://10.0.0.5:11434/v1"
+        assert env == {}
+
+    def test_paid_providers_untouched(self, tmp_path, monkeypatch):
+        conf, env = self._resolve(tmp_path, monkeypatch,
+            {"TRADINGAGENTS_LLM_PROVIDER": "openai",
+             "TRADINGAGENTS_DEEP_THINK_LLM": "gpt-5"})
+        assert conf["llm_provider"] == "openai" and conf["deep_think_llm"] == "gpt-5"
+        assert "backend_url" not in conf and env == {}

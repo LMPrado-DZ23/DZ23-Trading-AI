@@ -21,7 +21,9 @@ ALLOWED_KEYS = [
     "TRADINGAGENTS_QUICK_THINK_LLM", "TRADINGAGENTS_OUTPUT_LANGUAGE",
     "TRADINGAGENTS_MAX_DEBATE_ROUNDS", "TRADINGAGENTS_MAX_RISK_ROUNDS",
     "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY",
-    "GOOGLE_API_KEY", "FRED_API_KEY", "ALPHA_VANTAGE_API_KEY",
+    "GOOGLE_API_KEY", "GROQ_API_KEY", "MISTRAL_API_KEY",
+    "OPENROUTER_API_KEY", "OPENAI_COMPATIBLE_API_KEY",
+    "FRED_API_KEY", "ALPHA_VANTAGE_API_KEY",
     "TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
     "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET", "LIVE_TRADING_CONFIRM",
 ]
@@ -36,6 +38,52 @@ def auth(c: HTTPAuthorizationCredentials = Depends(bearer)):
     if not c or not hmac.compare_digest(c.credentials, PASSWORD):
         raise HTTPException(401, "não autenticado")
     return True
+
+# Provedores gratuitos/locais de primeira classe: todos falam o protocolo
+# OpenAI-compatível do núcleo, cada um com sua URL e sua chave própria
+# (a credencial dedicada OPENAI_COMPATIBLE_API_KEY é herança do Gate A:
+# um backend redirecionado jamais recebe a chave da OpenAI de verdade).
+FREE_PROVIDERS = {
+    "groq":       {"url": "https://api.groq.com/openai/v1", "key_from": "GROQ_API_KEY",
+                   "deep": "llama-3.3-70b-versatile", "quick": "llama-3.1-8b-instant"},
+    "mistral":    {"url": "https://api.mistral.ai/v1", "key_from": "MISTRAL_API_KEY",
+                   "deep": "mistral-large-latest", "quick": "mistral-small-latest"},
+    "openrouter": {"url": "https://openrouter.ai/api/v1", "key_from": "OPENROUTER_API_KEY",
+                   "deep": "meta-llama/llama-3.3-70b-instruct:free",
+                   "quick": "meta-llama/llama-3.3-70b-instruct:free"},
+    "ollama":     {"url": None, "key_from": None,
+                   "deep": "llama3.1", "quick": "llama3.1"},
+}
+
+
+def resolve_llm(cfg: dict):
+    """Traduz a escolha do painel em (config do núcleo, env). Pura e testável."""
+    conf, env = {}, {}
+    prov = (cfg.get("TRADINGAGENTS_LLM_PROVIDER") or "").strip().lower()
+    deep = (cfg.get("TRADINGAGENTS_DEEP_THINK_LLM") or "").strip()
+    quick = (cfg.get("TRADINGAGENTS_QUICK_THINK_LLM") or "").strip()
+    url = (cfg.get("TRADINGAGENTS_BACKEND_URL") or "").strip()
+    if prov in FREE_PROVIDERS:
+        p = FREE_PROVIDERS[prov]
+        conf["llm_provider"] = "ollama" if prov == "ollama" else "openai_compatible"
+        conf["backend_url"] = url or p["url"]
+        if prov == "ollama" and not conf["backend_url"]:
+            raise ValueError("Ollama precisa do 'Endereço do servidor de IA' "
+                             "(ex.: http://ip-do-teu-pc:11434/v1) — configura na aba ⚙️.")
+        conf["deep_think_llm"] = deep or p["deep"]
+        conf["quick_think_llm"] = quick or p["quick"]
+        if p["key_from"]:
+            key = cfg.get(p["key_from"]) or ""
+            if not key:
+                raise ValueError(f"Falta a chave {p['key_from']} — pega grátis e cola na aba ⚙️.")
+            env["OPENAI_COMPATIBLE_API_KEY"] = key
+    else:
+        if prov: conf["llm_provider"] = prov
+        if url: conf["backend_url"] = url
+        if deep: conf["deep_think_llm"] = deep
+        if quick: conf["quick_think_llm"] = quick
+    return conf, env
+
 
 def load_cfg() -> dict:
     if CFG_PATH.exists():
@@ -72,11 +120,9 @@ def run_job(jid, ticker, date):
             from tradingagents.default_config import DEFAULT_CONFIG
             from tradingagents.graph.trading_graph import TradingAgentsGraph
             conf = dict(DEFAULT_CONFIG)
-            prov = cfg.get("TRADINGAGENTS_LLM_PROVIDER")
-            if prov: conf["llm_provider"] = prov
-            if cfg.get("TRADINGAGENTS_DEEP_THINK_LLM"): conf["deep_think_llm"] = cfg["TRADINGAGENTS_DEEP_THINK_LLM"]
-            if cfg.get("TRADINGAGENTS_QUICK_THINK_LLM"): conf["quick_think_llm"] = cfg["TRADINGAGENTS_QUICK_THINK_LLM"]
-            if cfg.get("TRADINGAGENTS_BACKEND_URL"): conf["backend_url"] = cfg["TRADINGAGENTS_BACKEND_URL"]
+            llm_conf, llm_env = resolve_llm(cfg)
+            conf.update(llm_conf)
+            os.environ.update(llm_env)
             graph = TradingAgentsGraph(config=conf)
             t_up = ticker.upper()
             asset_type = "crypto" if ("/" in t_up or t_up.endswith(("-USD", "-USDT", "-BTC"))) else "stock"

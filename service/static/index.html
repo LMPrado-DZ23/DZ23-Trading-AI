@@ -41,18 +41,32 @@ pre{background:#0a0e15;border:1px solid var(--line);border-radius:8px;padding:10
 <div class="card" style="border-color:#14532d"><h2>🚀 Comece aqui — 3 passos</h2>
 <div style="font-size:14px;line-height:1.8">
 <b>1.</b> Digita a senha lá em cima e clica <b>Entrar</b>.<br>
-<b>2.</b> Preenche a chave do teu provedor de IA (uma basta) e, se quiser análises mais ricas, as duas gratuitas de mercado. Onde pegar cada uma:
-<span class="mut">OpenAI → platform.openai.com/api-keys · Claude → console.anthropic.com · Gemini → aistudio.google.com/apikey · DeepSeek → platform.deepseek.com · FRED (grátis) → fred.stlouisfed.org/docs/api/api_key.html · Alpha Vantage (grátis) → alphavantage.co/support/#api-key · Chave de treino da corretora (grátis, dinheiro fictício) → testnet.binance.vision</span><br>
+<b>2.</b> Escolhe um provedor de IA <b>GRÁTIS</b> (Groq é o mais fácil: chave em 1 minuto, sem cartão) — o painel te mostra onde pegar a chave e escolhe os modelos sozinho. Se quiser análises mais ricas, pega também as duas gratuitas de mercado:
+<span class="mut">FRED → fred.stlouisfed.org/docs/api/api_key.html · Alpha Vantage → alphavantage.co/support/#api-key · Chave de treino da corretora (dinheiro fictício) → testnet.binance.vision</span><br>
 <b>3.</b> Clica <b>💾 Salvar configurações</b> no fim da página e vai na aba <b>📈 Operação</b>.
 </div></div>
 <div class="card"><h2>🤖 Inteligência Artificial</h2>
 <div class="grid2"><div>
 <label>Provedor principal</label>
-<select id="TRADINGAGENTS_LLM_PROVIDER"><option value="openai">OpenAI</option><option value="anthropic">Anthropic (Claude)</option><option value="deepseek">DeepSeek</option><option value="google">Google (Gemini)</option><option value="azure">Azure OpenAI</option><option value="openai_compatible">OpenAI-compatível (Ollama, LM Studio, Groq…)</option></select>
+<select id="TRADINGAGENTS_LLM_PROVIDER" onchange="provHint()">
+<option value="groq">Groq — GRÁTIS, rápido (recomendado p/ começar)</option>
+<option value="google">Google Gemini — tem chave grátis</option>
+<option value="mistral">Mistral — grátis para começar</option>
+<option value="openrouter">OpenRouter — modelos grátis</option>
+<option value="ollama">Ollama — roda no TEU computador (grátis)</option>
+<option value="openai">OpenAI (pago)</option>
+<option value="anthropic">Anthropic Claude (pago)</option>
+<option value="deepseek">DeepSeek (barato)</option>
+<option value="azure">Azure OpenAI</option>
+<option value="openai_compatible">Outro OpenAI-compatível (LM Studio…)</option></select>
+<div id="provHint" class="mut" style="margin-top:4px"></div>
 <label>Endereço do servidor de IA (só p/ OpenAI-compatível)</label><input id="TRADINGAGENTS_BACKEND_URL" placeholder="ex.: http://meu-servidor:11434/v1 (Ollama)">
-<label>Modelo análise profunda</label><input id="TRADINGAGENTS_DEEP_THINK_LLM" placeholder="ex.: gpt-5">
-<label>Modelo análise rápida</label><input id="TRADINGAGENTS_QUICK_THINK_LLM" placeholder="ex.: gpt-5-mini">
+<label>Modelo análise profunda <span class="mut">(deixa vazio = escolho o certo)</span></label><input id="TRADINGAGENTS_DEEP_THINK_LLM" placeholder="automático">
+<label>Modelo análise rápida <span class="mut">(deixa vazio = escolho o certo)</span></label><input id="TRADINGAGENTS_QUICK_THINK_LLM" placeholder="automático">
 </div><div>
+<label>GROQ_API_KEY <span id="s_GROQ_API_KEY"></span></label><input id="GROQ_API_KEY" type="password" placeholder="grátis em console.groq.com/keys">
+<label>MISTRAL_API_KEY <span id="s_MISTRAL_API_KEY"></span></label><input id="MISTRAL_API_KEY" type="password" placeholder="console.mistral.ai/api-keys">
+<label>OPENROUTER_API_KEY <span id="s_OPENROUTER_API_KEY"></span></label><input id="OPENROUTER_API_KEY" type="password" placeholder="openrouter.ai/keys">
 <label>OPENAI_API_KEY <span id="s_OPENAI_API_KEY"></span></label><input id="OPENAI_API_KEY" type="password" placeholder="sk-…">
 <label>ANTHROPIC_API_KEY <span id="s_ANTHROPIC_API_KEY"></span></label><input id="ANTHROPIC_API_KEY" type="password">
 <label>DEEPSEEK_API_KEY <span id="s_DEEPSEEK_API_KEY"></span></label><input id="DEEPSEEK_API_KEY" type="password">
@@ -105,7 +119,20 @@ pre{background:#0a0e15;border:1px solid var(--line);border-radius:8px;padding:10
 const $=i=>document.getElementById(i);
 function tab(t){document.querySelectorAll('.tab').forEach(e=>e.classList.toggle('on',e.dataset.t===t));
 $('pane-cfg').classList.toggle('hide',t!=='cfg');$('pane-op').classList.toggle('hide',t!=='op')}
-const CFG_KEYS=['TRADINGAGENTS_LLM_PROVIDER','TRADINGAGENTS_BACKEND_URL','TRADINGAGENTS_DEEP_THINK_LLM','TRADINGAGENTS_QUICK_THINK_LLM','OPENAI_API_KEY','ANTHROPIC_API_KEY','DEEPSEEK_API_KEY','GOOGLE_API_KEY','FRED_API_KEY','ALPHA_VANTAGE_API_KEY','TRADINGAGENTS_EXCHANGE','TRADINGAGENTS_BROKER_MODE','EXCHANGE_API_KEY','EXCHANGE_API_SECRET','LIVE_TRADING_CONFIRM','TRADINGAGENTS_OUTPUT_LANGUAGE','TRADINGAGENTS_MAX_DEBATE_ROUNDS'];
+const CFG_KEYS=['TRADINGAGENTS_LLM_PROVIDER','TRADINGAGENTS_BACKEND_URL','GROQ_API_KEY','MISTRAL_API_KEY','OPENROUTER_API_KEY','TRADINGAGENTS_DEEP_THINK_LLM','TRADINGAGENTS_QUICK_THINK_LLM','OPENAI_API_KEY','ANTHROPIC_API_KEY','DEEPSEEK_API_KEY','GOOGLE_API_KEY','FRED_API_KEY','ALPHA_VANTAGE_API_KEY','TRADINGAGENTS_EXCHANGE','TRADINGAGENTS_BROKER_MODE','EXCHANGE_API_KEY','EXCHANGE_API_SECRET','LIVE_TRADING_CONFIRM','TRADINGAGENTS_OUTPUT_LANGUAGE','TRADINGAGENTS_MAX_DEBATE_ROUNDS'];
+const PROV={groq:{h:'Chave GRÁTIS em <b>console.groq.com/keys</b> (entra com Google, copia, cola aí embaixo). Modelos automáticos.',k:'GROQ_API_KEY'},
+google:{h:'Chave GRÁTIS em <b>aistudio.google.com/apikey</b>. Cola no campo GOOGLE_API_KEY.',k:'GOOGLE_API_KEY'},
+mistral:{h:'Chave em <b>console.mistral.ai/api-keys</b> (plano gratuito p/ experimentar).',k:'MISTRAL_API_KEY'},
+openrouter:{h:'Chave em <b>openrouter.ai/keys</b>; uso os modelos :free.',k:'OPENROUTER_API_KEY'},
+ollama:{h:'Instala de <b>ollama.com</b> no teu PC, roda "ollama pull llama3.1", e preenche o Endereço (ex.: http://ip-do-pc:11434/v1). Sem chave.',k:null},
+openai:{h:'Chave paga em platform.openai.com/api-keys.',k:'OPENAI_API_KEY'},
+anthropic:{h:'Chave em console.anthropic.com.',k:'ANTHROPIC_API_KEY'},
+deepseek:{h:'Chave em platform.deepseek.com (muito barata).',k:'DEEPSEEK_API_KEY'},
+azure:{h:'Endpoint e chave do teu recurso Azure.',k:null},
+openai_compatible:{h:'Preenche o Endereço do servidor e, se ele exigir, a chave OPENAI_COMPATIBLE (campo aparece ao salvar).',k:null}};
+function provHint(){const p=$('TRADINGAGENTS_LLM_PROVIDER').value,i=PROV[p]||{};
+$('provHint').innerHTML=i.h||'';
+for(const kk of ['GROQ_API_KEY','MISTRAL_API_KEY','OPENROUTER_API_KEY','OPENAI_API_KEY','ANTHROPIC_API_KEY','DEEPSEEK_API_KEY','GOOGLE_API_KEY']){const el=$(kk);if(el)el.style.borderColor=(kk===i.k)?'var(--acc)':'var(--line)'}}
 function H(x={}){try{sessionStorage.setItem('pw',$('pw').value)}catch(e){}return{'Authorization':'Bearer '+$('pw').value.trim(),'Content-Type':'application/json',...x}}
 try{$('pw').value=sessionStorage.getItem('pw')||''}catch(e){}
 $('pw').addEventListener('keydown',e=>{if(e.key==='Enter')loadStatus()});
@@ -173,5 +200,5 @@ m.innerHTML=r.ok?'<span class="ok">✔ ordem '+(d.mode==='live'?'REAL':'de trein
 function refreshAll(){store.k.forEach(j=>poll(j.id))}
 async function syncFromServer(){const r=await tapi('v1/jobs');
 if(r.status<300&&r.body&&r.body.jobs){const js=r.body.jobs.map(j=>({id:j.id,ticker:j.ticker,date:j.trade_date}));store.k=js;js.forEach(j=>{if(!states[j.id])poll(j.id)});render()}}
-loadStatus();render();syncFromServer();refreshAll();
+provHint();loadStatus();render();syncFromServer();refreshAll();
 </script></body></html>
