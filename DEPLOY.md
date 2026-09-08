@@ -24,6 +24,6 @@ acompanhar o card até CONCLUÍDA e ler a decisão.
 - Uma senha (Bearer) protege painel e API; /healthz é o único público.
 - Chaves ficam em /data/config.json (0600) no SERVIDOR; na tela, sempre
   mascaradas (•••últimos4). /docs desligado.
-- Corretora: seleção multi-exchange (Binance…Mercado Bitcoin) com modo
-  travado em TESTNET; execução real de ordens só após o marco de broker
-  CCXT ser implementado e auditado (MISSAO-BROKER-CCXT.md).
+- Corretora: 9 exchanges via CCXT. TESTNET (dinheiro fictício) é o padrão;
+  o modo REAL existe e só liga digitando a frase de autorização no painel.
+- Acesso protegido por trava anti-força-bruta (5 erros => 15 min).

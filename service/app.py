@@ -32,12 +32,42 @@ SECRETish = tuple(k for k in ALLOWED_KEYS if k.endswith(("_KEY", "_SECRET")))
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 bearer = HTTPBearer(auto_error=False)
 
-def auth(c: HTTPAuthorizationCredentials = Depends(bearer)):
+# Trava de força-bruta: com o código público, qualquer um sabe que UMA senha
+# guarda tudo — então errar custa caro. 5 erros por IP => 15 min de espera.
+_FAILS: dict = {}
+MAX_FAILS, LOCK_SECONDS = 5, 900
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for", "")
+    return (fwd.split(",")[0].strip() if fwd else None) or (
+        request.client.host if request.client else "?")
+
+def auth(request: Request, c: HTTPAuthorizationCredentials = Depends(bearer)):
     if not PASSWORD:
         raise HTTPException(500, "defina ACCESS_PASSWORD no ambiente")
+    ip = _client_ip(request)
+    rec = _FAILS.get(ip)
+    if rec and rec["n"] >= MAX_FAILS:
+        wait = int(rec["until"] - time.time())
+        if wait > 0:
+            raise HTTPException(429, f"muitas tentativas erradas — espera {wait // 60 + 1} min")
+        _FAILS.pop(ip, None)
     if not c or not hmac.compare_digest(c.credentials, PASSWORD):
+        r = _FAILS.setdefault(ip, {"n": 0, "until": 0})
+        r["n"] += 1
+        r["until"] = time.time() + LOCK_SECONDS
         raise HTTPException(401, "não autenticado")
+    _FAILS.pop(ip, None)
     return True
+
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    resp = await call_next(request)
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["X-Frame-Options"] = "DENY"
+    resp.headers["Referrer-Policy"] = "no-referrer"
+    return resp
 
 # Provedores gratuitos/locais de primeira classe: todos falam o protocolo
 # OpenAI-compatível do núcleo, cada um com sua URL e sua chave própria
@@ -142,7 +172,7 @@ def run_job(jid, ticker, date):
                       traceback.format_exc()[-1500:])
 
 @app.get("/healthz")
-def hz(): return {"status": "ok", "app": "tradingagents-operavel/2"}
+def hz(): return {"status": "ok", "app": "tradingagents-operavel/3"}
 
 @app.get("/")
 def index(): return FileResponse(STATIC / "index.html")

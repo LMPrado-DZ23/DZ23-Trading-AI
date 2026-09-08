@@ -87,3 +87,35 @@ class TestFreeProviders:
              "TRADINGAGENTS_DEEP_THINK_LLM": "gpt-5"})
         assert conf["llm_provider"] == "openai" and conf["deep_think_llm"] == "gpt-5"
         assert "backend_url" not in conf and env == {}
+
+
+class TestBruteForceLock:
+    def _client(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = _load_app(tmp_path, monkeypatch)
+        m._FAILS.clear()
+        return TestClient(m.app), m
+
+    def test_five_wrong_tries_lock_the_ip(self, tmp_path, monkeypatch):
+        c, m = self._client(tmp_path, monkeypatch)
+        for _ in range(5):
+            assert c.get("/v1/config", headers={"Authorization": "Bearer errada"}).status_code == 401
+        r = c.get("/v1/config", headers={"Authorization": "Bearer errada"})
+        assert r.status_code == 429 and "min" in r.json()["detail"]
+        # até a senha CERTA espera durante a trava (proteção > conveniência)
+        assert c.get("/v1/config", headers={"Authorization": "Bearer s3nh4"}).status_code == 429
+
+    def test_lock_expires_and_correct_password_resets(self, tmp_path, monkeypatch):
+        c, m = self._client(tmp_path, monkeypatch)
+        for _ in range(5):
+            c.get("/v1/config", headers={"Authorization": "Bearer errada"})
+        for rec in m._FAILS.values():
+            rec["until"] = 0  # simula os 15 min passando
+        assert c.get("/v1/config", headers={"Authorization": "Bearer s3nh4"}).status_code == 200
+        assert not m._FAILS  # acerto limpa o histórico
+
+    def test_security_headers_present(self, tmp_path, monkeypatch):
+        c, _ = self._client(tmp_path, monkeypatch)
+        h = c.get("/healthz").headers
+        assert h["X-Content-Type-Options"] == "nosniff"
+        assert h["X-Frame-Options"] == "DENY"
