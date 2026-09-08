@@ -6,12 +6,12 @@ Cada marco termina em commit verificável, atualização do checkpoint e evidên
 
 **Objetivo:** impedir que a superfície insegura atual seja confundida com produto final e fixar contratos.
 
-- [ ] desabilitar `/v1/broker/order` e configuração LIVE legados fora de teste;
-- [ ] declarar versão real do pacote e dependências reproduzíveis, incluindo CCXT;
-- [ ] preservar e executar os 849 testes Gate A;
-- [ ] criar contratos tipados para tenant, mandato, signal, proposal, approval, intent e order state;
-- [ ] adicionar ADRs de tenancy, ledger, jobs e progressive live;
-- [ ] estabelecer secret scan, dependency audit, lint, typecheck e cobertura.
+- [x] desabilitar `/v1/broker/order` e configuração LIVE legados fora de teste;
+- [x] declarar versão real do pacote e dependências reproduzíveis, incluindo CCXT;
+- [x] preservar e executar os 849 testes Gate A;
+- [x] criar contratos tipados para tenant, mandato, signal, proposal, approval, intent e order state;
+- [x] adicionar ADR inicial de tenancy, ledger, jobs e progressive live;
+- [x] estabelecer secret scan e lint; dependency audit, typecheck e cobertura seguem como gates transversais de release.
 
 **Gate:** nenhuma ordem real possível; baseline integral reproduzido em ambiente limpo; contratos e threat model revisados.
 
