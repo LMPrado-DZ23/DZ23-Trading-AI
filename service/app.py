@@ -17,7 +17,7 @@ PASSWORD = os.environ.get("ACCESS_PASSWORD", "")
 STATIC = Path(__file__).parent / "static"
 
 ALLOWED_KEYS = [
-    "TRADINGAGENTS_LLM_PROVIDER", "TRADINGAGENTS_DEEP_THINK_LLM",
+    "TRADINGAGENTS_LLM_PROVIDER", "TRADINGAGENTS_BACKEND_URL", "TRADINGAGENTS_DEEP_THINK_LLM",
     "TRADINGAGENTS_QUICK_THINK_LLM", "TRADINGAGENTS_OUTPUT_LANGUAGE",
     "TRADINGAGENTS_MAX_DEBATE_ROUNDS", "TRADINGAGENTS_MAX_RISK_ROUNDS",
     "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY",
@@ -76,6 +76,7 @@ def run_job(jid, ticker, date):
             if prov: conf["llm_provider"] = prov
             if cfg.get("TRADINGAGENTS_DEEP_THINK_LLM"): conf["deep_think_llm"] = cfg["TRADINGAGENTS_DEEP_THINK_LLM"]
             if cfg.get("TRADINGAGENTS_QUICK_THINK_LLM"): conf["quick_think_llm"] = cfg["TRADINGAGENTS_QUICK_THINK_LLM"]
+            if cfg.get("TRADINGAGENTS_BACKEND_URL"): conf["backend_url"] = cfg["TRADINGAGENTS_BACKEND_URL"]
             graph = TradingAgentsGraph(config=conf)
             t_up = ticker.upper()
             asset_type = "crypto" if ("/" in t_up or t_up.endswith(("-USD", "-USDT", "-BTC"))) else "stock"

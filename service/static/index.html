@@ -48,7 +48,8 @@ pre{background:#0a0e15;border:1px solid var(--line);border-radius:8px;padding:10
 <div class="card"><h2>🤖 Inteligência Artificial</h2>
 <div class="grid2"><div>
 <label>Provedor principal</label>
-<select id="TRADINGAGENTS_LLM_PROVIDER"><option value="openai">OpenAI</option><option value="anthropic">Anthropic (Claude)</option><option value="deepseek">DeepSeek</option><option value="google">Google (Gemini)</option><option value="azure">Azure OpenAI</option><option value="openai_compatible">Relay OpenAI-compatível</option></select>
+<select id="TRADINGAGENTS_LLM_PROVIDER"><option value="openai">OpenAI</option><option value="anthropic">Anthropic (Claude)</option><option value="deepseek">DeepSeek</option><option value="google">Google (Gemini)</option><option value="azure">Azure OpenAI</option><option value="openai_compatible">OpenAI-compatível (Ollama, LM Studio, Groq…)</option></select>
+<label>Endereço do servidor de IA (só p/ OpenAI-compatível)</label><input id="TRADINGAGENTS_BACKEND_URL" placeholder="ex.: http://meu-servidor:11434/v1 (Ollama)">
 <label>Modelo análise profunda</label><input id="TRADINGAGENTS_DEEP_THINK_LLM" placeholder="ex.: gpt-5">
 <label>Modelo análise rápida</label><input id="TRADINGAGENTS_QUICK_THINK_LLM" placeholder="ex.: gpt-5-mini">
 </div><div>
@@ -104,7 +105,7 @@ pre{background:#0a0e15;border:1px solid var(--line);border-radius:8px;padding:10
 const $=i=>document.getElementById(i);
 function tab(t){document.querySelectorAll('.tab').forEach(e=>e.classList.toggle('on',e.dataset.t===t));
 $('pane-cfg').classList.toggle('hide',t!=='cfg');$('pane-op').classList.toggle('hide',t!=='op')}
-const CFG_KEYS=['TRADINGAGENTS_LLM_PROVIDER','TRADINGAGENTS_DEEP_THINK_LLM','TRADINGAGENTS_QUICK_THINK_LLM','OPENAI_API_KEY','ANTHROPIC_API_KEY','DEEPSEEK_API_KEY','GOOGLE_API_KEY','FRED_API_KEY','ALPHA_VANTAGE_API_KEY','TRADINGAGENTS_EXCHANGE','TRADINGAGENTS_BROKER_MODE','EXCHANGE_API_KEY','EXCHANGE_API_SECRET','LIVE_TRADING_CONFIRM','TRADINGAGENTS_OUTPUT_LANGUAGE','TRADINGAGENTS_MAX_DEBATE_ROUNDS'];
+const CFG_KEYS=['TRADINGAGENTS_LLM_PROVIDER','TRADINGAGENTS_BACKEND_URL','TRADINGAGENTS_DEEP_THINK_LLM','TRADINGAGENTS_QUICK_THINK_LLM','OPENAI_API_KEY','ANTHROPIC_API_KEY','DEEPSEEK_API_KEY','GOOGLE_API_KEY','FRED_API_KEY','ALPHA_VANTAGE_API_KEY','TRADINGAGENTS_EXCHANGE','TRADINGAGENTS_BROKER_MODE','EXCHANGE_API_KEY','EXCHANGE_API_SECRET','LIVE_TRADING_CONFIRM','TRADINGAGENTS_OUTPUT_LANGUAGE','TRADINGAGENTS_MAX_DEBATE_ROUNDS'];
 function H(x={}){try{sessionStorage.setItem('pw',$('pw').value)}catch(e){}return{'Authorization':'Bearer '+$('pw').value.trim(),'Content-Type':'application/json',...x}}
 try{$('pw').value=sessionStorage.getItem('pw')||''}catch(e){}
 $('pw').addEventListener('keydown',e=>{if(e.key==='Enter')loadStatus()});
