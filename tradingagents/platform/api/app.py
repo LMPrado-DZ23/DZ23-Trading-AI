@@ -20,7 +20,13 @@ from tradingagents.platform.api.identity import (
     IdentityPrincipal,
     IdentityServicePort,
 )
+from tradingagents.platform.api.jobs import AnalysisJobServicePort
+from tradingagents.platform.api.llm_connections import LlmConnectionServicePort
 from tradingagents.platform.api.schemas import (
+    AnalysisJobCreatedResponse,
+    AnalysisJobDetailResponse,
+    AnalysisJobRequest,
+    AnalysisJobResponse,
     BrokerConnectionRequest,
     BrokerConnectionResponse,
     BrokerDiagnosticResponse,
@@ -29,6 +35,9 @@ from tradingagents.platform.api.schemas import (
     CsrfResponse,
     ExchangeCatalogResponse,
     HealthResponse,
+    LlmConnectionRequest,
+    LlmConnectionResponse,
+    LlmProviderResponse,
     LoginRequest,
     MessageResponse,
     MfaActivateRequest,
@@ -76,6 +85,8 @@ def create_platform_app(
     rate_limiter: RateLimiter,
     compliance_service: ComplianceServicePort | None = None,
     broker_connection_service: BrokerConnectionServicePort | None = None,
+    analysis_job_service: AnalysisJobServicePort | None = None,
+    llm_connection_service: LlmConnectionServicePort | None = None,
 ) -> FastAPI:
     """Create an isolated API instance with explicit security dependencies."""
 
@@ -181,19 +192,33 @@ def create_platform_app(
             )
         return broker_connection_service
 
+    def analysis_jobs() -> AnalysisJobServicePort:
+        if analysis_job_service is None:
+            raise _public_error(
+                503,
+                "ANALYSIS_JOBS_UNAVAILABLE",
+                "As análises estão temporariamente indisponíveis.",
+            )
+        return analysis_job_service
+
+    def llm_connections() -> LlmConnectionServicePort:
+        if llm_connection_service is None:
+            raise _public_error(
+                503,
+                "LLM_CONNECTIONS_UNAVAILABLE",
+                "Os provedores de inteligência artificial estão indisponíveis.",
+            )
+        return llm_connection_service
+
     async def enforce_rate(
         *, request: Request, scope: str, identity: str, limit: int, window: int
     ) -> None:
         ip = client_ip(request, security.trusted_proxy_networks)
-        await enforce_rate_key(
-            key=rate_key(scope, identity, ip), limit=limit, window=window
-        )
+        await enforce_rate_key(key=rate_key(scope, identity, ip), limit=limit, window=window)
 
     async def enforce_rate_key(*, key: str, limit: int, window: int) -> None:
         try:
-            allowed = await rate_limiter.allow(
-                key=key, limit=limit, window_seconds=window
-            )
+            allowed = await rate_limiter.allow(key=key, limit=limit, window_seconds=window)
         except RateLimitUnavailable:
             raise _public_error(
                 503,
@@ -495,7 +520,9 @@ def create_platform_app(
                 context=command_context(request),
             )
         except IdentityError:
-            raise _public_error(400, "CONSENT_INVALID", "Não foi possível registrar a decisão.") from None
+            raise _public_error(
+                400, "CONSENT_INVALID", "Não foi possível registrar a decisão."
+            ) from None
         return MessageResponse(message="Sua decisão foi registrada.")
 
     @app.get("/v1/legal/consents", response_model=list[ConsentResponse])
@@ -530,7 +557,9 @@ def create_platform_app(
                 kind=payload.kind,
             )
         except IdentityError:
-            raise _public_error(400, "PRIVACY_INVALID", "Não foi possível abrir a solicitação.") from None
+            raise _public_error(
+                400, "PRIVACY_INVALID", "Não foi possível abrir a solicitação."
+            ) from None
         return PrivacyResponse(**asdict(row))
 
     @app.get("/v1/privacy/requests/{request_id}", response_model=PrivacyResponse)
@@ -564,7 +593,9 @@ def create_platform_app(
                 account_label=payload.account_label,
             )
         except IdentityError:
-            raise _public_error(400, "MFA_ENROLLMENT_INVALID", "Não foi possível iniciar o MFA.") from None
+            raise _public_error(
+                400, "MFA_ENROLLMENT_INVALID", "Não foi possível iniciar o MFA."
+            ) from None
         return MfaEnrollmentResponse(**asdict(row))
 
     @app.post("/v1/mfa/activate", response_model=MfaActivationResponse)
@@ -659,9 +690,7 @@ def create_platform_app(
                 environment=payload.environment,
                 api_key=payload.api_key.get_secret_value(),
                 secret=payload.secret.get_secret_value(),
-                passphrase=(
-                    payload.passphrase.get_secret_value() if payload.passphrase else None
-                ),
+                passphrase=(payload.passphrase.get_secret_value() if payload.passphrase else None),
                 uid=payload.uid.get_secret_value() if payload.uid else None,
             )
         except IdentityError as exc:
@@ -716,6 +745,161 @@ def create_platform_app(
         except IdentityError as exc:
             _raise_connection_error(exc)
         return MessageResponse(message="Credencial removida e conexão desativada.")
+
+    @app.post("/v1/jobs", response_model=AnalysisJobCreatedResponse, status_code=202)
+    async def enqueue_analysis_job(
+        payload: AnalysisJobRequest,
+        request: Request,
+        context: Annotated[TenantRequestContext, Depends(require_session)],
+        idempotency_key: Annotated[
+            str, Header(alias="Idempotency-Key", min_length=16, max_length=128)
+        ],
+    ) -> AnalysisJobCreatedResponse:
+        verify_csrf(request, security.csrf_secret)
+        require_verified(context)
+        await enforce_rate_key(
+            key=f"analysis-job-create:{context.tenant_id}:{context.principal.user_id}",
+            limit=30,
+            window=3600,
+        )
+        try:
+            job_id = await analysis_jobs().enqueue(
+                token=request.cookies[SESSION_COOKIE],
+                principal=context.principal,
+                idempotency_key=idempotency_key,
+                command=payload.model_dump(mode="json"),
+            )
+        except IdentityError as exc:
+            _raise_job_error(exc)
+        return AnalysisJobCreatedResponse(
+            id=job_id,
+            message="Análise adicionada à fila com segurança.",
+        )
+
+    @app.get("/v1/llm/providers", response_model=list[LlmProviderResponse])
+    async def list_llm_providers(
+        context: Annotated[TenantRequestContext, Depends(require_session)],
+    ) -> list[LlmProviderResponse]:
+        require_verified(context)
+        return [LlmProviderResponse(**asdict(row)) for row in await llm_connections().catalog()]
+
+    @app.get("/v1/llm/connections", response_model=list[LlmConnectionResponse])
+    async def list_llm_connections(
+        request: Request,
+        context: Annotated[TenantRequestContext, Depends(require_session)],
+    ) -> list[LlmConnectionResponse]:
+        require_verified(context)
+        try:
+            rows = await llm_connections().list_connections(
+                token=request.cookies[SESSION_COOKIE], principal=context.principal
+            )
+        except IdentityError as exc:
+            _raise_llm_connection_error(exc)
+        return [LlmConnectionResponse(**asdict(row)) for row in rows]
+
+    @app.post("/v1/llm/connections", response_model=MessageResponse, status_code=201)
+    async def save_llm_connection(
+        payload: LlmConnectionRequest,
+        request: Request,
+        context: Annotated[TenantRequestContext, Depends(require_session)],
+        idempotency_key: Annotated[
+            str, Header(alias="Idempotency-Key", min_length=16, max_length=128)
+        ],
+    ) -> MessageResponse:
+        verify_csrf(request, security.csrf_secret)
+        require_verified(context)
+        await enforce_rate_key(
+            key=f"llm-connection-save:{context.tenant_id}:{context.principal.user_id}",
+            limit=10,
+            window=3600,
+        )
+        try:
+            connection_id = await llm_connections().save_connection(
+                token=request.cookies[SESSION_COOKIE],
+                principal=context.principal,
+                idempotency_key=idempotency_key,
+                label=payload.label,
+                provider=payload.provider,
+                api_key=payload.api_key.get_secret_value(),
+                base_url=payload.base_url,
+            )
+        except IdentityError as exc:
+            _raise_llm_connection_error(exc)
+        return MessageResponse(message=f"Provedor {connection_id} salvo com segurança.")
+
+    @app.delete("/v1/llm/connections/{connection_id}", response_model=MessageResponse)
+    async def disable_llm_connection(
+        connection_id: UUID,
+        request: Request,
+        context: Annotated[TenantRequestContext, Depends(require_session)],
+    ) -> MessageResponse:
+        verify_csrf(request, security.csrf_secret)
+        require_verified(context)
+        try:
+            await llm_connections().disable_connection(
+                token=request.cookies[SESSION_COOKIE],
+                principal=context.principal,
+                connection_id=connection_id,
+            )
+        except IdentityError as exc:
+            _raise_llm_connection_error(exc)
+        return MessageResponse(message="Provedor desativado.")
+
+    @app.get("/v1/jobs", response_model=list[AnalysisJobResponse])
+    async def list_analysis_jobs(
+        request: Request,
+        context: Annotated[TenantRequestContext, Depends(require_session)],
+        limit: int = 50,
+    ) -> list[AnalysisJobResponse]:
+        require_verified(context)
+        try:
+            rows = await analysis_jobs().list_jobs(
+                token=request.cookies[SESSION_COOKIE],
+                principal=context.principal,
+                limit=limit,
+            )
+        except IdentityError as exc:
+            _raise_job_error(exc)
+        return [AnalysisJobResponse(**asdict(row)) for row in rows]
+
+    @app.get("/v1/jobs/{job_id}", response_model=AnalysisJobDetailResponse)
+    async def get_analysis_job(
+        job_id: UUID,
+        request: Request,
+        context: Annotated[TenantRequestContext, Depends(require_session)],
+    ) -> AnalysisJobDetailResponse:
+        require_verified(context)
+        try:
+            detail = await analysis_jobs().get_job(
+                token=request.cookies[SESSION_COOKIE],
+                principal=context.principal,
+                job_id=job_id,
+            )
+        except IdentityError as exc:
+            _raise_job_error(exc)
+        return AnalysisJobDetailResponse(
+            **asdict(detail.job),
+            result=detail.result,
+            manifest=detail.manifest,
+        )
+
+    @app.post("/v1/jobs/{job_id}/cancel", response_model=MessageResponse)
+    async def cancel_analysis_job(
+        job_id: UUID,
+        request: Request,
+        context: Annotated[TenantRequestContext, Depends(require_session)],
+    ) -> MessageResponse:
+        verify_csrf(request, security.csrf_secret)
+        require_verified(context)
+        try:
+            status = await analysis_jobs().cancel(
+                token=request.cookies[SESSION_COOKIE],
+                principal=context.principal,
+                job_id=job_id,
+            )
+        except IdentityError as exc:
+            _raise_job_error(exc)
+        return MessageResponse(message=f"Cancelamento registrado: {status}.")
 
     return app
 
@@ -777,6 +961,44 @@ def _raise_connection_error(exc: IdentityError) -> None:
         400,
         "CONNECTION_INVALID",
         "Não foi possível salvar ou diagnosticar esta conexão.",
+    ) from None
+
+
+def _raise_job_error(exc: IdentityError) -> None:
+    if exc.code == "JOB_NOT_FOUND":
+        raise _public_error(404, exc.code, "Análise não encontrada.") from None
+    if exc.code in {"JOB_FORBIDDEN"}:
+        raise _public_error(403, exc.code, "Você não pode administrar análises.") from None
+    if exc.code in {"ACTIVE_JOB_QUOTA_EXCEEDED"}:
+        raise _public_error(
+            429,
+            exc.code,
+            "Há muitas análises em andamento. Aguarde uma conclusão.",
+        ) from None
+    if exc.code in {"IDEMPOTENCY_PAYLOAD_MISMATCH", "IDEMPOTENCY_KEY_INVALID"}:
+        raise _public_error(
+            409,
+            exc.code,
+            "Esta solicitação não pode reutilizar o mesmo identificador.",
+        ) from None
+    raise _public_error(400, "ANALYSIS_JOB_INVALID", "Não foi possível agendar a análise.")
+
+
+def _raise_llm_connection_error(exc: IdentityError) -> None:
+    if exc.code == "MFA_STEP_UP_REQUIRED":
+        raise _public_error(
+            403,
+            exc.code,
+            "Confirme o código de segurança para administrar este provedor.",
+        ) from None
+    if exc.code == "LLM_CONNECTION_NOT_FOUND":
+        raise _public_error(404, exc.code, "Provedor não encontrado.") from None
+    if exc.code == "LLM_CONNECTION_FORBIDDEN":
+        raise _public_error(403, exc.code, "Você não pode administrar provedores.") from None
+    raise _public_error(
+        400,
+        "LLM_CONNECTION_INVALID",
+        "Não foi possível salvar este provedor. Revise os dados informados.",
     ) from None
 
 

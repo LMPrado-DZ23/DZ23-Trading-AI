@@ -155,7 +155,11 @@ class SupabaseJwtVerifier:
         self._last_jwks_fetch_monotonic: float | None = None
 
     async def verify(self, token: str) -> SupabaseAuthClaims:
-        if not isinstance(token, str) or not token or len(token.encode("utf-8")) > self._config.max_token_bytes:
+        if (
+            not isinstance(token, str)
+            or not token
+            or len(token.encode("utf-8")) > self._config.max_token_bytes
+        ):
             raise SupabaseAuthError("TOKEN_FORMAT")
         if token.count(".") != 2:
             raise SupabaseAuthError("TOKEN_FORMAT")
@@ -262,7 +266,9 @@ class SupabaseJwtVerifier:
                     try:
                         parsed_length = int(declared_length)
                     except ValueError as exc:
-                        raise SupabaseAuthError("JWKS_CONTENT_LENGTH", "Autenticação indisponível.") from exc
+                        raise SupabaseAuthError(
+                            "JWKS_CONTENT_LENGTH", "Autenticação indisponível."
+                        ) from exc
                     if parsed_length < 0:
                         raise SupabaseAuthError("JWKS_CONTENT_LENGTH", "Autenticação indisponível.")
                     if parsed_length > self._config.max_jwks_bytes:
@@ -341,7 +347,9 @@ class SupabaseJwtVerifier:
         audience_claim = payload.get("aud")
         if isinstance(audience_claim, str):
             audience = (audience_claim,)
-        elif isinstance(audience_claim, list) and all(isinstance(item, str) for item in audience_claim):
+        elif isinstance(audience_claim, list) and all(
+            isinstance(item, str) for item in audience_claim
+        ):
             audience = tuple(audience_claim)
         else:
             raise SupabaseAuthError("TOKEN_AUDIENCE")
@@ -394,7 +402,9 @@ class SupabaseJwtVerifier:
             raise SupabaseAuthError("TOKEN_PROVIDER")
         providers = app_metadata.get("providers")
         if providers is not None:
-            if not isinstance(providers, list) or not all(isinstance(item, str) for item in providers):
+            if not isinstance(providers, list) or not all(
+                isinstance(item, str) for item in providers
+            ):
                 raise SupabaseAuthError("TOKEN_PROVIDER")
             normalized_providers = {item.strip().lower() for item in providers}
             if normalized not in normalized_providers:

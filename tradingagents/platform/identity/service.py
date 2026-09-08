@@ -797,9 +797,7 @@ class IdentityService:
                 token=raw_token,
             )
 
-    def consume_email_verification_token(
-        self, *, token: str, client_ip: str | None = None
-    ) -> UUID:
+    def consume_email_verification_token(self, *, token: str, client_ip: str | None = None) -> UUID:
         tenant_id = self.tenant_id_from_token(token)
         token_hash = self._tokens.digest(token, purpose=f"verify-email:{tenant_id}")
         now = self._now()

@@ -5,6 +5,7 @@ import os
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.engine import make_url
 
 from tradingagents.platform.runtime import create_production_app
 from tradingagents.platform.settings import PlatformSettings
@@ -20,7 +21,8 @@ def test_runtime_readiness_checks_restricted_postgres_role_and_real_redis() -> N
     settings = PlatformSettings(
         environment="production",
         database_url=database_url,
-        database_expected_role="tradingagents_app_test",
+        database_expected_role=make_url(database_url).username or "",
+        worker_database_url=os.environ.get("TRADINGAGENTS_TEST_WORKER_POSTGRES_URL", ""),
         public_url="https://trading.example.test",
         allowed_origins=["https://trading.example.test"],
         session_token_pepper="integration-runtime-master-secret-32-bytes-long",
@@ -36,6 +38,7 @@ def test_runtime_readiness_checks_restricted_postgres_role_and_real_redis() -> N
         broker_credential_provider="openbao_transit",
         broker_transit_url="https://openbao:8200",
         broker_transit_token="test-only-transit-token",
+        llm_transit_token="test-only-llm-transit-token",
     )
 
     with TestClient(create_production_app(settings), base_url=settings.public_url) as client:

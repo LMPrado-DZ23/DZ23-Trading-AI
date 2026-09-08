@@ -87,7 +87,7 @@ def crypto_base(raw: str) -> str | None:
     """
     if not isinstance(raw, str):
         return None
-    compact = raw.strip().upper().rstrip("+").replace("-", "")
+    compact = raw.strip().upper().rstrip("+").replace("-", "").replace("/", "")
     for quote in _CRYPTO_QUOTES:
         if compact.endswith(quote):
             base = compact[: -len(quote)]

@@ -35,6 +35,7 @@ Pure stdlib (dataclasses + json).
 import hashlib
 import json
 from dataclasses import dataclass, field, fields
+from datetime import datetime, timezone
 
 from .redact import redact_secrets
 from .sanitize import neutralize_block_delimiters
@@ -158,7 +159,7 @@ def wrap_report_for_prompt(agent_label: str, report_text: str,
     return derived_report(agent_label, str(report_text), now, as_of=as_of).to_prompt_block()
 
 
-def is_backtest_admissible(ev: "UntrustedEvidence") -> bool:
+def is_backtest_admissible(ev: "UntrustedEvidence", *, decision_at: str) -> bool:
     """Point-in-time admissibility for historical runs (rodada-5 rule).
 
     ``available_at`` is only a point-in-time guarantee when it comes from a
@@ -167,4 +168,13 @@ def is_backtest_admissible(ev: "UntrustedEvidence") -> bool:
     the record rather than silently substituting ``fetched_at``. Live runs
     may still use it. The P1 backtest engine must consult this gate.
     """
-    return ev.available_at is not None
+    if ev.available_at is None:
+        return False
+    try:
+        available = datetime.fromisoformat(ev.available_at.replace("Z", "+00:00"))
+        decision = datetime.fromisoformat(decision_at.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return False
+    if available.tzinfo is None or decision.tzinfo is None:
+        return False
+    return available.astimezone(timezone.utc) <= decision.astimezone(timezone.utc)

@@ -13,15 +13,15 @@ from pathlib import Path
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-from tradingagents.dataflows.utils import safe_ticker_component
+from tradingagents.dataflows.utils import safe_instrument_storage_component
 
 
 def _db_path(data_dir: str | Path, ticker: str) -> Path:
     """Return the SQLite checkpoint DB path for a ticker."""
     # Reject ticker values that would escape the checkpoints directory.
-    safe = safe_ticker_component(ticker).upper()
+    safe = safe_instrument_storage_component(ticker).upper()
     p = Path(data_dir) / "checkpoints"
-    p.mkdir(parents=True, exist_ok=True)
+    p.mkdir(parents=True, exist_ok=True, mode=0o700)
     return p / f"{safe}.db"
 
 
@@ -43,6 +43,7 @@ def get_checkpointer(data_dir: str | Path, ticker: str) -> Generator[SqliteSaver
     """Context manager yielding a SqliteSaver backed by a per-ticker DB."""
     db = _db_path(data_dir, ticker)
     conn = sqlite3.connect(str(db), check_same_thread=False)
+    db.chmod(0o600)
     try:
         saver = SqliteSaver(conn)
         saver.setup()

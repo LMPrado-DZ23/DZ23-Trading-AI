@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
@@ -220,3 +220,80 @@ class BrokerDiagnosticResponse(ApiModel):
     permission_status: str
     spot_only: bool
     adapter_version: str
+
+
+class AnalysisJobRequest(ApiModel):
+    symbol: str = Field(min_length=1, max_length=64)
+    asset_type: Literal["stock", "crypto"]
+    trade_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    market_calendar: Literal["24/7", "XNYS", "BVMF"] | None = None
+    mode: Literal["backtest", "shadow", "paper"]
+    provider: str = Field(min_length=1, max_length=40, pattern=r"^[a-z0-9_-]+$")
+    model: str = Field(min_length=1, max_length=160)
+    llm_connection_id: UUID
+    llm_credential_version: int = Field(ge=1)
+    selected_analysts: tuple[Literal["market", "social", "news", "fundamentals"], ...] = (
+        "market",
+        "news",
+    )
+    config: dict[str, Any] = Field(default_factory=dict)
+    token_budget: int = Field(default=250_000, ge=1_000, le=2_000_000)
+    cost_budget_microusd: int | None = Field(default=None, ge=1_000, le=1_000_000_000)
+
+
+class AnalysisJobCreatedResponse(ApiModel):
+    id: UUID
+    message: str
+
+
+class AnalysisJobResponse(ApiModel):
+    id: UUID
+    run_id: UUID
+    status: str
+    symbol: str
+    asset_type: str
+    trade_date: str
+    mode: str
+    attempts: int
+    max_attempts: int
+    error_code: str | None
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    llm_requests: int
+    unmetered_llm_requests: int
+    estimated_cost_microusd: int | None
+    pricing_version: str | None
+    token_budget: int
+    cost_budget_microusd: int | None
+    created_at: datetime
+    completed_at: datetime | None
+
+
+class AnalysisJobDetailResponse(AnalysisJobResponse):
+    result: dict[str, Any] | None
+    manifest: dict[str, Any] | None
+
+
+class LlmProviderResponse(ApiModel):
+    slug: str
+    display_name: str
+    requires_endpoint: bool
+
+
+class LlmConnectionRequest(ApiModel):
+    label: str = Field(min_length=2, max_length=80)
+    provider: str = Field(min_length=2, max_length=40, pattern=r"^[a-z0-9_-]+$")
+    api_key: SecretStr = Field(min_length=8, max_length=4096)
+    base_url: str | None = Field(default=None, min_length=8, max_length=2048)
+
+
+class LlmConnectionResponse(ApiModel):
+    id: UUID
+    label: str
+    provider: str
+    display_name: str
+    base_url: str | None
+    status: str
+    credential_version: int
+    created_at: datetime

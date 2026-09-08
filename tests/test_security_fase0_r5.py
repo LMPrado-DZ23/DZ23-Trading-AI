@@ -258,8 +258,21 @@ class TestBacktestAdmissibility:
                                   available_at="2026-09-05T13:30:00Z")
         unknown = UntrustedEvidence(source="stocktwits", kind="social", content="x",
                                     fetched_at="2026-09-06T10:00:00Z")
-        assert is_backtest_admissible(known) is True
-        assert is_backtest_admissible(unknown) is False
+        assert is_backtest_admissible(known, decision_at="2026-09-06T00:00:00+00:00") is True
+        assert is_backtest_admissible(unknown, decision_at="2026-09-06T00:00:00+00:00") is False
+        assert (
+            is_backtest_admissible(
+                UntrustedEvidence(
+                    source="future",
+                    kind="news",
+                    content="future",
+                    fetched_at="2025-01-03T00:00:00+00:00",
+                    available_at="2025-01-03T00:00:00+00:00",
+                ),
+                decision_at="2025-01-02T00:00:00+00:00",
+            )
+            is False
+        )
 
 
 class TestCapitalGateFailClosed:

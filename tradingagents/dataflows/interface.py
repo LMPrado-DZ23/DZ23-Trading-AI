@@ -1,4 +1,5 @@
 import logging
+from datetime import date
 
 from .alpha_vantage import (
     get_balance_sheet as get_alpha_vantage_balance_sheet,
@@ -19,6 +20,7 @@ from .errors import (
 )
 from .fred import get_macro_data as get_fred_macro_data
 from .polymarket import get_prediction_markets as get_polymarket_prediction_markets
+from .redact import redact_secrets
 from .y_finance import (
     get_balance_sheet as get_yfinance_balance_sheet,
     get_cashflow as get_yfinance_cashflow,
@@ -34,26 +36,14 @@ logger = logging.getLogger(__name__)
 
 # Tools organized by category
 TOOLS_CATEGORIES = {
-    "core_stock_apis": {
-        "description": "OHLCV stock price data",
-        "tools": [
-            "get_stock_data"
-        ]
-    },
+    "core_stock_apis": {"description": "OHLCV stock price data", "tools": ["get_stock_data"]},
     "technical_indicators": {
         "description": "Technical analysis indicators",
-        "tools": [
-            "get_indicators"
-        ]
+        "tools": ["get_indicators"],
     },
     "fundamental_data": {
         "description": "Company fundamentals",
-        "tools": [
-            "get_fundamentals",
-            "get_balance_sheet",
-            "get_cashflow",
-            "get_income_statement"
-        ]
+        "tools": ["get_fundamentals", "get_balance_sheet", "get_cashflow", "get_income_statement"],
     },
     "news_data": {
         "description": "News and insider data",
@@ -61,20 +51,20 @@ TOOLS_CATEGORIES = {
             "get_news",
             "get_global_news",
             "get_insider_transactions",
-        ]
+        ],
     },
     "macro_data": {
         "description": "Macroeconomic indicators (rates, inflation, labor, growth)",
         "tools": [
             "get_macro_indicators",
-        ]
+        ],
     },
     "prediction_markets": {
         "description": "Market-implied probabilities for forward-looking events",
         "tools": [
             "get_prediction_markets",
-        ]
-    }
+        ],
+    },
 }
 
 VENDOR_LIST = [
@@ -143,12 +133,14 @@ VENDOR_METHODS = {
     },
 }
 
+
 def get_category_for_method(method: str) -> str:
     """Get the category that contains the specified method."""
     for category, info in TOOLS_CATEGORIES.items():
         if method in info["tools"]:
             return category
     raise ValueError(f"Method '{method}' not found in any category")
+
 
 def get_vendor(category: str, method: str = None) -> str:
     """Get the configured vendor for a data category or specific tool method.
@@ -165,11 +157,38 @@ def get_vendor(category: str, method: str = None) -> str:
     # Fall back to category-level configuration
     return config.get("data_vendors", {}).get(category, "default")
 
+
 def route_to_vendor(method: str, *args, **kwargs):
     """Route method calls to appropriate vendor implementation with fallback support."""
     category = get_category_for_method(method)
+    from tradingagents.platform.contracts import RunMode
+    from tradingagents.platform.run_context import current_run_context
+
+    run_context = current_run_context()
+    platform_run = run_context is not None
+    if run_context is not None:
+        assert_platform_tool_request(method, args, run_context=run_context)
+    if run_context is not None and run_context.mode is RunMode.BACKTEST:
+        if category == "prediction_markets":
+            return (
+                "BACKTEST_DATA_EXCLUDED: prediction-market snapshots are live-only and "
+                "have no verified historical available_at timestamp. No network request "
+                "was made; do not estimate or fabricate a probability."
+            )
+        if category == "fundamental_data":
+            return (
+                "BACKTEST_DATA_EXCLUDED: this fundamentals source does not expose a "
+                "verified public filing timestamp for point-in-time reconstruction. No "
+                "network request was made; do not estimate or use current fundamentals."
+            )
+        if category == "news_data":
+            return (
+                "BACKTEST_DATA_EXCLUDED: this aggregated news source does not preserve "
+                "a verified available_at timestamp for every record. No network request "
+                "was made; do not estimate or use current news."
+            )
     vendor_config = get_vendor(category, method)
-    primary_vendors = [v.strip() for v in vendor_config.split(',')]
+    primary_vendors = [v.strip() for v in vendor_config.split(",")]
 
     if method not in VENDOR_METHODS:
         raise ValueError(f"Method '{method}' not supported")
@@ -215,7 +234,8 @@ def route_to_vendor(method: str, *args, **kwargs):
             # Don't let one vendor's failure crash the call when another can
             # serve it, but never swallow silently: a broken primary must be
             # visible in the logs (#989), not hidden behind a fallback's verdict.
-            logger.warning("Vendor %r failed for %s: %s", vendor, method, e)
+            safe_error = type(e).__name__ if platform_run else redact_secrets(str(e))
+            logger.warning("Vendor %r failed for %s: %s", vendor, method, safe_error)
             if first_error is None:
                 first_error = e
             continue
@@ -230,7 +250,8 @@ def route_to_vendor(method: str, *args, **kwargs):
             # verdict can't hide a broken primary (network/auth/etc.).
             logger.warning(
                 "Returning NO_DATA for %s, but a vendor errored earlier: %s",
-                method, first_error,
+                method,
+                type(first_error).__name__ if platform_run else redact_secrets(str(first_error)),
             )
         sym = last_no_data.symbol
         canonical = last_no_data.canonical
@@ -238,7 +259,7 @@ def route_to_vendor(method: str, *args, **kwargs):
         # Surface the typed error's detail (e.g. "latest row is 2025-06-11 ...
         # stale") so the agent sees the specific reason — invalid symbol, no
         # coverage, or stale data — not just a generic "unavailable".
-        reason = f" ({last_no_data.detail})" if last_no_data.detail else ""
+        reason = f" ({redact_secrets(last_no_data.detail)})" if last_no_data.detail else ""
         return (
             f"NO_DATA_AVAILABLE: No usable market data for '{sym}'{resolved} from "
             f"any configured vendor{reason}. The symbol may be invalid, delisted, "
@@ -252,11 +273,83 @@ def route_to_vendor(method: str, *args, **kwargs):
     # abort the run.
     if first_error is not None:
         if category in OPTIONAL_CATEGORIES:
-            logger.warning("Optional %s unavailable for %s: %s", category, method, first_error)
+            safe_error = (
+                type(first_error).__name__ if platform_run else redact_secrets(str(first_error))
+            )
+            logger.warning("Optional %s unavailable for %s: %s", category, method, safe_error)
             return (
                 f"DATA_UNAVAILABLE: optional {category} could not be retrieved "
-                f"({first_error}). Proceed without it; do not fabricate values."
+                f"({safe_error}). Proceed without it; do not fabricate values."
             )
+        if platform_run:
+            raise RuntimeError(f"VENDOR_REQUEST_FAILED:{type(first_error).__name__}") from None
         raise first_error
 
     raise RuntimeError(f"No available vendor for '{method}'")
+
+
+def assert_platform_tool_request(method: str, args: tuple, *, run_context=None) -> None:
+    """Bind LLM-selected tool arguments to the immutable platform run boundary."""
+
+    if run_context is None:
+        from tradingagents.platform.run_context import current_run_context
+
+        run_context = current_run_context()
+    if run_context is None:
+        return
+    symbol_positions = {
+        "get_stock_data": 0,
+        "get_indicators": 0,
+        "get_verified_market_snapshot": 0,
+        "get_fundamentals": 0,
+        "get_balance_sheet": 0,
+        "get_cashflow": 0,
+        "get_income_statement": 0,
+        "get_news": 0,
+        "get_insider_transactions": 0,
+    }
+    symbol_position = symbol_positions.get(method)
+    if symbol_position is not None and (
+        len(args) <= symbol_position
+        or str(args[symbol_position]).strip().upper() != run_context.symbol.strip().upper()
+    ):
+        raise ValueError("PLATFORM_TOOL_SYMBOL_MISMATCH")
+    date_positions = {
+        "get_stock_data": (1, 2),
+        "get_indicators": (2,),
+        "get_verified_market_snapshot": (1,),
+        "get_fundamentals": (1,),
+        "get_balance_sheet": (2,),
+        "get_cashflow": (2,),
+        "get_income_statement": (2,),
+        "get_news": (1, 2),
+        "get_global_news": (0,),
+        "get_macro_indicators": (1,),
+    }
+    parsed_dates: list[date] = []
+    for position in date_positions.get(method, ()):
+        if len(args) <= position:
+            raise ValueError("PLATFORM_TOOL_DATE_REQUIRED")
+        try:
+            parsed = date.fromisoformat(str(args[position]))
+        except ValueError:
+            raise ValueError("PLATFORM_TOOL_DATE_INVALID") from None
+        if parsed > date.fromisoformat(run_context.trade_date):
+            raise ValueError("PLATFORM_TOOL_LOOKAHEAD_BLOCKED")
+        parsed_dates.append(parsed)
+    if (
+        method in {"get_stock_data", "get_news"}
+        and len(parsed_dates) == 2
+        and parsed_dates[0] > parsed_dates[1]
+    ):
+        raise ValueError("PLATFORM_TOOL_DATE_RANGE_INVALID")
+    lookback_positions = {
+        "get_indicators": 3,
+        "get_verified_market_snapshot": 2,
+        "get_macro_indicators": 2,
+    }
+    position = lookback_positions.get(method)
+    if position is not None and len(args) > position and args[position] is not None:
+        value = args[position]
+        if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 3650:
+            raise ValueError("PLATFORM_TOOL_LOOKBACK_INVALID")

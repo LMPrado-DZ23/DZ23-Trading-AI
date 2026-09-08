@@ -9,8 +9,9 @@ from tradingagents.platform.settings import PlatformSettings
 def _settings() -> PlatformSettings:
     return PlatformSettings(
         environment="production",
-        database_url=(
-            "postgresql+psycopg://tradingagents_app:test@db/app?sslmode=require"
+        database_url=("postgresql+psycopg://tradingagents_app:test@db/app?sslmode=require"),
+        worker_database_url=(
+            "postgresql+psycopg://tradingagents_worker:test@db/app?sslmode=require"
         ),
         public_url="https://trading.dz23.online",
         allowed_origins=["https://trading.dz23.online"],
@@ -28,6 +29,7 @@ def _settings() -> PlatformSettings:
         broker_credential_provider="openbao_transit",
         broker_transit_url="https://openbao:8200",
         broker_transit_token="test-only-transit-token",
+        llm_transit_token="test-only-llm-transit-token",
     )
 
 

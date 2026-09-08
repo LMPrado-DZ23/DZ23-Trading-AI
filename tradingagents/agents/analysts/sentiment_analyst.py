@@ -43,6 +43,8 @@ from tradingagents.agents.utils.structured import (
 )
 from tradingagents.dataflows.reddit import fetch_reddit_posts
 from tradingagents.dataflows.stocktwits import fetch_stocktwits_messages
+from tradingagents.platform.contracts import RunMode
+from tradingagents.platform.run_context import current_run_context
 
 
 def _seven_days_back(trade_date: str) -> str:
@@ -68,13 +70,21 @@ def create_sentiment_analyst(llm):
         # Pre-fetch all three sources. Each fetcher degrades gracefully and
         # returns a string (no exceptions surface from here), so the LLM
         # always sees something — either real data or a clear placeholder.
-        news_block = get_news.func(ticker, start_date, end_date)
-        # Pass the analysis window so a historical run trims social posts to it
-        # instead of leaking today's chatter into a backtest (#1220).
-        stocktwits_block = fetch_stocktwits_messages(
-            ticker, limit=30, start_date=start_date, end_date=end_date
-        )
-        reddit_block = fetch_reddit_posts(ticker, start_date=start_date, end_date=end_date)
+        run_context = current_run_context()
+        if run_context is not None and run_context.mode is RunMode.BACKTEST:
+            excluded = (
+                "BACKTEST_DATA_EXCLUDED: source lacks a verified per-record "
+                "available_at timestamp; no network request was made."
+            )
+            news_block = stocktwits_block = reddit_block = excluded
+        else:
+            news_block = get_news.func(ticker, start_date, end_date)
+            # Pass the analysis window so a historical run trims social posts to it
+            # instead of leaking today's chatter into a backtest (#1220).
+            stocktwits_block = fetch_stocktwits_messages(
+                ticker, limit=30, start_date=start_date, end_date=end_date
+            )
+            reddit_block = fetch_reddit_posts(ticker, start_date=start_date, end_date=end_date)
 
         # SECURITY (#security-fase0, rodada 4): adversary-writable content
         # NEVER enters the privileged system message. Each block becomes a
@@ -104,8 +114,7 @@ def create_sentiment_analyst(llm):
                     # prompt, so tool-range wording would only invite a
                     # hallucinated tool call (#1130).
                     " Today's date is {current_date}; treat it as 'now' for all analysis. {instrument_context}"
-                    " " + NO_EXTERNAL_TOOLS +
-                    "\n{system_message}",
+                    " " + NO_EXTERNAL_TOOLS + "\n{system_message}",
                 ),
                 MessagesPlaceholder(variable_name="messages"),
                 ("human", "{data_message}"),
@@ -205,16 +214,25 @@ def _build_evidence_records(
     fetched_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     return [
         UntrustedEvidence(
-            source="yfinance:news", kind="news", content=news_block,
-            fetched_at=fetched_at, as_of=end_date,
+            source="yfinance:news",
+            kind="news",
+            content=news_block,
+            fetched_at=fetched_at,
+            as_of=end_date,
         ),
         UntrustedEvidence(
-            source="stocktwits", kind="social", content=stocktwits_block,
-            fetched_at=fetched_at, as_of=end_date,
+            source="stocktwits",
+            kind="social",
+            content=stocktwits_block,
+            fetched_at=fetched_at,
+            as_of=end_date,
         ),
         UntrustedEvidence(
-            source="reddit", kind="social", content=reddit_block,
-            fetched_at=fetched_at, as_of=end_date,
+            source="reddit",
+            kind="social",
+            content=reddit_block,
+            fetched_at=fetched_at,
+            as_of=end_date,
         ),
     ]
 
@@ -224,8 +242,7 @@ def _build_data_message(evidences: list[UntrustedEvidence]) -> str:
     blocks = "\n\n".join(ev.to_prompt_block() for ev in evidences)
     return (
         "Below are the pre-fetched data sources for your analysis, as "
-        "untrusted external data. Analyze them per your instructions.\n\n"
-        + blocks
+        "untrusted external data. Analyze them per your instructions.\n\n" + blocks
     )
 
 
@@ -242,6 +259,7 @@ def create_social_media_analyst(llm):
         Import :func:`create_sentiment_analyst` directly instead.
     """
     import warnings
+
     warnings.warn(
         "create_social_media_analyst is deprecated and will be removed in a "
         "future version. Use create_sentiment_analyst instead.",

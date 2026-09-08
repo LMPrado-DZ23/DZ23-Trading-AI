@@ -6,6 +6,7 @@ from tradingagents.agents.utils.agent_states import (
     InvestDebateState,
     RiskDebateState,
 )
+from tradingagents.platform.run_context import WORKFLOW_SCHEMA_VERSION, AnalysisRunContext
 
 
 class Propagator:
@@ -23,6 +24,7 @@ class Propagator:
         past_context: str = "",
         instrument_context: str = "",
         config: dict | None = None,
+        run_context: AnalysisRunContext | None = None,
     ) -> dict[str, Any]:
         """Create the initial state for the agent graph.
 
@@ -46,6 +48,10 @@ class Propagator:
                 config or {}, run_ticker=company_name, run_trade_date=trade_date
             ),
             "trade_date": str(trade_date),
+            "workflow_schema_version": WORKFLOW_SCHEMA_VERSION,
+            "run_context_digest": run_context.digest if run_context else None,
+            "analysis_run_id": str(run_context.run_id) if run_context else None,
+            "tenant_id": str(run_context.tenant_id) if run_context else None,
             "past_context": past_context,
             "investment_debate_state": InvestDebateState(
                 {

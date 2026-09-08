@@ -18,6 +18,7 @@ dependencies = [
     "langgraph>=0.4.8",
     "langgraph-checkpoint-sqlite>=2.0.0",
     "pandas>=2.3.0",
+    "exchange-calendars>=4.13.2,<5",
     "parsel>=1.10.0",
     "python-dotenv>=1.0.0",
     "pytz>=2025.2",
@@ -61,6 +62,7 @@ bedrock = [
 
 [project.scripts]
 tradingagents = "cli.main:app"
+tradingagents-worker = "service.worker:main"
 
 [tool.setuptools.packages.find]
 include = ["tradingagents*", "cli*", "service*"]

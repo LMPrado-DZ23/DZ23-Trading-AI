@@ -3,7 +3,7 @@ ranking, formatting, graceful degradation, and router integration.
 
 All API access is mocked, so these run without a network connection.
 """
-import copy
+
 import unittest
 from unittest import mock
 
@@ -11,7 +11,6 @@ import pytest
 import requests
 
 import tradingagents.dataflows.config as config_module
-import tradingagents.default_config as default_config
 from tradingagents.dataflows import interface, polymarket
 from tradingagents.dataflows.config import set_config
 
@@ -35,8 +34,16 @@ _SEARCH = {
     "events": [
         {
             "markets": [
-                _market("Open big?", 0.76, volume=5_000_000, end_date="2030-12-31T00:00:00Z", wk=-0.045),
-                _market("Resolved already?", 1.0, volume=9_000_000, end_date="2030-12-31T00:00:00Z", closed=True),
+                _market(
+                    "Open big?", 0.76, volume=5_000_000, end_date="2030-12-31T00:00:00Z", wk=-0.045
+                ),
+                _market(
+                    "Resolved already?",
+                    1.0,
+                    volume=9_000_000,
+                    end_date="2030-12-31T00:00:00Z",
+                    closed=True,
+                ),
                 _market("Past event?", 0.5, volume=8_000_000, end_date="2020-01-01T00:00:00Z"),
                 _market("Open small?", 0.30, volume=1_000, end_date="2030-06-30T00:00:00Z"),
             ]
@@ -53,7 +60,7 @@ class PolymarketFilterTests(unittest.TestCase):
         self.assertIn("Open big?", out)
         self.assertIn("Open small?", out)
         self.assertNotIn("Resolved already?", out)  # closed
-        self.assertNotIn("Past event?", out)         # endDate in the past
+        self.assertNotIn("Past event?", out)  # endDate in the past
 
     def test_ranked_by_volume(self):
         with mock.patch.object(polymarket, "_request", return_value=_SEARCH):
@@ -105,10 +112,10 @@ class PolymarketResilienceTests(unittest.TestCase):
 @pytest.mark.unit
 class PolymarketRoutingTests(unittest.TestCase):
     def setUp(self):
-        config_module._config = copy.deepcopy(default_config.DEFAULT_CONFIG)
+        config_module.reset_config()
 
     def tearDown(self):
-        config_module._config = copy.deepcopy(default_config.DEFAULT_CONFIG)
+        config_module.reset_config()
 
     def test_category_routes_to_polymarket(self):
         self.assertEqual(

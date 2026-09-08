@@ -5,7 +5,7 @@ import unittest
 
 import pytest
 
-from tradingagents.dataflows.utils import safe_ticker_component
+from tradingagents.dataflows.utils import safe_instrument_storage_component, safe_ticker_component
 
 
 @pytest.mark.unit
@@ -51,6 +51,13 @@ class TestSafeTickerComponent(unittest.TestCase):
         ticker = safe_ticker_component("AAPL")
         joined = os.path.realpath(os.path.join(base, f"{ticker}.csv"))
         self.assertTrue(joined.startswith(base + os.sep))
+
+    def test_crypto_pair_gets_stable_safe_storage_name_without_allowing_separator(self):
+        encoded = safe_instrument_storage_component("BTC/USDT")
+        self.assertNotIn("/", encoded)
+        self.assertEqual(encoded, safe_instrument_storage_component("BTC/USDT"))
+        with self.assertRaises(ValueError):
+            safe_ticker_component("BTC/USDT")
 
 
 if __name__ == "__main__":

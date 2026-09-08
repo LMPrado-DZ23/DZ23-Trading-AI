@@ -2,6 +2,7 @@ from typing import Annotated
 
 from langchain_core.tools import tool
 
+from tradingagents.dataflows.interface import assert_platform_tool_request
 from tradingagents.dataflows.market_data_validator import build_verified_market_snapshot
 
 
@@ -20,4 +21,7 @@ def get_verified_market_snapshot(
     price levels, Bollinger bands, RSI, MACD, moving averages, support /
     resistance, or historical comparisons, and treat it as the source of truth.
     """
+    assert_platform_tool_request(
+        "get_verified_market_snapshot", (symbol, curr_date, look_back_days)
+    )
     return build_verified_market_snapshot(symbol, curr_date, look_back_days)

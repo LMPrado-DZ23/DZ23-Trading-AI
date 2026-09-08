@@ -43,9 +43,7 @@ class CredentialCryptoPort(Protocol):
 
     def decrypt(self, envelope: CredentialEnvelope, *, context: bytes) -> bytes: ...
 
-    def rotate(
-        self, envelope: CredentialEnvelope, *, context: bytes
-    ) -> CredentialEnvelope: ...
+    def rotate(self, envelope: CredentialEnvelope, *, context: bytes) -> CredentialEnvelope: ...
 
     def needs_rewrap(self, envelope: CredentialEnvelope) -> bool: ...
 
@@ -62,9 +60,7 @@ class CredentialKeyring:
                 raise ValueError("every credential key must be AES-256 and have a safe id")
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-        self._aes = MappingProxyType(
-            {key_id: AESGCM(key) for key_id, key in normalized.items()}
-        )
+        self._aes = MappingProxyType({key_id: AESGCM(key) for key_id, key in normalized.items()})
         self.active_key_id = active_key_id
 
     def encrypt(self, plaintext: bytes, *, context: bytes) -> CredentialEnvelope:
@@ -74,9 +70,7 @@ class CredentialKeyring:
 
         data_key = secrets.token_bytes(32)
         payload_nonce = secrets.token_bytes(12)
-        ciphertext = AESGCM(data_key).encrypt(
-            payload_nonce, plaintext, context + b":payload"
-        )
+        ciphertext = AESGCM(data_key).encrypt(payload_nonce, plaintext, context + b":payload")
         wrapped_key_nonce = secrets.token_bytes(12)
         wrapped_key = self._aes[self.active_key_id].encrypt(
             wrapped_key_nonce, data_key, context + b":dek"
@@ -196,9 +190,7 @@ class TransitCredentialKeyring:
 
         data_key = secrets.token_bytes(32)
         payload_nonce = secrets.token_bytes(12)
-        ciphertext = AESGCM(data_key).encrypt(
-            payload_nonce, plaintext, context + b":payload"
-        )
+        ciphertext = AESGCM(data_key).encrypt(payload_nonce, plaintext, context + b":payload")
         binding = hashlib.sha256(context + b":dek").digest() + data_key
         wrapped_key = self._transit("encrypt", plaintext=binding).encode("ascii")
         return CredentialEnvelope(
@@ -230,9 +222,9 @@ class TransitCredentialKeyring:
         if envelope.key_id != self.active_key_id or envelope.wrapped_key_nonce:
             raise ValueError("credential references an unavailable transit key")
         # Rewrap updates the Transit key version without exposing the DEK.
-        wrapped = self._transit(
-            "rewrap", ciphertext=envelope.wrapped_key.decode("ascii")
-        ).encode("ascii")
+        wrapped = self._transit("rewrap", ciphertext=envelope.wrapped_key.decode("ascii")).encode(
+            "ascii"
+        )
         return CredentialEnvelope(
             self.active_key_id,
             b"",

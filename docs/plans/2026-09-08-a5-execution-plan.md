@@ -49,18 +49,22 @@ e não pode reutilizar chaves publicadas em chat.
 
 ## M3 — Jobs duráveis, RunContext e PIT
 
-- [ ] fila PostgreSQL com lease, heartbeat, retry e cancelamento;
-- [ ] API e worker em processos separados;
-- [ ] quotas por tenant e custo/tokens por job;
-- [ ] RunContext imutável e workflow schema version;
-- [ ] remover mutação de `os.environ` e configuração global no caminho concorrente;
-- [ ] checkpoint com tenant/config/provider/schema digests;
-- [ ] fundamentals filtrados por publicação disponível;
-- [ ] Polymarket histórico ou fail-closed;
-- [ ] `available_at` obrigatório nas fontes usadas historicamente;
-- [ ] manifesto reprodutível da análise.
+- [x] fila PostgreSQL com lease, heartbeat, retry e cancelamento;
+- [x] API e worker em processos separados;
+- [x] quotas por tenant e custo/tokens por job;
+- [x] RunContext imutável e workflow schema version;
+- [x] remover mutação de `os.environ` e configuração global no caminho concorrente;
+- [x] checkpoint com tenant/config/provider/schema digests;
+- [x] fundamentals filtrados por publicação disponível;
+- [x] Polymarket histórico ou fail-closed;
+- [x] `available_at` obrigatório nas fontes usadas historicamente;
+- [x] manifesto reprodutível da análise.
 
 **Gate:** restart recupera jobs; dois tenants executam simultaneamente sem estado cruzado; suite PIT adversarial verde.
+
+**Verificação do implementador:** concluída e registrada em
+`audit/M3_IMPLEMENTER_VERIFICATION.md`. A promoção depende de auditoria
+independente sobre o commit congelado.
 
 ## M4 — Carteira, suitability e motor de risco
 

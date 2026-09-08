@@ -401,9 +401,7 @@ class ConnectionService:
                     )
                     changed += 1
 
-    def list_connections(
-        self, *, principal: IdentityPrincipal
-    ) -> tuple[ConnectionView, ...]:
+    def list_connections(self, *, principal: IdentityPrincipal) -> tuple[ConnectionView, ...]:
         self._authorize(principal, write=False)
         with self._sessions() as db, db.begin():
             self._set_tenant_scope(db, principal.tenant_id)
@@ -416,13 +414,9 @@ class ConnectionService:
             )
             return tuple(self._view(row) for row in rows)
 
-    def diagnose(
-        self, *, principal: IdentityPrincipal, connection_id: UUID
-    ) -> DiagnosticResult:
+    def diagnose(self, *, principal: IdentityPrincipal, connection_id: UUID) -> DiagnosticResult:
         self._authorize(principal, write=True)
-        snapshot: tuple[
-            str, str, int, str, bytes, bytes, bytes, bytes
-        ]
+        snapshot: tuple[str, str, int, str, bytes, bytes, bytes, bytes]
         with self._sessions() as db, db.begin():
             self._set_tenant_scope(db, principal.tenant_id)
             connection = db.scalar(
@@ -466,7 +460,16 @@ class ConnectionService:
                 bytes(credential.ciphertext),
             )
 
-        exchange_slug, environment, version, key_id, key_nonce, wrapped_key, payload_nonce, ciphertext = snapshot
+        (
+            exchange_slug,
+            environment,
+            version,
+            key_id,
+            key_nonce,
+            wrapped_key,
+            payload_nonce,
+            ciphertext,
+        ) = snapshot
         context = self._context(
             principal.tenant_id,
             connection_id,
@@ -487,8 +490,7 @@ class ConnectionService:
             )
             decoded = json.loads(plaintext)
             if not isinstance(decoded, dict) or not all(
-                isinstance(key, str) and isinstance(value, str)
-                for key, value in decoded.items()
+                isinstance(key, str) and isinstance(value, str) for key, value in decoded.items()
             ):
                 raise ValueError("credential payload is invalid")
             result = self._diagnostics.run(
@@ -542,9 +544,7 @@ class ConnectionService:
             )
             return result
 
-    def remove_connection(
-        self, *, principal: IdentityPrincipal, connection_id: UUID
-    ) -> None:
+    def remove_connection(self, *, principal: IdentityPrincipal, connection_id: UUID) -> None:
         self._authorize(principal, write=True)
         with self._sessions() as db, db.begin():
             self._set_tenant_scope(db, principal.tenant_id)

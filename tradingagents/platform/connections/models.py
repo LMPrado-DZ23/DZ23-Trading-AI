@@ -69,9 +69,7 @@ class BrokerConnection(Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint("id", "tenant_id", name="uq_broker_connection_tenant_binding"),
-        UniqueConstraint(
-            "tenant_id", "label_normalized", name="uq_broker_connection_tenant_label"
-        ),
+        UniqueConstraint("tenant_id", "label_normalized", name="uq_broker_connection_tenant_label"),
         CheckConstraint(
             "environment IN ('testnet','live')", name="ck_broker_connection_environment"
         ),
@@ -133,9 +131,7 @@ class BrokerCredential(Base):
             name="uq_broker_credential_tenant_idempotency",
         ),
         CheckConstraint("version >= 1", name="ck_broker_credential_version_positive_row"),
-        CheckConstraint(
-            "length(request_digest) = 64", name="ck_broker_credential_request_digest"
-        ),
+        CheckConstraint("length(request_digest) = 64", name="ck_broker_credential_request_digest"),
         CheckConstraint(
             "length(wrapped_key_nonce) IN (0, 12)",
             name="ck_broker_wrapped_key_nonce_length",
@@ -144,9 +140,7 @@ class BrokerCredential(Base):
             "length(wrapped_key) BETWEEN 1 AND 8192",
             name="ck_broker_wrapped_key_length",
         ),
-        CheckConstraint(
-            "length(payload_nonce) = 12", name="ck_broker_payload_nonce_length"
-        ),
+        CheckConstraint("length(payload_nonce) = 12", name="ck_broker_payload_nonce_length"),
         Index("ix_broker_credential_tenant_connection", "tenant_id", "connection_id"),
     )
 

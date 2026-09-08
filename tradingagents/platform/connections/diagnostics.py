@@ -29,7 +29,9 @@ class ReadOnlyDiagnosticClient(Protocol):
 
     def fetch_balance(self, params: Mapping[str, Any] | None = None) -> Mapping[str, Any]: ...
 
-    def fetch_accounts(self, params: Mapping[str, Any] | None = None) -> list[Mapping[str, Any]]: ...
+    def fetch_accounts(
+        self, params: Mapping[str, Any] | None = None
+    ) -> list[Mapping[str, Any]]: ...
 
     def close(self) -> None: ...
 
@@ -71,8 +73,7 @@ class CCXTReadOnlyDiagnostics:
     def __init__(
         self,
         *,
-        client_factory: Callable[[str, Mapping[str, Any]], ReadOnlyDiagnosticClient]
-        | None = None,
+        client_factory: Callable[[str, Mapping[str, Any]], ReadOnlyDiagnosticClient] | None = None,
         resolve_hosts: bool = True,
         timeout_ms: int = 15_000,
     ) -> None:
@@ -186,9 +187,7 @@ class CCXTReadOnlyDiagnostics:
             if not getattr(session, "_dz23_redirects_disabled", False):
                 original_request = session.request
 
-                def request_without_redirects(
-                    _session, method: str, url: str, **kwargs
-                ):
+                def request_without_redirects(_session, method: str, url: str, **kwargs):
                     self._assert_request_url(url, capability, environment)
                     kwargs["allow_redirects"] = False
                     return original_request(method, url, **kwargs)
@@ -240,9 +239,7 @@ class CCXTReadOnlyDiagnostics:
             self._assert_public_dns(urlparse(origin).hostname or "")
 
     @staticmethod
-    def _origins(
-        capability: ExchangeCapability, environment: BrokerEnvironment
-    ) -> frozenset[str]:
+    def _origins(capability: ExchangeCapability, environment: BrokerEnvironment) -> frozenset[str]:
         configured = (
             capability.testnet_origins
             if environment is BrokerEnvironment.TESTNET

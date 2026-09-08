@@ -24,6 +24,8 @@ from tradingagents.platform.api.email_delivery import (
     SmtpIdentityTokenDelivery,
     SmtpSettings,
 )
+from tradingagents.platform.api.jobs_adapter import SqlAlchemyAnalysisJobAdapter
+from tradingagents.platform.api.llm_connections_adapter import SqlAlchemyLlmConnectionAdapter
 from tradingagents.platform.api.redis_rate_limit import RedisRateLimiter
 from tradingagents.platform.compliance import (
     AesGcmSecretCrypto,
@@ -38,6 +40,8 @@ from tradingagents.platform.connections import (
     TransitCredentialKeyring,
 )
 from tradingagents.platform.identity import IdentityService, TokenHasher
+from tradingagents.platform.jobs import JobService
+from tradingagents.platform.llm_connections import LlmConnectionService
 from tradingagents.platform.settings import (
     BrokerCredentialProvider,
     Environment,
@@ -85,6 +89,7 @@ def create_production_app(settings: PlatformSettings | None = None) -> FastAPI:
             or row[2] is not False
         ):
             raise RuntimeError("database runtime role is unsafe or does not match configuration")
+
     factory = sessionmaker(engine, expire_on_commit=False)
     identity = IdentityService(
         factory,
@@ -134,6 +139,12 @@ def create_production_app(settings: PlatformSettings | None = None) -> FastAPI:
             token=effective.broker_transit_token.get_secret_value(),
             namespace=effective.broker_transit_namespace or None,
         )
+        llm_crypto = TransitCredentialKeyring(
+            base_url=effective.broker_transit_url,
+            key_name=effective.llm_transit_key_name,
+            token=effective.llm_transit_token.get_secret_value(),
+            namespace=effective.broker_transit_namespace or None,
+        )
     else:
         broker_keys = (
             effective.broker_credential_keys
@@ -149,6 +160,10 @@ def create_production_app(settings: PlatformSettings | None = None) -> FastAPI:
             keys=broker_keys,
             active_key_id=active_broker_key,
         )
+        llm_crypto = CredentialKeyring(
+            keys={"development-llm-v1": _derive_secret(master, "llm-credentials")},
+            active_key_id="development-llm-v1",
+        )
     connection_service = ConnectionService(
         factory,
         keyring=broker_crypto,
@@ -156,6 +171,19 @@ def create_production_app(settings: PlatformSettings | None = None) -> FastAPI:
             resolve_hosts=effective.environment in {Environment.STAGING, Environment.PRODUCTION}
         ),
         idempotency_digest_key=_derive_secret(master, "broker-idempotency-digest"),
+    )
+    llm_connection_service = LlmConnectionService(
+        factory,
+        keyring=llm_crypto,
+        idempotency_digest_key=_derive_secret(master, "llm-idempotency-digest"),
+    )
+    job_service = JobService(
+        factory,
+        idempotency_digest_key=_derive_secret(master, "analysis-job-idempotency"),
+        llm_reference_validator=llm_connection_service,
+        max_active_jobs_per_tenant=effective.max_active_jobs_per_tenant,
+        monthly_token_quota=effective.monthly_token_quota,
+        monthly_cost_quota_microusd=effective.monthly_cost_quota_microusd,
     )
     redis = Redis.from_url(
         effective.redis_url.get_secret_value(),
@@ -204,6 +232,15 @@ def create_production_app(settings: PlatformSettings | None = None) -> FastAPI:
             mfa=mfa,
             connections=connection_service,
         ),
+        analysis_job_service=SqlAlchemyAnalysisJobAdapter(
+            identity=identity,
+            jobs=job_service,
+        ),
+        llm_connection_service=SqlAlchemyLlmConnectionAdapter(
+            identity=identity,
+            mfa=mfa,
+            connections=llm_connection_service,
+        ),
     )
     app.state.database_engine = engine
     app.state.redis = redis
@@ -217,6 +254,9 @@ def create_production_app(settings: PlatformSettings | None = None) -> FastAPI:
         close_broker_crypto = getattr(broker_crypto, "close", None)
         if callable(close_broker_crypto):
             close_broker_crypto()
+        close_llm_crypto = getattr(llm_crypto, "close", None)
+        if callable(close_llm_crypto):
+            close_llm_crypto()
         engine.dispose()
 
     app.router.add_event_handler("shutdown", close_runtime_resources)

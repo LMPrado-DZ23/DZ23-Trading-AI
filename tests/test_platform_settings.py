@@ -11,8 +11,9 @@ from tradingagents.platform.settings import Environment, PlatformSettings
 def _production(**overrides):
     values = {
         "environment": Environment.PRODUCTION,
-        "database_url": (
-            "postgresql+psycopg://tradingagents_app:test@db/app?sslmode=require"
+        "database_url": ("postgresql+psycopg://tradingagents_app:test@db/app?sslmode=require"),
+        "worker_database_url": (
+            "postgresql+psycopg://tradingagents_worker:test@db/app?sslmode=require"
         ),
         "public_url": "https://trading.dz23.online",
         "allowed_origins": ["https://trading.dz23.online"],
@@ -29,6 +30,7 @@ def _production(**overrides):
         "broker_credential_provider": "openbao_transit",
         "broker_transit_url": "https://openbao:8200",
         "broker_transit_token": "test-only-transit-token",
+        "llm_transit_token": "test-only-llm-transit-token",
     }
     values.update(overrides)
     return values
@@ -46,14 +48,16 @@ def test_production_settings_are_fail_closed() -> None:
         )
     with pytest.raises(ValidationError, match="dedicated runtime role"):
         PlatformSettings(
-            **_production(
-                database_url="postgresql+psycopg://postgres:test@db/app?sslmode=require"
-            )
+            **_production(database_url="postgresql+psycopg://postgres:test@db/app?sslmode=require")
         )
     with pytest.raises(ValidationError, match="sslmode"):
         PlatformSettings(
+            **_production(database_url="postgresql+psycopg://tradingagents_app:test@db/app")
+        )
+    with pytest.raises(ValidationError, match="worker role"):
+        PlatformSettings(
             **_production(
-                database_url="postgresql+psycopg://tradingagents_app:test@db/app"
+                worker_database_url=("postgresql+psycopg://postgres:test@db/app?sslmode=require")
             )
         )
 
@@ -90,6 +94,10 @@ def test_production_requires_delivery_redis_and_exact_mfa_key() -> None:
                 + base64.urlsafe_b64encode(b"b" * 32).decode()
                 + '"}'
             )
+        )
+    with pytest.raises(ValidationError, match="separate capabilities"):
+        PlatformSettings(
+            **_production(llm_transit_token="test-only-transit-token"),
         )
     settings = PlatformSettings(**_production())
     assert settings.secure_cookies is True

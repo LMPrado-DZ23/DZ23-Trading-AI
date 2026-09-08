@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import base64
+import hmac
 import ipaddress
 import json
 import re
+from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Self
 from urllib.parse import urlparse
 
 from pydantic import BeforeValidator, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+from tradingagents.platform.usage import PricingCatalog
 
 
 class Environment(StrEnum):
@@ -50,6 +54,12 @@ class PlatformSettings(BaseSettings):
     environment: Environment = Environment.DEVELOPMENT
     database_url: SecretStr = SecretStr("sqlite+pysqlite:///:memory:")
     database_expected_role: str = "tradingagents_app"
+    worker_database_url: SecretStr = SecretStr("")
+    worker_id: str = "analysis-worker-1"
+    worker_runtime_root: str = "/data/worker-runs"
+    worker_lease_seconds: int = Field(default=120, ge=30, le=900)
+    worker_poll_seconds: float = Field(default=2.0, ge=0.1, le=30.0)
+    llm_request_timeout_seconds: float = Field(default=30.0, ge=1.0, le=300.0)
     public_url: str = "http://localhost:8080"
     session_token_pepper: SecretStr = SecretStr("development-only-session-pepper")
     mfa_encryption_key_b64: SecretStr = SecretStr("")
@@ -68,10 +78,16 @@ class PlatformSettings(BaseSettings):
     broker_credential_provider: BrokerCredentialProvider = BrokerCredentialProvider.LOCAL
     broker_transit_url: str = ""
     broker_transit_key_name: str = "tradingagents-broker-credentials"
+    llm_transit_key_name: str = "tradingagents-llm-credentials"
     broker_transit_token: SecretStr = SecretStr("")
+    llm_transit_token: SecretStr = SecretStr("")
     broker_transit_namespace: str = ""
     allowed_origins: CsvList = Field(default_factory=lambda: ["http://localhost:8080"])
     trusted_proxy_networks: CsvList = Field(default_factory=list)
+    llm_pricing: dict[str, dict[str, Decimal]] = Field(default_factory=dict)
+    max_active_jobs_per_tenant: int = Field(default=20, ge=1, le=1000)
+    monthly_token_quota: int = Field(default=5_000_000, ge=10_000, le=10_000_000_000)
+    monthly_cost_quota_microusd: int | None = Field(default=None, ge=10_000, le=1_000_000_000_000)
     session_ttl_seconds: int = Field(default=43_200, ge=300, le=2_592_000)
     recovery_ttl_seconds: int = Field(default=1_800, ge=300, le=86_400)
     max_auth_failures: int = Field(default=5, ge=3, le=20)
@@ -114,6 +130,23 @@ class PlatformSettings(BaseSettings):
             raise ValueError("database_expected_role must be a safe PostgreSQL role name")
         return value
 
+    @field_validator("worker_id")
+    @classmethod
+    def validate_worker_id(cls, value: str) -> str:
+        if not 3 <= len(value) <= 120 or any(ord(character) < 33 for character in value):
+            raise ValueError("worker_id is invalid")
+        return value
+
+    @field_validator("llm_pricing")
+    @classmethod
+    def validate_llm_pricing(
+        cls, value: dict[str, dict[str, Decimal]]
+    ) -> dict[str, dict[str, Decimal]]:
+        if len(value) > 500:
+            raise ValueError("LLM pricing catalog is too large")
+        PricingCatalog(value)
+        return value
+
     @model_validator(mode="after")
     def validate_environment_constraints(self) -> Self:
         database_url = self.database_url.get_secret_value()
@@ -126,6 +159,8 @@ class PlatformSettings(BaseSettings):
             raise ValueError("session_token_pepper must contain at least 32 bytes")
 
         if self.environment in {Environment.STAGING, Environment.PRODUCTION}:
+            if self.llm_request_timeout_seconds >= self.worker_lease_seconds / 2:
+                raise ValueError("LLM request timeout must be less than half the worker lease")
             if not database_url.startswith(("postgresql://", "postgresql+psycopg://")):
                 raise ValueError("PostgreSQL is mandatory outside development/test")
             database = urlparse(database_url.replace("postgresql+psycopg", "postgresql", 1))
@@ -133,16 +168,32 @@ class PlatformSettings(BaseSettings):
                 raise ValueError("PostgreSQL URL must include host and runtime role")
             if database.username != self.database_expected_role:
                 raise ValueError("PostgreSQL URL must authenticate as the dedicated runtime role")
+            worker_url = self.worker_database_url.get_secret_value()
+            worker_database = urlparse(worker_url.replace("postgresql+psycopg", "postgresql", 1))
+            if (
+                not worker_url.startswith(("postgresql://", "postgresql+psycopg://"))
+                or worker_database.username != "tradingagents_worker"
+                or not worker_database.hostname
+            ):
+                raise ValueError("worker_database_url must use the dedicated worker role")
+            if worker_database.hostname not in {"localhost", "127.0.0.1", "::1"}:
+                worker_query = dict(
+                    item.split("=", 1) for item in worker_database.query.split("&") if "=" in item
+                )
+                if worker_query.get("sslmode") not in {"require", "verify-ca", "verify-full"}:
+                    raise ValueError(
+                        "remote worker PostgreSQL requires sslmode=require or stronger"
+                    )
             if database.hostname not in {"localhost", "127.0.0.1", "::1"}:
                 query = dict(
-                    item.split("=", 1)
-                    for item in database.query.split("&")
-                    if "=" in item
+                    item.split("=", 1) for item in database.query.split("&") if "=" in item
                 )
                 if query.get("sslmode") not in {"require", "verify-ca", "verify-full"}:
                     raise ValueError("remote PostgreSQL requires sslmode=require or stronger")
             if not self.public_url.startswith("https://"):
                 raise ValueError("HTTPS public_url is mandatory outside development/test")
+            if self.broker_transit_key_name == self.llm_transit_key_name:
+                raise ValueError("broker and LLM credentials require separate Transit keys")
             if any(origin.startswith("http://") for origin in self.allowed_origins):
                 raise ValueError("HTTP origins are forbidden outside development/test")
             if not self.redis_url.get_secret_value().startswith(("redis://", "rediss://")):
@@ -166,7 +217,9 @@ class PlatformSettings(BaseSettings):
                     "sb_publishable_"
                 )
             ):
-                raise ValueError("Supabase Auth configuration is mandatory outside development/test")
+                raise ValueError(
+                    "Supabase Auth configuration is mandatory outside development/test"
+                )
             if self.broker_credential_provider is not BrokerCredentialProvider.OPENBAO_TRANSIT:
                 raise ValueError("external OpenBao Transit is mandatory outside development/test")
             if self.broker_credential_keys_json.get_secret_value():
@@ -181,8 +234,14 @@ class PlatformSettings(BaseSettings):
                 or transit_url.fragment
                 or transit_url.path not in {"", "/"}
                 or not self.broker_transit_token.get_secret_value()
+                or not self.llm_transit_token.get_secret_value()
             ):
                 raise ValueError("secure OpenBao Transit configuration is mandatory")
+            if hmac.compare_digest(
+                self.broker_transit_token.get_secret_value(),
+                self.llm_transit_token.get_secret_value(),
+            ):
+                raise ValueError("broker and LLM Transit tokens require separate capabilities")
             try:
                 decoded_key = base64.urlsafe_b64decode(mfa_key + "=" * (-len(mfa_key) % 4))
             except (ValueError, base64.binascii.Error) as exc:

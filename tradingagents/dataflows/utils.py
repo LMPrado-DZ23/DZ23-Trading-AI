@@ -1,3 +1,4 @@
+import hashlib
 import re
 from datetime import date, datetime, timedelta
 from typing import Annotated
@@ -40,6 +41,22 @@ def safe_ticker_component(value: str, *, max_len: int = 32) -> str:
     if set(value) == {"."}:
         raise ValueError(f"ticker cannot consist solely of dots: {value!r}")
     return value
+
+
+def safe_instrument_storage_component(value: str) -> str:
+    """Create a non-reversible, collision-resistant path component for any symbol."""
+
+    try:
+        return safe_ticker_component(value, max_len=128)
+    except ValueError:
+        pass
+    if not isinstance(value, str) or not value or len(value) > 128:
+        raise ValueError("instrument symbol is invalid")
+    if any(ord(character) < 32 for character in value):
+        raise ValueError("instrument symbol contains control characters")
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "_", value.strip()).strip("._-") or "instrument"
+    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+    return f"{slug[:32]}-{digest}"
 
 
 def save_output(data: pd.DataFrame, tag: str, save_path: SavePathType = None) -> None:
