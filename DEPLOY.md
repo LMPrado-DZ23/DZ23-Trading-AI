@@ -1,7 +1,15 @@
-# TradingAgents Operável — deploy no Coolify (3 passos, 5 minutos)
+# Deploy legado — não usar para capital real
 
-Sistema COMPLETO num serviço só: API + painel de CONFIGURAÇÃO + painel de
-OPERAÇÃO embutidos. Depois deste deploy, TUDO se faz pelo navegador.
+Este documento descrevia o serviço monousuário da v1.1.0. A rota direta de
+ordens foi retirada por segurança e o deploy abaixo não representa a plataforma
+SaaS A5 nem autorização para operar dinheiro.
+
+O procedimento de produção será substituído no marco M9 e só será considerado
+válido após instalação limpa, migrations, backup/restore, TLS e smoke no domínio.
+
+## Referência histórica da v1.1.0
+
+Serviço legado num único processo: API, configuração e painel básico.
 
 ## 1. Criar o recurso
 Coolify → + New Resource → Dockerfile → aponte para esta pasta
@@ -24,6 +32,6 @@ acompanhar o card até CONCLUÍDA e ler a decisão.
 - Uma senha (Bearer) protege painel e API; /healthz é o único público.
 - Chaves ficam em /data/config.json (0600) no SERVIDOR; na tela, sempre
   mascaradas (•••últimos4). /docs desligado.
-- Corretora: 9 exchanges via CCXT. TESTNET (dinheiro fictício) é o padrão;
-  o modo REAL existe e só liga digitando a frase de autorização no painel.
+- A configuração/ordem de corretora legada está desabilitada. O novo fluxo
+  exige tenant, mandato, risco, intenção, aprovação, reserva e reconciliação.
 - Acesso protegido por trava anti-força-bruta (5 erros => 15 min).

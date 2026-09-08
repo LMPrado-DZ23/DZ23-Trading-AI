@@ -2,12 +2,12 @@
 
 - **mission_id:** `tradingagents-dz23-a5-2026-09-08`
 - **objective:** concluir o TradingAgents DZ23 como plataforma web multiusuário pronta para usuários leigos, com carteira administrada, perfis de risco, execução CCXT segura e implantação verificada em `https://trading.dz23.online/`.
-- **state:** `EXECUTING`
-- **iteration:** 1
+- **state:** `CHECKPOINTING`
+- **iteration:** 2
 - **started_at:** 2026-09-08 America/Sao_Paulo
 - **last_heartbeat:** 2026-09-08
 - **last_progress_at:** 2026-09-08
-- **current_task:** M0 — contenção da execução legada, contratos e fundação reproduzível.
+- **current_task:** M0 concluído — registrar commit; em seguida iniciar M1 (identidade, tenancy e LGPD).
 
 ## Acceptance criteria
 
@@ -43,13 +43,17 @@
 - [x] Especificação de carteira/perfis registrada em `C:\TradingAgents-Handoff\entrada\ESPECIFICACAO_CARTEIRA_PERFIS_RISCO_A5.md`.
 - [x] Arquivo de acesso inspecionado sem reproduzir segredos.
 - [x] Servidor identificado no documento como Hostinger VPS `82.29.59.71`.
+- [x] M0 conteve o endpoint e a UI de execução legados com resposta fail-closed HTTP 410 antes da rede.
+- [x] M0 adicionou contratos tipados e imutáveis para ator, suitability, mandato, sinal, proposta, aprovação e intenção.
+- [x] M0 declarou dependências de runtime, incluiu o serviço no wheel e gerou `tradingagents-1.2.0.dev0-py3-none-any.whl`.
+- [x] Núcleo Gate A e seus testes restaurados sem alteração material após formatação mecânica acidental.
 
 ## Pending tasks
 
 - [x] Consolidar inventários Architect, Security e Product/UX.
 - [x] Fechar design e plano de marcos.
 - [x] Preparar ambiente Python reprodutível e reproduzir baseline.
-- [ ] Executar marcos M0–M10 do plano.
+- [ ] Executar marcos M1–M10 do plano (M0 concluído).
 - [ ] Três auditorias independentes e fix loop final.
 - [ ] Release, push, deploy e validação de produção.
 
@@ -65,24 +69,37 @@
 
 ## Current failure
 
-- Nenhuma falha de código ativa no início de M0.
+- Nenhuma falha de código ativa ao fechar M0.
 - O primeiro `.venv` ficou incompleto após interrupção do instalador; foi substituído por `.venv-a5` criado com `--no-compile` e instalação concluída com exit 0.
 
 ## Files modified
 
 - `.gitignore`
-- `audit/AUTONOMOUS_MISSION_STATE.md`
-- `docs/specs/2026-09-08-a5-saas-trading-platform-design.md`
-- `docs/plans/2026-09-08-a5-execution-plan.md`
+- `DEPLOY.md`
+- `README.md`
+- `pyproject.toml`
+- `service/app.py`
+- `service/static/index.html`
+- `service/__init__.py`
+- `tradingagents/brokers/ccxt_bridge.py`
+- `tradingagents/platform/__init__.py`
+- `tradingagents/platform/contracts.py`
+- `tests/test_broker_ccxt.py`
+- `tests/test_platform_contracts.py`
+- `tests/test_service_leigo.py`
+- `docs/adr/0001-a5-platform-foundation.md`
 
 ## Tests executed
 
 - `python -m pytest tests -q` com Python global 3.14: **falha de ambiente**, 50 erros de coleta por dependências ausentes.
 - `.venv-a5\\Scripts\\python.exe -m pytest tests -q`: **897 passed, 2 skipped, 71 subtests**, 18 warnings, 211,98 s.
+- Após M0, `.venv-a5\\Scripts\\python.exe -m ruff check .`: **verde**.
+- Após M0, `.venv-a5\\Scripts\\python.exe -m pytest tests -q`: **908 passed, 2 skipped, 71 subtests**, 18 warnings, 116,35 s.
+- `.venv-a5\\Scripts\\python.exe -m build --wheel`: **verde**, wheel gerado e conteúdo do serviço conferido.
 
 ## Commits
 
-- Nenhum commit da missão ainda.
+- `3b786ee` — `docs: define A5 SaaS mission and execution gates`.
 
 ## Agents delegated
 
@@ -92,10 +109,10 @@
 
 ## Next action
 
-1. escrever testes M0 para bloqueio da execução legada e contratos imutáveis;
-2. corrigir packaging/dependências e política de release;
-3. executar testes focados, Gate A e suíte integral;
-4. commit verificável de M0.
+1. registrar o commit verificável de M0;
+2. implementar M1 com autenticação segura, organizações, memberships e isolamento por tenant;
+3. adicionar recuperação de conta e registros LGPD/auditoria;
+4. validar M1 em unidade, integração e concorrência antes do próximo checkpoint.
 
 ## Resume instructions
 

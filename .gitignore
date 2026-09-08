@@ -13,3 +13,5 @@ eval_results/
 htmlcov/
 playwright-report/
 test-results/
+build/
+dist/

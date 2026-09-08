@@ -1,5 +1,8 @@
 """Auditoria de usabilidade: o serviço protege o leigo por construção."""
+
 import importlib
+from pathlib import Path
+
 import pytest
 
 
@@ -7,15 +10,22 @@ def _load_app(tmp_path, monkeypatch):
     monkeypatch.setenv("ACCESS_PASSWORD", "s3nh4")
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     import service.app as m
+
     importlib.reload(m)
     return m
 
 
 class TestAssetType:
-    @pytest.mark.parametrize("t,expected", [
-        ("BTC/USDT", "crypto"), ("ETH-USD", "crypto"), ("SOL-USDT", "crypto"),
-        ("NVDA", "stock"), ("PETR4", "stock"),
-    ])
+    @pytest.mark.parametrize(
+        "t,expected",
+        [
+            ("BTC/USDT", "crypto"),
+            ("ETH-USD", "crypto"),
+            ("SOL-USDT", "crypto"),
+            ("NVDA", "stock"),
+            ("PETR4", "stock"),
+        ],
+    )
     def test_crypto_detection_rule(self, t, expected):
         t_up = t.upper()
         got = "crypto" if ("/" in t_up or t_up.endswith(("-USD", "-USDT", "-BTC"))) else "stock"
@@ -31,18 +41,44 @@ class TestServerSideHistory:
 
 class TestPanelHonesty:
     def test_no_stale_promises_in_panel(self):
-        html = open("service/static/index.html", encoding="utf-8").read()
-        assert "reiniciar o serviço" not in html      # botão mentiroso removido
-        assert "via Coolify" not in html               # resquício da central antiga
-        assert "capital real segue bloqueado" not in html  # live existe
-        assert "Comece aqui" in html                   # guia do leigo presente
-        assert "testnet.binance.vision" in html        # onde pegar chave de treino
+        html = Path("service/static/index.html").read_text(encoding="utf-8")
+        assert "reiniciar o serviço" not in html  # botão mentiroso removido
+        assert "via Coolify" not in html  # resquício da central antiga
+        assert "Comece aqui" in html  # guia do leigo presente
+        assert "Execução de ordens temporariamente indisponível" in html
+        assert "LIVE — DINHEIRO REAL" not in html
+        assert "LIVE_TRADING_CONFIRM" not in html
+        assert "execOrder(" not in html
 
-    def test_broker_test_saves_before_testing(self):
-        html = open("service/static/index.html", encoding="utf-8").read()
-        i_save = html.find("/v1/config'", html.find("async function brokerTest"))
-        i_stat = html.find("/v1/broker/status", html.find("async function brokerTest"))
-        assert 0 < i_save < i_stat  # salva ANTES de testar
+    def test_legacy_broker_order_is_fail_closed(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+
+        m = _load_app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+        r = c.post(
+            "/v1/broker/order",
+            headers={"Authorization": "Bearer s3nh4"},
+            json={"job_id": "anything", "symbol": "BTC/USDT", "side": "buy", "amount": 1},
+        )
+        assert r.status_code == 410
+        assert r.json()["detail"]["code"] == "LEGACY_EXECUTION_DISABLED"
+
+    def test_legacy_broker_secrets_cannot_be_saved(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+
+        m = _load_app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+        r = c.post(
+            "/v1/config",
+            headers={"Authorization": "Bearer s3nh4"},
+            json={"vars": {"EXCHANGE_API_SECRET": "must-not-persist"}},
+        )
+        assert r.status_code == 400
+        assert (
+            "must-not-persist" not in m.CFG_PATH.read_text(encoding="utf-8")
+            if m.CFG_PATH.exists()
+            else True
+        )
 
 
 class TestFreeProviders:
@@ -51,8 +87,9 @@ class TestFreeProviders:
         return m.resolve_llm(cfg)
 
     def test_groq_maps_to_compatible_with_own_credential(self, tmp_path, monkeypatch):
-        conf, env = self._resolve(tmp_path, monkeypatch,
-            {"TRADINGAGENTS_LLM_PROVIDER": "groq", "GROQ_API_KEY": "gsk-x"})
+        conf, env = self._resolve(
+            tmp_path, monkeypatch, {"TRADINGAGENTS_LLM_PROVIDER": "groq", "GROQ_API_KEY": "gsk-x"}
+        )
         assert conf["llm_provider"] == "openai_compatible"
         assert conf["backend_url"] == "https://api.groq.com/openai/v1"
         assert conf["deep_think_llm"] and conf["quick_think_llm"]
@@ -60,10 +97,13 @@ class TestFreeProviders:
         assert "OPENAI_API_KEY" not in env  # chave OpenAI real jamais vaza p/ backend alheio
 
     def test_mistral_and_openrouter(self, tmp_path, monkeypatch):
-        for prov, key, url in [("mistral", "MISTRAL_API_KEY", "https://api.mistral.ai/v1"),
-                               ("openrouter", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1")]:
-            conf, env = self._resolve(tmp_path, monkeypatch,
-                {"TRADINGAGENTS_LLM_PROVIDER": prov, key: "k1"})
+        for prov, key, url in [
+            ("mistral", "MISTRAL_API_KEY", "https://api.mistral.ai/v1"),
+            ("openrouter", "OPENROUTER_API_KEY", "https://openrouter.ai/api/v1"),
+        ]:
+            conf, env = self._resolve(
+                tmp_path, monkeypatch, {"TRADINGAGENTS_LLM_PROVIDER": prov, key: "k1"}
+            )
             assert conf["backend_url"] == url
             assert env["OPENAI_COMPATIBLE_API_KEY"] == "k1"
 
@@ -74,17 +114,24 @@ class TestFreeProviders:
     def test_ollama_requires_address_and_uses_native_provider(self, tmp_path, monkeypatch):
         with pytest.raises(ValueError, match="Endereço"):
             self._resolve(tmp_path, monkeypatch, {"TRADINGAGENTS_LLM_PROVIDER": "ollama"})
-        conf, env = self._resolve(tmp_path, monkeypatch,
-            {"TRADINGAGENTS_LLM_PROVIDER": "ollama",
-             "TRADINGAGENTS_BACKEND_URL": "http://10.0.0.5:11434/v1"})
+        conf, env = self._resolve(
+            tmp_path,
+            monkeypatch,
+            {
+                "TRADINGAGENTS_LLM_PROVIDER": "ollama",
+                "TRADINGAGENTS_BACKEND_URL": "http://10.0.0.5:11434/v1",
+            },
+        )
         assert conf["llm_provider"] == "ollama"
         assert conf["backend_url"] == "http://10.0.0.5:11434/v1"
         assert env == {}
 
     def test_paid_providers_untouched(self, tmp_path, monkeypatch):
-        conf, env = self._resolve(tmp_path, monkeypatch,
-            {"TRADINGAGENTS_LLM_PROVIDER": "openai",
-             "TRADINGAGENTS_DEEP_THINK_LLM": "gpt-5"})
+        conf, env = self._resolve(
+            tmp_path,
+            monkeypatch,
+            {"TRADINGAGENTS_LLM_PROVIDER": "openai", "TRADINGAGENTS_DEEP_THINK_LLM": "gpt-5"},
+        )
         assert conf["llm_provider"] == "openai" and conf["deep_think_llm"] == "gpt-5"
         assert "backend_url" not in conf and env == {}
 
@@ -92,6 +139,7 @@ class TestFreeProviders:
 class TestBruteForceLock:
     def _client(self, tmp_path, monkeypatch):
         from fastapi.testclient import TestClient
+
         m = _load_app(tmp_path, monkeypatch)
         m._FAILS.clear()
         return TestClient(m.app), m
@@ -99,7 +147,9 @@ class TestBruteForceLock:
     def test_five_wrong_tries_lock_the_ip(self, tmp_path, monkeypatch):
         c, m = self._client(tmp_path, monkeypatch)
         for _ in range(5):
-            assert c.get("/v1/config", headers={"Authorization": "Bearer errada"}).status_code == 401
+            assert (
+                c.get("/v1/config", headers={"Authorization": "Bearer errada"}).status_code == 401
+            )
         r = c.get("/v1/config", headers={"Authorization": "Bearer errada"})
         assert r.status_code == 429 and "min" in r.json()["detail"]
         # até a senha CERTA espera durante a trava (proteção > conveniência)

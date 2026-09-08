@@ -80,18 +80,10 @@ pre{background:#0a0e15;border:1px solid var(--line);border-radius:8px;padding:10
 </div></div></div>
 
 <div class="card"><h2>🏦 Corretora</h2>
-<div class="grid2"><div>
-<label>Exchange</label>
-<select id="TRADINGAGENTS_EXCHANGE"><option value="binance">Binance</option><option value="bybit">Bybit</option><option value="okx">OKX</option><option value="coinbase">Coinbase</option><option value="kraken">Kraken</option><option value="gateio">Gate.io</option><option value="kucoin">KuCoin</option><option value="mercadobitcoin">Mercado Bitcoin</option><option value="bitget">Bitget</option></select>
-<label>Modo</label>
-<select id="TRADINGAGENTS_BROKER_MODE"><option value="testnet">TESTNET (fictício — padrão)</option><option value="live">LIVE — DINHEIRO REAL</option></select>
-<label>Frase de autorização (só p/ LIVE)</label><input id="LIVE_TRADING_CONFIRM" placeholder="EU AUTORIZO OPERAR COM DINHEIRO REAL">
-</div><div>
-<label>EXCHANGE_API_KEY <span id="s_EXCHANGE_API_KEY"></span></label><input id="EXCHANGE_API_KEY" type="password">
-<label>EXCHANGE_API_SECRET <span id="s_EXCHANGE_API_SECRET"></span></label><input id="EXCHANGE_API_SECRET" type="password">
-</div></div>
-<div class="mut" style="margin-top:6px">TESTNET = treino com dinheiro fictício (existe em: Binance, Bybit, OKX, Gate.io, Coinbase — chave em testnet.binance.vision). LIVE = <b style="color:var(--err)">dinheiro real</b> nas 9 corretoras, e só liga digitando a frase de autorização acima.</div>
-<button class="bs" style="margin-top:8px" onclick="brokerTest()">🔌 Testar corretora</button> <span id="brokerMsg" class="msg"></span></div>
+<div class="bad"><b>Execução de ordens temporariamente indisponível.</b><br>
+A integração anterior permitia informar símbolo, lado e quantidade sem um mandato de carteira.
+Ela foi bloqueada por segurança. O novo onboarding será liberado apenas com perfil de risco,
+prévia, aprovação, reserva e reconciliação.</div></div>
 
 <div class="card"><h2>🌐 Comportamento</h2><div class="grid2"><div>
 <label>Idioma dos relatórios</label>
@@ -119,7 +111,7 @@ pre{background:#0a0e15;border:1px solid var(--line);border-radius:8px;padding:10
 const $=i=>document.getElementById(i);
 function tab(t){document.querySelectorAll('.tab').forEach(e=>e.classList.toggle('on',e.dataset.t===t));
 $('pane-cfg').classList.toggle('hide',t!=='cfg');$('pane-op').classList.toggle('hide',t!=='op')}
-const CFG_KEYS=['TRADINGAGENTS_LLM_PROVIDER','TRADINGAGENTS_BACKEND_URL','GROQ_API_KEY','MISTRAL_API_KEY','OPENROUTER_API_KEY','TRADINGAGENTS_DEEP_THINK_LLM','TRADINGAGENTS_QUICK_THINK_LLM','OPENAI_API_KEY','ANTHROPIC_API_KEY','DEEPSEEK_API_KEY','GOOGLE_API_KEY','FRED_API_KEY','ALPHA_VANTAGE_API_KEY','TRADINGAGENTS_EXCHANGE','TRADINGAGENTS_BROKER_MODE','EXCHANGE_API_KEY','EXCHANGE_API_SECRET','LIVE_TRADING_CONFIRM','TRADINGAGENTS_OUTPUT_LANGUAGE','TRADINGAGENTS_MAX_DEBATE_ROUNDS'];
+const CFG_KEYS=['TRADINGAGENTS_LLM_PROVIDER','TRADINGAGENTS_BACKEND_URL','GROQ_API_KEY','MISTRAL_API_KEY','OPENROUTER_API_KEY','TRADINGAGENTS_DEEP_THINK_LLM','TRADINGAGENTS_QUICK_THINK_LLM','OPENAI_API_KEY','ANTHROPIC_API_KEY','DEEPSEEK_API_KEY','GOOGLE_API_KEY','FRED_API_KEY','ALPHA_VANTAGE_API_KEY','TRADINGAGENTS_OUTPUT_LANGUAGE','TRADINGAGENTS_MAX_DEBATE_ROUNDS'];
 const PROV={groq:{h:'Chave GRÁTIS em <b>console.groq.com/keys</b> (entra com Google, copia, cola aí embaixo). Modelos automáticos.',k:'GROQ_API_KEY'},
 google:{h:'Chave GRÁTIS em <b>aistudio.google.com/apikey</b>. Cola no campo GOOGLE_API_KEY.',k:'GOOGLE_API_KEY'},
 mistral:{h:'Chave em <b>console.mistral.ai/api-keys</b> (plano gratuito p/ experimentar).',k:'MISTRAL_API_KEY'},
@@ -177,26 +169,7 @@ el.innerHTML=js.map(j=>{const st=states[j.id],b=st&&st.body||{};const[c,l]=st?pf
 return`<div class="job"><div class="top"><div><b style="font-size:16px">${j.ticker}</b> <span class="mut">${j.date}</span><div class="mut" style="word-break:break-all">${j.id}</div></div>
 <div><span class="pill ${c}">${l}</span> <button class="bs" onclick="poll('${j.id}')">↻</button> <button class="bs" onclick="cancelJob('${j.id}')">✕</button> <button class="bs" onclick="const p=this.closest('.job').querySelector('pre');p.classList.toggle('hide')">detalhes</button></div></div>
 ${dec?`<div class="decision">📊 <b>Decisão:</b> ${dec.replace(/</g,'&lt;')}</div>`:''}
-${(st&&(b.status||'')==='completed')?`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-<input placeholder="símbolo (ex.: BTC/USDT)" id="sym_${j.id}" value="${j.ticker.includes('/')?j.ticker:''}" style="max-width:170px">
-<input placeholder="qtd" id="amt_${j.id}" style="max-width:90px">
-<button class="bs" onclick="execOrder('${j.id}','buy')">🟢 Comprar</button>
-<button class="bs" onclick="execOrder('${j.id}','sell')">🔴 Vender</button>
-<span id="om_${j.id}" class="msg"></span></div>`:''}
 <pre class="hide">${(JSON.stringify(b,null,2)||'').replace(/</g,'&lt;')}</pre></div>`}).join('')}
-async function brokerTest(){const m=$('brokerMsg');m.innerHTML=' salvando e validando…';
-const vars={};for(const k of ['TRADINGAGENTS_EXCHANGE','TRADINGAGENTS_BROKER_MODE','EXCHANGE_API_KEY','EXCHANGE_API_SECRET','LIVE_TRADING_CONFIRM']){const v=$(k)&&$(k).value.trim();if(v)vars[k]=v}
-if(Object.keys(vars).length){const sv=await fetch('/v1/config',{method:'POST',headers:H(),body:JSON.stringify({vars})});if(!sv.ok){m.innerHTML='<span class="bad">✘ não consegui salvar — digitou a senha lá em cima e clicou Entrar?</span>';return}loadStatus()}
-const r=await fetch('/v1/broker/status',{headers:H()});const d=await r.json();
-m.innerHTML=d.ready?'<span class="ok">✔ '+d.exchange+' pronta — modo '+(d.mode==='live'?'<b style="color:var(--err)">LIVE (DINHEIRO REAL)</b>':'TESTNET (fictício)')+', chaves '+(d.keys_set?'ok':'faltando')+'</span>':'<span class="bad">✘ '+String(d.erro||'inválida').replace(/^[A-Za-z]+Error: /,'')+'</span>'}
-async function execOrder(jid,side){const m=$('om_'+jid);
-const sym=$('sym_'+jid).value.trim(),amt=parseFloat($('amt_'+jid).value);
-if(!sym){m.innerHTML='<span class="bad">preenche o símbolo (ex.: BTC/USDT)</span>';return}
-if(!(amt>0)){m.innerHTML='<span class="bad">preenche a quantidade (ex.: 0.001)</span>';return}
-m.innerHTML=' enviando…';
-const r=await fetch('/v1/broker/order',{method:'POST',headers:H(),body:JSON.stringify({job_id:jid,side,symbol:sym,amount:amt})});
-const d=await r.json();
-m.innerHTML=r.ok?'<span class="ok">✔ ordem '+(d.mode==='live'?'REAL':'de treino')+' enviada ('+(d.order_id||d.client_order_id)+')</span>':'<span class="bad">✘ '+String(d.detail||JSON.stringify(d)).replace(/^[A-Za-z]+Error: /,'').slice(0,200)+'</span>'}
 function refreshAll(){store.k.forEach(j=>poll(j.id))}
 async function syncFromServer(){const r=await tapi('v1/jobs');
 if(r.status<300&&r.body&&r.body.jobs){const js=r.body.jobs.map(j=>({id:j.id,ticker:j.ticker,date:j.trade_date}));store.k=js;js.forEach(j=>{if(!states[j.id])poll(j.id)});render()}}

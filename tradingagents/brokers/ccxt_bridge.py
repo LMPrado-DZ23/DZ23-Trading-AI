@@ -1,25 +1,22 @@
-"""CCXT bridge — TESTNET-only, fail-closed, decisão do Prado registrada.
+"""Legacy CCXT bridge retained for read-only compatibility.
 
 Regras (decisão do Prado, dono do sistema):
 - Corretora selecionável entre a linha DZ23 (Binance, Bybit, OKX, Coinbase,
   Kraken, Gate.io, KuCoin, Mercado Bitcoin, Bitget) via CCXT.
 - MODO TESTNET: padrão; exchange sem testnet real ⇒ recusa (nunca degrada
   silenciosamente para live).
-- MODO LIVE (dinheiro real): existe e funciona, mas SÓ nasce com a frase de
-  autorização explícita do dono em LIVE_TRADING_CONFIRM — a confirmação é
-  DELE, não do software. Sem a frase exata, live recusa nascer.
+- Order submission is permanently disabled in this legacy adapter.  The A5
+  platform will introduce a separate adapter behind immutable intents,
+  reservations, an outbox and reconciliation.
 - TODO envio de ordem passa OBRIGATORIAMENTE por assert_secure_for_capital
   (consumidor selado do Gate B) ANTES de qualquer chamada de rede.
-- Idempotência: clientOrderId determinístico derivado do job — retry NUNCA
-  duplica ordem.
-- Journal: qualquer payload logado passa por redact_secrets.
+- Journal compatibility remains available and redacts every payload.
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import os
-import time
 from pathlib import Path
 
 from tradingagents.dataflows.redact import redact_secrets
@@ -121,36 +118,14 @@ class CCXTBridge:
             "mode": self.mode,
             "sandbox": self.mode == "testnet",
             "keys_set": bool(self.api_key and self.api_secret),
-            "aviso": ("DINHEIRO REAL — autorizado pela frase do dono"
-                      if self.mode == "live" else
-                      "testnet: ordens de mentira, risco zero"),
+            "submission_enabled": False,
+            "aviso": "adaptador legado bloqueado; nenhuma ordem pode ser enviada",
         }
 
     def submit_order(self, final_state: dict, *, job_id: str, symbol: str,
                      side: str, amount: float, order_type: str = "market") -> dict:
-        """Única porta de envio. O gate roda ANTES de qualquer rede."""
-        assert_secure_for_capital(final_state)  # incontornável, sem flag
-        if side not in ("buy", "sell"):
-            raise ValueError("side deve ser buy|sell")
-        if not (isinstance(amount, (int, float)) and amount > 0):
-            raise ValueError("amount deve ser > 0")
-        coid = self.client_order_id(job_id, symbol, side)
-        params = {"clientOrderId": coid}
-        if self._ex.id == "okx":
-            params = {"clOrdId": coid[:32]}
-        self._journal({"ts": time.time(), "event": "submit_attempt",
-                       "exchange": self.exchange_name, "symbol": symbol,
-                       "side": side, "amount": amount, "client_order_id": coid,
-                       "job_id": job_id})
-        try:
-            order = self._ex.create_order(symbol, order_type, side, amount,
-                                          None, params)
-        except Exception as exc:  # rede/exchange: journal redigido + repropaga
-            self._journal({"ts": time.time(), "event": "submit_error",
-                           "client_order_id": coid,
-                           "error": f"{type(exc).__name__}: {exc}"[:500]})
-            raise
-        self._journal({"ts": time.time(), "event": "submit_ok",
-                       "client_order_id": coid,
-                       "order_id": order.get("id")})
-        return {"client_order_id": coid, "order": order}
+        """Refuse before network even when the legacy transport mark is valid."""
+        assert_secure_for_capital(final_state)
+        raise BrokerSecurityError(
+            "legacy CCXT order submission is disabled; use an audited ExecutionIntent"
+        )
