@@ -1,12 +1,13 @@
 """CCXT bridge — TESTNET-only, fail-closed, decisão do Prado registrada.
 
-Regras normativas (MISSAO-BROKER-CCXT):
+Regras (decisão do Prado, dono do sistema):
 - Corretora selecionável entre a linha DZ23 (Binance, Bybit, OKX, Coinbase,
   Kraken, Gate.io, KuCoin, Mercado Bitcoin, Bitget) via CCXT.
-- TRADINGAGENTS_BROKER_MODE=testnet é OBRIGATÓRIO: ausente/qualquer outro
-  valor ⇒ a ponte recusa NASCER (fail closed). "live" não existe nesta fase.
-- Exchange sem testnet real no CCXT instalado ⇒ recusa com mensagem clara;
-  jamais degrada para endpoint live.
+- MODO TESTNET: padrão; exchange sem testnet real ⇒ recusa (nunca degrada
+  silenciosamente para live).
+- MODO LIVE (dinheiro real): existe e funciona, mas SÓ nasce com a frase de
+  autorização explícita do dono em LIVE_TRADING_CONFIRM — a confirmação é
+  DELE, não do software. Sem a frase exata, live recusa nascer.
 - TODO envio de ordem passa OBRIGATORIAMENTE por assert_secure_for_capital
   (consumidor selado do Gate B) ANTES de qualquer chamada de rede.
 - Idempotência: clientOrderId determinístico derivado do job — retry NUNCA
@@ -38,8 +39,11 @@ EXCHANGE_ALIASES = {
 }
 
 
+LIVE_CONFIRM_PHRASE = "EU AUTORIZO OPERAR COM DINHEIRO REAL"
+
+
 class BrokerSecurityError(RuntimeError):
-    """Refusal by construction — configuration alone must never trade live."""
+    """Refusal by construction — live nunca acontece por acidente."""
 
 
 class CCXTBridge:
@@ -53,11 +57,21 @@ class CCXTBridge:
             "TRADINGAGENTS_BROKER_JOURNAL", "/data/broker-journal.jsonl"))
 
         # --- fail-closed ANTES de qualquer objeto de rede existir ---
-        if mode != "testnet":
+        if mode not in ("testnet", "live"):
             raise BrokerSecurityError(
-                "TRADINGAGENTS_BROKER_MODE deve ser exatamente 'testnet' nesta "
-                f"fase (recebido: {mode!r}). Modo live não existe até o marco "
-                "de broker ser auditado e promovido pelo Prado.")
+                "TRADINGAGENTS_BROKER_MODE deve ser 'testnet' ou 'live' "
+                f"(recebido: {mode!r}).")
+        self.mode = mode
+        if mode == "live":
+            confirm = (env.get("LIVE_TRADING_CONFIRM") or "").strip()
+            if confirm != LIVE_CONFIRM_PHRASE:
+                raise BrokerSecurityError(
+                    "Modo LIVE exige a frase exata de autorização do dono em "
+                    f"LIVE_TRADING_CONFIRM: '{LIVE_CONFIRM_PHRASE}'. Sem ela, "
+                    "dinheiro real não entra em jogo.")
+            if not (self.api_key and self.api_secret):
+                raise BrokerSecurityError(
+                    "Modo LIVE exige EXCHANGE_API_KEY e EXCHANGE_API_SECRET.")
         if self.exchange_name not in EXCHANGE_ALIASES:
             raise BrokerSecurityError(
                 f"exchange {self.exchange_name!r} fora da linha DZ23 "
@@ -72,13 +86,15 @@ class CCXTBridge:
             "apiKey": self.api_key, "secret": self.api_secret,
             "enableRateLimit": True,
         })
-        if not (self._ex.urls or {}).get("test"):
-            raise BrokerSecurityError(
-                f"{self.exchange_name} não expõe testnet no CCXT — recusando "
-                "(nunca degradar para live). Escolha binance, bybit, okx, "
-                "gateio ou coinbase para operar em testnet.")
-        # Sandbox liga endpoints de teste; falha aqui é falha da ponte.
-        self._ex.set_sandbox_mode(True)
+        if self.mode == "testnet":
+            if not (self._ex.urls or {}).get("test"):
+                raise BrokerSecurityError(
+                    f"{self.exchange_name} não expõe testnet no CCXT. Em "
+                    "testnet use binance, bybit, okx, gateio ou coinbase; "
+                    "para as demais, o modo live (com a frase de autorização) "
+                    "é o único caminho — nunca degrado silenciosamente.")
+            self._ex.set_sandbox_mode(True)
+        # live: endpoints reais, sem sandbox — autorizado pela frase acima.
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -102,9 +118,12 @@ class CCXTBridge:
         return {
             "exchange": self.exchange_name,
             "ccxt_id": self._ex.id,
-            "mode": "testnet",
-            "sandbox": True,
+            "mode": self.mode,
+            "sandbox": self.mode == "testnet",
             "keys_set": bool(self.api_key and self.api_secret),
+            "aviso": ("DINHEIRO REAL — autorizado pela frase do dono"
+                      if self.mode == "live" else
+                      "testnet: ordens de mentira, risco zero"),
         }
 
     def submit_order(self, final_state: dict, *, job_id: str, symbol: str,

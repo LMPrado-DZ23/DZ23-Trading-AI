@@ -23,7 +23,7 @@ ALLOWED_KEYS = [
     "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY",
     "GOOGLE_API_KEY", "FRED_API_KEY", "ALPHA_VANTAGE_API_KEY",
     "TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
-    "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET",
+    "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET", "LIVE_TRADING_CONFIRM",
 ]
 SECRETish = tuple(k for k in ALLOWED_KEYS if k.endswith(("_KEY", "_SECRET")))
 
@@ -80,8 +80,13 @@ def run_job(jid, ticker, date):
             state, decision = graph.propagate(ticker, date)
             reports = {k: v for k, v in (state or {}).items()
                        if isinstance(v, str) and ("report" in k or "decision" in k)}
+            # guarda o mark de transporte + identidade: é o que permite EXECUTAR
+            # a decisão depois, passando pelo gate de capital honestamente.
+            reports["_transport_mark"] = (state or {}).get("transport_security")
+            reports["_identity"] = {"company_of_interest": (state or {}).get("company_of_interest"),
+                                     "trade_date": (state or {}).get("trade_date")}
             upd(jid, status="completed", decision=str(decision)[:4000],
-                result=json.dumps(reports, ensure_ascii=False)[:200000])
+                result=json.dumps(reports, ensure_ascii=False, default=str)[:200000])
         except Exception as e:
             upd(jid, status="failed",
                 error=f"{type(e).__name__}: {e}"[:2000] + "\n" +
@@ -152,11 +157,48 @@ def broker_status(_=Depends(auth)):
     cfg = load_cfg()
     env = {k: cfg.get(k, "") for k in
            ("TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
-            "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET")}
+            "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET",
+            "LIVE_TRADING_CONFIRM")}
     try:
         from tradingagents.brokers.ccxt_bridge import CCXTBridge
         b = CCXTBridge(env=env, journal_path=str(DATA / "broker-journal.jsonl"))
         return {"ready": True, **b.status(),
-                "nota": "testnet ativo; envio de ordens só após auditoria do marco"}
+                "nota": ("ordens serão REAIS" if b.mode=="live" else "ordens de mentira (testnet)")}
     except Exception as e:
         return {"ready": False, "erro": f"{type(e).__name__}: {e}"[:400]}
+
+
+@app.post("/v1/broker/order")
+async def broker_order(req: Request, _=Depends(auth)):
+    """EXECUTA uma ordem (testnet ou live conforme configuração) amarrada a
+    um job concluído — a decisão analisada é o que se opera."""
+    b = await req.json()
+    jid = str(b.get("job_id", "")).strip()
+    symbol = str(b.get("symbol", "")).strip().upper()
+    side = str(b.get("side", "")).strip().lower()
+    try:
+        amount = float(b.get("amount", 0))
+    except (TypeError, ValueError):
+        amount = 0
+    with db() as c:
+        r = c.execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()
+    if not r or r["status"] != "completed":
+        raise HTTPException(422, "job_id inexistente ou não concluído — executa-se a decisão de uma análise")
+    stored = json.loads(r["result"] or "{}")
+    ident = stored.get("_identity") or {}
+    final_state = {**ident, "transport_security": stored.get("_transport_mark")}
+    cfg = load_cfg()
+    env = {k: cfg.get(k, "") for k in ("TRADINGAGENTS_EXCHANGE",
+           "TRADINGAGENTS_BROKER_MODE", "EXCHANGE_API_KEY",
+           "EXCHANGE_API_SECRET", "LIVE_TRADING_CONFIRM")}
+    try:
+        from tradingagents.brokers.ccxt_bridge import CCXTBridge
+        bridge = CCXTBridge(env=env, journal_path=str(DATA / "broker-journal.jsonl"))
+        out = bridge.submit_order(final_state, job_id=jid,
+                                  symbol=symbol or ident.get("company_of_interest", ""),
+                                  side=side, amount=amount)
+        return {"ok": True, "mode": bridge.mode,
+                "client_order_id": out["client_order_id"],
+                "order_id": (out.get("order") or {}).get("id")}
+    except Exception as e:
+        raise HTTPException(422, f"{type(e).__name__}: {e}"[:400])

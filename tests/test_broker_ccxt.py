@@ -31,8 +31,8 @@ SECURE_STATE = {
 
 
 class TestFailClosed:
-    @pytest.mark.parametrize("mode", ["", "live", "LIVE", "paper", "prod", None])
-    def test_any_mode_but_testnet_refuses_to_be_born(self, mode, tmp_path):
+    @pytest.mark.parametrize("mode", ["", "paper", "prod", "LIVE ", None])
+    def test_invalid_modes_refuse_to_be_born(self, mode, tmp_path):
         env = _env()
         if mode is None:
             env.pop("TRADINGAGENTS_BROKER_MODE")
@@ -51,6 +51,37 @@ class TestFailClosed:
         with pytest.raises(BrokerSecurityError, match="testnet"):
             CCXTBridge(env=_env(TRADINGAGENTS_EXCHANGE=ex),
                        journal_path=tmp_path / "j.jsonl")
+
+    def test_live_without_owner_phrase_refuses(self, tmp_path):
+        with pytest.raises(BrokerSecurityError, match="LIVE_TRADING_CONFIRM"):
+            CCXTBridge(env=_env(TRADINGAGENTS_BROKER_MODE="live"),
+                       journal_path=tmp_path / "j.jsonl")
+        with pytest.raises(BrokerSecurityError):
+            CCXTBridge(env=_env(TRADINGAGENTS_BROKER_MODE="live",
+                                LIVE_TRADING_CONFIRM="autorizo"),
+                       journal_path=tmp_path / "j.jsonl")
+
+    @pytest.mark.parametrize("ex", sorted(EXCHANGE_ALIASES))
+    def test_live_with_owner_phrase_boots_ALL_nine_exchanges(self, ex, tmp_path):
+        from tradingagents.brokers.ccxt_bridge import LIVE_CONFIRM_PHRASE
+        b = CCXTBridge(env=_env(TRADINGAGENTS_EXCHANGE=ex,
+                                TRADINGAGENTS_BROKER_MODE="live",
+                                LIVE_TRADING_CONFIRM=LIVE_CONFIRM_PHRASE),
+                       journal_path=tmp_path / "j.jsonl")
+        st = b.status()
+        assert st["mode"] == "live" and st["sandbox"] is False
+
+    def test_gate_still_mandatory_in_live(self, tmp_path):
+        from tradingagents.brokers.ccxt_bridge import LIVE_CONFIRM_PHRASE
+        b = CCXTBridge(env=_env(TRADINGAGENTS_BROKER_MODE="live",
+                                LIVE_TRADING_CONFIRM=LIVE_CONFIRM_PHRASE),
+                       journal_path=tmp_path / "j.jsonl")
+        called = {"n": 0}
+        b._ex.create_order = lambda *a, **k: called.__setitem__("n", 1)
+        with pytest.raises(InsecureTransportError):
+            b.submit_order({}, job_id="j", symbol="BTC/USDT", side="buy",
+                           amount=0.001)
+        assert called["n"] == 0
 
     @pytest.mark.parametrize("ex", ["binance", "bybit", "okx", "gateio", "coinbase"])
     def test_testnet_capable_exchanges_boot_in_sandbox(self, ex, tmp_path):
