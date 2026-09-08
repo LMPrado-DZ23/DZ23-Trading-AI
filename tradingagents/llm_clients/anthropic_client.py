@@ -60,6 +60,12 @@ class AnthropicClient(BaseLLMClient):
         """Return configured ChatAnthropic instance."""
         self.warn_if_unknown_model()
         llm_kwargs = {"model": self.model}
+        if self.kwargs.get("platform_strict_credentials") and not self.kwargs.get(
+            "api_key"
+        ):
+            raise ValueError("API key for provider 'anthropic' is not set.")
+        if self.kwargs.get("platform_strict_credentials") and self.base_url:
+            raise ValueError("Custom Anthropic endpoints are forbidden in platform mode.")
 
         if self.base_url:
             llm_kwargs["base_url"] = self.base_url

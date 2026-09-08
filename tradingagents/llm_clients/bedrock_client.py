@@ -54,18 +54,24 @@ class BedrockClient(BaseLLMClient):
         self.warn_if_unknown_model()
         chat_cls = _bedrock_class()
 
-        region = (
-            os.environ.get("AWS_REGION")
-            or os.environ.get("AWS_DEFAULT_REGION")
-            or _DEFAULT_REGION
+        strict_credentials = bool(self.kwargs.get("platform_strict_credentials"))
+        region = self.kwargs.get("region_name") or (
+            None
+            if strict_credentials
+            else os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
         )
+        region = region or _DEFAULT_REGION
         llm_kwargs = {"model": self.model, "region_name": region}
         # A Bedrock API key authenticates without AWS access keys. Passing it as
         # api_key makes langchain-aws prefer bearer auth, so an ambient
         # AWS_PROFILE / SigV4 credentials can't override it (#1103).
-        bearer_token = os.environ.get("AWS_BEARER_TOKEN_BEDROCK")
+        bearer_token = self.kwargs.get("api_key") or (
+            None if strict_credentials else os.environ.get("AWS_BEARER_TOKEN_BEDROCK")
+        )
         if bearer_token:
             llm_kwargs["api_key"] = bearer_token
+        elif strict_credentials:
+            raise ValueError("API key for provider 'bedrock' is not set.")
         for key in ("temperature", "max_tokens", "max_retries", "callbacks"):
             if key in self.kwargs:
                 llm_kwargs[key] = self.kwargs[key]

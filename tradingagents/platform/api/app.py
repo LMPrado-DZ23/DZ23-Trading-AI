@@ -6,12 +6,13 @@ from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from tradingagents.platform.api.compliance import ComplianceServicePort
+from tradingagents.platform.api.connections import BrokerConnectionServicePort
 from tradingagents.platform.api.identity import (
     AuthenticatedSession,
     CommandContext,
@@ -20,9 +21,13 @@ from tradingagents.platform.api.identity import (
     IdentityServicePort,
 )
 from tradingagents.platform.api.schemas import (
+    BrokerConnectionRequest,
+    BrokerConnectionResponse,
+    BrokerDiagnosticResponse,
     ConsentRequest,
     ConsentResponse,
     CsrfResponse,
+    ExchangeCatalogResponse,
     HealthResponse,
     LoginRequest,
     MessageResponse,
@@ -70,6 +75,7 @@ def create_platform_app(
     security: ApiSecuritySettings,
     rate_limiter: RateLimiter,
     compliance_service: ComplianceServicePort | None = None,
+    broker_connection_service: BrokerConnectionServicePort | None = None,
 ) -> FastAPI:
     """Create an isolated API instance with explicit security dependencies."""
 
@@ -92,6 +98,7 @@ def create_platform_app(
                 "Content-Type",
                 "X-CSRF-Token",
                 "X-Tenant-ID",
+                "Idempotency-Key",
             ],
         )
 
@@ -164,6 +171,15 @@ def create_platform_app(
                 "Este recurso está temporariamente indisponível.",
             )
         return compliance_service
+
+    def broker_connections() -> BrokerConnectionServicePort:
+        if broker_connection_service is None:
+            raise _public_error(
+                503,
+                "BROKER_CONNECTIONS_UNAVAILABLE",
+                "As conexões com corretoras estão temporariamente indisponíveis.",
+            )
+        return broker_connection_service
 
     async def enforce_rate(
         *, request: Request, scope: str, identity: str, limit: int, window: int
@@ -595,6 +611,112 @@ def create_platform_app(
             raise _public_error(401, "MFA_VERIFICATION_FAILED", "Código MFA inválido.") from None
         return MfaVerificationResponse(**asdict(row))
 
+    @app.get("/v1/exchanges/catalog", response_model=list[ExchangeCatalogResponse])
+    async def list_exchange_catalog(
+        context: Annotated[TenantRequestContext, Depends(require_session)],
+    ) -> list[ExchangeCatalogResponse]:
+        require_verified(context)
+        rows = await broker_connections().catalog()
+        return [ExchangeCatalogResponse(**asdict(row)) for row in rows]
+
+    @app.get("/v1/connections", response_model=list[BrokerConnectionResponse])
+    async def list_broker_connections(
+        request: Request,
+        context: Annotated[TenantRequestContext, Depends(require_session)],
+    ) -> list[BrokerConnectionResponse]:
+        require_verified(context)
+        try:
+            rows = await broker_connections().list_connections(
+                token=request.cookies[SESSION_COOKIE], principal=context.principal
+            )
+        except IdentityError as exc:
+            _raise_connection_error(exc)
+        return [BrokerConnectionResponse(**asdict(row)) for row in rows]
+
+    @app.post("/v1/connections", response_model=MessageResponse, status_code=201)
+    async def save_broker_connection(
+        payload: BrokerConnectionRequest,
+        request: Request,
+        context: Annotated[TenantRequestContext, Depends(require_session)],
+        idempotency_key: Annotated[
+            str, Header(alias="Idempotency-Key", min_length=16, max_length=128)
+        ],
+    ) -> MessageResponse:
+        verify_csrf(request, security.csrf_secret)
+        require_verified(context)
+        await enforce_rate_key(
+            key=f"connection-save:{context.tenant_id}:{context.principal.user_id}",
+            limit=10,
+            window=3600,
+        )
+        try:
+            connection_id = await broker_connections().save_connection(
+                token=request.cookies[SESSION_COOKIE],
+                principal=context.principal,
+                idempotency_key=idempotency_key,
+                label=payload.label,
+                exchange_slug=payload.exchange_slug,
+                environment=payload.environment,
+                api_key=payload.api_key.get_secret_value(),
+                secret=payload.secret.get_secret_value(),
+                passphrase=(
+                    payload.passphrase.get_secret_value() if payload.passphrase else None
+                ),
+                uid=payload.uid.get_secret_value() if payload.uid else None,
+            )
+        except IdentityError as exc:
+            _raise_connection_error(exc)
+        return MessageResponse(message=f"Conexão {connection_id} salva com segurança.")
+
+    @app.post(
+        "/v1/connections/{connection_id}/diagnose",
+        response_model=BrokerDiagnosticResponse,
+    )
+    async def diagnose_broker_connection(
+        connection_id: UUID,
+        request: Request,
+        context: Annotated[TenantRequestContext, Depends(require_session)],
+    ) -> BrokerDiagnosticResponse:
+        verify_csrf(request, security.csrf_secret)
+        require_verified(context)
+        await enforce_rate_key(
+            key=f"connection-diagnostic:{context.tenant_id}:{connection_id}",
+            limit=5,
+            window=300,
+        )
+        try:
+            row = await broker_connections().diagnose(
+                token=request.cookies[SESSION_COOKIE],
+                principal=context.principal,
+                connection_id=connection_id,
+            )
+        except IdentityError as exc:
+            _raise_connection_error(exc)
+        return BrokerDiagnosticResponse(**asdict(row))
+
+    @app.delete("/v1/connections/{connection_id}", response_model=MessageResponse)
+    async def remove_broker_connection(
+        connection_id: UUID,
+        request: Request,
+        context: Annotated[TenantRequestContext, Depends(require_session)],
+    ) -> MessageResponse:
+        verify_csrf(request, security.csrf_secret)
+        require_verified(context)
+        await enforce_rate_key(
+            key=f"connection-remove:{context.tenant_id}:{context.principal.user_id}",
+            limit=10,
+            window=3600,
+        )
+        try:
+            await broker_connections().remove_connection(
+                token=request.cookies[SESSION_COOKIE],
+                principal=context.principal,
+                connection_id=connection_id,
+            )
+        except IdentityError as exc:
+            _raise_connection_error(exc)
+        return MessageResponse(message="Credencial removida e conexão desativada.")
+
     return app
 
 
@@ -631,6 +753,30 @@ def _raise_identity_error(exc: IdentityError) -> None:
         ) from None
     raise _public_error(
         400, "REGISTRATION_FAILED", "Não foi possível criar a conta com esses dados."
+    ) from None
+
+
+def _raise_connection_error(exc: IdentityError) -> None:
+    if exc.code == "MFA_STEP_UP_REQUIRED":
+        raise _public_error(
+            403,
+            exc.code,
+            "Confirme o código de segurança novamente para acessar credenciais.",
+        ) from None
+    if exc.code in {"CONNECTION_NOT_FOUND", "CREDENTIAL_NOT_FOUND"}:
+        raise _public_error(404, "CONNECTION_NOT_FOUND", "Conexão não encontrada.") from None
+    if exc.code in {"CONNECTION_FORBIDDEN"}:
+        raise _public_error(403, exc.code, "Você não pode administrar conexões.") from None
+    if exc.code == "TESTNET_UNAVAILABLE":
+        raise _public_error(
+            400,
+            exc.code,
+            "Esta corretora não oferece testnet real; o sistema não muda para LIVE sozinho.",
+        ) from None
+    raise _public_error(
+        400,
+        "CONNECTION_INVALID",
+        "Não foi possível salvar ou diagnosticar esta conexão.",
     ) from None
 
 

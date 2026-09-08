@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
 _EMAIL = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 Password = Annotated[str, Field(min_length=12, max_length=128)]
@@ -175,3 +175,48 @@ class MfaVerificationResponse(ApiModel):
     method: str
     verified_at: datetime
     valid_until: datetime
+
+
+class ExchangeCatalogResponse(ApiModel):
+    slug: str
+    display_name: str
+    has_real_testnet: bool
+    required_fields: tuple[str, ...]
+    live_permission_probe: bool
+
+
+class BrokerConnectionRequest(ApiModel):
+    label: str = Field(min_length=2, max_length=80)
+    exchange_slug: str = Field(min_length=2, max_length=40, pattern=r"^[a-z0-9]+$")
+    environment: Literal["testnet", "live"]
+    api_key: SecretStr = Field(min_length=4, max_length=4096)
+    secret: SecretStr = Field(min_length=4, max_length=4096)
+    passphrase: SecretStr | None = Field(default=None, min_length=1, max_length=4096)
+    uid: SecretStr | None = Field(default=None, min_length=1, max_length=4096)
+
+
+class BrokerConnectionResponse(ApiModel):
+    id: UUID
+    label: str
+    exchange_slug: str
+    display_name: str
+    environment: str
+    status: str
+    credential_version: int
+    capability_digest: str
+    ccxt_version: str | None
+    permission_status: str
+    last_diagnostic_code: str | None
+    last_checked_at: datetime | None
+
+
+class BrokerDiagnosticResponse(ApiModel):
+    success: bool
+    code: str
+    market_count: int
+    nonzero_asset_count: int
+    permissions_verified: bool
+    permissions_safe: bool
+    permission_status: str
+    spot_only: bool
+    adapter_version: str

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import ipaddress
+import json
 import re
 from enum import StrEnum
 from typing import Annotated, Self
@@ -18,6 +19,11 @@ class Environment(StrEnum):
     DEVELOPMENT = "development"
     STAGING = "staging"
     PRODUCTION = "production"
+
+
+class BrokerCredentialProvider(StrEnum):
+    LOCAL = "local"
+    OPENBAO_TRANSIT = "openbao_transit"
 
 
 def _split_csv(value: object) -> object:
@@ -57,6 +63,13 @@ class PlatformSettings(BaseSettings):
     supabase_project_ref: str = ""
     supabase_url: str = ""
     supabase_publishable_key: SecretStr = SecretStr("")
+    broker_credential_keys_json: SecretStr = SecretStr("")
+    broker_active_credential_key_id: str = "broker-credentials-v1"
+    broker_credential_provider: BrokerCredentialProvider = BrokerCredentialProvider.LOCAL
+    broker_transit_url: str = ""
+    broker_transit_key_name: str = "tradingagents-broker-credentials"
+    broker_transit_token: SecretStr = SecretStr("")
+    broker_transit_namespace: str = ""
     allowed_origins: CsvList = Field(default_factory=lambda: ["http://localhost:8080"])
     trusted_proxy_networks: CsvList = Field(default_factory=list)
     session_ttl_seconds: int = Field(default=43_200, ge=300, le=2_592_000)
@@ -154,6 +167,22 @@ class PlatformSettings(BaseSettings):
                 )
             ):
                 raise ValueError("Supabase Auth configuration is mandatory outside development/test")
+            if self.broker_credential_provider is not BrokerCredentialProvider.OPENBAO_TRANSIT:
+                raise ValueError("external OpenBao Transit is mandatory outside development/test")
+            if self.broker_credential_keys_json.get_secret_value():
+                raise ValueError("local broker master keys are forbidden with OpenBao Transit")
+            transit_url = urlparse(self.broker_transit_url)
+            if (
+                transit_url.scheme != "https"
+                or not transit_url.hostname
+                or transit_url.username
+                or transit_url.password
+                or transit_url.query
+                or transit_url.fragment
+                or transit_url.path not in {"", "/"}
+                or not self.broker_transit_token.get_secret_value()
+            ):
+                raise ValueError("secure OpenBao Transit configuration is mandatory")
             try:
                 decoded_key = base64.urlsafe_b64decode(mfa_key + "=" * (-len(mfa_key) % 4))
             except (ValueError, base64.binascii.Error) as exc:
@@ -173,3 +202,25 @@ class PlatformSettings(BaseSettings):
     @property
     def secure_cookies(self) -> bool:
         return self.environment in {Environment.STAGING, Environment.PRODUCTION}
+
+    @property
+    def broker_credential_keys(self) -> dict[str, bytes]:
+        raw = self.broker_credential_keys_json.get_secret_value()
+        try:
+            payload = json.loads(raw)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ValueError("broker_credential_keys_json must be a JSON object") from exc
+        if not isinstance(payload, dict) or self.broker_active_credential_key_id not in payload:
+            raise ValueError("active broker credential key must exist in the keyring")
+        decoded: dict[str, bytes] = {}
+        for key_id, encoded in payload.items():
+            if not isinstance(key_id, str) or not isinstance(encoded, str):
+                raise ValueError("broker credential keyring entries must be strings")
+            try:
+                key = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+            except (ValueError, base64.binascii.Error) as exc:
+                raise ValueError("broker credential key is not valid base64") from exc
+            if len(key) != 32:
+                raise ValueError("broker credential keys must decode to exactly 32 bytes")
+            decoded[key_id] = key
+        return decoded

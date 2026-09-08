@@ -18,6 +18,7 @@ from tradingagents.platform.api import (
     create_platform_app,
 )
 from tradingagents.platform.api.compliance_adapter import SqlAlchemyComplianceAdapter
+from tradingagents.platform.api.connections_adapter import SqlAlchemyBrokerConnectionAdapter
 from tradingagents.platform.api.email_delivery import (
     IdentityEmailKind,
     SmtpIdentityTokenDelivery,
@@ -30,8 +31,18 @@ from tradingagents.platform.compliance import (
     MfaService,
     RecoveryCodeHasher,
 )
+from tradingagents.platform.connections import (
+    CCXTReadOnlyDiagnostics,
+    ConnectionService,
+    CredentialKeyring,
+    TransitCredentialKeyring,
+)
 from tradingagents.platform.identity import IdentityService, TokenHasher
-from tradingagents.platform.settings import Environment, PlatformSettings
+from tradingagents.platform.settings import (
+    BrokerCredentialProvider,
+    Environment,
+    PlatformSettings,
+)
 from tradingagents.platform.supabase_auth import (
     SupabaseAuthConfig,
     SupabaseJwtVerifier,
@@ -115,6 +126,37 @@ def create_production_app(settings: PlatformSettings | None = None) -> FastAPI:
         ),
         recovery_hasher=RecoveryCodeHasher(_derive_secret(master, "mfa-recovery-codes")),
     )
+    configured_broker_keys = effective.broker_credential_keys_json.get_secret_value()
+    if effective.broker_credential_provider is BrokerCredentialProvider.OPENBAO_TRANSIT:
+        broker_crypto = TransitCredentialKeyring(
+            base_url=effective.broker_transit_url,
+            key_name=effective.broker_transit_key_name,
+            token=effective.broker_transit_token.get_secret_value(),
+            namespace=effective.broker_transit_namespace or None,
+        )
+    else:
+        broker_keys = (
+            effective.broker_credential_keys
+            if configured_broker_keys
+            else {"development-derived-v1": _derive_secret(master, "broker-credentials")}
+        )
+        active_broker_key = (
+            effective.broker_active_credential_key_id
+            if configured_broker_keys
+            else "development-derived-v1"
+        )
+        broker_crypto = CredentialKeyring(
+            keys=broker_keys,
+            active_key_id=active_broker_key,
+        )
+    connection_service = ConnectionService(
+        factory,
+        keyring=broker_crypto,
+        diagnostics=CCXTReadOnlyDiagnostics(
+            resolve_hosts=effective.environment in {Environment.STAGING, Environment.PRODUCTION}
+        ),
+        idempotency_digest_key=_derive_secret(master, "broker-idempotency-digest"),
+    )
     redis = Redis.from_url(
         effective.redis_url.get_secret_value(),
         decode_responses=False,
@@ -157,6 +199,11 @@ def create_production_app(settings: PlatformSettings | None = None) -> FastAPI:
             compliance=compliance,
             mfa=mfa,
         ),
+        broker_connection_service=SqlAlchemyBrokerConnectionAdapter(
+            identity=identity,
+            mfa=mfa,
+            connections=connection_service,
+        ),
     )
     app.state.database_engine = engine
     app.state.redis = redis
@@ -167,6 +214,9 @@ def create_production_app(settings: PlatformSettings | None = None) -> FastAPI:
 
         await supabase_http.aclose()
         await redis.aclose()
+        close_broker_crypto = getattr(broker_crypto, "close", None)
+        if callable(close_broker_crypto):
+            close_broker_crypto()
         engine.dispose()
 
     app.router.add_event_handler("shutdown", close_runtime_resources)

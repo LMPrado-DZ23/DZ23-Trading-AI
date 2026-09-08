@@ -33,6 +33,9 @@ def test_runtime_readiness_checks_restricted_postgres_role_and_real_redis() -> N
         supabase_project_ref="fkswahrxvmueowcjisnp",
         supabase_url="https://fkswahrxvmueowcjisnp.supabase.co",
         supabase_publishable_key="sb_publishable_test-value",
+        broker_credential_provider="openbao_transit",
+        broker_transit_url="https://openbao:8200",
+        broker_transit_token="test-only-transit-token",
     )
 
     with TestClient(create_production_app(settings), base_url=settings.public_url) as client:

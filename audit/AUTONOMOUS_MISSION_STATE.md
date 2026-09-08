@@ -7,7 +7,7 @@
 - **started_at:** 2026-09-08 America/Sao_Paulo
 - **last_heartbeat:** 2026-09-08
 - **last_progress_at:** 2026-09-08
-- **current_task:** M1 implementado e validado; registrar commit e iniciar M2 (cofre e conexões).
+- **current_task:** M2 aprovado com ressalvas externas; registrar commit, aplicar migração remota e iniciar M3.
 
 ## Acceptance criteria
 
@@ -58,7 +58,7 @@
 - [x] Consolidar inventários Architect, Security e Product/UX.
 - [x] Fechar design e plano de marcos.
 - [x] Preparar ambiente Python reprodutível e reproduzir baseline.
-- [ ] Executar marcos M2–M10 do plano (M0 e M1 concluídos).
+- [ ] Executar marcos M3–M10 do plano (M0, M1 e implementação local do M2 concluídos).
 - [ ] Três auditorias independentes e fix loop final.
 - [ ] Release, push, deploy e validação de produção.
 
@@ -120,17 +120,20 @@
 - `49700ba` — `feat: contain legacy execution and define capital contracts`.
 - `4a42476` — `docs: record M0 verification checkpoint`.
 - `8574112` — `feat: add multi-tenant identity and Supabase auth`.
+- `6e19191` — `fix: harden Supabase runtime schema`.
 
 ## Agents delegated
 
 - Revisão PostgreSQL/RLS M1: migrations e testes reais verdes.
 - Revisão runtime M1: orientou correções de role, MFA, lockout, CORS, SMTP e readiness.
 - Revisão Supabase M1: orientou contenção de JWKS, TTL social e pre-hijacking por e-mail.
+- Revisão M2: aprovou código após fixes de Transit, keyset pagination, rotação,
+  idempotência vinculada ao payload e proibição de KEK local em produção.
 
 ## Next action
 
-1. congelar o endurecimento final do Supabase em commit focal de M1;
-2. implementar M2 com cofre criptografado, catálogo/capabilities e diagnóstico read-only de exchanges;
+1. revisar independentemente o M2, aplicar a migração 0006 no Supabase e registrar o commit do gate;
+2. iniciar M3 com fila durável, worker separado e RunContext imutável;
 3. manter credenciais reais fora de chat, Git, fixtures e evidências;
 4. configurar Google e Apple no Supabase quando os Client IDs/secrets externos forem fornecidos, sem bloquear os demais marcos.
 

@@ -31,14 +31,19 @@ Cada marco termina em commit verificável, atualização do checkpoint e evidên
 
 ## M2 — Cofre e conexões
 
-- [ ] envelope encryption com chave-mestra externa e rotação;
-- [ ] conexão por tenant/exchange/ambiente e credential version;
-- [ ] catálogo explícito: Binance, Bybit, OKX, Coinbase, Kraken, Gate.io, KuCoin, Mercado Bitcoin e Bitget;
-- [ ] capability matrix por exchange;
-- [ ] diagnóstico read-only de autenticação, saldo, spot, mercado e permissões;
-- [ ] recusa de saque, margem, derivativos e permissões excessivas;
-- [ ] separação de credenciais de LLM e egress allowlisted;
-- [ ] remoção real de credencial e trilha de acesso.
+- [x] envelope encryption com DEK por versão, OpenBao Transit externo e rotação por rewrap;
+- [x] conexão por tenant/exchange/ambiente e credential version;
+- [x] catálogo explícito: Binance, Bybit, OKX, Coinbase, Kraken, Gate.io, KuCoin, Mercado Bitcoin e Bitget;
+- [x] capability matrix por exchange;
+- [x] diagnóstico read-only de autenticação, saldo, spot, mercado e permissões;
+- [x] recusa de saque, margem, derivativos e permissões excessivas;
+- [x] separação de credenciais de LLM e egress allowlisted;
+- [x] remoção real de credencial e trilha de acesso.
+
+LIVE permanece deliberadamente `PERMISSIONS_NOT_VERIFIABLE` até os probes
+específicos e o executor isolado do M6. O M2 não promove nenhuma conexão LIVE
+para pronta. A prova com credenciais reais de testnet faz parte do gate externo
+e não pode reutilizar chaves publicadas em chat.
 
 **Gate:** nenhum plaintext em banco/log/API; contratos reais de sandbox/testnet onde disponíveis; permissões perigosas recusadas.
 

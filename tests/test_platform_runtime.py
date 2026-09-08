@@ -25,6 +25,9 @@ def _settings() -> PlatformSettings:
         supabase_project_ref="fkswahrxvmueowcjisnp",
         supabase_url="https://fkswahrxvmueowcjisnp.supabase.co",
         supabase_publishable_key="sb_publishable_test-value",
+        broker_credential_provider="openbao_transit",
+        broker_transit_url="https://openbao:8200",
+        broker_transit_token="test-only-transit-token",
     )
 
 

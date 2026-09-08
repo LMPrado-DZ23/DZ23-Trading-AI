@@ -26,6 +26,9 @@ def _production(**overrides):
         "supabase_project_ref": "fkswahrxvmueowcjisnp",
         "supabase_url": "https://fkswahrxvmueowcjisnp.supabase.co",
         "supabase_publishable_key": "sb_publishable_test-value",
+        "broker_credential_provider": "openbao_transit",
+        "broker_transit_url": "https://openbao:8200",
+        "broker_transit_token": "test-only-transit-token",
     }
     values.update(overrides)
     return values
@@ -77,6 +80,16 @@ def test_production_requires_delivery_redis_and_exact_mfa_key() -> None:
     with pytest.raises(ValidationError, match="exactly 32 bytes"):
         PlatformSettings(
             **_production(mfa_encryption_key_b64=base64.urlsafe_b64encode(b"short").decode())
+        )
+    with pytest.raises(ValidationError, match="OpenBao Transit"):
+        PlatformSettings(**_production(broker_credential_provider="local"))
+    with pytest.raises(ValidationError, match="local broker master keys"):
+        PlatformSettings(
+            **_production(
+                broker_credential_keys_json='{"local":"'
+                + base64.urlsafe_b64encode(b"b" * 32).decode()
+                + '"}'
+            )
         )
     settings = PlatformSettings(**_production())
     assert settings.secure_cookies is True

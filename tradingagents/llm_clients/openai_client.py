@@ -259,6 +259,20 @@ def _is_native_openai_base_url(base_url: str | None) -> bool:
     return host == "api.openai.com" or host.endswith(".openai.com")
 
 
+def _normalized_origin(base_url: str) -> str:
+    parsed = urlparse(base_url)
+    host = (parsed.hostname or "").rstrip(".").lower()
+    if (
+        parsed.scheme != "https"
+        or not host
+        or parsed.username
+        or parsed.password
+        or parsed.port not in {None, 443}
+    ):
+        raise ValueError("platform LLM endpoints must use an exact HTTPS origin")
+    return f"https://{host}"
+
+
 class OpenAIClient(BaseLLMClient):
     """Client for OpenAI, Ollama, OpenRouter, and xAI providers.
 
@@ -287,13 +301,20 @@ class OpenAIClient(BaseLLMClient):
 
         if spec is not None:
             chat_cls = spec.chat_class
+            strict_credentials = bool(self.kwargs.get("platform_strict_credentials"))
 
             # base_url precedence: explicit client base_url (carries the config /
             # TRADINGAGENTS_LLM_BACKEND_URL value) > provider env override (e.g.
             # OLLAMA_BASE_URL) > provider default. None means use the SDK default.
-            env_base_url = os.environ.get(spec.base_url_env) if spec.base_url_env else None
+            env_base_url = (
+                os.environ.get(spec.base_url_env)
+                if spec.base_url_env and not strict_credentials
+                else None
+            )
             base_url = self.base_url or env_base_url or spec.base_url
-            if not base_url:
+            if not base_url and strict_credentials and self.provider == "openai":
+                base_url = "https://api.openai.com/v1"
+            if not base_url and not strict_credentials:
                 # Rodada-6 finding: with no explicit base_url, the pinned
                 # LangChain/OpenAI SDKs would later resolve OPENAI_BASE_URL /
                 # OPENAI_API_BASE from the environment — an endpoint the
@@ -322,6 +343,23 @@ class OpenAIClient(BaseLLMClient):
             # validating one URL and consuming another would not close the
             # control (rodada-4 condition).
             validate_backend_url(self.provider, base_url)
+            if strict_credentials:
+                configured_origins = tuple(
+                    self.kwargs.get("platform_allowed_origins") or ()
+                )
+                if self.provider not in {"openai_compatible", "ollama"}:
+                    provider_url = (
+                        "https://api.openai.com/v1"
+                        if self.provider == "openai"
+                        else spec.base_url
+                    )
+                    configured_origins = (
+                        (_normalized_origin(provider_url),) if provider_url else ()
+                    )
+                if not base_url or _normalized_origin(base_url) not in configured_origins:
+                    raise ValueError(
+                        f"Provider '{self.provider}' endpoint is not approved for this tenant."
+                    )
             if base_url:
                 llm_kwargs["base_url"] = base_url
 
@@ -336,16 +374,17 @@ class OpenAIClient(BaseLLMClient):
             # API key: required unless key_optional; keyless local servers get a
             # placeholder. The env-var name is the single source in api_key_env.
             api_key_env = get_api_key_env(self.provider)
-            api_key = os.environ.get(api_key_env) if api_key_env else None
+            explicit_api_key = self.kwargs.get("api_key")
+            api_key = explicit_api_key
+            if not api_key and not strict_credentials:
+                api_key = os.environ.get(api_key_env) if api_key_env else None
             if api_key:
                 llm_kwargs["api_key"] = api_key
-            elif spec.key_optional:
+            elif spec.key_optional and not strict_credentials:
                 llm_kwargs["api_key"] = spec.placeholder_key
-            elif api_key_env:
+            elif api_key_env or strict_credentials:
                 raise ValueError(
-                    f"API key for provider '{self.provider}' is not set. "
-                    f"Please set the {api_key_env} environment variable "
-                    f"(e.g. add {api_key_env}=your_key to your .env file)."
+                    f"API key for provider '{self.provider}' is not set."
                 )
 
             # The Responses API only exists on native OpenAI; if the user points

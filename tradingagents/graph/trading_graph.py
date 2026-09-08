@@ -170,6 +170,15 @@ class TradingAgentsGraph:
         kwargs = {}
         provider = self.config.get("llm_provider", "").lower()
 
+        if self.config.get("llm_api_key"):
+            kwargs["api_key"] = self.config["llm_api_key"]
+        if self.config.get("platform_strict_credentials"):
+            kwargs["platform_strict_credentials"] = True
+        if self.config.get("llm_allowed_origins"):
+            kwargs["platform_allowed_origins"] = tuple(
+                self.config["llm_allowed_origins"]
+            )
+
         if provider == "google":
             thinking_level = self.config.get("google_thinking_level")
             if thinking_level:
