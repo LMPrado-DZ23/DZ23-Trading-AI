@@ -6,3 +6,10 @@ results/
 eval_results/
 *.db
 .pytest_cache/
+.venv/
+.venv-a5/
+*.egg-info/
+.coverage
+htmlcov/
+playwright-report/
+test-results/
