@@ -50,6 +50,8 @@
 - [x] M1 implementou identidade local e Supabase social, sessão opaca, RBAC, RLS, LGPD, MFA persistente, bloqueio de conta, SMTP sanitizado e rate limit Redis.
 - [x] PostgreSQL 17 descartável aplicou migrations 0001–0003 e provou isolamento entre tenants com role sem `BYPASSRLS`.
 - [x] Redis 7.4 real provou limite atômico compartilhado e readiness conjunto.
+- [x] Supabase `fkswahrxvmueowcjisnp` aplicou migrations 0001–0005; advisor de segurança ficou sem achados e os únicos avisos de performance restantes são índices ainda não usados em banco vazio.
+- [x] Papel PostgreSQL `tradingagents_app` confirmado sem superuser, `CREATEDB`, `CREATEROLE`, herança ou `BYPASSRLS`.
 
 ## Pending tasks
 
@@ -72,7 +74,7 @@
 
 ## Current failure
 
-- Nenhuma falha de código ativa ao fechar M1.
+- Nenhuma falha de código ativa ao fechar M1; Google/Apple dependem apenas da configuração dos respectivos provedores OAuth no painel do Supabase para o smoke externo.
 - O primeiro `.venv` ficou incompleto após interrupção do instalador; foi substituído por `.venv-a5` criado com `--no-compile` e instalação concluída com exit 0.
 
 ## Files modified
@@ -91,6 +93,11 @@
 - `tests/test_platform_contracts.py`
 - `tests/test_service_leigo.py`
 - `docs/adr/0001-a5-platform-foundation.md`
+- `migrations/versions/20260908_0001_identity_tenancy.py`
+- `migrations/versions/20260908_0002_compliance_mfa.py`
+- `migrations/versions/20260908_0003_runtime_role.py`
+- `migrations/versions/20260908_0004_supabase_hardening.py`
+- `migrations/versions/20260908_0005_supabase_advisor_fixes.py`
 
 ## Tests executed
 
@@ -104,12 +111,15 @@
 - PostgreSQL/Redis reais (`tests/integration`): **5 passed**.
 - Suíte integral após M1: **1049 passed, 2 skipped, 71 subtests**, ruff e compileall verdes.
 - Secret scan textual por padrões de chaves privadas/JWT/provider: **0 arquivos**; `gitleaks` indisponível e permanece gate de CI M9.
+- Supabase advisor pós-migration: **0 achados de segurança**, **0 FKs sem índice**, **0 políticas com init-plan por linha**; 21 índices novos/necessários aparecem apenas como ainda não usados porque o banco está vazio.
+- Revalidação focal PostgreSQL/Redis/Supabase após migrations 0004–0005: **46 passed**.
 
 ## Commits
 
 - `3b786ee` — `docs: define A5 SaaS mission and execution gates`.
 - `49700ba` — `feat: contain legacy execution and define capital contracts`.
 - `4a42476` — `docs: record M0 verification checkpoint`.
+- `8574112` — `feat: add multi-tenant identity and Supabase auth`.
 
 ## Agents delegated
 
@@ -119,10 +129,10 @@
 
 ## Next action
 
-1. registrar o commit verificável de M1;
+1. congelar o endurecimento final do Supabase em commit focal de M1;
 2. implementar M2 com cofre criptografado, catálogo/capabilities e diagnóstico read-only de exchanges;
 3. manter credenciais reais fora de chat, Git, fixtures e evidências;
-4. aplicar migrations no Supabase somente após o commit M1 estar congelado e revalidado.
+4. configurar Google e Apple no Supabase quando os Client IDs/secrets externos forem fornecidos, sem bloquear os demais marcos.
 
 ## Resume instructions
 

@@ -39,17 +39,16 @@ def upgrade() -> None:
         return
     op.execute(
         sa.text(
-            "DO $$ BEGIN "
+            "DO $$ DECLARE role_row record; BEGIN "
+            "SELECT rolsuper, rolcreatedb, rolcreaterole, rolbypassrls INTO role_row "
+            "FROM pg_roles WHERE rolname = 'tradingagents_app'; "
             "IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'tradingagents_app') THEN "
             "CREATE ROLE tradingagents_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE "
             "NOINHERIT NOBYPASSRLS; "
+            "ELSIF role_row.rolsuper OR role_row.rolcreatedb OR role_row.rolcreaterole "
+            "OR role_row.rolbypassrls THEN "
+            "RAISE EXCEPTION 'existing tradingagents_app role has unsafe attributes'; "
             "END IF; END $$"
-        )
-    )
-    op.execute(
-        sa.text(
-            "ALTER ROLE tradingagents_app NOSUPERUSER NOCREATEDB NOCREATEROLE "
-            "NOINHERIT NOBYPASSRLS"
         )
     )
     op.execute(
