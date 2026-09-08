@@ -77,7 +77,9 @@ def run_job(jid, ticker, date):
             if cfg.get("TRADINGAGENTS_DEEP_THINK_LLM"): conf["deep_think_llm"] = cfg["TRADINGAGENTS_DEEP_THINK_LLM"]
             if cfg.get("TRADINGAGENTS_QUICK_THINK_LLM"): conf["quick_think_llm"] = cfg["TRADINGAGENTS_QUICK_THINK_LLM"]
             graph = TradingAgentsGraph(config=conf)
-            state, decision = graph.propagate(ticker, date)
+            t_up = ticker.upper()
+            asset_type = "crypto" if ("/" in t_up or t_up.endswith(("-USD", "-USDT", "-BTC"))) else "stock"
+            state, decision = graph.propagate(ticker, date, asset_type=asset_type)
             reports = {k: v for k, v in (state or {}).items()
                        if isinstance(v, str) and ("report" in k or "decision" in k)}
             # guarda o mark de transporte + identidade: é o que permite EXECUTAR
@@ -93,7 +95,7 @@ def run_job(jid, ticker, date):
                       traceback.format_exc()[-1500:])
 
 @app.get("/healthz")
-def hz(): return {"status": "ok", "app": "tradingagents-operavel/1"}
+def hz(): return {"status": "ok", "app": "tradingagents-operavel/2"}
 
 @app.get("/")
 def index(): return FileResponse(STATIC / "index.html")
@@ -133,6 +135,14 @@ async def new_job(req: Request, _=Depends(auth)):
                   " VALUES(?,?,?,?,?,?,?)", (jid, idem, t, d, "queued", time.time(), time.time()))
     threading.Thread(target=run_job, args=(jid, t, d), daemon=True).start()
     return {"id": jid}
+
+@app.get("/v1/jobs")
+def list_jobs(_=Depends(auth)):
+    with db() as c:
+        rows = c.execute("SELECT id,ticker,trade_date,status,decision,created "
+                         "FROM jobs ORDER BY created DESC LIMIT 50").fetchall()
+    return {"jobs": [dict(r) for r in rows]}
+
 
 @app.get("/v1/jobs/{jid}")
 def get_job(jid: str, _=Depends(auth)):
