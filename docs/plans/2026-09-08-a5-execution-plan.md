@@ -17,15 +17,15 @@ Cada marco termina em commit verificável, atualização do checkpoint e evidên
 
 ## M1 — Identidade, multitenancy e LGPD
 
-- [ ] FastAPI modular e settings tipados fail-closed;
-- [ ] PostgreSQL + Alembic;
-- [ ] users, tenants, memberships e papéis;
-- [ ] cadastro, verificação, login, logout, recovery e sessões revogáveis;
-- [ ] Argon2id, cookies seguros, CSRF e MFA/step-up;
-- [ ] RLS em todas as tabelas tenant-aware;
-- [ ] consentimentos/termos versionados, exportação e solicitação de exclusão;
-- [ ] auditoria de autenticação e ações administrativas;
-- [ ] rate limit distribuído e trusted proxy.
+- [x] FastAPI modular e settings tipados fail-closed;
+- [x] PostgreSQL + Alembic;
+- [x] users, tenants, memberships e papéis;
+- [x] cadastro, verificação, login, logout, recovery e sessões revogáveis;
+- [x] Argon2id, cookies seguros, CSRF e MFA/step-up;
+- [x] RLS em todas as tabelas tenant-aware;
+- [x] consentimentos/termos versionados, exportação e solicitação de exclusão;
+- [x] auditoria de autenticação e ações administrativas;
+- [x] rate limit distribuído e trusted proxy.
 
 **Gate:** testes com dois tenants provam ausência de IDOR em API, worker, exportação e RLS; recovery/MFA E2E verdes.
 

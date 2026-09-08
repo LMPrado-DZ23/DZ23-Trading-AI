@@ -3,11 +3,11 @@
 - **mission_id:** `tradingagents-dz23-a5-2026-09-08`
 - **objective:** concluir o TradingAgents DZ23 como plataforma web multiusuário pronta para usuários leigos, com carteira administrada, perfis de risco, execução CCXT segura e implantação verificada em `https://trading.dz23.online/`.
 - **state:** `CHECKPOINTING`
-- **iteration:** 2
+- **iteration:** 3
 - **started_at:** 2026-09-08 America/Sao_Paulo
 - **last_heartbeat:** 2026-09-08
 - **last_progress_at:** 2026-09-08
-- **current_task:** M0 concluído — registrar commit; em seguida iniciar M1 (identidade, tenancy e LGPD).
+- **current_task:** M1 implementado e validado; registrar commit e iniciar M2 (cofre e conexões).
 
 ## Acceptance criteria
 
@@ -47,13 +47,16 @@
 - [x] M0 adicionou contratos tipados e imutáveis para ator, suitability, mandato, sinal, proposta, aprovação e intenção.
 - [x] M0 declarou dependências de runtime, incluiu o serviço no wheel e gerou `tradingagents-1.2.0.dev0-py3-none-any.whl`.
 - [x] Núcleo Gate A e seus testes restaurados sem alteração material após formatação mecânica acidental.
+- [x] M1 implementou identidade local e Supabase social, sessão opaca, RBAC, RLS, LGPD, MFA persistente, bloqueio de conta, SMTP sanitizado e rate limit Redis.
+- [x] PostgreSQL 17 descartável aplicou migrations 0001–0003 e provou isolamento entre tenants com role sem `BYPASSRLS`.
+- [x] Redis 7.4 real provou limite atômico compartilhado e readiness conjunto.
 
 ## Pending tasks
 
 - [x] Consolidar inventários Architect, Security e Product/UX.
 - [x] Fechar design e plano de marcos.
 - [x] Preparar ambiente Python reprodutível e reproduzir baseline.
-- [ ] Executar marcos M1–M10 do plano (M0 concluído).
+- [ ] Executar marcos M2–M10 do plano (M0 e M1 concluídos).
 - [ ] Três auditorias independentes e fix loop final.
 - [ ] Release, push, deploy e validação de produção.
 
@@ -69,7 +72,7 @@
 
 ## Current failure
 
-- Nenhuma falha de código ativa ao fechar M0.
+- Nenhuma falha de código ativa ao fechar M1.
 - O primeiro `.venv` ficou incompleto após interrupção do instalador; foi substituído por `.venv-a5` criado com `--no-compile` e instalação concluída com exit 0.
 
 ## Files modified
@@ -97,22 +100,29 @@
 - Após M0, `.venv-a5\\Scripts\\python.exe -m pytest tests -q`: **908 passed, 2 skipped, 71 subtests**, 18 warnings, 116,35 s.
 - `.venv-a5\\Scripts\\python.exe -m build --wheel`: **verde**, wheel gerado e conteúdo do serviço conferido.
 
+- M1 focado: **136 passed**.
+- PostgreSQL/Redis reais (`tests/integration`): **5 passed**.
+- Suíte integral após M1: **1049 passed, 2 skipped, 71 subtests**, ruff e compileall verdes.
+- Secret scan textual por padrões de chaves privadas/JWT/provider: **0 arquivos**; `gitleaks` indisponível e permanece gate de CI M9.
+
 ## Commits
 
 - `3b786ee` — `docs: define A5 SaaS mission and execution gates`.
+- `49700ba` — `feat: contain legacy execution and define capital contracts`.
+- `4a42476` — `docs: record M0 verification checkpoint`.
 
 ## Agents delegated
 
-- Architect/Database inventory: somente leitura.
-- Security/CCXT inventory: somente leitura.
-- Product/UX inventory: somente leitura.
+- Revisão PostgreSQL/RLS M1: migrations e testes reais verdes.
+- Revisão runtime M1: orientou correções de role, MFA, lockout, CORS, SMTP e readiness.
+- Revisão Supabase M1: orientou contenção de JWKS, TTL social e pre-hijacking por e-mail.
 
 ## Next action
 
-1. registrar o commit verificável de M0;
-2. implementar M1 com autenticação segura, organizações, memberships e isolamento por tenant;
-3. adicionar recuperação de conta e registros LGPD/auditoria;
-4. validar M1 em unidade, integração e concorrência antes do próximo checkpoint.
+1. registrar o commit verificável de M1;
+2. implementar M2 com cofre criptografado, catálogo/capabilities e diagnóstico read-only de exchanges;
+3. manter credenciais reais fora de chat, Git, fixtures e evidências;
+4. aplicar migrations no Supabase somente após o commit M1 estar congelado e revalidado.
 
 ## Resume instructions
 

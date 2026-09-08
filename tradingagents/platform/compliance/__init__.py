@@ -1,0 +1,61 @@
+"""Compliance, privacy, and multi-factor authentication domain."""
+
+from tradingagents.platform.compliance.crypto import (
+    AesGcmSecretCrypto,
+    EncryptedSecret,
+    RecoveryCodeHasher,
+    SecretCryptoPort,
+    TotpEngine,
+)
+from tradingagents.platform.compliance.models import (
+    ConsentDecision,
+    ConsentRecord,
+    MfaCredential,
+    MfaCredentialStatus,
+    PrivacyRequest,
+    PrivacyRequestEvent,
+    PrivacyRequestKind,
+    PrivacyRequestStatus,
+    RecoveryCode,
+    TermsDocument,
+)
+from tradingagents.platform.compliance.service import (
+    ComplianceAuthorizationDenied,
+    ComplianceConflict,
+    ComplianceError,
+    ComplianceService,
+    InvalidComplianceTransition,
+    MfaActivation,
+    MfaEnrollment,
+    MfaService,
+    MfaVerification,
+    MfaVerificationFailed,
+)
+
+__all__ = [
+    "AesGcmSecretCrypto",
+    "ComplianceAuthorizationDenied",
+    "ComplianceConflict",
+    "ComplianceError",
+    "ComplianceService",
+    "ConsentDecision",
+    "ConsentRecord",
+    "EncryptedSecret",
+    "InvalidComplianceTransition",
+    "MfaActivation",
+    "MfaCredential",
+    "MfaCredentialStatus",
+    "MfaEnrollment",
+    "MfaService",
+    "MfaVerification",
+    "MfaVerificationFailed",
+    "PrivacyRequest",
+    "PrivacyRequestEvent",
+    "PrivacyRequestKind",
+    "PrivacyRequestStatus",
+    "RecoveryCode",
+    "RecoveryCodeHasher",
+    "SecretCryptoPort",
+    "TermsDocument",
+    "TotpEngine",
+]
