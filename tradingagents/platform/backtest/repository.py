@@ -18,8 +18,11 @@ from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from .candlesticks import CandlestickEvidenceBundle
 
 from .calendar import BacktestCalendar, calendar_provenance, schedule_digest
 from .contracts import (
@@ -613,6 +616,32 @@ class FrozenDatasetRepository:
             expected_tenant_id=expected_tenant_id,
             expected_manifest_digest=expected_manifest_digest,
         ).eligible_at(decision_at, decision_session_date=decision_session_date)
+
+    def derive_candlestick_bundle(
+        self,
+        dataset_id: UUID,
+        *,
+        expected_tenant_id: UUID,
+        expected_manifest_digest: str,
+        decision_at: datetime,
+        decision_session_date: date,
+    ) -> CandlestickEvidenceBundle:
+        """Derive M5.1 evidence only after this repository verifies authority.
+
+        The pure detector is intentionally private: accepting a caller-built
+        ``EligibleMarketView`` would let that caller forge frozen bar ordinals.
+        """
+
+        from .candlesticks import _derive_candlestick_bundle_from_view
+
+        view = self.load_eligible(
+            dataset_id,
+            expected_tenant_id=expected_tenant_id,
+            expected_manifest_digest=expected_manifest_digest,
+            decision_at=decision_at,
+            decision_session_date=decision_session_date,
+        )
+        return _derive_candlestick_bundle_from_view(view)
 
     def load_execution_open(
         self,

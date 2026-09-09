@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, Inexact, Rounded, localcontext
 from pathlib import Path
@@ -23,18 +23,23 @@ from tradingagents.platform.backtest import (
     CorporateAction,
     CorporateActionType,
     DailyBar,
+    DatasetIntegrityError,
     FrozenDatasetRepository,
+    FxObservation,
     InstrumentSpec,
     MarketCalendar,
     candlestick_bundle_to_untrusted_evidence,
     canonical_json_bytes,
-    derive_candlestick_bundle,
 )
 from tradingagents.platform.backtest.calendar import BacktestCalendar
+from tradingagents.platform.backtest.candlesticks import (
+    _derive_candlestick_bundle_from_view,
+    _split_context_digest,
+)
 
 TENANT_ID = UUID("30000000-0000-0000-0000-000000000051")
 INSTRUMENT_ID = UUID("10000000-0000-0000-0000-000000000051")
-CREATED_AT = datetime(2026, 2, 1, tzinfo=UTC)
+CREATED_AT = datetime(2028, 1, 1, tzinfo=UTC)
 
 
 def _instrument() -> InstrumentSpec:
@@ -83,7 +88,34 @@ def _bar(
     )
 
 
-def _view(
+@dataclass(frozen=True)
+class _PreparedDataset:
+    repository: FrozenDatasetRepository
+    dataset_id: UUID
+    manifest_digest: str
+    decision_at: datetime
+    decision_session_date: date
+
+    def view(self):
+        return self.repository.load_eligible(
+            self.dataset_id,
+            expected_tenant_id=TENANT_ID,
+            expected_manifest_digest=self.manifest_digest,
+            decision_at=self.decision_at,
+            decision_session_date=self.decision_session_date,
+        )
+
+    def derive(self):
+        return self.repository.derive_candlestick_bundle(
+            self.dataset_id,
+            expected_tenant_id=TENANT_ID,
+            expected_manifest_digest=self.manifest_digest,
+            decision_at=self.decision_at,
+            decision_session_date=self.decision_session_date,
+        )
+
+
+def _prepare(
     root: Path,
     prices: tuple[tuple[str, str, str, str], ...],
     *,
@@ -91,6 +123,7 @@ def _view(
     decision_index: int | None = None,
     unknown_indices: frozenset[int] = frozenset(),
     split_index: int | None = None,
+    split_indices: tuple[int, ...] = (),
     volume_overrides: dict[int, str] | None = None,
 ):
     start = date(2026, 1, 1)
@@ -104,12 +137,17 @@ def _view(
         )
         for index, values in enumerate(prices)
     )
-    actions: tuple[CorporateAction, ...] = ()
-    if split_index is not None:
-        split_day = start + timedelta(days=split_index)
-        actions = (
+    if split_index is not None and split_indices:
+        raise ValueError("use split_index or split_indices, not both")
+    resolved_split_indices = (split_index,) if split_index is not None else split_indices
+    action_rows: list[CorporateAction] = []
+    for sequence, index in enumerate(resolved_split_indices, start=1):
+        split_day = start + timedelta(days=index)
+        action_rows.append(
             CorporateAction(
-                action_id=UUID(f"40000000-0000-0000-0000-{dataset_number:012d}"),
+                action_id=UUID(
+                    f"40000000-0000-0000-0000-{dataset_number * 100000 + sequence:012d}"
+                ),
                 instrument_id=INSTRUMENT_ID,
                 action_type=CorporateActionType.SPLIT,
                 published_at=datetime.combine(
@@ -122,9 +160,12 @@ def _view(
                 ex_date=split_day,
                 effective_date=split_day,
                 split_ratio="2",
-                source_digest="2" * 64,
-            ),
+                source_digest=hashlib.sha256(
+                    f"split:{dataset_number}:{sequence}".encode()
+                ).hexdigest(),
+            )
         )
+    actions = tuple(action_rows)
     dataset_id = UUID(f"20000000-0000-0000-0000-{dataset_number:012d}")
     repository = FrozenDatasetRepository(root)
     manifest = repository.ingest(
@@ -141,10 +182,10 @@ def _view(
     resolved_index = len(bars) - 1 if decision_index is None else decision_index
     decision_bar = bars[resolved_index]
     assert decision_bar.available_at is not None
-    return repository.load_eligible(
-        dataset_id,
-        expected_tenant_id=TENANT_ID,
-        expected_manifest_digest=manifest.digest,
+    return _PreparedDataset(
+        repository=repository,
+        dataset_id=dataset_id,
+        manifest_digest=manifest.digest,
         decision_at=decision_bar.available_at + timedelta(minutes=1),
         decision_session_date=decision_bar.session_date,
     )
@@ -271,7 +312,7 @@ def test_golden_pattern_vectors(
     prices: tuple[tuple[str, str, str, str], ...],
     expected: CandlestickPattern,
 ) -> None:
-    bundle = derive_candlestick_bundle(_view(tmp_path, prices))
+    bundle = _prepare(tmp_path, prices).derive()
     assert bundle.features.status is CandlestickEvaluationStatus.EVALUATED
     assert expected in {item.pattern for item in bundle.features.matches}
 
@@ -279,8 +320,8 @@ def test_golden_pattern_vectors(
 def test_doji_boundary_is_inclusive_and_neighbor_is_not(tmp_path: Path) -> None:
     exact = _neutral_prices()[:-1] + (("10", "10.5", "9.5", "10.1"),)
     outside = _neutral_prices()[:-1] + (("10", "10.5", "9.5", "10.1001"),)
-    first = derive_candlestick_bundle(_view(tmp_path / "a", exact, dataset_number=10))
-    second = derive_candlestick_bundle(_view(tmp_path / "b", outside, dataset_number=11))
+    first = _prepare(tmp_path / "a", exact, dataset_number=10).derive()
+    second = _prepare(tmp_path / "b", outside, dataset_number=11).derive()
     assert CandlestickPattern.DOJI in {item.pattern for item in first.features.matches}
     assert CandlestickPattern.DOJI not in {item.pattern for item in second.features.matches}
 
@@ -312,9 +353,7 @@ def test_single_candle_threshold_edges(
         ("10", "10.5", "9.5", "10"),
         last,
     )
-    patterns = {
-        item.pattern for item in derive_candlestick_bundle(_view(tmp_path, down)).features.matches
-    }
+    patterns = {item.pattern for item in _prepare(tmp_path, down).derive().features.matches}
     assert (pattern in patterns) is present
 
 
@@ -329,9 +368,7 @@ def test_star_middle_body_threshold_edge(tmp_path: Path, middle_body: str, prese
         ("9.5", "10", "9.4", middle_close),
         ("9.6", "10.3", "9.5", "10.2"),
     )
-    patterns = {
-        item.pattern for item in derive_candlestick_bundle(_view(tmp_path, prices)).features.matches
-    }
+    patterns = {item.pattern for item in _prepare(tmp_path, prices).derive().features.matches}
     assert (CandlestickPattern.MORNING_STAR in patterns) is present
 
 
@@ -346,7 +383,7 @@ def test_requires_complete_fixed_history(
     tmp_path: Path, count: int, status: CandlestickEvaluationStatus
 ) -> None:
     prices = _neutral_prices()[-count:]
-    bundle = derive_candlestick_bundle(_view(tmp_path, prices))
+    bundle = _prepare(tmp_path, prices).derive()
     assert bundle.features.status is status
     if status is not CandlestickEvaluationStatus.EVALUATED:
         assert bundle.features.matches == ()
@@ -354,8 +391,9 @@ def test_requires_complete_fixed_history(
 
 def test_unknown_bar_cannot_be_bridged(tmp_path: Path) -> None:
     prices = _neutral_prices() + ((_neutral_prices()[-1]),)
-    view = _view(tmp_path, prices, unknown_indices=frozenset({3}))
-    bundle = derive_candlestick_bundle(view)
+    prepared = _prepare(tmp_path, prices, unknown_indices=frozenset({3}))
+    view = prepared.view()
+    bundle = prepared.derive()
     assert view.bar_ordinals == (0, 1, 2, 4, 5, 6)
     assert bundle.features.status is CandlestickEvaluationStatus.DISCONTINUOUS_HISTORY
     assert bundle.features.matches == ()
@@ -372,13 +410,34 @@ def test_unknown_bar_cannot_be_bridged(tmp_path: Path) -> None:
 def test_split_requires_six_post_split_bars(
     tmp_path: Path, split_index: int, expected: CandlestickEvaluationStatus
 ) -> None:
-    bundle = derive_candlestick_bundle(_view(tmp_path, _neutral_prices(), split_index=split_index))
+    bundle = _prepare(tmp_path, _neutral_prices(), split_index=split_index).derive()
     assert bundle.features.status is expected
+
+
+def test_many_historical_splits_stay_bounded_and_json_parseable(tmp_path: Path) -> None:
+    import json
+
+    prices = tuple(("10", "11", "9", "10.1") for _ in range(356))
+    prepared = _prepare(
+        tmp_path,
+        prices,
+        dataset_number=12,
+        split_indices=tuple(range(350)),
+    )
+    bundle = prepared.derive()
+    evidence = candlestick_bundle_to_untrusted_evidence(bundle)
+    assert bundle.features.latest_split_effective_date == date(2026, 12, 16)
+    assert bundle.features.split_context_digest is not None
+    assert len(evidence.content) < 20_000
+    assert "[TRUNCATED" not in evidence.content
+    assert json.loads(evidence.content)["split_context_digest"] == (
+        bundle.features.split_context_digest
+    )
 
 
 def test_zero_range_is_typed_and_empty(tmp_path: Path) -> None:
     prices = _neutral_prices()[:-1] + (("10", "10", "10", "10"),)
-    bundle = derive_candlestick_bundle(_view(tmp_path, prices))
+    bundle = _prepare(tmp_path, prices).derive()
     assert bundle.features.status is CandlestickEvaluationStatus.ZERO_RANGE
     assert bundle.features.matches == ()
 
@@ -386,10 +445,8 @@ def test_zero_range_is_typed_and_empty(tmp_path: Path) -> None:
 def test_future_append_changes_lineage_not_historical_features(tmp_path: Path) -> None:
     history = _neutral_prices()
     future = history + (("50", "60", "40", "55"),)
-    first = derive_candlestick_bundle(_view(tmp_path / "a", history, dataset_number=20))
-    second = derive_candlestick_bundle(
-        _view(tmp_path / "b", future, dataset_number=21, decision_index=5)
-    )
+    first = _prepare(tmp_path / "a", history, dataset_number=20).derive()
+    second = _prepare(tmp_path / "b", future, dataset_number=21, decision_index=5).derive()
     assert canonical_json_bytes(first.features) == canonical_json_bytes(second.features)
     assert first.feature_digest == second.feature_digest
     assert first.eligible_view_sha256 != second.eligible_view_sha256
@@ -401,8 +458,8 @@ def test_positive_price_scaling_preserves_patterns_and_ratios(tmp_path: Path) ->
     scaled = tuple(
         tuple(str(Decimal(value) * Decimal("1000")) for value in candle) for candle in original
     )
-    first = derive_candlestick_bundle(_view(tmp_path / "a", original, dataset_number=22))
-    second = derive_candlestick_bundle(_view(tmp_path / "b", scaled, dataset_number=23))
+    first = _prepare(tmp_path / "a", original, dataset_number=22).derive()
+    second = _prepare(tmp_path / "b", scaled, dataset_number=23).derive()
     assert [item.pattern for item in first.features.matches] == [
         item.pattern for item in second.features.matches
     ]
@@ -441,9 +498,9 @@ def test_valid_ohlc_fuzz_is_bounded_and_repeatable(
     identity = hashlib.sha256(
         f"{low}:{lower_wick}:{body}:{upper_wick}:{bullish}".encode()
     ).hexdigest()
-    view = _view(tmp_path / identity, _neutral_prices()[:-1] + (last,))
-    first = derive_candlestick_bundle(view)
-    second = derive_candlestick_bundle(view)
+    prepared = _prepare(tmp_path / identity, _neutral_prices()[:-1] + (last,))
+    first = prepared.derive()
+    second = prepared.derive()
     assert canonical_json_bytes(first) == canonical_json_bytes(second)
     assert len(first.features.parent_bar_digests) <= 6
     assert len(first.features.matches) <= len(CandlestickPattern)
@@ -471,25 +528,23 @@ def test_valid_ohlc_fuzz_is_bounded_and_repeatable(
 
 
 def test_decimal_context_cannot_change_results(tmp_path: Path) -> None:
-    view = _view(tmp_path, _neutral_prices())
-    baseline = canonical_json_bytes(derive_candlestick_bundle(view).features)
+    prepared = _prepare(tmp_path, _neutral_prices())
+    baseline = canonical_json_bytes(prepared.derive().features)
     with localcontext() as context:
         context.prec = 2
         context.traps[Inexact] = True
         context.traps[Rounded] = True
-        assert canonical_json_bytes(derive_candlestick_bundle(view).features) == baseline
+        assert canonical_json_bytes(prepared.derive().features) == baseline
 
 
 def test_volume_changes_provenance_not_geometry(tmp_path: Path) -> None:
-    first = derive_candlestick_bundle(_view(tmp_path / "a", _neutral_prices(), dataset_number=30))
-    second = derive_candlestick_bundle(
-        _view(
-            tmp_path / "b",
-            _neutral_prices(),
-            dataset_number=31,
-            volume_overrides={5: "2000"},
-        )
-    )
+    first = _prepare(tmp_path / "a", _neutral_prices(), dataset_number=30).derive()
+    second = _prepare(
+        tmp_path / "b",
+        _neutral_prices(),
+        dataset_number=31,
+        volume_overrides={5: "2000"},
+    ).derive()
 
     def ratios(bundle):
         return [
@@ -510,13 +565,14 @@ def test_volume_changes_provenance_not_geometry(tmp_path: Path) -> None:
 
 
 def test_feature_becomes_derived_untrusted_data_not_an_order(tmp_path: Path) -> None:
-    bundle = derive_candlestick_bundle(_view(tmp_path, _neutral_prices()))
+    bundle = _prepare(tmp_path, _neutral_prices()).derive()
     evidence = candlestick_bundle_to_untrusted_evidence(bundle)
     block = evidence.to_prompt_block()
     assert evidence.kind == "market_data"
     assert evidence.derived is True
     assert evidence.available_at == bundle.features.available_at.isoformat()
     assert evidence.ref == bundle.digest
+    assert evidence.digest == bundle.feature_digest
     assert block.count("[UNTRUSTED EXTERNAL DATA") == 1
     assert block.count("[END UNTRUSTED DATA") == 1
     for forbidden in (
@@ -553,7 +609,7 @@ def test_contract_field_names_have_no_capital_instruction_surface() -> None:
 
 
 def test_bundle_rejects_forged_feature_or_ordinal_binding(tmp_path: Path) -> None:
-    bundle = derive_candlestick_bundle(_view(tmp_path, _neutral_prices()))
+    bundle = _prepare(tmp_path, _neutral_prices()).derive()
     with pytest.raises(ValueError, match="feature digest"):
         CandlestickEvidenceBundle.model_validate(
             bundle.model_dump(mode="python") | {"feature_digest": "f" * 64}
@@ -564,27 +620,98 @@ def test_bundle_rejects_forged_feature_or_ordinal_binding(tmp_path: Path) -> Non
         )
 
 
-def test_detector_does_not_reenter_repository(
+def test_public_derivation_reloads_repository_authority(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    view = _view(tmp_path, _neutral_prices())
+    prepared = _prepare(tmp_path, _neutral_prices())
 
     def forbidden(*_args, **_kwargs):
-        raise AssertionError("detector re-entered dataset authority")
+        raise AssertionError("repository authority was consulted")
 
     monkeypatch.setattr(FrozenDatasetRepository, "load_eligible", forbidden)
-    assert derive_candlestick_bundle(view).features.status == "evaluated"
+    with pytest.raises(AssertionError, match="authority was consulted"):
+        prepared.derive()
 
 
-def test_fabricated_or_mutated_view_fails_closed(tmp_path: Path) -> None:
-    view = _view(tmp_path, _neutral_prices())
+def test_internal_detector_rejects_mutated_view_records(tmp_path: Path) -> None:
+    view = _prepare(tmp_path, _neutral_prices()).view()
     with pytest.raises(CandlestickEvidenceError, match="chronological|data digest"):
-        derive_candlestick_bundle(replace(view, bars=view.bars[:-1] + (view.bars[-2],)))
+        _derive_candlestick_bundle_from_view(replace(view, bars=view.bars[:-1] + (view.bars[-2],)))
     with pytest.raises(CandlestickEvidenceError, match="ordinals"):
-        derive_candlestick_bundle(replace(view, bar_ordinals=(0, 1, 2, 3, 4, 4)))
+        _derive_candlestick_bundle_from_view(replace(view, bar_ordinals=(0, 1, 2, 3, 4, 4)))
     with pytest.raises(CandlestickEvidenceError, match="post-cutoff"):
-        derive_candlestick_bundle(
+        _derive_candlestick_bundle_from_view(
             replace(view, data_cutoff_at=view.bars[-1].available_at - timedelta(seconds=1))
+        )
+
+
+def test_internal_detector_rejects_foreign_corporate_action(tmp_path: Path) -> None:
+    prepared = _prepare(tmp_path, _neutral_prices(), split_index=0)
+    view = prepared.view()
+    foreign = view.corporate_actions[0].model_copy(
+        update={"instrument_id": UUID("10000000-0000-0000-0000-000000000999")}
+    )
+    with pytest.raises(CandlestickEvidenceError, match="corporate action"):
+        _derive_candlestick_bundle_from_view(replace(view, corporate_actions=(foreign,)))
+
+
+def test_split_context_digest_streams_beyond_canonical_sequence_limit(tmp_path: Path) -> None:
+    view = _prepare(tmp_path, _neutral_prices(), split_index=0).view()
+    action = view.corporate_actions[0]
+    digest = _split_context_digest(tuple(action for _ in range(10_001)))
+    assert digest is not None
+    assert len(digest) == 64
+    assert digest == _split_context_digest(tuple(action for _ in range(10_001)))
+
+
+def test_internal_detector_rejects_noncanonical_or_duplicate_fx(tmp_path: Path) -> None:
+    view = _prepare(tmp_path, _neutral_prices()).view()
+    first = FxObservation(
+        base_currency="USD",
+        quote_currency="BRL",
+        observed_at=view.data_cutoff_at - timedelta(hours=2),
+        available_at=view.data_cutoff_at - timedelta(hours=1),
+        rate="5.10",
+        source_digest="a" * 64,
+    )
+    second = first.model_copy(
+        update={
+            "observed_at": first.observed_at + timedelta(minutes=10),
+            "available_at": first.available_at + timedelta(minutes=10),
+            "source_digest": "b" * 64,
+        }
+    )
+    with pytest.raises(CandlestickEvidenceError, match="FX observations are not canonical"):
+        _derive_candlestick_bundle_from_view(replace(view, fx_observations=(second, first)))
+    with pytest.raises(CandlestickEvidenceError, match="duplicate FX observations"):
+        _derive_candlestick_bundle_from_view(replace(view, fx_observations=(first, first)))
+
+
+def test_internal_detector_rejects_post_cutoff_instrument(tmp_path: Path) -> None:
+    view = _prepare(tmp_path, _neutral_prices()).view()
+    future_instrument = view.instrument.model_copy(
+        update={"available_at": view.data_cutoff_at + timedelta(seconds=1)}
+    )
+    with pytest.raises(CandlestickEvidenceError, match="instrument is not available"):
+        _derive_candlestick_bundle_from_view(replace(view, instrument=future_instrument))
+
+
+def test_direct_view_derivation_is_not_exported() -> None:
+    import tradingagents.platform.backtest as backtest
+
+    assert not hasattr(backtest, "derive_candlestick_bundle")
+    assert hasattr(FrozenDatasetRepository, "derive_candlestick_bundle")
+
+
+def test_public_derivation_rejects_wrong_external_authority(tmp_path: Path) -> None:
+    prepared = _prepare(tmp_path, _neutral_prices())
+    with pytest.raises(DatasetIntegrityError, match="binding|tenant|manifest"):
+        prepared.repository.derive_candlestick_bundle(
+            prepared.dataset_id,
+            expected_tenant_id=TENANT_ID,
+            expected_manifest_digest="f" * 64,
+            decision_at=prepared.decision_at,
+            decision_session_date=prepared.decision_session_date,
         )
 
 
@@ -593,12 +720,14 @@ def test_detector_has_no_io_agent_or_capital_imports() -> None:
         Path(__file__).parents[1] / "tradingagents" / "platform" / "backtest" / "candlesticks.py"
     )
     tree = ast.parse(source_path.read_text(encoding="utf-8"))
-    imported = {
-        alias.name
-        for node in ast.walk(tree)
-        if isinstance(node, (ast.Import, ast.ImportFrom))
-        for alias in node.names
-    }
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            imported.add(module)
+            imported.update(f"{module}.{alias.name}" for alias in node.names)
     forbidden = {
         "os",
         "pathlib",
@@ -613,13 +742,34 @@ def test_detector_has_no_io_agent_or_capital_imports() -> None:
         "portfolio",
         "agents",
         "signal_processing",
+        "FrozenDatasetRepository",
     }
     assert not any(
         any(part == item for part in name.split(".")) for name in imported for item in forbidden
     )
-    calls = {
+    attribute_calls = {
         node.func.attr
         for node in ast.walk(tree)
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
     }
-    assert not ({"now", "utcnow", "open", "getenv"} & calls)
+    direct_calls = {
+        node.func.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    forbidden_calls = {"open", "getenv", "urlopen", "request", "now", "utcnow"}
+    assert not (forbidden_calls & attribute_calls)
+    assert not (forbidden_calls & direct_calls)
+
+
+def test_private_view_detector_has_no_production_consumer_outside_authority() -> None:
+    package_root = Path(__file__).parents[1] / "tradingagents"
+    private_name = "_derive_candlestick_bundle_from_view"
+    consumers = []
+    for path in package_root.rglob("*.py"):
+        if private_name in path.read_text(encoding="utf-8"):
+            consumers.append(path.relative_to(package_root).as_posix())
+    assert sorted(consumers) == [
+        "platform/backtest/candlesticks.py",
+        "platform/backtest/repository.py",
+    ]

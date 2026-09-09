@@ -14,7 +14,6 @@ from tradingagents.platform.backtest.candlesticks import (
     CandlestickPattern,
     PriorTrend,
     candlestick_bundle_to_untrusted_evidence,
-    derive_candlestick_bundle,
 )
 from tradingagents.platform.backtest.contracts import (
     M5_UNVERIFIED_LIMITATIONS,
@@ -92,6 +91,5 @@ __all__ = [
     "candlestick_bundle_to_untrusted_evidence",
     "canonical_digest",
     "canonical_json_bytes",
-    "derive_candlestick_bundle",
     "market_dataset_binding_digest",
 ]

@@ -16,13 +16,16 @@ from uuid import UUID
 
 from pydantic import Field, field_validator, model_validator
 
-from tradingagents.dataflows.evidence import UntrustedEvidence
+from tradingagents.dataflows.evidence import MAX_CONTENT_CHARS, UntrustedEvidence
 
 from .contracts import (
     BacktestContract,
+    CorporateAction,
     CorporateActionType,
     DailyBar,
     Digest,
+    FxObservation,
+    InstrumentSpec,
     canonical_digest,
     canonical_json_bytes,
 )
@@ -180,7 +183,9 @@ class CandlestickFeatureSet(BacktestContract):
     status: CandlestickEvaluationStatus
     parent_bar_ordinals: tuple[int, ...]
     parent_bar_digests: tuple[Digest, ...]
-    parent_split_action_digests: tuple[Digest, ...]
+    split_action_count: int = Field(ge=0, le=25_000)
+    latest_split_effective_date: date | None
+    split_context_digest: Digest | None
     matches: tuple[CandlestickMatch, ...]
 
     _timestamps_are_utc = field_validator("data_cutoff_at", "decision_at", "available_at")(
@@ -217,6 +222,14 @@ class CandlestickFeatureSet(BacktestContract):
             raise ValueError("candlestick evaluation statuses require the fixed full window")
         if self.status is not CandlestickEvaluationStatus.EVALUATED and self.matches:
             raise ValueError("non-evaluated candlestick evidence cannot contain matches")
+        if self.split_action_count == 0:
+            if (
+                self.latest_split_effective_date is not None
+                or self.split_context_digest is not None
+            ):
+                raise ValueError("empty split context cannot carry split provenance")
+        elif self.latest_split_effective_date is None or self.split_context_digest is None:
+            raise ValueError("non-empty split context requires bounded provenance")
         if any(item.available_at > self.available_at for item in self.matches):
             raise ValueError("candlestick match availability exceeds its feature parents")
         ordered = tuple(
@@ -296,12 +309,16 @@ def _view_digest_payload(view: EligibleMarketView) -> tuple[dict[str, object], d
 def _validate_view(view: EligibleMarketView) -> None:
     if type(view) is not EligibleMarketView:
         raise CandlestickEvidenceError("candlestick derivation requires an exact eligible view")
+    if type(view.instrument) is not InstrumentSpec:
+        raise CandlestickEvidenceError("eligible-view instrument contract is invalid")
     if view.decision_at.tzinfo is None or view.decision_at.utcoffset() != UTC.utcoffset(None):
         raise CandlestickEvidenceError("eligible-view decision timestamp must use UTC")
     if view.data_cutoff_at.tzinfo is None or view.data_cutoff_at.utcoffset() != UTC.utcoffset(None):
         raise CandlestickEvidenceError("eligible-view data cutoff must use UTC")
     if view.data_cutoff_at > view.decision_at:
         raise CandlestickEvidenceError("eligible-view data cutoff follows the decision")
+    if view.instrument.available_at > view.data_cutoff_at:
+        raise CandlestickEvidenceError("eligible-view instrument is not available at the cutoff")
     if not view.bars or len(view.bars) != len(view.bar_ordinals):
         raise CandlestickEvidenceError("eligible-view bars and ordinals must align")
     if any(type(value) is not int or value < 0 for value in view.bar_ordinals):
@@ -325,6 +342,47 @@ def _validate_view(view: EligibleMarketView) -> None:
         previous_date = bar.session_date
     if view.bars[-1].session_date != view.decision_session_date:
         raise CandlestickEvidenceError("eligible-view does not end on the decision session")
+    expected_action_order = tuple(
+        sorted(
+            view.corporate_actions,
+            key=lambda item: (item.effective_date, str(item.action_id)),
+        )
+    )
+    if view.corporate_actions != expected_action_order:
+        raise CandlestickEvidenceError("eligible-view corporate actions are not canonical")
+    if any(
+        type(item) is not CorporateAction
+        or item.instrument_id != view.instrument.instrument_id
+        or item.available_at > view.data_cutoff_at
+        for item in view.corporate_actions
+    ):
+        raise CandlestickEvidenceError("eligible-view contains an invalid corporate action")
+    if len({item.action_id for item in view.corporate_actions}) != len(view.corporate_actions):
+        raise CandlestickEvidenceError("eligible-view contains duplicate corporate actions")
+    if any(
+        type(item) is not FxObservation or item.available_at > view.data_cutoff_at
+        for item in view.fx_observations
+    ):
+        raise CandlestickEvidenceError("eligible-view contains an invalid FX observation")
+    expected_fx_order = tuple(
+        sorted(
+            view.fx_observations,
+            key=lambda item: (
+                item.observed_at.isoformat(),
+                item.base_currency,
+                item.quote_currency,
+                item.available_at.isoformat(),
+            ),
+        )
+    )
+    if view.fx_observations != expected_fx_order:
+        raise CandlestickEvidenceError("eligible-view FX observations are not canonical")
+    fx_keys = {
+        (item.base_currency, item.quote_currency, item.observed_at, item.available_at)
+        for item in view.fx_observations
+    }
+    if len(fx_keys) != len(view.fx_observations):
+        raise CandlestickEvidenceError("eligible-view contains duplicate FX observations")
     data, authority = _view_digest_payload(view)
     data_digest = hashlib.sha256(canonical_json_bytes(data)).hexdigest()
     authority["eligible_data_sha256"] = data_digest
@@ -482,16 +540,43 @@ def _star_pattern(
     return None
 
 
-def derive_candlestick_bundle(view: EligibleMarketView) -> CandlestickEvidenceBundle:
+def _split_context_digest(actions: tuple[CorporateAction, ...]) -> Digest | None:
+    """Bind an arbitrarily large, ordered split history without materializing it."""
+
+    if not actions:
+        return None
+    digest = hashlib.sha256()
+    digest.update(canonical_json_bytes({"binding_version": "candlestick-split-context/1"}) + b"\n")
+    for action in actions:
+        digest.update(
+            canonical_json_bytes(
+                {
+                    "action_digest": action.digest,
+                    "effective_date": action.effective_date,
+                }
+            )
+            + b"\n"
+        )
+    return digest.hexdigest()
+
+
+def _derive_candlestick_bundle_from_view(
+    view: EligibleMarketView,
+) -> CandlestickEvidenceBundle:
     """Derive bounded candle geometry from a verified decision-time view."""
 
     _validate_view(view)
-    split_digests = tuple(
-        item.digest
+    parent_split_actions = tuple(
+        item
         for item in view.corporate_actions
         if item.action_type is CorporateActionType.SPLIT
         and item.effective_date <= view.decision_session_date
     )
+    latest_split_effective_date = max(
+        (item.effective_date for item in parent_split_actions),
+        default=None,
+    )
+    split_context_digest = _split_context_digest(parent_split_actions)
     status = CandlestickEvaluationStatus.EVALUATED
     matches: tuple[CandlestickMatch, ...] = ()
     parent_ordinals = view.bar_ordinals[-REQUIRED_WINDOW_BARS:]
@@ -502,10 +587,9 @@ def derive_candlestick_bundle(view: EligibleMarketView) -> CandlestickEvidenceBu
         right != left + 1 for left, right in zip(parent_ordinals, parent_ordinals[1:], strict=False)
     ):
         status = CandlestickEvaluationStatus.DISCONTINUOUS_HISTORY
-    elif any(
-        item.action_type is CorporateActionType.SPLIT
-        and window[0].session_date < item.effective_date <= view.decision_session_date
-        for item in view.corporate_actions
+    elif (
+        latest_split_effective_date is not None
+        and window[0].session_date < latest_split_effective_date <= view.decision_session_date
     ):
         status = CandlestickEvaluationStatus.SPLIT_BARRIER
     elif any(item.high == item.low for item in window[-MAX_CONSTITUENT_BARS:]):
@@ -538,12 +622,6 @@ def derive_candlestick_bundle(view: EligibleMarketView) -> CandlestickEvidenceBu
             )
         )
 
-    parent_split_actions = tuple(
-        item
-        for item in view.corporate_actions
-        if item.action_type is CorporateActionType.SPLIT
-        and item.effective_date <= view.decision_session_date
-    )
     parent_available_at = max(
         tuple(item.available_at for item in window)
         + tuple(item.available_at for item in parent_split_actions),
@@ -559,7 +637,9 @@ def derive_candlestick_bundle(view: EligibleMarketView) -> CandlestickEvidenceBu
         status=status,
         parent_bar_ordinals=parent_ordinals,
         parent_bar_digests=tuple(item.digest for item in window),
-        parent_split_action_digests=split_digests,
+        split_action_count=len(parent_split_actions),
+        latest_split_effective_date=latest_split_effective_date,
+        split_context_digest=split_context_digest,
         matches=matches,
     )
     ordinal_binding_digest = canonical_digest(
@@ -594,7 +674,9 @@ def candlestick_bundle_to_untrusted_evidence(
         raise CandlestickEvidenceError("candlestick evidence requires an exact bundle")
     validated = CandlestickEvidenceBundle.model_validate(bundle.model_dump(mode="python"))
     content = canonical_json_bytes(validated.features).decode("ascii")
-    return UntrustedEvidence(
+    if len(content) > MAX_CONTENT_CHARS:
+        raise CandlestickEvidenceError("candlestick feature JSON exceeds the evidence limit")
+    evidence = UntrustedEvidence(
         source=f"backtest:candlestick/{CANDLESTICK_DETECTOR_VERSION}",
         kind="market_data",
         content=content,
@@ -604,6 +686,11 @@ def candlestick_bundle_to_untrusted_evidence(
         ref=validated.digest,
         derived=True,
     )
+    if evidence.content != content or not hmac.compare_digest(
+        evidence.digest or "", validated.feature_digest
+    ):
+        raise CandlestickEvidenceError("candlestick feature JSON changed at the evidence boundary")
+    return evidence
 
 
 __all__ = [
@@ -620,5 +707,4 @@ __all__ = [
     "CandlestickPattern",
     "PriorTrend",
     "candlestick_bundle_to_untrusted_evidence",
-    "derive_candlestick_bundle",
 ]

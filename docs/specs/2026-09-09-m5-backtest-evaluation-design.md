@@ -71,6 +71,12 @@ wrapped `UntrustedEvidence` in a data/user message.
 External open-source repositories were design references only. V1 copies no
 code and adds no TA-Lib, Rust, ML or Pine dependency.
 
+The pure detector is private to the frozen-data authority. The supported
+entrypoint is `FrozenDatasetRepository.derive_candlestick_bundle`, which first
+reloads and verifies dataset ID, tenant ID and the externally trusted manifest
+digest. A caller-constructed `EligibleMarketView` is never an accepted public
+derivation boundary.
+
 ### M5.1 detector policy v1
 
 The policy is fixed in code and content-addressed; callers cannot override its
@@ -123,6 +129,11 @@ eligible-view digests.  Only the feature set enters an LLM prompt, wrapped as
 derived `UntrustedEvidence`; full lineage remains in the audit record.  This
 separation prevents an irrelevant future snapshot identifier from changing a
 historical prompt while retaining complete custody evidence.
+
+Visible split history is represented in output by one bounded aggregate digest
+plus the latest effective date, not by an unbounded list of action digests. The
+aggregate still binds every eligible split record while keeping the prompt JSON
+within the evidence-size contract.
 
 ## M5.2 — accounting and execution simulation
 
