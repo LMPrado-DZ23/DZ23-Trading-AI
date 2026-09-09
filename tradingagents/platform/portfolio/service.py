@@ -1130,6 +1130,10 @@ class PortfolioService:
                 )
             )
             if existing_reservation is not None and (
+                existing_reservation.expires_at - existing_reservation.created_at != ttl
+            ):
+                raise PortfolioError("IDEMPOTENCY_PAYLOAD_MISMATCH")
+            if existing_reservation is not None and (
                 existing_reservation.status != "active"
                 or existing_reservation.expires_at <= now
             ):
@@ -1414,6 +1418,7 @@ class PortfolioService:
                     purpose_digest=purpose_digest,
                     mandate_id=mandate.id,
                     snapshot=snapshot,
+                    ttl=ttl,
                     now=now,
                 )
                 self._assert_reservation_risk_context(
@@ -1489,6 +1494,7 @@ class PortfolioService:
                     purpose_digest=purpose_digest,
                     mandate_id=mandate.id,
                     snapshot=_snapshot,
+                    ttl=ttl,
                     now=now,
                 )
                 self._assert_reservation_risk_context(
@@ -2363,6 +2369,7 @@ class PortfolioService:
         purpose_digest: str,
         mandate_id: UUID,
         snapshot: PortfolioSnapshot,
+        ttl: timedelta,
         now: datetime,
     ) -> CashReservation | None:
         existing = db.scalar(
@@ -2376,7 +2383,7 @@ class PortfolioService:
             return None
         if existing.amount != amount or not hmac.compare_digest(
             existing.purpose_digest, purpose_digest
-        ):
+        ) or existing.expires_at - existing.created_at != ttl:
             raise PortfolioError("IDEMPOTENCY_PAYLOAD_MISMATCH")
         if (
             existing.status != "active"

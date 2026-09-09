@@ -344,6 +344,123 @@ def test_reserve_capability_is_rechecked_after_waiting_for_portfolio_lock() -> N
 
 
 @pytest.mark.skipif(not APP_URL, reason="PostgreSQL app test URL is not configured")
+@pytest.mark.parametrize(
+    ("initial_ttl", "replay_ttl"),
+    [
+        (timedelta(seconds=30), timedelta(hours=1)),
+        (timedelta(hours=1), timedelta(seconds=30)),
+    ],
+)
+def test_postgres_reservation_replay_binds_ttl(initial_ttl, replay_ttl) -> None:
+    engine = create_engine(APP_URL, pool_pre_ping=True)
+    factory = sessionmaker(engine, expire_on_commit=False)
+    identity = IdentityService(factory, token_hasher=TokenHasher(_TOKEN_PEPPER))
+    principal = _principal(identity, f"Ttl{int(initial_ttl.total_seconds())}")
+    service = PortfolioService(
+        factory,
+        idempotency_digest_key=b"a" * 32,
+        capability_signing_key=_CAPABILITY_KEY,
+    )
+    _suitability, portfolio = _ready(service, principal, "TtlReplay")
+    key = f"pg-ttl-replay-{int(initial_ttl.total_seconds())}"
+    first = service.reserve_cash(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("1"),
+        purpose_digest="7" * 64,
+        idempotency_key=key,
+        ttl=initial_ttl,
+    )
+
+    with pytest.raises(PortfolioError, match="IDEMPOTENCY_PAYLOAD_MISMATCH"):
+        service.reserve_cash(
+            principal=principal,
+            portfolio_id=portfolio.id,
+            amount=Decimal("1"),
+            purpose_digest="7" * 64,
+            idempotency_key=key,
+            ttl=replay_ttl,
+        )
+    assert first.expires_at - first.created_at == initial_ttl
+    engine.dispose()
+
+
+@pytest.mark.skipif(not APP_URL, reason="PostgreSQL app test URL is not configured")
+def test_release_capability_is_rechecked_after_waiting_for_portfolio_lock() -> None:
+    engine = create_engine(APP_URL, pool_pre_ping=True)
+    factory = sessionmaker(engine, expire_on_commit=False)
+    identity = IdentityService(factory, token_hasher=TokenHasher(_TOKEN_PEPPER))
+    principal = _principal(identity, "ReleaseLockExpiry")
+    service = PortfolioService(
+        factory,
+        idempotency_digest_key=b"a" * 32,
+        capability_signing_key=_CAPABILITY_KEY,
+    )
+    _suitability, portfolio = _ready(service, principal, "ReleaseLockExpiry")
+    reservation = service.reserve_cash(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("1"),
+        purpose_digest="8" * 64,
+        idempotency_key="pg-release-lock-expiry",
+    )
+
+    holder = factory()
+    holder.begin()
+    service._set_portfolio_scope(holder, principal)
+    holder.scalar(
+        select(Portfolio)
+        .where(Portfolio.id == portfolio.id, Portfolio.tenant_id == principal.tenant_id)
+        .with_for_update()
+    )
+    with factory() as clock_db, clock_db.begin():
+        service._set_portfolio_scope(clock_db, principal)
+        capability_now = service._database_now(clock_db)
+    capability = _mint_short_capability(
+        service,
+        principal,
+        audience="portfolio.release.v1",
+        fields=(str(reservation.id),),
+        now=capability_now,
+        ttl_seconds=2,
+    )
+    sql = text(
+        "SELECT tradingagents_private.portfolio_release_cash_v1("
+        ":reservation_id,:cap_kid,:cap_session_id,:cap_token_hash,:cap_issued_at,"
+        ":cap_expires_at,:cap_nonce,:cap_mac)"
+    )
+    params = {"reservation_id": str(reservation.id)} | capability
+    entered = threading.Event()
+
+    def invoke_blocked_port() -> str:
+        try:
+            with factory() as db, db.begin():
+                service._set_portfolio_scope(db, principal)
+                entered.set()
+                return str(db.scalar(sql, params))
+        except DBAPIError as exc:
+            return _primary_error(exc)
+
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(invoke_blocked_port)
+            assert entered.wait(timeout=2)
+            time.sleep(0.5)
+            assert not future.done(), "release port did not block on the portfolio row"
+            time.sleep(2.5)
+            holder.commit()
+            assert future.result(timeout=5) == "PORTFOLIO_CAPABILITY_INVALID"
+        with factory() as db, db.begin():
+            service._set_portfolio_scope(db, principal)
+            assert db.get(CashReservation, reservation.id).status == "active"
+    finally:
+        if holder.in_transaction():
+            holder.rollback()
+        holder.close()
+        engine.dispose()
+
+
+@pytest.mark.skipif(not APP_URL, reason="PostgreSQL app test URL is not configured")
 def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -> None:
     engine = create_engine(APP_URL, pool_pre_ping=True)
     factory = sessionmaker(engine, expire_on_commit=False)
@@ -545,6 +662,9 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -
     cap_key_hash = first_service._key_hash("pg-stale-replay-guard-0001")
     cap_now = datetime.now(UTC)
     baseline_snapshot = _latest_snapshot(first_service, first, portfolio.id)
+    replay_ttl_microseconds = first_service._ttl_microseconds(
+        stale_replay_guard.expires_at - stale_replay_guard.created_at
+    )
     reserve_capability = first_service._mint_capability(
         principal=first,
         audience="portfolio.reserve.v1",
@@ -553,7 +673,7 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -
             "1",
             "2" * 64,
             cap_key_hash,
-            "30000000",
+            str(replay_ttl_microseconds),
             str(baseline_snapshot.id),
             baseline_snapshot.digest,
         ),
@@ -570,7 +690,7 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -
         "amount": Decimal("1"),
         "purpose": "2" * 64,
         "key_hash": cap_key_hash,
-        "ttl_microseconds": 30_000_000,
+        "ttl_microseconds": replay_ttl_microseconds,
         "snapshot_id": str(baseline_snapshot.id),
         "snapshot_digest": baseline_snapshot.digest,
     } | reserve_capability
@@ -635,6 +755,23 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -
                 "(uuid,numeric,text,text,bigint,uuid,text,text,uuid,text,bigint,bigint,text,text)', "
                 "'EXECUTE')"
             )
+        )
+        reserve_impl = (
+            "tradingagents_private.portfolio_reserve_cash_v1_0022_impl"
+            "(uuid,numeric,text,text,bigint,uuid,text,text,uuid,text,bigint,bigint,text,text)"
+        )
+        assert not connection.scalar(
+            text(
+                "SELECT has_function_privilege(current_user, :function, 'EXECUTE')"
+            ),
+            {"function": reserve_impl},
+        )
+        assert not connection.scalar(
+            text(
+                "SELECT has_function_privilege('tradingagents_worker', :function, "
+                "'EXECUTE')"
+            ),
+            {"function": reserve_impl},
         )
         assert connection.scalar(
             text(

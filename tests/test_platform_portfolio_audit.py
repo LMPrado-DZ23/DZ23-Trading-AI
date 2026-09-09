@@ -106,6 +106,28 @@ def _valuation(service, *, available_offset: timedelta = timedelta()) -> Trusted
     )
 
 
+def _single_asset_proposal(service: PortfolioService) -> TrustedAllocationRequest:
+    observed = service._now()
+    return TrustedAllocationRequest(
+        raw_target_weights={"BTC/BRL": Decimal("0.05")},
+        correlations={},
+        assets={
+            "BTC/BRL": TrustedAssetAllocation(
+                symbol="BTC/BRL",
+                asset_class="crypto",
+                price=Decimal("500000"),
+                conviction=Decimal("1"),
+                realized_annual_volatility=Decimal("0.10"),
+                average_daily_notional=Decimal("1000000"),
+            )
+        },
+        source="analysis_pit",
+        observed_at=observed,
+        available_at=observed,
+        evidence_digest="9" * 64,
+    )
+
+
 def _fund_snapshot_and_reserve(
     runtime,
     *,
@@ -158,6 +180,38 @@ def test_reservation_replay_is_valid_only_while_active_and_current(
 
     assert replay.id == reservation.id
     assert replay.status == "active"
+
+
+@pytest.mark.parametrize(
+    ("initial_ttl", "replay_ttl"),
+    [
+        (timedelta(seconds=30), timedelta(hours=1)),
+        (timedelta(hours=1), timedelta(seconds=30)),
+    ],
+)
+def test_reservation_replay_binds_requested_ttl(
+    audited_portfolio_runtime,
+    initial_ttl,
+    replay_ttl,
+) -> None:
+    service, principal, _factory = audited_portfolio_runtime
+    portfolio, reservation = _fund_snapshot_and_reserve(
+        audited_portfolio_runtime,
+        label=f"ttl-replay-{int(initial_ttl.total_seconds())}",
+        ttl=initial_ttl,
+    )
+
+    with pytest.raises(PortfolioError, match="IDEMPOTENCY_PAYLOAD_MISMATCH"):
+        service.reserve_cash(
+            principal=principal,
+            portfolio_id=portfolio.id,
+            amount=reservation.amount,
+            purpose_digest=reservation.purpose_digest,
+            idempotency_key=(
+                f"ttl-replay-{int(initial_ttl.total_seconds())}-reservation-0001"
+            ),
+            ttl=replay_ttl,
+        )
 
 
 def test_expired_reservation_replay_fails_closed(
@@ -900,6 +954,52 @@ def test_internal_allocator_applies_aggregate_caps_and_reserves_atomically(
     assert replay.reservation.id == result.reservation.id
 
 
+@pytest.mark.parametrize(
+    ("initial_ttl", "replay_ttl"),
+    [
+        (timedelta(seconds=30), timedelta(hours=1)),
+        (timedelta(hours=1), timedelta(seconds=30)),
+    ],
+)
+def test_allocator_replay_binds_requested_ttl(
+    audited_portfolio_runtime,
+    initial_ttl,
+    replay_ttl,
+) -> None:
+    service, principal, _factory = audited_portfolio_runtime
+    portfolio, _mandate = _active(audited_portfolio_runtime)
+    service.record_funding(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("1000"),
+        idempotency_key=f"allocator-ttl-{int(initial_ttl.total_seconds())}-funding",
+        reference_id=f"allocator-ttl-{int(initial_ttl.total_seconds())}",
+    )
+    service.capture_trusted_snapshot(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        valuation=_valuation(service),
+    )
+    proposal = _single_asset_proposal(service)
+    key = f"allocator-ttl-{int(initial_ttl.total_seconds())}-reservation"
+    service.allocate_and_reserve(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        proposal=proposal,
+        idempotency_key=key,
+        ttl=initial_ttl,
+    )
+
+    with pytest.raises(PortfolioError, match="IDEMPOTENCY_PAYLOAD_MISMATCH"):
+        service.allocate_and_reserve(
+            principal=principal,
+            portfolio_id=portfolio.id,
+            proposal=proposal,
+            idempotency_key=key,
+            ttl=replay_ttl,
+        )
+
+
 def test_allocator_replaces_elapsed_sqlite_reservation_without_permanent_lockout(
     audited_portfolio_runtime,
     monkeypatch,
@@ -1294,3 +1394,27 @@ def test_portfolio_operation_ports_are_snapshot_bound_and_least_privilege() -> N
     ).read_text(encoding="utf-8")
     assert "point-in-time recovery" in runbook
     assert "Never attempt a schema downgrade" in runbook
+
+
+def test_reservation_replay_contract_binds_ttl_and_rechecks_release_capability() -> None:
+    migration = (
+        Path(__file__).resolve().parents[1]
+        / "migrations"
+        / "versions"
+        / "20260909_0023_reservation_replay_contract.py"
+    ).read_text(encoding="utf-8")
+    assert "expires_at - v_result.created_at" in migration
+    assert "p_ttl_microseconds * interval '1 microsecond'" in migration
+    assert "IDEMPOTENCY_PAYLOAD_MISMATCH" in migration
+    assert "portfolio_reserve_cash_v1_0022_impl" in migration
+    assert "FROM PUBLIC,tradingagents_app,tradingagents_worker" in migration
+    release_port = migration[
+        migration.index("def _replace_release_port") : migration.index("def downgrade")
+    ]
+    assert release_port.index("p_mac,\n                false") < release_port.index(
+        "FOR UPDATE"
+    )
+    assert release_port.index("FOR UPDATE") < release_port.index(
+        "p_mac,\n                true"
+    )
+    assert "20260909_0023 is a one-way security migration" in migration
