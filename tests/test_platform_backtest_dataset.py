@@ -709,9 +709,13 @@ def test_public_repository_api_does_not_expose_full_future_snapshot(tmp_path: Pa
 
 
 def test_full_snapshot_loader_remains_private_to_repository_module() -> None:
-    package = Path(__file__).parents[1] / "tradingagents" / "platform" / "backtest"
-    for source in package.glob("*.py"):
-        if source.name == "repository.py":
+    project = Path(__file__).parents[1]
+    sources = tuple((project / "tradingagents").rglob("*.py")) + tuple(
+        (project / "service").rglob("*.py")
+    )
+    authority = project / "tradingagents" / "platform" / "backtest" / "repository.py"
+    for source in sources:
+        if source == authority:
             continue
         content = source.read_text(encoding="utf-8")
         assert "_load_verified" not in content, source

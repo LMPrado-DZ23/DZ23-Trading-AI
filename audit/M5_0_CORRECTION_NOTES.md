@@ -1,6 +1,7 @@
 # M5.0 corrected candidate notes
 
-Status: candidate awaiting independent review. This document is not an approval.
+Status: second corrected candidate awaiting independent review. This document
+is not an approval.
 
 The first M5.0 candidate at `d093c285e7424e30f1965046a35cafe32f2565ca`
 was rejected. The corrected candidate addresses the reproduced findings:
@@ -21,15 +22,22 @@ corporate-action lineage and positive coverage attestations are deferred to an
 append-only M5.5 authority and block performance publication until independently
 reviewed.
 
+The first corrected commit `e7ffae7249be4774f2ce84b38aabb0a61c23e748`
+was also rejected after an independent reviewer proved that the public
+`ExecutionOpen` contract accepted a fill at or before its decision. The second
+correction moves the temporal invariant into the contract, binds execution to
+a strictly later session, canonicalizes dataset-reference order, and expands
+the structural private-loader guard across all production Python modules.
+
 ## Reproduction before freeze
 
-- Focused backtest suite: `99 passed`.
-- Full suite with PostgreSQL 16 and Redis 7: `1407 passed, 2 skipped, 71 subtests`.
+- Focused backtest suite: `103 passed`.
+- Full suite with PostgreSQL 16 and Redis 7: `1411 passed, 2 skipped, 71 subtests`.
 - Ruff over `tradingagents` and `tests`: pass.
 - Compileall over `tradingagents` and `service`: pass.
-- JUnit: `audit/m5-0-corrected-full-junit.xml`.
-- JUnit bytes: `194930`.
-- JUnit SHA-256: `a8d53c14cf9710aff3de24cdfc31a21b5f991bdf540a83722f007c1c30a7a017`.
+- JUnit: `audit/m5-0-r2-full-junit.xml`.
+- JUnit bytes: `195522`.
+- JUnit SHA-256: `39ed03fe8250feb5473123ba27d6b49ab2d204c95a72ed7eaee8ba7819cef455`.
 
 The skips are the credential-gated DeepSeek live call and the Windows-only
 `taskkill` failure path. Neither is silently counted as passed.

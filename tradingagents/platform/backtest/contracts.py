@@ -376,6 +376,14 @@ class ExecutionOpen(BacktestContract):
     def validate_raw_open(cls, value: Decimal) -> Decimal:
         return _positive(value)
 
+    @model_validator(mode="after")
+    def validate_execution_follows_decision(self):
+        if self.execution_at <= self.decision_at:
+            raise ValueError("execution open must occur strictly after the decision")
+        if self.session_date <= self.decision_session_date:
+            raise ValueError("execution session must follow the decision session")
+        return self
+
 
 class DatasetReference(BacktestContract):
     instrument_id: UUID
@@ -621,4 +629,9 @@ class BacktestSpec(BacktestContract):
             raise ValueError("tradeable dataset references must match every instrument")
         if benchmark_ids != [self.benchmark_instrument_id]:
             raise ValueError("exactly one dataset reference must bind the benchmark")
+        canonical_reference_order = self.instrument_ids + (self.benchmark_instrument_id,)
+        if tuple(item.instrument_id for item in self.dataset_references) != canonical_reference_order:
+            raise ValueError(
+                "dataset references must follow instrument order with benchmark last"
+            )
         return self

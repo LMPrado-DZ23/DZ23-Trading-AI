@@ -502,6 +502,34 @@ def test_execution_open_is_a_minimal_raw_projection():
     }
 
 
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"execution_at": NOW - timedelta(minutes=1)},
+        {"execution_at": NOW - timedelta(minutes=2)},
+        {"session_date": date(2026, 9, 8)},
+        {"session_date": date(2026, 9, 7)},
+    ],
+)
+def test_execution_open_rejects_equal_or_predecision_fill(overrides):
+    data = {
+        "dataset_id": uuid4(),
+        "manifest_digest": "c" * 64,
+        "instrument_id": uuid4(),
+        "decision_session_date": date(2026, 9, 8),
+        "decision_at": NOW - timedelta(minutes=1),
+        "eligible_view_digest": "d" * 64,
+        "session_date": date(2026, 9, 9),
+        "execution_at": NOW,
+        "raw_open": Decimal("30.25"),
+        "parent_bar_digest": "b" * 64,
+        "source_digest": DIGEST,
+    }
+    data.update(overrides)
+    with pytest.raises(ValidationError, match="strictly after|follow"):
+        ExecutionOpen(**data)
+
+
 def test_backtest_spec_binds_every_instrument_and_unique_dataset():
     spec = _spec()
     shared = {
@@ -527,6 +555,19 @@ def test_backtest_spec_binds_every_instrument_and_unique_dataset():
         _spec(
             instrument_ids=spec.instrument_ids,
             benchmark_instrument_id=spec.instrument_ids[0],
+        )
+
+    first_id, second_id = uuid4(), uuid4()
+    ordered = _spec(instrument_ids=(first_id, second_id))
+    with pytest.raises(ValidationError, match="instrument order"):
+        _spec(
+            instrument_ids=ordered.instrument_ids,
+            benchmark_instrument_id=ordered.benchmark_instrument_id,
+            dataset_references=(
+                ordered.dataset_references[1],
+                ordered.dataset_references[0],
+                ordered.dataset_references[2],
+            ),
         )
 
 
