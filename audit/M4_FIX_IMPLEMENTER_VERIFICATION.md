@@ -45,6 +45,9 @@
   baseline and circuit breaker and never masks unrelated integrity violations.
 - PostgreSQL requires an operational mandate and baseline for both active and
   consumed reservations; only release/expiry can unwind after authority loss.
+- PostgreSQL also requires every reservation to be inserted as `active` and
+  refuses to consume an expired reservation even when its stale row label has
+  not yet been changed. Future-dated consumption is refused as well.
 - Mandate pause provenance is persisted. Suitability reassessment records a
   dedicated pause reason, while an open circuit breaker takes precedence over
   suitability and exposes only the risk-review action.
@@ -55,7 +58,7 @@
 
 - Final full suite with real PostgreSQL and Redis:
   `1279 passed, 1 skipped, 71 subtests passed`.
-- Final focused portfolio/API/audit suite: `75 passed`.
+- Final focused portfolio/API/audit suite: `60 passed`.
 - Formerly flaky LGPD event-order test: `10/10 passed` after the monotonic-time fix.
 - SQLite migration compatibility test: `1 passed`.
 - Ruff: green for the repository (permission warnings only for stale sandbox
@@ -65,11 +68,11 @@
   green.
 - Final full JUnit: `audit/m4-final-full-junit.xml`
   - bytes: `175198`
-  - SHA-256: `eb73cc589f97ea8c6ced8788169d386c4fca637e51c8891df376bf00344c7e8c`
+  - SHA-256: `0156f75226ff9444b4217b485bf1ea5eb301ba5f8d5c0b28f1b58ac46bd289ac`
 - Final generated and executed PostgreSQL SQL:
   `audit/m4-final-postgresql-offline.sql`
-  - bytes: `22484`
-  - SHA-256: `c8a14d591a6c5b070db15aaee72001f75a47e480112c64cbd8ff616aeab4afa6`
+  - bytes: `22803`
+  - SHA-256: `952ed50f8ac60d8ca06c72e6e61e4e4276bd5421426a3f15aee8fbb5a20fcf17`
 - Offline-generation log: `audit/m4-final-postgresql-offline.log`
   - bytes: `341`
   - SHA-256: `5b42a7b0d1c408d037a1e826e99840b6f33eaa884c444b13fa7029f311ee9d82`
@@ -79,10 +82,11 @@
 
 ## Independent review status
 
-- Independent re-review found three final defects after the first PostgreSQL
+- Independent re-review found four final defects after the first PostgreSQL
   run: expired/stale reservation replay, `active -> consumed` without current
-  authority, and loss of the public database-time error contract. All three are
-  corrected and covered by local and real PostgreSQL tests.
+  authority, loss of the public database-time error contract, and direct SQL
+  consumption of an expired reservation. All four are corrected and covered by
+  local and real PostgreSQL tests.
 - The previous independent verdicts are superseded by these corrections. A
   fresh review of the final commit is still required; this document does not
   claim independent approval.

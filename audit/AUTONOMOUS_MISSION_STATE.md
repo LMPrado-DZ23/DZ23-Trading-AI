@@ -98,9 +98,9 @@
 
 - Não há falha interna conhecida na candidata M4. O último ciclo independente
   encontrou replay de reserva expirada/obsoleta, consumo sem mandato no trigger
-  PostgreSQL e perda do contrato 503 na listagem. Os três foram corrigidos e a
-  suíte real ficou verde. A promoção continua proibida até a re-auditoria
-  independente do commit e bundles finais.
+  PostgreSQL, perda do contrato 503 na listagem e consumo SQL direto após
+  expiração. Os quatro foram corrigidos e a suíte real ficou verde. A promoção
+  continua proibida até a re-auditoria independente do commit e bundles finais.
 - Fontes fundamentals/news/macro/social/Polymarket continuam deliberadamente indisponíveis na plataforma; não há alegação de cobertura PIT para elas.
 - O primeiro `.venv` ficou incompleto após interrupção do instalador; foi substituído por `.venv-a5` criado com `--no-compile` e instalação concluída com exit 0.
 
@@ -160,10 +160,11 @@
   dinâmicos e não representam o estado final.
 - Gate PostgreSQL 17 + Redis 7 real final: migration online, SQL offline aplicado
   em base 0019, RLS/roles, downgrade fail-closed, `active -> consumed` bloqueado
-  sem mandato e concorrência verdes; integração **11 passed**.
+  sem mandato ou após expiração, inserção direta como `consumed` recusada e
+  concorrência verdes; integração **11 passed**.
 - Suíte integral final com serviços reais: **1279 passed, 1 skipped, 71 subtests**.
 - Evidência: `audit/m4-final-full-junit.xml` SHA-256
-  `eb73cc589f97ea8c6ced8788169d386c4fca637e51c8891df376bf00344c7e8c`.
+  `0156f75226ff9444b4217b485bf1ea5eb301ba5f8d5c0b28f1b58ac46bd289ac`.
 
 ## Commits
 

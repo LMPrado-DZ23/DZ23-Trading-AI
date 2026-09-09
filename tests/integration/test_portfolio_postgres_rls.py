@@ -76,7 +76,11 @@ def _ready(service: PortfolioService, principal: IdentityPrincipal, label: str):
         idempotency_key=f"pg-funding-{label}-0001",
         reference_id=f"deposit-{label}",
     )
-    observed = datetime.now(UTC)
+    # Keep trusted valuation timestamps on the same clock used by the
+    # PostgreSQL timeline gate. Host/container clocks can differ slightly.
+    with service._sessions() as db, db.begin():
+        service._set_tenant_scope(db, principal.tenant_id)
+        observed = service._database_now(db)
     service.capture_trusted_snapshot(
         principal=principal,
         portfolio_id=portfolio.id,
@@ -257,6 +261,41 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -
             purpose_digest="1" * 64,
             idempotency_key="pg-expired-replay-0001",
             ttl=timedelta(seconds=30),
+        )
+    with pytest.raises(DBAPIError), engine.begin() as connection:
+        connection.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(first.tenant_id)},
+        )
+        connection.execute(
+            text(
+                "UPDATE portfolio_cash_reservations SET status = 'consumed', "
+                "consumed_at = clock_timestamp() WHERE id = :id"
+            ),
+            {"id": str(expired_replay_id)},
+        )
+    with pytest.raises(DBAPIError), engine.begin() as connection:
+        connection.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(first.tenant_id)},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO portfolio_cash_reservations "
+                "(id, tenant_id, portfolio_id, mandate_id, idempotency_key_hash, "
+                "currency, amount, status, purpose_digest, expires_at, consumed_at, "
+                "created_at) VALUES (:id, :tenant, :portfolio, :mandate, :key_hash, "
+                "'BRL', 1, 'consumed', :purpose, clock_timestamp() + interval '1 minute', "
+                "clock_timestamp(), clock_timestamp())"
+            ),
+            {
+                "id": str(uuid4()),
+                "tenant": str(first.tenant_id),
+                "portfolio": str(portfolio.id),
+                "mandate": str(stale_replay_guard.mandate_id),
+                "key_hash": "0" * 64,
+                "purpose": "0" * 64,
+            },
         )
 
     # The database itself rejects a partially written double-entry event at commit.

@@ -1,7 +1,8 @@
 # M4 PostgreSQL 17 Dynamic Gate Verification
 
 - Date: `2026-09-09` (`America/Sao_Paulo`).
-- Superseded candidate: `1cc9584d2e4be987ba11d48ce15dafdb4180b4ce`.
+- Superseded candidates: `1cc9584d2e4be987ba11d48ce15dafdb4180b4ce`
+  and `feecf5500447d45ed656f0d364e0ace3004630f0`.
 - Database: PostgreSQL `17.11`, official image
   `postgres@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73`.
 - Cache: Redis `7.4.11`.
@@ -30,6 +31,15 @@
    `retry_later` contract.
 6. Destructive downgrade implementation below the unconditional fail-closed
    exception was removed. Migration 0020 has no latent downgrade path.
+7. An expired reservation that still had the `active` label could be changed
+   directly to `consumed` in SQL. PostgreSQL now rejects consumption after
+   `expires_at`, rejects future-dated consumption, and permits inserts only in
+   `active` state. This prevents stale cash authority from being consumed after
+   new cash has been reserved.
+8. The PostgreSQL integration fixture used the Windows host clock to build a
+   trusted valuation that the database compared with `clock_timestamp()`. The
+   fixture now obtains the observation time from the same transaction database
+   clock, eliminating cross-host clock drift from the security proof.
 
 All artifacts generated before these corrections, including the `1cc9584`
 bundles and `m4-fix-*-6/9/10/11/12` evidence, were removed as superseded.
@@ -45,6 +55,10 @@ bundles and `m4-fix-*-6/9/10/11/12` evidence, were removed as superseded.
 - The installed function body contains
   `requires_operational := NEW.status IN ('active','consumed')`.
 - Direct `active -> consumed` after mandate pause is rejected by PostgreSQL.
+- Direct expired `active -> consumed` is rejected by PostgreSQL, even if the
+  row has not yet been relabelled `expired`.
+- Direct insertion of a reservation already labelled `consumed` is rejected;
+  every reservation must be born `active`.
 - Direct `active -> released` and `active -> expired` after mandate pause are
   accepted as risk-reducing exits.
 - A process clock forced one day backward cannot invalidate a just-created
@@ -64,18 +78,18 @@ bundles and `m4-fix-*-6/9/10/11/12` evidence, were removed as superseded.
 
 - Focused PostgreSQL RLS/race/operational-transition test: `1 passed`.
   - `audit/m4-final-postgresql-junit.xml`
-  - SHA-256 `0f525542e73156b36260d57583082ffc69e877e7ffc36a00e00ea8f84b8559bf`
+  - SHA-256 `3022e48def714ef68524e487622656d36f28ebee2b5c91142420e32f6297c35c`
 - PostgreSQL/Redis integration directory: `11 passed`.
   - `audit/m4-final-integration-junit.xml`
-  - SHA-256 `80a525ab6c11969ecf234b595f13655fba693bafdb79e2d183833e762b76d361`
+  - SHA-256 `800534ef45b1185fa7a6d61bf2caa6b1e635cf50643ecbe455d1a491e5991164`
 - Full suite with real PostgreSQL and Redis: `1279 passed, 1 skipped`,
   `71 subtests passed`, `22 warnings`.
   - Only skip: opt-in live DeepSeek request, unrelated to M4.
   - `audit/m4-final-full-junit.xml`
-  - SHA-256 `eb73cc589f97ea8c6ced8788169d386c4fca637e51c8891df376bf00344c7e8c`
+  - SHA-256 `0156f75226ff9444b4217b485bf1ea5eb301ba5f8d5c0b28f1b58ac46bd289ac`
 - Executed offline SQL:
   - `audit/m4-final-postgresql-offline.sql`
-  - SHA-256 `c8a14d591a6c5b070db15aaee72001f75a47e480112c64cbd8ff616aeab4afa6`
+  - SHA-256 `952ed50f8ac60d8ca06c72e6e61e4e4276bd5421426a3f15aee8fbb5a20fcf17`
 - Offline generation log:
   - `audit/m4-final-postgresql-offline.log`
   - SHA-256 `5b42a7b0d1c408d037a1e826e99840b6f33eaa884c444b13fa7029f311ee9d82`
