@@ -536,6 +536,7 @@ def test_valid_ohlc_fuzz_is_bounded_and_repeatable(
     upper_wick: int,
     bullish: bool,
 ) -> None:
+    generated_identity = (low, lower_wick, body, upper_wick, bullish)
     if lower_wick + body + upper_wick == 0:
         upper_wick = 1
     if bullish:
@@ -546,9 +547,7 @@ def test_valid_ohlc_fuzz_is_bounded_and_repeatable(
         opened = closed + body
     high = max(opened, closed) + upper_wick
     last = tuple(str(value) for value in (opened, high, low, closed))
-    identity = hashlib.sha256(
-        f"{low}:{lower_wick}:{body}:{upper_wick}:{bullish}".encode()
-    ).hexdigest()
+    identity = hashlib.sha256(":".join(map(str, generated_identity)).encode()).hexdigest()
     prepared = _prepare(tmp_path / identity, _neutral_prices()[:-1] + (last,))
     first = prepared.derive()
     second = prepared.derive()
