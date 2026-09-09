@@ -22,6 +22,7 @@ dependencies = [
     "parsel>=1.10.0",
     "python-dotenv>=1.0.0",
     "pytz>=2025.2",
+    "tzdata>=2025.2,<2027",
     "questionary>=2.1.0",
     "redis>=6.2.0",
     "requests>=2.32.4",

@@ -1,0 +1,505 @@
+"""Immutable, point-in-time contracts for deterministic backtests.
+
+The contracts in this module describe trusted inputs to a backtest.  They do
+not fetch market data, generate signals, simulate fills, or place orders.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from datetime import UTC, date, datetime
+from decimal import Decimal
+from enum import StrEnum
+from typing import Annotated, Any, Literal
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+Digest = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+Currency = Annotated[str, Field(pattern=r"^[A-Z]{3}$")]
+
+
+class AssetType(StrEnum):
+    STOCK = "stock"
+    CRYPTO = "crypto"
+
+
+class MarketCalendar(StrEnum):
+    CONTINUOUS = "24/7"
+    NEW_YORK = "XNYS"
+    BRAZIL = "BVMF"
+
+
+class CorporateActionType(StrEnum):
+    SPLIT = "split"
+    CASH_DIVIDEND = "cash_dividend"
+    DELISTING = "delisting"
+
+
+class DatasetLimitation(StrEnum):
+    SURVIVORSHIP_UNVERIFIED = "survivorship_unverified"
+    CORPORATE_ACTION_VINTAGE_UNVERIFIED = "corporate_action_vintage_unverified"
+    DELISTING_COVERAGE_UNVERIFIED = "delisting_coverage_unverified"
+    FX_VINTAGE_UNVERIFIED = "fx_vintage_unverified"
+    VENDOR_ADJUSTMENT_STATUS_UNVERIFIED = "vendor_adjustment_status_unverified"
+
+
+class DecisionPolicy(StrEnum):
+    SETTLED_SESSION_CLOSE = "settled_session_close"
+
+
+class FillPolicy(StrEnum):
+    NEXT_SESSION_RAW_OPEN = "next_session_raw_open"
+
+
+class MissingDataPolicy(StrEnum):
+    FAIL_CLOSED = "fail_closed"
+
+
+def _decimal_text(value: Decimal) -> str:
+    if not value.is_finite():
+        raise ValueError("canonical decimals must be finite")
+    if value == 0:
+        return "0"
+    return format(value.normalize(), "f")
+
+
+def _canonical_value(value: Any, *, depth: int = 0) -> Any:
+    if depth > 32:
+        raise ValueError("canonical payload exceeds the nesting limit")
+    if isinstance(value, Decimal):
+        return _decimal_text(value)
+    if isinstance(value, datetime):
+        _utc(value)
+        return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, UUID):
+        return str(value)
+    if isinstance(value, StrEnum):
+        return value.value
+    if isinstance(value, (bool, float)):
+        raise ValueError("canonical payload cannot contain booleans or binary floats")
+    if isinstance(value, int):
+        if value.bit_length() > 256:
+            raise ValueError("canonical integer exceeds the resource limit")
+        return value
+    if isinstance(value, str):
+        if len(value) > 4_096:
+            raise ValueError("canonical string exceeds the resource limit")
+        return value
+    if isinstance(value, dict):
+        if len(value) > 10_000 or any(not isinstance(key, str) for key in value):
+            raise ValueError("canonical mappings require bounded string keys")
+        return {
+            key: _canonical_value(item, depth=depth + 1) for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        if len(value) > 10_000:
+            raise ValueError("canonical sequence exceeds the resource limit")
+        return [_canonical_value(item, depth=depth + 1) for item in value]
+    if value is None:
+        return None
+    raise ValueError("canonical payload contains an unsupported scalar type")
+    return value
+
+
+def canonical_digest(value: BaseModel | dict[str, Any]) -> str:
+    """Return a stable SHA-256 digest without binary-float serialization."""
+
+    payload = value.model_dump(mode="python") if isinstance(value, BaseModel) else value
+    canonical = json.dumps(
+        _canonical_value(payload),
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def market_dataset_binding_digest(
+    *,
+    tenant_id: UUID,
+    dataset_id: UUID,
+    instrument_digest: str,
+    content_sha256: str,
+    schedule_digest: str,
+    source_vintage: str,
+    calendar_engine_version: str,
+    timezone_database_version: str,
+    settlement_policy_version: str,
+) -> str:
+    """Bind frozen dataset bytes to their tenant, identity, and source vintage."""
+
+    return canonical_digest(
+        {
+            "calendar_engine_version": calendar_engine_version,
+            "content_sha256": content_sha256,
+            "dataset_id": dataset_id,
+            "instrument_digest": instrument_digest,
+            "schedule_digest": schedule_digest,
+            "settlement_policy_version": settlement_policy_version,
+            "source_vintage": source_vintage,
+            "tenant_id": tenant_id,
+            "timezone_database_version": timezone_database_version,
+        }
+    )
+
+
+class BacktestContract(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid", str_strip_whitespace=True)
+
+    @property
+    def digest(self) -> str:
+        return canonical_digest(self)
+
+
+def _utc(value: datetime) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("timestamp must include a timezone")
+    if value.utcoffset().total_seconds() != 0:
+        raise ValueError("timestamp must use UTC")
+    return value.astimezone(UTC)
+
+
+def _reject_binary_float(value: Any) -> Any:
+    if isinstance(value, (bool, float)):
+        raise ValueError("decimal values must not be supplied as binary floats or booleans")
+    if isinstance(value, str) and len(value) > 80:
+        raise ValueError("decimal text exceeds the resource limit")
+    if isinstance(value, int) and value.bit_length() > 256:
+        raise ValueError("decimal integer exceeds the resource limit")
+    if isinstance(value, Decimal):
+        _bounded_decimal(value)
+    return value
+
+
+def _bounded_decimal(value: Decimal) -> Decimal:
+    if not value.is_finite():
+        raise ValueError("decimal value must be finite")
+    _, digits, exponent = value.as_tuple()
+    if len(digits) > 38 or value.adjusted() >= 38:
+        raise ValueError("decimal value exceeds 38 significant integer digits")
+    if exponent < -18:
+        raise ValueError("decimal value exceeds 18 fractional digits")
+    return value
+
+
+def _positive(value: Decimal) -> Decimal:
+    _bounded_decimal(value)
+    if value <= 0:
+        raise ValueError("value must be finite and positive")
+    return value
+
+
+def _non_negative(value: Decimal) -> Decimal:
+    _bounded_decimal(value)
+    if value < 0:
+        raise ValueError("value must be finite and non-negative")
+    return value
+
+
+class InstrumentSpec(BacktestContract):
+    instrument_id: UUID
+    symbol: str = Field(min_length=1, max_length=64, pattern=r"^[A-Z0-9][A-Z0-9./_=-]*$")
+    asset_type: AssetType
+    venue: str = Field(min_length=1, max_length=32, pattern=r"^[a-z0-9_.-]+$")
+    venue_instrument_id: str = Field(
+        min_length=1,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9./:_=-]*$",
+    )
+    base_currency: Currency | None = None
+    quote_currency: Currency
+    market_calendar: MarketCalendar
+    published_at: datetime
+    available_at: datetime
+    listing_date: date
+    delisting_date: date | None = None
+    source_digest: Digest
+
+    _timestamps_are_utc = field_validator("published_at", "available_at")(_utc)
+
+    @model_validator(mode="after")
+    def validate_point_in_time_window(self):
+        if self.available_at < self.published_at:
+            raise ValueError("instrument availability cannot precede publication")
+        if self.delisting_date is not None and self.delisting_date < self.listing_date:
+            raise ValueError("instrument validity end cannot precede its start")
+        if self.asset_type is AssetType.CRYPTO and self.market_calendar is not MarketCalendar.CONTINUOUS:
+            raise ValueError("crypto instruments require the 24/7 market calendar")
+        if self.asset_type is AssetType.STOCK and self.market_calendar is MarketCalendar.CONTINUOUS:
+            raise ValueError("stock instruments require an exchange session calendar")
+        if self.asset_type is AssetType.CRYPTO and self.base_currency is None:
+            raise ValueError("crypto instruments require a base currency")
+        if self.asset_type is AssetType.STOCK and self.base_currency is not None:
+            raise ValueError("stock instruments cannot declare a base currency")
+        return self
+
+    @property
+    def price_currency(self) -> str:
+        return self.quote_currency
+
+    @property
+    def valid_from(self) -> date:
+        return self.listing_date
+
+    @property
+    def valid_to(self) -> date | None:
+        return self.delisting_date
+
+
+class DailyBar(BacktestContract):
+    instrument_id: UUID
+    session_date: date
+    session_open_at: datetime
+    session_close_at: datetime
+    available_at: datetime
+    open: Decimal
+    high: Decimal
+    low: Decimal
+    close: Decimal
+    volume: Decimal
+    price_basis: Literal["raw"] = "raw"
+    source_digest: Digest
+
+    _timestamps_are_utc = field_validator(
+        "session_open_at", "session_close_at", "available_at"
+    )(_utc)
+    _decimal_input_is_exact = field_validator(
+        "open", "high", "low", "close", "volume", mode="before"
+    )(_reject_binary_float)
+
+    @field_validator("open", "high", "low", "close")
+    @classmethod
+    def validate_price(cls, value: Decimal) -> Decimal:
+        return _positive(value)
+
+    @field_validator("volume")
+    @classmethod
+    def validate_volume(cls, value: Decimal) -> Decimal:
+        return _non_negative(value)
+
+    @model_validator(mode="after")
+    def validate_bar(self):
+        if not self.session_open_at < self.session_close_at < self.available_at:
+            raise ValueError("bar timestamps must satisfy open < close < available")
+        if self.low > self.high:
+            raise ValueError("bar low cannot exceed high")
+        if not self.low <= self.open <= self.high:
+            raise ValueError("bar open must be within low and high")
+        if not self.low <= self.close <= self.high:
+            raise ValueError("bar close must be within low and high")
+        return self
+
+
+class CorporateAction(BacktestContract):
+    action_id: UUID
+    instrument_id: UUID
+    revision: int = Field(default=1, ge=1)
+    action_type: CorporateActionType
+    announced_at: datetime | None = None
+    published_at: datetime
+    available_at: datetime
+    ex_date: date | None = None
+    effective_date: date
+    pay_date: date | None = None
+    split_ratio: Decimal | None = None
+    cash_amount: Decimal | None = None
+    cash_consideration: Decimal | None = None
+    currency: Currency | None = None
+    source_digest: Digest
+
+    _timestamps_are_utc = field_validator("announced_at", "published_at", "available_at")(
+        lambda value: None if value is None else _utc(value)
+    )
+    _decimal_input_is_exact = field_validator(
+        "split_ratio", "cash_amount", "cash_consideration", mode="before"
+    )(_reject_binary_float)
+
+    @field_validator("split_ratio", "cash_amount", "cash_consideration")
+    @classmethod
+    def validate_optional_positive_value(cls, value: Decimal | None) -> Decimal | None:
+        return None if value is None else _positive(value)
+
+    @model_validator(mode="after")
+    def validate_action(self):
+        if self.available_at < self.published_at:
+            raise ValueError("corporate-action availability cannot precede publication")
+        if self.announced_at is not None and self.announced_at > self.published_at:
+            raise ValueError("corporate-action announcement cannot follow publication")
+        if self.pay_date is not None and self.pay_date < self.effective_date:
+            raise ValueError("corporate-action pay date cannot precede its effective date")
+        if self.action_type is CorporateActionType.SPLIT:
+            if (
+                self.split_ratio is None
+                or self.ex_date is None
+                or self.cash_amount is not None
+                or self.cash_consideration is not None
+                or self.currency is not None
+            ):
+                raise ValueError("split actions require an ex-date and only a split ratio")
+        elif self.action_type is CorporateActionType.CASH_DIVIDEND:
+            if (
+                self.cash_amount is None
+                or self.currency is None
+                or self.ex_date is None
+                or self.pay_date is None
+                or self.split_ratio is not None
+                or self.cash_consideration is not None
+            ):
+                raise ValueError("cash dividends require an ex-date, pay date, amount, and currency")
+        elif (
+            self.ex_date is not None
+            or self.split_ratio is not None
+            or self.cash_amount is not None
+            or (self.cash_consideration is None) != (self.currency is None)
+            or (self.cash_consideration is None) != (self.pay_date is None)
+        ):
+            raise ValueError(
+                "delistings allow only an optional cash consideration, currency, and pay date"
+            )
+        return self
+
+
+class FxObservation(BacktestContract):
+    base_currency: Currency
+    quote_currency: Currency
+    observed_at: datetime
+    available_at: datetime
+    rate: Decimal
+    source_digest: Digest
+
+    _timestamps_are_utc = field_validator("observed_at", "available_at")(_utc)
+    _decimal_input_is_exact = field_validator("rate", mode="before")(_reject_binary_float)
+
+    @field_validator("rate")
+    @classmethod
+    def validate_rate(cls, value: Decimal) -> Decimal:
+        return _positive(value)
+
+    @model_validator(mode="after")
+    def validate_observation(self):
+        if self.base_currency == self.quote_currency:
+            raise ValueError("FX currencies must be different")
+        if self.available_at < self.observed_at:
+            raise ValueError("FX availability cannot precede observation")
+        return self
+
+
+class MarketDatasetManifest(BacktestContract):
+    dataset_id: UUID
+    tenant_id: UUID
+    schema_version: Literal[1] = 1
+    created_at: datetime
+    source: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9_.-]+$")
+    source_vintage: str = Field(min_length=1, max_length=160)
+    instrument_digest: Digest
+    content_sha256: Digest
+    row_count: int = Field(ge=1)
+    first_session: date
+    last_session: date
+    schedule_digest: Digest
+    calendar_engine_version: str = Field(min_length=1, max_length=80)
+    timezone_database_version: str = Field(min_length=1, max_length=80)
+    settlement_policy_version: str = Field(min_length=1, max_length=80)
+    binding_digest: Digest
+    limitations: tuple[DatasetLimitation, ...] = Field(default=(), max_length=64)
+
+    _created_at_is_utc = field_validator("created_at")(_utc)
+
+    @field_validator("limitations")
+    @classmethod
+    def validate_limitations(
+        cls, value: tuple[DatasetLimitation, ...]
+    ) -> tuple[DatasetLimitation, ...]:
+        if len(set(value)) != len(value):
+            raise ValueError("dataset limitations must be unique")
+        return value
+
+    @model_validator(mode="after")
+    def validate_session_window(self):
+        if self.last_session < self.first_session:
+            raise ValueError("dataset last session cannot precede first session")
+        expected_binding = market_dataset_binding_digest(
+            tenant_id=self.tenant_id,
+            dataset_id=self.dataset_id,
+            instrument_digest=self.instrument_digest,
+            content_sha256=self.content_sha256,
+            schedule_digest=self.schedule_digest,
+            source_vintage=self.source_vintage,
+            calendar_engine_version=self.calendar_engine_version,
+            timezone_database_version=self.timezone_database_version,
+            settlement_policy_version=self.settlement_policy_version,
+        )
+        if self.binding_digest != expected_binding:
+            raise ValueError("dataset binding digest does not match the frozen authority fields")
+        return self
+
+    @property
+    def quantitative_claims_eligible(self) -> bool:
+        """False when source coverage or vintage remains explicitly unverified."""
+
+        return not self.limitations
+
+
+class BacktestSpec(BacktestContract):
+    backtest_id: UUID
+    tenant_id: UUID
+    schema_version: Literal[1] = 1
+    created_at: datetime
+    dataset_manifest_digest: Digest
+    instrument_ids: tuple[UUID, ...] = Field(min_length=1, max_length=1_000)
+    benchmark_instrument_id: UUID
+    start_session: date
+    end_session: date
+    base_currency: Currency
+    initial_cash: Decimal
+    commission_bps: Decimal = Decimal("0")
+    slippage_bps: Decimal = Decimal("0")
+    max_volume_participation: Decimal = Decimal("0.10")
+    decision_policy: Literal[DecisionPolicy.SETTLED_SESSION_CLOSE] = (
+        DecisionPolicy.SETTLED_SESSION_CLOSE
+    )
+    fill_policy: Literal[FillPolicy.NEXT_SESSION_RAW_OPEN] = FillPolicy.NEXT_SESSION_RAW_OPEN
+    price_basis: Literal["raw"] = "raw"
+    missing_data_policy: Literal[MissingDataPolicy.FAIL_CLOSED] = MissingDataPolicy.FAIL_CLOSED
+    random_seed: int = Field(default=0, ge=0, le=2**63 - 1)
+
+    _created_at_is_utc = field_validator("created_at")(_utc)
+    _decimal_input_is_exact = field_validator(
+        "initial_cash",
+        "commission_bps",
+        "slippage_bps",
+        "max_volume_participation",
+        mode="before",
+    )(_reject_binary_float)
+
+    @field_validator("initial_cash")
+    @classmethod
+    def validate_initial_cash(cls, value: Decimal) -> Decimal:
+        return _positive(value)
+
+    @field_validator("commission_bps", "slippage_bps")
+    @classmethod
+    def validate_cost(cls, value: Decimal) -> Decimal:
+        value = _non_negative(value)
+        if value > Decimal("1000"):
+            raise ValueError("backtest costs cannot exceed 1000 basis points")
+        return value
+
+    @field_validator("max_volume_participation")
+    @classmethod
+    def validate_participation(cls, value: Decimal) -> Decimal:
+        if not value.is_finite() or value <= 0 or value > 1:
+            raise ValueError("volume participation must be finite and in (0, 1]")
+        return value
+
+    @model_validator(mode="after")
+    def validate_backtest_window(self):
+        if self.end_session < self.start_session:
+            raise ValueError("backtest end session cannot precede start session")
+        if len(set(self.instrument_ids)) != len(self.instrument_ids):
+            raise ValueError("backtest instrument IDs must be unique")
+        return self
