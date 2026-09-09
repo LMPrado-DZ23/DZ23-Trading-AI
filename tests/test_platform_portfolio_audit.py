@@ -239,15 +239,25 @@ def test_expired_reservation_replay_fails_closed(
 
 
 def test_released_reservation_replay_fails_closed(audited_portfolio_runtime) -> None:
-    service, principal, _factory = audited_portfolio_runtime
+    service, principal, factory = audited_portfolio_runtime
     portfolio, reservation = _fund_snapshot_and_reserve(
         audited_portfolio_runtime,
         label="released-replay",
     )
+    with factory() as db:
+        version_before_release = db.get(Portfolio, portfolio.id).balance_version
     assert (
         service.release_reservation(principal=principal, reservation_id=reservation.id)
         == "released"
     )
+    with factory() as db:
+        assert db.get(Portfolio, portfolio.id).balance_version == version_before_release + 1
+    assert (
+        service.release_reservation(principal=principal, reservation_id=reservation.id)
+        == "released"
+    )
+    with factory() as db:
+        assert db.get(Portfolio, portfolio.id).balance_version == version_before_release + 1
 
     with pytest.raises(PortfolioError, match="IDEMPOTENCY_RESERVATION_FINALIZED"):
         service.reserve_cash(
@@ -1418,3 +1428,21 @@ def test_reservation_replay_contract_binds_ttl_and_rechecks_release_capability()
         "p_mac,\n                true"
     )
     assert "20260909_0023 is a one-way security migration" in migration
+
+
+def test_postgresql_public_reservation_port_checks_ttl_before_finalization() -> None:
+    migration = (
+        Path(__file__).resolve().parents[1]
+        / "migrations"
+        / "versions"
+        / "20260909_0024_reservation_contract_parity.py"
+    ).read_text(encoding="utf-8")
+    assert migration.index("SELECT * INTO v_existing") < migration.index(
+        "portfolio_reserve_cash_v1_0022_impl"
+    )
+    assert migration.index("IDEMPOTENCY_PAYLOAD_MISMATCH") < migration.index(
+        "portfolio_reserve_cash_v1_0022_impl"
+    )
+    assert "p_mac,\n                false" in migration
+    assert "FROM PUBLIC,tradingagents_worker" in migration
+    assert "20260909_0024 is a one-way security migration" in migration

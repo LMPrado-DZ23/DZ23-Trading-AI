@@ -386,6 +386,49 @@ def test_postgres_reservation_replay_binds_ttl(initial_ttl, replay_ttl) -> None:
 
 
 @pytest.mark.skipif(not APP_URL, reason="PostgreSQL app test URL is not configured")
+def test_postgres_rpc_ttl_mismatch_precedes_finalized_status() -> None:
+    engine = create_engine(APP_URL, pool_pre_ping=True)
+    factory = sessionmaker(engine, expire_on_commit=False)
+    identity = IdentityService(factory, token_hasher=TokenHasher(_TOKEN_PEPPER))
+    principal = _principal(identity, "TtlFinalized")
+    service = PortfolioService(
+        factory,
+        idempotency_digest_key=b"a" * 32,
+        capability_signing_key=_CAPABILITY_KEY,
+    )
+    _suitability, portfolio = _ready(service, principal, "TtlFinalized")
+    purpose = "9" * 64
+    key = "pg-ttl-finalized-replay"
+    reservation = service.reserve_cash(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("1"),
+        purpose_digest=purpose,
+        idempotency_key=key,
+        ttl=timedelta(seconds=30),
+    )
+    assert (
+        service.release_reservation(principal=principal, reservation_id=reservation.id)
+        == "released"
+    )
+    snapshot = _latest_snapshot(service, principal, portfolio.id)
+
+    with pytest.raises(DBAPIError) as captured:
+        _call_reserve_port(
+            service,
+            principal,
+            portfolio_id=portfolio.id,
+            amount=Decimal("1"),
+            purpose_digest=purpose,
+            key_hash=service._key_hash(key),
+            ttl_microseconds=3_600_000_000,
+            snapshot=snapshot,
+        )
+    assert _primary_error(captured.value) == "IDEMPOTENCY_PAYLOAD_MISMATCH"
+    engine.dispose()
+
+
+@pytest.mark.skipif(not APP_URL, reason="PostgreSQL app test URL is not configured")
 def test_release_capability_is_rechecked_after_waiting_for_portfolio_lock() -> None:
     engine = create_engine(APP_URL, pool_pre_ping=True)
     factory = sessionmaker(engine, expire_on_commit=False)

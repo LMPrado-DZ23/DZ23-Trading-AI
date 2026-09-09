@@ -1512,7 +1512,7 @@ class PortfolioService:
 
     def release_reservation(self, *, principal: IdentityPrincipal, reservation_id: UUID) -> str:
         self._authorize(principal, write=True)
-        with self._sessions() as db, db.begin():
+        with self._reservation_lock, self._sessions() as db, db.begin():
             self._set_portfolio_scope(db, principal)
             if db.get_bind().dialect.name == "postgresql":
                 now = self._database_now(db)
@@ -1545,8 +1545,19 @@ class PortfolioService:
             if row is None:
                 raise PortfolioError("RESERVATION_NOT_FOUND")
             if row.status == "active":
+                portfolio = db.scalar(
+                    select(Portfolio)
+                    .where(
+                        Portfolio.id == row.portfolio_id,
+                        Portfolio.tenant_id == principal.tenant_id,
+                    )
+                    .with_for_update()
+                )
+                if portfolio is None:
+                    raise PortfolioError("PORTFOLIO_NOT_ACTIVE")
                 row.status = "released"
                 row.released_at = now
+                portfolio.balance_version += 1
             return row.status
 
     def _create_reservation(

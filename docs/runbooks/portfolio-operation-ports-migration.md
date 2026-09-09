@@ -1,11 +1,12 @@
 # Runbook: portfolio operation ports migration
 
-Migrations `20260909_0022` and `20260909_0023` are forward-only security
+Migrations `20260909_0022` through `20260909_0024` are forward-only security
 migrations. They replace the capital-operation ports, tighten table privileges,
 bind active reservations to an immutable valuation snapshot and their requested
-TTL, expire legacy active reservations that do not have that binding, and
-revalidate release capabilities after acquiring the portfolio lock. Their
-`downgrade()` functions intentionally refuse to run.
+TTL, enforce the same replay contract before PostgreSQL finalization checks,
+expire legacy active reservations that do not have that binding, and revalidate
+release capabilities after acquiring the portfolio lock. Their `downgrade()`
+functions intentionally refuse to run.
 
 ## Pre-deploy gate
 
@@ -37,4 +38,4 @@ Never attempt a schema downgrade. Before accepting new writes, choose one of:
 If writes were accepted after the migration, recovery requires reconciliation
 of the immutable ledger and reservation journal before traffic resumes. A code
 rollback alone is not a database rollback and must remain blocked while schema
-head `20260909_0023` is active.
+head `20260909_0024` is active.
