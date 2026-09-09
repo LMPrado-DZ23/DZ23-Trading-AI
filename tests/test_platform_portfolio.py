@@ -311,6 +311,15 @@ def test_expired_sqlite_reservation_is_materialized_before_new_reservation(
 
     after_expiry = first.expires_at + timedelta(microseconds=1)
     monkeypatch.setattr(service, "_now", lambda: after_expiry)
+    with pytest.raises(PortfolioError, match="IDEMPOTENCY_RESERVATION_FINALIZED"):
+        service.reserve_cash(
+            principal=principal,
+            portfolio_id=portfolio.id,
+            amount=Decimal("40"),
+            purpose_digest="a" * 64,
+            idempotency_key="expired-reservation-0001",
+            ttl=timedelta(seconds=30),
+        )
     second = service.reserve_cash(
         principal=principal,
         portfolio_id=portfolio.id,

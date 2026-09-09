@@ -949,6 +949,14 @@ def test_allocator_replaces_elapsed_sqlite_reservation_without_permanent_lockout
 
     after_expiry = first.reservation.expires_at + timedelta(microseconds=1)
     monkeypatch.setattr(service, "_now", lambda: after_expiry)
+    with pytest.raises(PortfolioError, match="IDEMPOTENCY_RESERVATION_FINALIZED"):
+        service.allocate_and_reserve(
+            principal=principal,
+            portfolio_id=portfolio.id,
+            proposal=proposal,
+            idempotency_key="allocator-expiry-reservation-0001",
+            ttl=timedelta(seconds=30),
+        )
     second = service.allocate_and_reserve(
         principal=principal,
         portfolio_id=portfolio.id,
