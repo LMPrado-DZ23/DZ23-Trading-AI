@@ -333,6 +333,7 @@ class WorkerSettings(BaseSettings):
     worker_runtime_root: str = "/data/worker-runs"
     worker_lease_seconds: int = Field(default=120, ge=30, le=900)
     worker_poll_seconds: float = Field(default=2.0, ge=0.1, le=30.0)
+    worker_maintenance_seconds: int = Field(default=300, ge=30, le=86_400)
     llm_request_timeout_seconds: float = Field(default=30.0, ge=1.0, le=300.0)
     worker_max_attempt_bytes: int = Field(
         default=256 * 1024 * 1024,

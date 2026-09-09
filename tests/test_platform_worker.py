@@ -1007,6 +1007,34 @@ def test_worker_preserves_attempt_workspace_when_failure_cannot_be_persisted(
     assert executor.cleanup_calls == 0
 
 
+def test_worker_runs_bounded_maintenance_before_polling() -> None:
+    stop = threading.Event()
+    calls: list[str] = []
+
+    class EmptyJobs:
+        @staticmethod
+        def claim_next(**_kwargs):
+            calls.append("poll")
+            return None
+
+    def maintenance() -> int:
+        calls.append("maintenance")
+        stop.set()
+        return 0
+
+    worker = WorkerRunner(
+        jobs=EmptyJobs(),
+        credentials=object(),
+        executor=lambda *_args: None,
+        config=WorkerConfig(worker_id="worker-maintenance", maintenance_seconds=30),
+        maintenance=maintenance,
+    )
+
+    worker.run_forever(poll_seconds=0.1, stop=stop)
+
+    assert calls == ["maintenance", "poll"]
+
+
 def test_attempt_cleanup_removes_only_the_exact_fenced_attempt(tmp_path) -> None:
     _factory, principal, _llm, jobs, connection_id = _stack()
     jobs.enqueue(

@@ -7,6 +7,7 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import create_engine, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -201,6 +202,14 @@ def test_cash_reservation_cannot_exceed_available_balance(portfolio_runtime) -> 
         portfolio_id=portfolio.id,
         valuation=_trusted_valuation(service),
     )
+    with pytest.raises(PortfolioError, match="INSUFFICIENT_AVAILABLE_CASH"):
+        service.reserve_cash(
+            principal=principal,
+            portfolio_id=portfolio.id,
+            amount=Decimal("101"),
+            purpose_digest="c" * 64,
+            idempotency_key="reservation-oversized-0001",
+        )
     reservation = service.reserve_cash(
         principal=principal,
         portfolio_id=portfolio.id,
@@ -208,7 +217,28 @@ def test_cash_reservation_cannot_exceed_available_balance(portfolio_runtime) -> 
         purpose_digest="a" * 64,
         idempotency_key="reservation-request-0001",
     )
-    with pytest.raises(PortfolioError, match="INSUFFICIENT_AVAILABLE_CASH"):
+    with pytest.raises(IntegrityError), _factory() as db, db.begin():
+        db.add(
+            CashReservation(
+                tenant_id=reservation.tenant_id,
+                portfolio_id=reservation.portfolio_id,
+                mandate_id=reservation.mandate_id,
+                idempotency_key_hash=service._key_hash(
+                    "reservation-direct-db-conflict"
+                ),
+                currency=reservation.currency,
+                amount=Decimal("1"),
+                status="active",
+                purpose_digest="d" * 64,
+                snapshot_id=reservation.snapshot_id,
+                snapshot_digest=reservation.snapshot_digest,
+                source_state_digest=reservation.source_state_digest,
+                expires_at=reservation.expires_at,
+                created_at=reservation.created_at,
+            )
+        )
+        db.flush()
+    with pytest.raises(PortfolioError, match="ACTIVE_RESERVATION_EXISTS"):
         service.reserve_cash(
             principal=principal,
             portfolio_id=portfolio.id,

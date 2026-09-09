@@ -345,6 +345,17 @@ class PortfolioService:
             + ttl.microseconds
         )
 
+    @staticmethod
+    def _epoch_microseconds(value: datetime) -> int:
+        normalized = value.astimezone(UTC)
+        epoch = datetime(1970, 1, 1, tzinfo=UTC)
+        delta = normalized - epoch
+        return (
+            delta.days * 86_400_000_000
+            + delta.seconds * 1_000_000
+            + delta.microseconds
+        )
+
     def assess_suitability(
         self,
         *,
@@ -1117,6 +1128,17 @@ class PortfolioService:
                 or existing_reservation.expires_at <= now
             ):
                 raise PortfolioError("IDEMPOTENCY_RESERVATION_FINALIZED")
+            if existing_reservation is None and db.scalar(
+                select(func.count())
+                .select_from(CashReservation)
+                .where(
+                    CashReservation.tenant_id == principal.tenant_id,
+                    CashReservation.portfolio_id == portfolio_id,
+                    CashReservation.status == "active",
+                    CashReservation.expires_at > now,
+                )
+            ):
+                raise PortfolioError("ACTIVE_RESERVATION_EXISTS")
             if db.scalar(
                 select(func.count())
                 .select_from(CircuitBreaker)
@@ -1138,11 +1160,14 @@ class PortfolioService:
             )
             if snapshot is None:
                 raise PortfolioError("BASELINE_SNAPSHOT_REQUIRED")
-            if (
-                snapshot.valuation_available_at < now - timedelta(minutes=15)
-                or snapshot.captured_at < now - timedelta(minutes=15)
-            ):
-                raise PortfolioError("ALLOCATION_BASELINE_STALE")
+            self._assert_reservation_risk_context(
+                db,
+                tenant_id=principal.tenant_id,
+                portfolio_id=portfolio_id,
+                mandate=mandate,
+                snapshot=snapshot,
+                now=now,
+            )
             capital = self._decimal("capital", snapshot.equity, positive=True)
             cash, reserved = self._cash_balances(
                 db, principal.tenant_id, portfolio_id, now
@@ -1258,6 +1283,32 @@ class PortfolioService:
                     or existing_reservation.mandate_id != mandate.id
                 ):
                     raise PortfolioError("IDEMPOTENCY_PAYLOAD_MISMATCH")
+                if (
+                    existing_reservation.snapshot_id != snapshot.id
+                    or not existing_reservation.snapshot_digest
+                    or not hmac.compare_digest(
+                        existing_reservation.snapshot_digest, snapshot.digest
+                    )
+                    or not existing_reservation.source_state_digest
+                    or not hmac.compare_digest(
+                        existing_reservation.source_state_digest,
+                        snapshot.source_state_digest,
+                    )
+                ):
+                    raise PortfolioError("IDEMPOTENCY_RESERVATION_FINALIZED")
+                if db.get_bind().dialect.name == "postgresql":
+                    existing_reservation = self._create_reservation(
+                        db,
+                        principal=principal,
+                        portfolio=portfolio,
+                        mandate=mandate,
+                        snapshot=snapshot,
+                        key_hash=key_hash,
+                        amount=total,
+                        purpose_digest=allocation_digest,
+                        ttl=ttl,
+                        now=now,
+                    )
                 db.expunge(existing_reservation)
                 return AllocationReservation(
                     portfolio_id=portfolio_id,
@@ -1274,6 +1325,7 @@ class PortfolioService:
                 principal=principal,
                 portfolio=portfolio,
                 mandate=mandate,
+                snapshot=snapshot,
                 key_hash=key_hash,
                 amount=total,
                 purpose_digest=allocation_digest,
@@ -1335,7 +1387,7 @@ class PortfolioService:
             with self._sessions() as db, db.begin():
                 self._set_portfolio_scope(db, principal)
                 now = self._database_now(db)
-                portfolio, mandate = self._reservation_authorization_context(
+                portfolio, mandate, snapshot = self._reservation_authorization_context(
                     db,
                     tenant_id=principal.tenant_id,
                     portfolio_id=portfolio_id,
@@ -1349,11 +1401,44 @@ class PortfolioService:
                     amount=amount,
                     purpose_digest=purpose_digest,
                     mandate_id=mandate.id,
+                    snapshot=snapshot,
+                    now=now,
+                )
+                self._assert_reservation_risk_context(
+                    db,
+                    tenant_id=principal.tenant_id,
+                    portfolio_id=portfolio_id,
+                    mandate=mandate,
+                    snapshot=snapshot,
                     now=now,
                 )
                 if existing is not None:
+                    if db.get_bind().dialect.name == "postgresql":
+                        existing = self._create_reservation(
+                            db,
+                            principal=principal,
+                            portfolio=portfolio,
+                            mandate=mandate,
+                            snapshot=snapshot,
+                            key_hash=key_hash,
+                            amount=amount,
+                            purpose_digest=purpose_digest,
+                            ttl=ttl,
+                            now=now,
+                        )
                     db.expunge(existing)
                     return existing
+                if db.scalar(
+                    select(func.count())
+                    .select_from(CashReservation)
+                    .where(
+                        CashReservation.tenant_id == principal.tenant_id,
+                        CashReservation.portfolio_id == portfolio_id,
+                        CashReservation.status == "active",
+                        CashReservation.expires_at > now,
+                    )
+                ):
+                    raise PortfolioError("ACTIVE_RESERVATION_EXISTS")
                 cash, reserved = self._cash_balances(db, principal.tenant_id, portfolio_id, now)
                 if amount > cash - reserved:
                     raise PortfolioError("INSUFFICIENT_AVAILABLE_CASH")
@@ -1362,6 +1447,7 @@ class PortfolioService:
                     principal=principal,
                     portfolio=portfolio,
                     mandate=mandate,
+                    snapshot=snapshot,
                     key_hash=key_hash,
                     amount=amount,
                     purpose_digest=purpose_digest,
@@ -1376,7 +1462,7 @@ class PortfolioService:
             with self._sessions() as db, db.begin():
                 self._set_portfolio_scope(db, principal)
                 now = self._database_now(db)
-                _portfolio, mandate = self._reservation_authorization_context(
+                _portfolio, mandate, _snapshot = self._reservation_authorization_context(
                     db,
                     tenant_id=principal.tenant_id,
                     portfolio_id=portfolio_id,
@@ -1390,6 +1476,15 @@ class PortfolioService:
                     amount=amount,
                     purpose_digest=purpose_digest,
                     mandate_id=mandate.id,
+                    snapshot=_snapshot,
+                    now=now,
+                )
+                self._assert_reservation_risk_context(
+                    db,
+                    tenant_id=principal.tenant_id,
+                    portfolio_id=portfolio_id,
+                    mandate=mandate,
+                    snapshot=_snapshot,
                     now=now,
                 )
                 if existing is None:
@@ -1443,6 +1538,7 @@ class PortfolioService:
         principal: IdentityPrincipal,
         portfolio: Portfolio,
         mandate: PortfolioMandate,
+        snapshot: PortfolioSnapshot,
         key_hash: str,
         amount: Decimal,
         purpose_digest: str,
@@ -1460,6 +1556,8 @@ class PortfolioService:
                     purpose_digest,
                     key_hash,
                     str(ttl_microseconds),
+                    str(snapshot.id),
+                    snapshot.digest,
                 ),
                 now=now,
             )
@@ -1467,7 +1565,8 @@ class PortfolioService:
                 text(
                     "SELECT * FROM tradingagents_private.portfolio_reserve_cash_v1("
                     ":portfolio_id, :amount, :purpose_digest, :key_hash, :ttl_microseconds, "
-                    ":cap_kid, :cap_session_id, :cap_token_hash, :cap_issued_at, "
+                    ":snapshot_id, :snapshot_digest, :cap_kid, :cap_session_id, "
+                    ":cap_token_hash, :cap_issued_at, "
                     ":cap_expires_at, :cap_nonce, :cap_mac)"
                 )
             )
@@ -1479,6 +1578,8 @@ class PortfolioService:
                     "purpose_digest": purpose_digest,
                     "key_hash": key_hash,
                     "ttl_microseconds": ttl_microseconds,
+                    "snapshot_id": snapshot.id,
+                    "snapshot_digest": snapshot.digest,
                 }
                 | capability,
             ).one()
@@ -1493,12 +1594,20 @@ class PortfolioService:
             amount=amount,
             status="active",
             purpose_digest=purpose_digest,
+            snapshot_id=snapshot.id,
+            snapshot_digest=snapshot.digest,
+            source_state_digest=snapshot.source_state_digest,
             expires_at=now + ttl,
             created_at=now,
         )
         db.add(row)
         portfolio.balance_version += 1
-        db.flush()
+        try:
+            db.flush()
+        except IntegrityError as exc:
+            if self._is_active_reservation_conflict(exc):
+                raise PortfolioError("ACTIVE_RESERVATION_EXISTS") from exc
+            raise
         return row
 
     def list_portfolios(self, *, principal: IdentityPrincipal) -> tuple[PortfolioOverview, ...]:
@@ -1649,6 +1758,17 @@ class PortfolioService:
         with self._sessions() as db, db.begin():
             self._set_portfolio_scope(db, principal)
             now = self._database_now(db)
+            self._validate_valuation(valuation, now=now)
+            if db.get_bind().dialect.name == "postgresql":
+                row = self._capture_snapshot_postgresql(
+                    db,
+                    principal=principal,
+                    portfolio_id=portfolio_id,
+                    valuation=valuation,
+                    now=now,
+                )
+                db.expunge(row)
+                return row
             portfolio = db.scalar(
                 select(Portfolio)
                 .where(Portfolio.id == portfolio_id, Portfolio.tenant_id == principal.tenant_id)
@@ -1664,7 +1784,6 @@ class PortfolioService:
                 RunMode.PAPER.value,
             }:
                 raise PortfolioError("ACTIVE_MANDATE_REQUIRED")
-            self._validate_valuation(valuation, now=now)
             positions = db.scalars(
                 select(PortfolioPosition).where(
                     PortfolioPosition.tenant_id == principal.tenant_id,
@@ -1698,7 +1817,7 @@ class PortfolioService:
             if portfolio.unit_count <= 0:
                 raise PortfolioError("PORTFOLIO_HAS_NO_CAPITAL")
             nav_per_unit = (equity / portfolio.unit_count).quantize(
-                Decimal("0.000000000001")
+                Decimal("0.000000000001"), ROUND_HALF_UP
             )
             if nav_per_unit <= 0:
                 raise PortfolioError("PORTFOLIO_NAV_INVALID")
@@ -1775,6 +1894,12 @@ class PortfolioService:
                 "valuation_digest": valuation.evidence_digest,
                 "captured_at": now.isoformat(),
             }
+            source_state_digest = self._source_state_digest(
+                db,
+                tenant_id=principal.tenant_id,
+                portfolio_id=portfolio_id,
+            )
+            payload["source_state_digest"] = source_state_digest
             row = PortfolioSnapshot(
                 tenant_id=principal.tenant_id,
                 portfolio_id=portfolio_id,
@@ -1793,6 +1918,7 @@ class PortfolioService:
                 daily_drawdown=daily_drawdown,
                 positions=position_payload,
                 prices=normalized_prices,
+                source_state_digest=source_state_digest,
                 valuation_source=valuation.source,
                 valuation_observed_at=valuation.observed_at,
                 valuation_available_at=valuation.available_at,
@@ -1837,6 +1963,67 @@ class PortfolioService:
             db.flush()
             db.expunge(row)
             return row
+
+    def _capture_snapshot_postgresql(
+        self,
+        db: Session,
+        *,
+        principal: IdentityPrincipal,
+        portfolio_id: UUID,
+        valuation: TrustedValuation,
+        now: datetime,
+    ) -> PortfolioSnapshot:
+        normalized_prices: dict[str, str] = {}
+        for symbol, price in valuation.prices.items():
+            if not isinstance(symbol, str) or not symbol or len(symbol.encode("utf-8")) > 64:
+                raise PortfolioError("VALUATION_PRICES_INVALID")
+            self._decimal("price", price, positive=True)
+            if price.as_tuple().exponent < -12:
+                raise PortfolioError("VALUATION_PRICES_INVALID")
+            normalized_prices[symbol] = self._canonical_decimal(price)
+        prices_text = json.dumps(
+            normalized_prices,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        observed_microseconds = self._epoch_microseconds(valuation.observed_at)
+        available_microseconds = self._epoch_microseconds(valuation.available_at)
+        prices_digest = hashlib.sha256(prices_text.encode("utf-8")).hexdigest()
+        capability = self._mint_capability(
+            principal=principal,
+            audience="portfolio.snapshot.v1",
+            fields=(
+                str(portfolio_id),
+                valuation.source,
+                str(observed_microseconds),
+                str(available_microseconds),
+                valuation.evidence_digest,
+                prices_digest,
+            ),
+            now=now,
+        )
+        statement = select(PortfolioSnapshot).from_statement(
+            text(
+                "SELECT * FROM tradingagents_private.portfolio_capture_snapshot_v1("
+                ":portfolio_id, :valuation_source, :observed_microseconds, "
+                ":available_microseconds, :evidence_digest, :prices_text, :cap_kid, "
+                ":cap_session_id, :cap_token_hash, :cap_issued_at, :cap_expires_at, "
+                ":cap_nonce, :cap_mac)"
+            )
+        )
+        return db.scalars(
+            statement,
+            {
+                "portfolio_id": portfolio_id,
+                "valuation_source": valuation.source,
+                "observed_microseconds": observed_microseconds,
+                "available_microseconds": available_microseconds,
+                "evidence_digest": valuation.evidence_digest,
+                "prices_text": prices_text,
+            }
+            | capability,
+        ).one()
 
     @staticmethod
     def _validate_valuation(valuation: TrustedValuation, *, now: datetime) -> None:
@@ -2012,7 +2199,7 @@ class PortfolioService:
         tenant_id: UUID,
         portfolio_id: UUID,
         now: datetime,
-    ) -> tuple[Portfolio, PortfolioMandate]:
+    ) -> tuple[Portfolio, PortfolioMandate, PortfolioSnapshot]:
         portfolio = db.scalar(
             select(Portfolio)
             .where(Portfolio.id == portfolio_id, Portfolio.tenant_id == tenant_id)
@@ -2021,15 +2208,44 @@ class PortfolioService:
         if portfolio is None or portfolio.status != "active":
             raise PortfolioError("PORTFOLIO_NOT_ACTIVE")
         mandate = self._require_active_mandate(db, tenant_id, portfolio_id, now)
-        if not db.scalar(
-            select(func.count())
-            .select_from(PortfolioSnapshot)
+        snapshot = db.scalar(
+            select(PortfolioSnapshot)
             .where(
                 PortfolioSnapshot.tenant_id == tenant_id,
                 PortfolioSnapshot.portfolio_id == portfolio_id,
             )
-        ):
+            .order_by(PortfolioSnapshot.sequence.desc())
+            .limit(1)
+        )
+        if snapshot is None:
             raise PortfolioError("BASELINE_SNAPSHOT_REQUIRED")
+        return portfolio, mandate, snapshot
+
+    @staticmethod
+    def _assert_reservation_risk_context(
+        db: Session,
+        *,
+        tenant_id: UUID,
+        portfolio_id: UUID,
+        mandate: PortfolioMandate,
+        snapshot: PortfolioSnapshot,
+        now: datetime,
+    ) -> None:
+        if (
+            snapshot.valuation_available_at < now - timedelta(minutes=15)
+            or snapshot.captured_at < now - timedelta(minutes=15)
+            or snapshot.captured_at < mandate.effective_at
+        ):
+            raise PortfolioError("ALLOCATION_BASELINE_STALE")
+        if db.get_bind().dialect.name != "postgresql" and not hmac.compare_digest(
+            snapshot.source_state_digest,
+            PortfolioService._source_state_digest(
+                db,
+                tenant_id=tenant_id,
+                portfolio_id=portfolio_id,
+            ),
+        ):
+            raise PortfolioError("ALLOCATION_BASELINE_STALE")
         if db.scalar(
             select(func.count())
             .select_from(CircuitBreaker)
@@ -2040,7 +2256,55 @@ class PortfolioService:
             )
         ):
             raise PortfolioError("CIRCUIT_BREAKER_OPEN")
-        return portfolio, mandate
+
+    @staticmethod
+    def _source_state_digest(
+        db: Session,
+        *,
+        tenant_id: UUID,
+        portfolio_id: UUID,
+    ) -> str:
+        transactions = db.execute(
+            select(LedgerTransaction.id, LedgerTransaction.digest)
+            .where(
+                LedgerTransaction.tenant_id == tenant_id,
+                LedgerTransaction.portfolio_id == portfolio_id,
+            )
+            .order_by(LedgerTransaction.id)
+        ).all()
+        positions = db.execute(
+            select(
+                PortfolioPosition.id,
+                PortfolioPosition.symbol,
+                PortfolioPosition.version,
+                PortfolioPosition.quantity,
+                PortfolioPosition.average_cost,
+                PortfolioPosition.realized_pnl,
+            )
+            .where(
+                PortfolioPosition.tenant_id == tenant_id,
+                PortfolioPosition.portfolio_id == portfolio_id,
+            )
+            .order_by(PortfolioPosition.id)
+        ).all()
+        return PortfolioService._canonical_digest(
+            {
+                "transactions": [
+                    {"id": str(row.id), "digest": row.digest} for row in transactions
+                ],
+                "positions": [
+                    {
+                        "id": str(row.id),
+                        "symbol": row.symbol,
+                        "version": row.version,
+                        "quantity": str(row.quantity),
+                        "average_cost": str(row.average_cost),
+                        "realized_pnl": str(row.realized_pnl),
+                    }
+                    for row in positions
+                ],
+            }
+        )
 
     @staticmethod
     def _validated_reservation_replay(
@@ -2052,6 +2316,7 @@ class PortfolioService:
         amount: Decimal,
         purpose_digest: str,
         mandate_id: UUID,
+        snapshot: PortfolioSnapshot,
         now: datetime,
     ) -> CashReservation | None:
         existing = db.scalar(
@@ -2071,6 +2336,13 @@ class PortfolioService:
             existing.status != "active"
             or existing.expires_at <= now
             or existing.mandate_id != mandate_id
+            or existing.snapshot_id != snapshot.id
+            or not existing.snapshot_digest
+            or not hmac.compare_digest(existing.snapshot_digest, snapshot.digest)
+            or not existing.source_state_digest
+            or not hmac.compare_digest(
+                existing.source_state_digest, snapshot.source_state_digest
+            )
         ):
             raise PortfolioError("IDEMPOTENCY_RESERVATION_FINALIZED")
         return existing
@@ -2088,4 +2360,19 @@ class PortfolioService:
             and "portfolio_cash_reservations.tenant_id" in message
             and "portfolio_cash_reservations.portfolio_id" in message
             and "portfolio_cash_reservations.idempotency_key_hash" in message
+        )
+
+    @staticmethod
+    def _is_active_reservation_conflict(exc: IntegrityError) -> bool:
+        original = exc.orig
+        diagnostic = getattr(original, "diag", None)
+        constraint_name = getattr(diagnostic, "constraint_name", None)
+        if constraint_name is not None:
+            return constraint_name == "uq_portfolio_single_active_reservation"
+        message = str(original).lower()
+        return (
+            "unique constraint failed" in message
+            and "portfolio_cash_reservations.tenant_id" in message
+            and "portfolio_cash_reservations.portfolio_id" in message
+            and "portfolio_cash_reservations.idempotency_key_hash" not in message
         )

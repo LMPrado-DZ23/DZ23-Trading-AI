@@ -1157,3 +1157,61 @@ def test_portfolio_capability_migration_is_parameter_bound_and_fail_closed() -> 
     assert "TRADINGAGENTS_SESSION_TOKEN_PEPPER" in migration
     assert "key_material=EXCLUDED.key_material" in migration
     assert "20260909_0021 is a one-way security migration" in migration
+
+
+def test_portfolio_operation_ports_are_snapshot_bound_and_least_privilege() -> None:
+    migration = (
+        Path(__file__).resolve().parents[1]
+        / "migrations"
+        / "versions"
+        / "20260909_0022_portfolio_operation_ports.py"
+    ).read_text(encoding="utf-8")
+    verifier = migration[
+        migration.index("def _replace_verifier") : migration.index(
+            "def _install_nonce_maintenance"
+        )
+    ]
+    assert "p_expires_at<=v_now" in verifier
+    assert "DELETE FROM" not in verifier
+    assert "FOR UPDATE SKIP LOCKED" in migration
+    assert "portfolio_prune_capability_nonces_v1" in migration
+    assert "uq_portfolio_single_active_reservation" in migration
+    assert "source_state_digest" in migration
+    assert "portfolio_source_state_digest_v1" in migration
+    assert "portfolio_capture_snapshot_v1" in migration
+    assert "p_snapshot_id uuid" in migration
+    assert "p_snapshot_digest text" in migration
+    assert "REVOKE INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER" in migration
+    assert "portfolio_positions\", \"portfolio_snapshots\", \"portfolio_circuit_breakers" in migration
+    assert "jsonb_object_length" not in migration
+    assert "irreversible security migration" in migration
+    restricted = migration[
+        migration.index("def _restrict_control_tables") : migration.index(
+            "def _replace_reserve_port"
+        )
+    ]
+    assert restricted.index("SET CONSTRAINTS ALL IMMEDIATE") < restricted.index(
+            "ck_reservation_active_snapshot"
+        )
+    reserve_port = migration[
+        migration.index("def _replace_reserve_port") : migration.index(
+            "def _install_snapshot_port"
+        )
+    ]
+    snapshot_port = migration[
+        migration.index("def _install_snapshot_port") : migration.index("def downgrade")
+    ]
+    for port in (reserve_port, snapshot_port):
+        assert "p_nonce,p_mac,false" in port
+        assert "p_nonce,p_mac,true" in port
+        assert port.index("p_nonce,p_mac,false") < port.index("FOR UPDATE")
+        assert port.index("FOR UPDATE") < port.index("p_nonce,p_mac,true")
+    assert "[0-9]{0,25}" in snapshot_port
+    runbook = (
+        Path(__file__).resolve().parents[1]
+        / "docs"
+        / "runbooks"
+        / "portfolio-operation-ports-migration.md"
+    ).read_text(encoding="utf-8")
+    assert "point-in-time recovery" in runbook
+    assert "Never attempt a schema downgrade" in runbook

@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import DBAPIError
 
 from tradingagents.platform.api import (
     ApiSecuritySettings,
@@ -23,6 +24,22 @@ from tradingagents.platform.api.security import (
 )
 from tradingagents.platform.identity import MembershipRole
 from tradingagents.platform.portfolio import PortfolioError
+
+
+class _PostgresDiagnosticError(Exception):
+    def __init__(self, message: str, *, sqlstate: str = "P0001") -> None:
+        super().__init__("redacted database failure")
+        self.sqlstate = sqlstate
+        self.diag = SimpleNamespace(message_primary=message)
+
+
+def _database_error(message: str, *, sqlstate: str = "P0001") -> DBAPIError:
+    return DBAPIError(
+        "redacted statement",
+        {},
+        _PostgresDiagnosticError(message, sqlstate=sqlstate),
+        False,
+    )
 
 
 class VerifiedIdentity:
@@ -225,6 +242,158 @@ def test_sqlalchemy_adapter_translates_portfolio_list_clock_failure() -> None:
                 token="clock-token",
                 principal=expected,
             )
+        )
+
+
+@pytest.mark.parametrize(
+    ("database_code", "sqlstate", "public_code", "status"),
+    [
+        ("PORTFOLIO_CAPABILITY_INVALID", "P0001", "PORTFOLIO_TEMPORARILY_UNAVAILABLE", 503),
+        (
+            "PORTFOLIO_CAPABILITY_UNAVAILABLE",
+            "P0001",
+            "PORTFOLIO_TEMPORARILY_UNAVAILABLE",
+            503,
+        ),
+        ("PORTFOLIO_SESSION_FORBIDDEN", "P0001", "SESSION_INVALID", 401),
+        ("UNRECOGNIZED_INTERNAL_DETAIL", "P0001", "PORTFOLIO_TEMPORARILY_UNAVAILABLE", 503),
+        ("connection failed with secret", "08006", "PORTFOLIO_TEMPORARILY_UNAVAILABLE", 503),
+    ],
+)
+def test_postgres_portfolio_failures_are_sanitized_through_http(
+    database_code: str,
+    sqlstate: str,
+    public_code: str,
+    status: int,
+) -> None:
+    identity = VerifiedIdentity()
+    profile = SimpleNamespace(
+        user_id=identity.session.principal.user_id,
+        tenant_id=identity.session.principal.tenant_id,
+        membership_id=uuid4(),
+        session_id=identity.session.principal.session_id,
+        role=MembershipRole.OWNER,
+        session_token_hash="a" * 64,
+    )
+
+    class SyncIdentity:
+        @staticmethod
+        def authenticate_session_token(*, token):
+            assert token == identity.session.token
+            return profile
+
+    class FailingPortfolioService:
+        @staticmethod
+        def list_portfolios(*, principal):
+            assert principal.tenant_id == identity.session.principal.tenant_id
+            raise _database_error(database_code, sqlstate=sqlstate)
+
+    adapter = SqlAlchemyPortfolioAdapter(
+        identity=SyncIdentity(), portfolios=FailingPortfolioService()
+    )
+    app = create_platform_app(
+        identity_service=identity,
+        security=ApiSecuritySettings(csrf_secret=b"portfolio-db-error-secret-value-32"),
+        rate_limiter=InMemorySlidingWindowRateLimiter(),
+        portfolio_service=adapter,
+    )
+    client = TestClient(app, base_url="https://testserver", raise_server_exceptions=False)
+    client.cookies.set(SESSION_COOKIE, identity.session.token)
+
+    response = client.get("/v1/portfolios")
+
+    assert response.status_code == status
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json()["detail"]["code"] == public_code
+    assert "secret" not in response.text.lower()
+
+
+@pytest.mark.parametrize("path", ["invoke", "list", "snapshot"])
+def test_database_error_translation_covers_every_adapter_path(path: str) -> None:
+    expected = IdentityPrincipal(
+        user_id=uuid4(),
+        tenant_id=uuid4(),
+        email="database-error@example.test",
+        display_name="Database Error",
+        roles=("owner",),
+        email_verified=True,
+        session_id=uuid4(),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    profile = SimpleNamespace(
+        user_id=expected.user_id,
+        tenant_id=expected.tenant_id,
+        membership_id=uuid4(),
+        session_id=expected.session_id,
+        role=MembershipRole.OWNER,
+        session_token_hash="b" * 64,
+    )
+
+    class SyncIdentity:
+        @staticmethod
+        def authenticate_session_token(*, token):
+            assert token == "database-error-token"
+            return profile
+
+    class FailingPortfolioService:
+        @staticmethod
+        def create_portfolio(**_kwargs):
+            raise _database_error("PORTFOLIO_CAPABILITY_INVALID")
+
+        @staticmethod
+        def list_portfolios(**_kwargs):
+            raise _database_error("PORTFOLIO_CAPABILITY_INVALID")
+
+        @staticmethod
+        def latest_snapshot(**_kwargs):
+            raise _database_error("PORTFOLIO_CAPABILITY_INVALID")
+
+    adapter = SqlAlchemyPortfolioAdapter(
+        identity=SyncIdentity(), portfolios=FailingPortfolioService()
+    )
+    if path == "invoke":
+        call = adapter.create_portfolio(
+            token="database-error-token",
+            principal=expected,
+            name="Principal",
+            base_currency="BRL",
+        )
+    elif path == "list":
+        call = adapter.list_portfolios(token="database-error-token", principal=expected)
+    else:
+        call = adapter.get_latest_snapshot(
+            token="database-error-token",
+            principal=expected,
+            portfolio_id=uuid4(),
+        )
+    with pytest.raises(IdentityError, match="PORTFOLIO_TEMPORARILY_UNAVAILABLE"):
+        asyncio.run(call)
+
+
+def test_database_error_during_principal_resolution_is_fail_closed() -> None:
+    expected = IdentityPrincipal(
+        user_id=uuid4(),
+        tenant_id=uuid4(),
+        email="identity-database-error@example.test",
+        display_name="Identity Database Error",
+        roles=("owner",),
+        email_verified=True,
+        session_id=uuid4(),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+
+    class FailingIdentity:
+        @staticmethod
+        def authenticate_session_token(**_kwargs):
+            raise _database_error("connection failed with secret", sqlstate="08006")
+
+    adapter = SqlAlchemyPortfolioAdapter(
+        identity=FailingIdentity(), portfolios=object()
+    )
+
+    with pytest.raises(IdentityError, match="PORTFOLIO_TEMPORARILY_UNAVAILABLE"):
+        asyncio.run(
+            adapter.list_portfolios(token="database-error-token", principal=expected)
         )
 
 
@@ -437,6 +606,8 @@ def test_public_portfolio_error_table_covers_every_reachable_service_code() -> N
 
     reachable = {
         "ACTIVE_MANDATE_REQUIRED",
+        "ACTIVE_RESERVATION_EXISTS",
+        "ALLOCATION_BASELINE_STALE",
         "AMOUNT_BELOW_UNIT_PRECISION",
         "AMOUNT_INVALID",
         "BASELINE_SNAPSHOT_REQUIRED",
@@ -448,6 +619,7 @@ def test_public_portfolio_error_table_covers_every_reachable_service_code() -> N
         "FUNDING_REFERENCE_INVALID",
         "IDEMPOTENCY_KEY_INVALID",
         "IDEMPOTENCY_PAYLOAD_MISMATCH",
+        "IDEMPOTENCY_RESERVATION_FINALIZED",
         "LEDGER_WRITE_CONFLICT",
         "MANDATE_TRANSITION_INVALID",
         "PAPER_CAPITAL_LOCKED_AFTER_TRADING",

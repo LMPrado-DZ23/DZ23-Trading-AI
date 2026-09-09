@@ -16,6 +16,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
     event,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -317,6 +318,9 @@ class CashReservation(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(36, 12), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     purpose_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    snapshot_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    snapshot_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_state_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
     expires_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     released_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     consumed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
@@ -339,6 +343,16 @@ class CashReservation(Base):
             name="fk_reservation_mandate",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["snapshot_id", "tenant_id", "portfolio_id"],
+            [
+                "portfolio_snapshots.id",
+                "portfolio_snapshots.tenant_id",
+                "portfolio_snapshots.portfolio_id",
+            ],
+            name="fk_reservation_snapshot",
+            ondelete="RESTRICT",
+        ),
         UniqueConstraint(
             "tenant_id", "portfolio_id", "idempotency_key_hash", name="uq_reservation_idempotency"
         ),
@@ -354,7 +368,20 @@ class CashReservation(Base):
             name="ck_reservation_status_timestamps",
         ),
         CheckConstraint("length(purpose_digest) = 64", name="ck_reservation_digest"),
+        CheckConstraint(
+            "status <> 'active' OR (snapshot_id IS NOT NULL AND "
+            "length(snapshot_digest) = 64 AND length(source_state_digest) = 64)",
+            name="ck_reservation_active_snapshot",
+        ),
         Index("ix_reservation_active", "tenant_id", "portfolio_id", "status", "expires_at"),
+        Index(
+            "uq_portfolio_single_active_reservation",
+            "tenant_id",
+            "portfolio_id",
+            unique=True,
+            sqlite_where=text("status = 'active'"),
+            postgresql_where=text("status = 'active'"),
+        ),
     )
 
 
@@ -411,6 +438,7 @@ class PortfolioSnapshot(Base):
     daily_drawdown: Mapped[Decimal] = mapped_column(Numeric(18, 12), nullable=False)
     positions: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     prices: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    source_state_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     digest: Mapped[str] = mapped_column(String(64), nullable=False)
     valuation_source: Mapped[str] = mapped_column(String(32), nullable=False)
     valuation_observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
@@ -426,6 +454,9 @@ class PortfolioSnapshot(Base):
             ondelete="RESTRICT",
         ),
         UniqueConstraint("tenant_id", "portfolio_id", "sequence", name="uq_snapshot_sequence"),
+        UniqueConstraint(
+            "id", "tenant_id", "portfolio_id", name="uq_snapshot_identity_portfolio"
+        ),
         CheckConstraint("sequence >= 1", name="ck_snapshot_sequence"),
         CheckConstraint("cash >= 0 AND reserved_cash >= 0", name="ck_snapshot_cash"),
         CheckConstraint("equity >= 0 AND high_water_mark >= 0", name="ck_snapshot_equity"),
@@ -444,6 +475,9 @@ class PortfolioSnapshot(Base):
         ),
         CheckConstraint(
             "length(valuation_digest) = 64", name="ck_snapshot_valuation_digest"
+        ),
+        CheckConstraint(
+            "length(source_state_digest) = 64", name="ck_snapshot_source_state_digest"
         ),
         CheckConstraint(
             "valuation_observed_at <= valuation_available_at AND "

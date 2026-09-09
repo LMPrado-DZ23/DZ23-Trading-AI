@@ -1,5 +1,6 @@
 """Deterministic portfolio, suitability, mandate, and and risk controls."""
 
+from tradingagents.platform.portfolio.maintenance import PortfolioMaintenance
 from tradingagents.platform.portfolio.models import (
     CashReservation,
     CircuitBreaker,
@@ -48,6 +49,7 @@ __all__ = [
     "Portfolio",
     "PortfolioError",
     "PortfolioMandate",
+    "PortfolioMaintenance",
     "PortfolioOverview",
     "PortfolioPolicy",
     "PortfolioPosition",

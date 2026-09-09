@@ -1220,6 +1220,13 @@ def _raise_llm_connection_error(exc: IdentityError) -> None:
 
 
 _PORTFOLIO_PUBLIC_ERRORS: dict[str, tuple[int, str, bool, str | None]] = {
+    "SESSION_INVALID": (401, "Sua sessão expirou. Entre novamente.", False, "sign_in"),
+    "PORTFOLIO_TEMPORARILY_UNAVAILABLE": (
+        503,
+        "A carteira está temporariamente indisponível. Tente novamente em instantes.",
+        True,
+        "retry_later",
+    ),
     "PORTFOLIO_NOT_FOUND": (404, "Carteira não encontrada.", False, "return_to_portfolios"),
     "RESERVATION_NOT_FOUND": (404, "Reserva não encontrada.", False, "refresh_portfolio"),
     "SNAPSHOT_NOT_FOUND": (404, "Fotografia de risco não encontrada.", True, "refresh_portfolio"),
@@ -1230,6 +1237,8 @@ _PORTFOLIO_PUBLIC_ERRORS: dict[str, tuple[int, str, bool, str | None]] = {
     "PROFILE_EXCEEDS_SUITABILITY": (409, "Escolha um perfil igual ou mais conservador que o perfil permitido.", False, "create_compatible_mandate"),
     "ACTIVE_MANDATE_REQUIRED": (409, "Ative ou retome um mandato válido antes de continuar.", False, "review_mandate"),
     "BASELINE_SNAPSHOT_REQUIRED": (409, "Aguarde a primeira fotografia de risco confiável antes de reservar capital.", True, "refresh_snapshot"),
+    "ALLOCATION_BASELINE_STALE": (409, "A fotografia de risco ficou desatualizada. Atualize a carteira antes de continuar.", True, "refresh_snapshot"),
+    "ACTIVE_RESERVATION_EXISTS": (409, "Já existe uma operação pendente para esta carteira. Conclua ou cancele essa operação antes de criar outra.", True, "refresh_portfolio"),
     "MANDATE_TRANSITION_INVALID": (409, "Esta transição não é permitida no estado atual do mandato.", False, "refresh_portfolio"),
     "PAPER_CAPITAL_LOCKED_AFTER_TRADING": (409, "O saldo inicial não pode ser alterado depois da primeira posição; crie uma nova carteira.", False, "create_new_portfolio"),
     "FUNDING_MODE_MISMATCH": (409, "O modo informado não corresponde ao modo ativo da carteira.", False, "select_active_mode"),
@@ -1240,6 +1249,7 @@ _PORTFOLIO_PUBLIC_ERRORS: dict[str, tuple[int, str, bool, str | None]] = {
     "INSUFFICIENT_AVAILABLE_CASH": (409, "Saldo disponível insuficiente.", False, "reduce_allocation"),
     "INSUFFICIENT_PORTFOLIO_UNITS": (409, "Unidades insuficientes na carteira.", False, "reduce_withdrawal"),
     "IDEMPOTENCY_PAYLOAD_MISMATCH": (409, "A chave de repetição já foi usada com outros dados.", False, "use_new_idempotency_key"),
+    "IDEMPOTENCY_RESERVATION_FINALIZED": (409, "Esta operação já foi finalizada. Atualize a carteira antes de tentar novamente.", False, "refresh_portfolio"),
     "PORTFOLIO_ALREADY_EXISTS": (409, "Já existe uma carteira com este nome.", False, "choose_another_name"),
     "LEDGER_WRITE_CONFLICT": (409, "O saldo mudou durante a operação. Atualize a carteira e tente novamente.", True, "refresh_and_retry"),
     "DATABASE_TIME_UNAVAILABLE": (503, "O relógio transacional está temporariamente indisponível.", True, "retry_later"),

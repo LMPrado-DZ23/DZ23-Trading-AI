@@ -15,6 +15,7 @@ from sqlalchemy.orm import sessionmaker
 from tradingagents.platform.connections import CredentialKeyring, TransitCredentialKeyring
 from tradingagents.platform.jobs import JobService
 from tradingagents.platform.llm_connections import LlmConnectionService
+from tradingagents.platform.portfolio import PortfolioMaintenance
 from tradingagents.platform.settings import (
     BrokerCredentialProvider,
     Environment,
@@ -121,7 +122,9 @@ def create_worker_runtime(settings: WorkerSettings | None = None) -> WorkerRunti
         config=WorkerConfig(
             worker_id=effective.worker_id,
             lease_seconds=effective.worker_lease_seconds,
+            maintenance_seconds=effective.worker_maintenance_seconds,
         ),
+        maintenance=PortfolioMaintenance(factory).run_once,
     )
     return WorkerRuntime(
         runner=runner,

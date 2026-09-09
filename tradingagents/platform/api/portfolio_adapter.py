@@ -10,6 +10,7 @@ from typing import Any
 from uuid import UUID
 
 from anyio import to_thread
+from sqlalchemy.exc import DBAPIError
 
 from tradingagents.platform.api.identity import (
     IdentityError as ApiIdentityError,
@@ -18,6 +19,29 @@ from tradingagents.platform.api.identity import (
 from tradingagents.platform.contracts import RiskProfile, RunMode
 from tradingagents.platform.identity import IdentityError, IdentityPrincipal, IdentityService
 from tradingagents.platform.portfolio import PortfolioError, PortfolioService
+
+_POSTGRES_PORTFOLIO_CODES = frozenset(
+    {
+        "ACTIVE_MANDATE_REQUIRED",
+        "ACTIVE_RESERVATION_EXISTS",
+        "ALLOCATION_BASELINE_STALE",
+        "BASELINE_SNAPSHOT_REQUIRED",
+        "CIRCUIT_BREAKER_OPEN",
+        "IDEMPOTENCY_PAYLOAD_MISMATCH",
+        "IDEMPOTENCY_RESERVATION_FINALIZED",
+        "INSUFFICIENT_AVAILABLE_CASH",
+        "POLICY_VERSION_MISMATCH",
+        "PORTFOLIO_NAV_INVALID",
+        "PORTFOLIO_NOT_ACTIVE",
+        "RESERVATION_AMOUNT_INVALID",
+        "RESERVATION_NOT_FOUND",
+        "RESERVATION_TTL_INVALID",
+        "VALUATION_INPUT_INVALID",
+        "VALUATION_PRICES_INVALID",
+        "VALUATION_SYMBOL_SET_MISMATCH",
+        "VALUATION_TIMELINE_INVALID",
+    }
+)
 
 
 class SqlAlchemyPortfolioAdapter:
@@ -112,6 +136,8 @@ class SqlAlchemyPortfolioAdapter:
             rows = await self._run_sync(self._portfolios.list_portfolios, principal=actor)
         except PortfolioError as exc:
             raise ApiIdentityError(str(exc)) from exc
+        except DBAPIError as exc:
+            raise self._translate_database_error(exc) from exc
         return tuple(asdict(row) for row in rows)
 
     async def get_latest_snapshot(self, *, token, principal, portfolio_id):
@@ -124,6 +150,8 @@ class SqlAlchemyPortfolioAdapter:
             )
         except PortfolioError as exc:
             raise ApiIdentityError(str(exc)) from exc
+        except DBAPIError as exc:
+            raise self._translate_database_error(exc) from exc
         return self._jsonable(asdict(row)) if row is not None else None
 
     @classmethod
@@ -153,6 +181,8 @@ class SqlAlchemyPortfolioAdapter:
             row = await self._run_sync(function, **kwargs)
         except (PortfolioError, ValueError) as exc:
             raise ApiIdentityError(str(exc)) from exc
+        except DBAPIError as exc:
+            raise self._translate_database_error(exc) from exc
         payload = (
             asdict(row)
             if hasattr(row, "__dataclass_fields__")
@@ -175,6 +205,8 @@ class SqlAlchemyPortfolioAdapter:
             profile = await self._run_sync(self._identity.authenticate_session_token, token=token)
         except IdentityError as exc:
             raise ApiIdentityError("SESSION_INVALID") from exc
+        except DBAPIError as exc:
+            raise self._translate_database_error(exc) from exc
         if profile.user_id != expected.user_id or profile.tenant_id != expected.tenant_id:
             raise ApiIdentityError("SESSION_INVALID")
         return IdentityPrincipal(
@@ -185,6 +217,18 @@ class SqlAlchemyPortfolioAdapter:
             role=profile.role,
             session_token_hash=getattr(profile, "session_token_hash", ""),
         )
+
+    @staticmethod
+    def _translate_database_error(exc: DBAPIError) -> ApiIdentityError:
+        original = getattr(exc, "orig", None)
+        sqlstate = getattr(original, "sqlstate", None) or getattr(original, "pgcode", None)
+        diagnostic = getattr(original, "diag", None)
+        primary = getattr(diagnostic, "message_primary", None)
+        if sqlstate == "P0001" and primary == "PORTFOLIO_SESSION_FORBIDDEN":
+            return ApiIdentityError("SESSION_INVALID")
+        if sqlstate == "P0001" and primary in _POSTGRES_PORTFOLIO_CODES:
+            return ApiIdentityError(primary)
+        return ApiIdentityError("PORTFOLIO_TEMPORARILY_UNAVAILABLE")
 
     @staticmethod
     async def _run_sync(function, /, *args, **kwargs):

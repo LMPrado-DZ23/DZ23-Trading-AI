@@ -14,7 +14,7 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from copy import deepcopy
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -103,12 +103,15 @@ class GraphExecutionFailure(RuntimeError):
 class WorkerConfig:
     worker_id: str
     lease_seconds: int = 120
+    maintenance_seconds: int = 300
 
     def __post_init__(self) -> None:
         if not 3 <= len(self.worker_id) <= 120:
             raise ValueError("worker_id is invalid")
         if not 30 <= self.lease_seconds <= 900:
             raise ValueError("lease_seconds must be between 30 and 900")
+        if not 30 <= self.maintenance_seconds <= 86_400:
+            raise ValueError("maintenance_seconds must be between 30 and 86400")
 
 
 def _supervise_attempt_process(
@@ -718,11 +721,13 @@ class WorkerRunner:
         credentials: LlmConnectionService,
         executor: GraphExecutor,
         config: WorkerConfig,
+        maintenance: Callable[[], object] | None = None,
     ) -> None:
         self._jobs = jobs
         self._credentials = credentials
         self._executor = executor
         self._config = config
+        self._maintenance = maintenance
 
     def run_once(self) -> bool:
         claim = self._jobs.claim_next(
@@ -949,8 +954,13 @@ class WorkerRunner:
             raise ValueError("poll_seconds must be between 0.1 and 30")
         stop_event = stop or threading.Event()
         database_failures = 0
+        next_maintenance = 0.0
         while not stop_event.is_set():
             try:
+                now = time.monotonic()
+                if self._maintenance is not None and now >= next_maintenance:
+                    self._maintenance()
+                    next_maintenance = now + self._config.maintenance_seconds
                 handled = self.run_once()
                 database_failures = 0
             except (OperationalError, DBAPIError):
