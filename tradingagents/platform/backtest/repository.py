@@ -86,15 +86,17 @@ class _FrozenMarketDataset:
                 "instrument was not available at the frozen data cutoff",
                 code=BacktestDataCode.PIT_AVAILABILITY_UNKNOWN,
             )
-        bars = tuple(
-            item
-            for item in self.bars
+        indexed_bars = tuple(
+            (ordinal, item)
+            for ordinal, item in enumerate(self.bars)
             if (
                 item.session_date <= decision_session_date
                 and item.available_at is not None
                 and item.available_at <= data_cutoff
             )
         )
+        bar_ordinals = tuple(ordinal for ordinal, _item in indexed_bars)
+        bars = tuple(item for _ordinal, item in indexed_bars)
         eligible_actions = tuple(
             item for item in self.corporate_actions if item.available_at <= data_cutoff
         )
@@ -153,6 +155,7 @@ class _FrozenMarketDataset:
             limitations=self.manifest.limitations,
             quantitative_claims_eligible=self.manifest.quantitative_claims_eligible,
             instrument=eligible_instrument,
+            bar_ordinals=bar_ordinals,
             bars=bars,
             corporate_actions=actions,
             fx_observations=fx,
@@ -202,6 +205,7 @@ class EligibleMarketView:
     limitations: tuple[DatasetLimitation, ...]
     quantitative_claims_eligible: bool
     instrument: InstrumentSpec
+    bar_ordinals: tuple[int, ...]
     bars: tuple[DailyBar, ...]
     corporate_actions: tuple[CorporateAction, ...]
     fx_observations: tuple[FxObservation, ...]

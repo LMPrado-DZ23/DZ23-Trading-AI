@@ -71,6 +71,59 @@ wrapped `UntrustedEvidence` in a data/user message.
 External open-source repositories were design references only. V1 copies no
 code and adds no TA-Lib, Rust, ML or Pine dependency.
 
+### M5.1 detector policy v1
+
+The policy is fixed in code and content-addressed; callers cannot override its
+thresholds.  All comparisons use exact `Decimal` cross-products.  Ratios are
+display-only parts-per-million values rounded half-even in a local decimal
+context.  A candle is bullish when `close > open`, bearish when `close < open`,
+and flat otherwise.  Body, upper wick and lower wick are measured against the
+raw high-low range.
+
+- Doji: body is at most 10% of range.
+- Marubozu: directional body is at least 90% of range and each wick is at most
+  5% of range.
+- Hammer-family geometry: non-zero body, long wick at least twice the body and
+  opposite wick at most 10% of range.  A down prior trend names Hammer or
+  Inverted Hammer; an up prior trend names Hanging Man or Shooting Star.
+- Engulfing: two opposite directional real bodies, with the current body
+  containing the previous body and at least one boundary strictly exceeding
+  it.  Bullish requires a down prior trend and bearish requires an up prior
+  trend.
+- Morning/Evening Star: three directional candles; the middle body is at most
+  30% of the first body, and the third candle closes through the exact midpoint
+  of the first body.  Morning requires down/bearish/bullish and Evening requires
+  up/bullish/bearish.  V1 deliberately does not require a price gap so it is
+  usable on continuous crypto markets.
+
+Overlaps are retained rather than hidden (for example, a small-body Hammer may
+also be a Doji) and are serialized in the fixed enum order above.  A flat body
+can be Doji but never Marubozu or a hammer-family pattern.  The M5.0
+`corporate_action_vintage_unverified` limitation remains attached to the
+provenance bundle and keeps quantitative claims disabled; it does not rewrite
+raw candle geometry into an unearned conclusion.
+
+Prior trend uses exactly the three completed bars strictly before the first
+constituent: strictly rising closes are `up`, strictly falling closes are
+`down`, otherwise `flat`.  Full evaluation therefore requires the last six
+eligible bars.  The frozen dataset ordinal of every eligible bar is bound by a
+new, versioned M5.1 provenance digest together with the immutable content hash;
+the already-approved M5.0 eligible-view digest is not rewritten.  A
+missing/excluded ordinal in that six-bar window is `discontinuous_history`;
+replay never consults the currently installed market calendar.  A split
+strictly after the first bar in the six-bar window and on or before the decision
+session is a `split_barrier`; evaluation resumes only after six post-split bars
+exist.  A zero-range constituent window is `zero_range`. Non-evaluated statuses
+emit no matches.
+
+The deterministic feature set binds only decision-eligible content and is
+therefore byte-identical when a later frozen snapshot merely appends future
+bars.  A separate provenance bundle binds tenant, dataset, manifest and full
+eligible-view digests.  Only the feature set enters an LLM prompt, wrapped as
+derived `UntrustedEvidence`; full lineage remains in the audit record.  This
+separation prevents an irrelevant future snapshot identifier from changing a
+historical prompt while retaining complete custody evidence.
+
 ## M5.2 — accounting and execution simulation
 
 Use `Decimal` throughout. The simulation ledger is double-entry and enforces

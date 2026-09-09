@@ -1,5 +1,21 @@
 """Deterministic point-in-time backtest contracts."""
 
+from tradingagents.platform.backtest.candlesticks import (
+    CANDLESTICK_DETECTOR_VERSION,
+    CANDLESTICK_POLICY_DIGEST,
+    CANDLESTICK_SCHEMA_VERSION,
+    CandleDirection,
+    CandleGeometry,
+    CandlestickEvaluationStatus,
+    CandlestickEvidenceBundle,
+    CandlestickEvidenceError,
+    CandlestickFeatureSet,
+    CandlestickMatch,
+    CandlestickPattern,
+    PriorTrend,
+    candlestick_bundle_to_untrusted_evidence,
+    derive_candlestick_bundle,
+)
 from tradingagents.platform.backtest.contracts import (
     M5_UNVERIFIED_LIMITATIONS,
     AssetType,
@@ -37,11 +53,22 @@ from tradingagents.platform.backtest.repository import (
 
 __all__ = [
     "M5_UNVERIFIED_LIMITATIONS",
+    "CANDLESTICK_DETECTOR_VERSION",
+    "CANDLESTICK_POLICY_DIGEST",
+    "CANDLESTICK_SCHEMA_VERSION",
     "AssetType",
     "AvailabilityBasis",
     "BacktestDataCode",
     "BacktestDataError",
     "BacktestSpec",
+    "CandleDirection",
+    "CandleGeometry",
+    "CandlestickEvaluationStatus",
+    "CandlestickEvidenceBundle",
+    "CandlestickEvidenceError",
+    "CandlestickFeatureSet",
+    "CandlestickMatch",
+    "CandlestickPattern",
     "CorporateAction",
     "CorporateActionType",
     "DailyBar",
@@ -61,7 +88,10 @@ __all__ = [
     "MarketCalendarError",
     "MarketDatasetManifest",
     "MissingDataPolicy",
+    "PriorTrend",
+    "candlestick_bundle_to_untrusted_evidence",
     "canonical_digest",
     "canonical_json_bytes",
+    "derive_candlestick_bundle",
     "market_dataset_binding_digest",
 ]
