@@ -4,6 +4,10 @@ This module intentionally has no repository, broker, database, network, FX,
 corporate-action, or LLM integration.  ``raw_open`` is a typed economic input;
 the full M5.2b milestone must bind it to the frozen price authority before
 calling this module.
+
+The reducer exposes no unchecked transition as a module attribute.  This is a
+safe application boundary, not a Python sandbox: untrusted Python or plugins
+must never execute in the ledger process.
 """
 
 from __future__ import annotations
@@ -388,23 +392,24 @@ class ExecutionFill(SimulationContract):
 
     @model_validator(mode="after")
     def validate_side_semantics(self):
-        if self.executed_quantity > self.requested_quantity:
-            raise ValueError("executed quantity cannot exceed requested quantity")
-        if self.side is SimulationSide.BUY:
-            if self.fill_price < self.raw_open or self.cash_delta >= 0:
-                raise ValueError("buy fills and cash movement must be adverse")
-            if self.cost_basis_removed != 0 or self.realized_pnl != 0:
-                raise ValueError("buy fills cannot remove cost basis or realize PnL")
-        else:
-            if self.fill_price > self.raw_open or self.cash_delta <= 0:
-                raise ValueError("sell fills and cash movement must be adverse")
-            if self.realized_pnl != self.fill_notional - self.cost_basis_removed:
-                raise ValueError("sell realized PnL is inconsistent with the fill")
-        expected_slippage = (
-            self.fill_notional - self.raw_notional
-            if self.side is SimulationSide.BUY
-            else self.raw_notional - self.fill_notional
-        )
+        with localcontext(_DECIMAL_CONTEXT):
+            if self.executed_quantity > self.requested_quantity:
+                raise ValueError("executed quantity cannot exceed requested quantity")
+            if self.side is SimulationSide.BUY:
+                if self.fill_price < self.raw_open or self.cash_delta >= 0:
+                    raise ValueError("buy fills and cash movement must be adverse")
+                if self.cost_basis_removed != 0 or self.realized_pnl != 0:
+                    raise ValueError("buy fills cannot remove cost basis or realize PnL")
+            else:
+                if self.fill_price > self.raw_open or self.cash_delta <= 0:
+                    raise ValueError("sell fills and cash movement must be adverse")
+                if self.realized_pnl != self.fill_notional - self.cost_basis_removed:
+                    raise ValueError("sell realized PnL is inconsistent with the fill")
+            expected_slippage = (
+                self.fill_notional - self.raw_notional
+                if self.side is SimulationSide.BUY
+                else self.raw_notional - self.fill_notional
+            )
         if self.slippage_amount != expected_slippage:
             raise ValueError("fill slippage is inconsistent with its notionals")
         reconstructed_order = SimulationOrder(
@@ -596,7 +601,7 @@ class SimulationLedgerState(SimulationContract):
                 signed = (
                     posting.amount
                     if posting.direction is PostingDirection.DEBIT
-                    else -posting.amount
+                    else posting.amount.copy_negate()
                 )
                 if posting.account is LedgerAccount.CASH:
                     cash_balance = _decimal_add(cash_balance, signed)
@@ -606,12 +611,12 @@ class SimulationLedgerState(SimulationContract):
                         position_costs.get(posting.instrument_id, Decimal("0")), signed
                     )
                 elif posting.account is LedgerAccount.REALIZED_PNL:
-                    realized_balance = _decimal_add(realized_balance, -signed)
+                    realized_balance = _decimal_add(realized_balance, signed.copy_negate())
             if event.fill is not None:
                 quantity_delta = (
                     event.fill.executed_quantity
                     if event.fill.side is SimulationSide.BUY
-                    else -event.fill.executed_quantity
+                    else event.fill.executed_quantity.copy_negate()
                 )
                 position_quantities[event.fill.instrument_id] = _decimal_add(
                     position_quantities.get(event.fill.instrument_id, Decimal("0")),
@@ -704,8 +709,44 @@ class SimulationBatchResult(SimulationContract):
     result_version: Literal["simulation-batch-result/1"] = "simulation-batch-result/1"
     request_digest: Digest
     replay_status: Literal["applied", "replayed"]
-    appended_events: tuple[LedgerEvent, ...]
+    appended_events: tuple[LedgerEvent, ...] = Field(max_length=9_999)
     state: SimulationLedgerState
+
+    @model_validator(mode="after")
+    def validate_result(self):
+        if type(self.state) is not SimulationLedgerState:
+            raise ValueError("batch result state must use the exact contract type")
+        if any(type(event) is not LedgerEvent for event in self.appended_events):
+            raise ValueError("batch result events must use the exact contract type")
+        matching_receipts = tuple(
+            receipt
+            for receipt in self.state.processed_batches
+            if hmac.compare_digest(receipt.request_digest, self.request_digest)
+        )
+        if len(matching_receipts) != 1:
+            raise ValueError("batch result digest must identify one committed receipt")
+        receipt = matching_receipts[0]
+        if self.replay_status == "replayed":
+            if self.appended_events:
+                raise ValueError("a replayed batch cannot append ledger events")
+            return self
+        if not self.appended_events:
+            raise ValueError("an applied batch must append ledger events")
+        if tuple(self.state.events[-len(self.appended_events) :]) != self.appended_events:
+            raise ValueError("batch result events must be the exact state suffix")
+        if (
+            receipt.first_event_sequence != self.appended_events[0].sequence
+            or receipt.last_event_sequence != self.appended_events[-1].sequence
+            or receipt.result_event_hash != self.appended_events[-1].event_hash
+            or any(
+                event.batch_id != receipt.batch_id
+                or event.session_id != receipt.session_id
+                or event.batch_request_digest != self.request_digest
+                for event in self.appended_events
+            )
+        ):
+            raise ValueError("batch result events do not match their committed receipt")
+        return self
 
 
 class SimulationRunResult(SimulationContract):
@@ -713,6 +754,52 @@ class SimulationRunResult(SimulationContract):
     request_digests: tuple[Digest, ...] = Field(min_length=1, max_length=9_999)
     appended_events: tuple[LedgerEvent, ...] = Field(max_length=9_999)
     state: SimulationLedgerState
+
+    @model_validator(mode="after")
+    def validate_result(self):
+        if type(self.state) is not SimulationLedgerState:
+            raise ValueError("run result state must use the exact contract type")
+        if any(type(event) is not LedgerEvent for event in self.appended_events):
+            raise ValueError("run result events must use the exact contract type")
+        if len(set(self.request_digests)) != len(self.request_digests):
+            raise ValueError("run result request digests must be unique")
+        receipts_by_digest = {
+            receipt.request_digest: receipt for receipt in self.state.processed_batches
+        }
+        if len(receipts_by_digest) != len(self.state.processed_batches) or any(
+            digest not in receipts_by_digest for digest in self.request_digests
+        ):
+            raise ValueError("run result digests must identify committed receipts")
+        if not self.appended_events:
+            return self
+        if tuple(self.state.events[-len(self.appended_events) :]) != self.appended_events:
+            raise ValueError("run result events must be the exact state suffix")
+        first_sequence = self.appended_events[0].sequence
+        appended_receipts = tuple(
+            receipt
+            for receipt in self.state.processed_batches
+            if receipt.first_event_sequence >= first_sequence
+        )
+        if not appended_receipts:
+            raise ValueError("run result event suffix has no matching receipt")
+        expected_digests = tuple(
+            digest
+            for digest in self.request_digests
+            if receipts_by_digest[digest].first_event_sequence >= first_sequence
+        )
+        if tuple(receipt.request_digest for receipt in appended_receipts) != expected_digests:
+            raise ValueError("run result events do not match the requested new batches")
+        if any(
+            event.batch_request_digest not in expected_digests for event in self.appended_events
+        ):
+            raise ValueError("run result event digest is outside the requested batches")
+        if (
+            appended_receipts[0].first_event_sequence != first_sequence
+            or appended_receipts[-1].last_event_sequence != self.appended_events[-1].sequence
+            or appended_receipts[-1].result_event_hash != self.appended_events[-1].event_hash
+        ):
+            raise ValueError("run result receipt range does not cover its event suffix")
+        return self
 
 
 def _order_sort_key(order: SimulationOrder) -> tuple[datetime, int, bytes, bytes]:
@@ -784,7 +871,7 @@ def _expected_postings_for_fill(fill: ExecutionFill) -> tuple[JournalPosting, ..
             _posting(
                 LedgerAccount.CASH,
                 PostingDirection.CREDIT,
-                -fill.cash_delta,
+                fill.cash_delta.copy_negate(),
                 fill.currency,
             )
         )
@@ -839,7 +926,7 @@ def _expected_postings_for_fill(fill: ExecutionFill) -> tuple[JournalPosting, ..
                 _posting(
                     LedgerAccount.REALIZED_PNL,
                     PostingDirection.DEBIT,
-                    -fill.realized_pnl,
+                    fill.realized_pnl.copy_negate(),
                     fill.currency,
                 )
             )
@@ -1061,6 +1148,25 @@ def _validate_external_anchor(
         raise SimulationLedgerError("ledger state does not match the externally anchored hash")
 
 
+def _validate_request_anchor(
+    batch: SimulationBatch,
+    expected_request_digest: str | None,
+) -> str:
+    if expected_request_digest is None:
+        raise SimulationLedgerError("expected_request_digest is required")
+    if type(expected_request_digest) is not str or (
+        len(expected_request_digest) != 64
+        or any(character not in "0123456789abcdef" for character in expected_request_digest)
+    ):
+        raise SimulationLedgerError("expected_request_digest must be a lowercase SHA-256")
+    request_digest = batch.request_digest
+    if not hmac.compare_digest(request_digest, expected_request_digest):
+        raise SimulationLedgerError(
+            "simulation batch does not match the externally anchored request digest"
+        )
+    return request_digest
+
+
 def _validate_state_and_policy(
     state: SimulationLedgerState,
     policy: SimulationLedgerPolicy,
@@ -1081,327 +1187,265 @@ def _validate_state_and_policy(
     return state, policy
 
 
-def _apply_validated_batch(
-    state: SimulationLedgerState,
-    policy: SimulationLedgerPolicy,
-    batch: SimulationBatch,
-) -> SimulationBatchResult:
-    """Apply one already-validated batch; callers must not expose this boundary."""
-
-    request_digest = batch.request_digest
-    existing_receipt = next(
-        (receipt for receipt in state.processed_batches if receipt.batch_id == batch.batch_id),
-        None,
-    )
-    if existing_receipt is not None:
-        if not hmac.compare_digest(existing_receipt.request_digest, request_digest):
-            raise IdempotencyConflictError("batch ID was reused with a different payload")
-        return SimulationBatchResult.model_construct(
-            request_digest=request_digest,
-            replay_status="replayed",
-            appended_events=(),
-            state=state,
-        )
-    if any(receipt.session_id == batch.session_id for receipt in state.processed_batches):
-        raise IdempotencyConflictError("session ID was already committed under another batch")
-    previous_order_ids = {event.order_id for event in state.events if event.order_id is not None}
-    duplicate_order_ids = previous_order_ids & {order.order_id for order in batch.orders}
-    if duplicate_order_ids:
-        raise IdempotencyConflictError("order ID was already committed in another batch")
-
-    rules = {rule.instrument_id: rule for rule in policy.instrument_rules}
-    positions = {position.instrument_id: position for position in state.positions}
-    cash = state.cash
-    realized_pnl = state.realized_pnl
-    appended: list[LedgerEvent] = []
-    previous_hash = state.last_event_hash
-    sequence = state.next_sequence
-
-    for order in sorted(batch.orders, key=_order_sort_key):
-        if order.execution_at <= policy.opened_at:
-            raise SimulationLedgerError("order execution must follow ledger opening")
-        if len(state.events) > 1 and order.execution_at <= state.events[-1].occurred_at:
-            raise SimulationLedgerError(
-                "a new batch must execute after all committed ledger events"
-            )
-        rule = rules.get(order.instrument_id)
-        if rule is None:
-            raise SimulationLedgerError("order instrument has no simulation rule")
-        quantity = _step_quantize(order.requested_quantity, rule.lot_size, rounding=ROUND_FLOOR)
-        if quantity <= 0:
-            raise SimulationLedgerError("order quantity is below one executable lot")
-        with localcontext(_DECIMAL_CONTEXT):
-            slip_rate = policy.slippage_bps / _BPS_DENOMINATOR
-            unrounded_fill = (
-                order.raw_open * (Decimal("1") + slip_rate)
-                if order.side is SimulationSide.BUY
-                else order.raw_open * (Decimal("1") - slip_rate)
-            )
-        price_rounding = ROUND_CEILING if order.side is SimulationSide.BUY else ROUND_FLOOR
-        fill_price = _step_quantize(unrounded_fill, rule.price_tick, rounding=price_rounding)
-        if fill_price <= 0:
-            raise SimulationLedgerError("adverse sell slippage produced a non-positive price")
-        with localcontext(_DECIMAL_CONTEXT):
-            raw_notional = _money(order.raw_open * quantity, policy.money_quantum)
-            fill_notional = _money(fill_price * quantity, policy.money_quantum)
-            commission_fee = _step_quantize(
-                fill_notional * policy.commission_bps / _BPS_DENOMINATOR,
-                policy.money_quantum,
-                rounding=ROUND_CEILING,
-            )
-            tax = _step_quantize(
-                fill_notional * policy.tax_bps / _BPS_DENOMINATOR,
-                policy.money_quantum,
-                rounding=ROUND_CEILING,
-            )
-        if raw_notional <= 0 or fill_notional <= 0:
-            raise SimulationLedgerError("order notional is below the money quantum")
-        slippage_amount = (
-            fill_notional - raw_notional
-            if order.side is SimulationSide.BUY
-            else raw_notional - fill_notional
-        )
-        if slippage_amount < 0:
-            raise SimulationLedgerError("quantized fill is favorable instead of adverse")
-
-        position = positions.get(order.instrument_id)
-        cost_basis_removed = Decimal("0")
-        trade_realized_pnl = Decimal("0")
-        if order.side is SimulationSide.BUY:
-            cash_outflow = fill_notional + commission_fee + tax
-            if cash_outflow > cash:
-                raise InsufficientCashError("buy would make simulated cash negative")
-            cash -= cash_outflow
-            new_quantity = quantity + (Decimal("0") if position is None else position.quantity)
-            new_cost_basis = fill_notional + (
-                Decimal("0") if position is None else position.cost_basis
-            )
-            positions[order.instrument_id] = PositionBalance(
-                instrument_id=order.instrument_id,
-                quantity=new_quantity,
-                cost_basis=new_cost_basis,
-                currency=policy.base_currency,
-            )
-            postings_list = [
-                _posting(
-                    LedgerAccount.POSITION_COST,
-                    PostingDirection.DEBIT,
-                    fill_notional,
-                    policy.base_currency,
-                    instrument_id=order.instrument_id,
-                )
-            ]
-            if commission_fee:
-                postings_list.append(
-                    _posting(
-                        LedgerAccount.COMMISSION_EXPENSE,
-                        PostingDirection.DEBIT,
-                        commission_fee,
-                        policy.base_currency,
-                    )
-                )
-            if tax:
-                postings_list.append(
-                    _posting(
-                        LedgerAccount.TAX_EXPENSE,
-                        PostingDirection.DEBIT,
-                        tax,
-                        policy.base_currency,
-                    )
-                )
-            postings_list.append(
-                _posting(
-                    LedgerAccount.CASH,
-                    PostingDirection.CREDIT,
-                    cash_outflow,
-                    policy.base_currency,
-                )
-            )
-            cash_delta = -cash_outflow
-        else:
-            if position is None or quantity > position.quantity:
-                raise ShortSaleError("sell exceeds the settled simulated position")
-            if quantity == position.quantity:
-                cost_basis_removed = position.cost_basis
-            else:
-                with localcontext(_DECIMAL_CONTEXT):
-                    cost_basis_removed = _money(
-                        position.cost_basis * quantity / position.quantity,
-                        policy.money_quantum,
-                    )
-            net_proceeds = fill_notional - commission_fee - tax
-            if net_proceeds <= 0:
-                raise SimulationLedgerError("sell costs consume all simulated proceeds")
-            trade_realized_pnl = fill_notional - cost_basis_removed
-            cash += net_proceeds
-            realized_pnl += trade_realized_pnl
-            remaining_quantity = position.quantity - quantity
-            remaining_cost = position.cost_basis - cost_basis_removed
-            if remaining_quantity == 0:
-                positions.pop(order.instrument_id)
-            else:
-                positions[order.instrument_id] = PositionBalance(
-                    instrument_id=order.instrument_id,
-                    quantity=remaining_quantity,
-                    cost_basis=remaining_cost,
-                    currency=policy.base_currency,
-                )
-            postings_list = [
-                _posting(
-                    LedgerAccount.CASH,
-                    PostingDirection.DEBIT,
-                    net_proceeds,
-                    policy.base_currency,
-                )
-            ]
-            if commission_fee:
-                postings_list.append(
-                    _posting(
-                        LedgerAccount.COMMISSION_EXPENSE,
-                        PostingDirection.DEBIT,
-                        commission_fee,
-                        policy.base_currency,
-                    )
-                )
-            if tax:
-                postings_list.append(
-                    _posting(
-                        LedgerAccount.TAX_EXPENSE,
-                        PostingDirection.DEBIT,
-                        tax,
-                        policy.base_currency,
-                    )
-                )
-            if cost_basis_removed:
-                postings_list.append(
-                    _posting(
-                        LedgerAccount.POSITION_COST,
-                        PostingDirection.CREDIT,
-                        cost_basis_removed,
-                        policy.base_currency,
-                        instrument_id=order.instrument_id,
-                    )
-                )
-            if trade_realized_pnl > 0:
-                postings_list.append(
-                    _posting(
-                        LedgerAccount.REALIZED_PNL,
-                        PostingDirection.CREDIT,
-                        trade_realized_pnl,
-                        policy.base_currency,
-                    )
-                )
-            elif trade_realized_pnl < 0:
-                postings_list.append(
-                    _posting(
-                        LedgerAccount.REALIZED_PNL,
-                        PostingDirection.DEBIT,
-                        -trade_realized_pnl,
-                        policy.base_currency,
-                    )
-                )
-            cash_delta = net_proceeds
-
-        fill = ExecutionFill(
-            order_digest=order.digest,
-            order_id=order.order_id,
-            instrument_id=order.instrument_id,
-            side=order.side,
-            currency=policy.base_currency,
-            executed_at=order.execution_at,
-            requested_quantity=order.requested_quantity,
-            executed_quantity=quantity,
-            raw_open=order.raw_open,
-            fill_price=fill_price,
-            raw_notional=raw_notional,
-            fill_notional=fill_notional,
-            slippage_amount=slippage_amount,
-            commission_fee=commission_fee,
-            tax=tax,
-            cost_basis_removed=cost_basis_removed,
-            realized_pnl=trade_realized_pnl,
-            cash_delta=cash_delta,
-        )
-        event = _event(
-            sequence=sequence,
-            kind=LedgerEventKind.TRADE_FILL,
-            ledger_id=state.ledger_id,
-            policy_digest=state.policy_digest,
-            occurred_at=order.execution_at,
-            batch_id=batch.batch_id,
-            session_id=batch.session_id,
-            batch_request_digest=request_digest,
-            order_id=order.order_id,
-            fill=fill,
-            postings=tuple(postings_list),
-            previous_hash=previous_hash,
-        )
-        appended.append(event)
-        previous_hash = event.event_hash
-        sequence += 1
-
-    receipt = BatchReceipt(
-        batch_id=batch.batch_id,
-        session_id=batch.session_id,
-        execution_at=batch.execution_at,
-        request_digest=request_digest,
-        first_event_sequence=appended[0].sequence,
-        last_event_sequence=appended[-1].sequence,
-        result_event_hash=appended[-1].event_hash,
-    )
-    next_events = state.events + tuple(appended)
-    next_receipts = state.processed_batches + (receipt,)
-    next_positions = tuple(sorted(positions.values(), key=lambda item: item.instrument_id.bytes))
-    if len(next_events) > 10_000 or len(next_receipts) > 9_999:
-        raise SimulationLedgerError("simulation ledger history exceeds its resource limit")
-    if len(next_positions) > 1_000:
-        raise SimulationLedgerError("simulation positions exceed their resource limit")
-    next_state = SimulationLedgerState.model_construct(
-        ledger_id=state.ledger_id,
-        policy_digest=state.policy_digest,
-        base_currency=state.base_currency,
-        money_quantum=state.money_quantum,
-        cash=cash,
-        realized_pnl=realized_pnl,
-        positions=next_positions,
-        events=next_events,
-        processed_batches=next_receipts,
-        last_event_hash=previous_hash,
-        next_sequence=sequence,
-    )
-    return SimulationBatchResult.model_construct(
-        request_digest=request_digest,
-        replay_status="applied",
-        appended_events=tuple(appended),
-        state=next_state,
-    )
-
-
-def execute_simulation_batch(
-    state: SimulationLedgerState,
-    policy: SimulationLedgerPolicy,
-    batch: SimulationBatch,
-    *,
-    expected_last_event_hash: str | None = None,
-) -> SimulationBatchResult:
-    """Validate an anchored state, then apply one batch atomically."""
-
-    with localcontext(_DECIMAL_CONTEXT):
-        state, policy = _validate_state_and_policy(state, policy, expected_last_event_hash)
-        if type(batch) is not SimulationBatch:
-            raise SimulationLedgerError("batch must use the exact contract type")
-        batch = SimulationBatch.model_validate(batch)
-        return _apply_validated_batch(state, policy, batch)
-
-
 def execute_simulation_run(
     state: SimulationLedgerState,
     policy: SimulationLedgerPolicy,
     batches: tuple[SimulationBatch, ...],
     *,
     expected_last_event_hash: str | None = None,
+    expected_request_digests: dict[UUID, str] | None = None,
 ) -> SimulationRunResult:
     """Validate once and fold a bounded set of complete sessions deterministically."""
+
+    def _apply_new_batch(batch: SimulationBatch, request_digest: str) -> tuple[LedgerEvent, ...]:
+        """Mutate only this call's transient accumulator after all anchors validate."""
+
+        nonlocal cash, last_event_time, previous_hash, realized_pnl, sequence
+        appended: list[LedgerEvent] = []
+
+        for order in sorted(batch.orders, key=_order_sort_key):
+            if order.execution_at <= policy.opened_at:
+                raise SimulationLedgerError("order execution must follow ledger opening")
+            if last_event_time is not None and order.execution_at <= last_event_time:
+                raise SimulationLedgerError(
+                    "a new batch must execute after all committed ledger events"
+                )
+            rule = rules.get(order.instrument_id)
+            if rule is None:
+                raise SimulationLedgerError("order instrument has no simulation rule")
+            quantity = _step_quantize(order.requested_quantity, rule.lot_size, rounding=ROUND_FLOOR)
+            if quantity <= 0:
+                raise SimulationLedgerError("order quantity is below one executable lot")
+            with localcontext(_DECIMAL_CONTEXT):
+                slip_rate = policy.slippage_bps / _BPS_DENOMINATOR
+                unrounded_fill = (
+                    order.raw_open * (Decimal("1") + slip_rate)
+                    if order.side is SimulationSide.BUY
+                    else order.raw_open * (Decimal("1") - slip_rate)
+                )
+            price_rounding = ROUND_CEILING if order.side is SimulationSide.BUY else ROUND_FLOOR
+            fill_price = _step_quantize(unrounded_fill, rule.price_tick, rounding=price_rounding)
+            if fill_price <= 0:
+                raise SimulationLedgerError("adverse sell slippage produced a non-positive price")
+            with localcontext(_DECIMAL_CONTEXT):
+                raw_notional = _money(order.raw_open * quantity, policy.money_quantum)
+                fill_notional = _money(fill_price * quantity, policy.money_quantum)
+                commission_fee = _step_quantize(
+                    fill_notional * policy.commission_bps / _BPS_DENOMINATOR,
+                    policy.money_quantum,
+                    rounding=ROUND_CEILING,
+                )
+                tax = _step_quantize(
+                    fill_notional * policy.tax_bps / _BPS_DENOMINATOR,
+                    policy.money_quantum,
+                    rounding=ROUND_CEILING,
+                )
+            if raw_notional <= 0 or fill_notional <= 0:
+                raise SimulationLedgerError("order notional is below the money quantum")
+            slippage_amount = (
+                fill_notional - raw_notional
+                if order.side is SimulationSide.BUY
+                else raw_notional - fill_notional
+            )
+            if slippage_amount < 0:
+                raise SimulationLedgerError("quantized fill is favorable instead of adverse")
+
+            position = positions.get(order.instrument_id)
+            cost_basis_removed = Decimal("0")
+            trade_realized_pnl = Decimal("0")
+            if order.side is SimulationSide.BUY:
+                cash_outflow = _bounded_decimal(fill_notional + commission_fee + tax)
+                if cash_outflow > cash:
+                    raise InsufficientCashError("buy would make simulated cash negative")
+                cash = _non_negative(_decimal_add(cash, -cash_outflow))
+                new_quantity = _positive(
+                    _decimal_add(quantity, Decimal("0") if position is None else position.quantity)
+                )
+                new_cost_basis = _positive(
+                    _decimal_add(
+                        fill_notional,
+                        Decimal("0") if position is None else position.cost_basis,
+                    )
+                )
+                positions[order.instrument_id] = PositionBalance(
+                    instrument_id=order.instrument_id,
+                    quantity=new_quantity,
+                    cost_basis=new_cost_basis,
+                    currency=policy.base_currency,
+                )
+                postings_list = [
+                    _posting(
+                        LedgerAccount.POSITION_COST,
+                        PostingDirection.DEBIT,
+                        fill_notional,
+                        policy.base_currency,
+                        instrument_id=order.instrument_id,
+                    )
+                ]
+                if commission_fee:
+                    postings_list.append(
+                        _posting(
+                            LedgerAccount.COMMISSION_EXPENSE,
+                            PostingDirection.DEBIT,
+                            commission_fee,
+                            policy.base_currency,
+                        )
+                    )
+                if tax:
+                    postings_list.append(
+                        _posting(
+                            LedgerAccount.TAX_EXPENSE,
+                            PostingDirection.DEBIT,
+                            tax,
+                            policy.base_currency,
+                        )
+                    )
+                postings_list.append(
+                    _posting(
+                        LedgerAccount.CASH,
+                        PostingDirection.CREDIT,
+                        cash_outflow,
+                        policy.base_currency,
+                    )
+                )
+                cash_delta = -cash_outflow
+            else:
+                if position is None or quantity > position.quantity:
+                    raise ShortSaleError("sell exceeds the settled simulated position")
+                if quantity == position.quantity:
+                    cost_basis_removed = position.cost_basis
+                else:
+                    with localcontext(_DECIMAL_CONTEXT):
+                        cost_basis_removed = _money(
+                            position.cost_basis * quantity / position.quantity,
+                            policy.money_quantum,
+                        )
+                net_proceeds = _bounded_decimal(fill_notional - commission_fee - tax)
+                if net_proceeds <= 0:
+                    raise SimulationLedgerError("sell costs consume all simulated proceeds")
+                trade_realized_pnl = _bounded_decimal(fill_notional - cost_basis_removed)
+                cash = _non_negative(_decimal_add(cash, net_proceeds))
+                realized_pnl = _bounded_decimal(_decimal_add(realized_pnl, trade_realized_pnl))
+                remaining_quantity = _non_negative(position.quantity - quantity)
+                remaining_cost = _non_negative(position.cost_basis - cost_basis_removed)
+                if remaining_quantity == 0:
+                    positions.pop(order.instrument_id)
+                else:
+                    positions[order.instrument_id] = PositionBalance(
+                        instrument_id=order.instrument_id,
+                        quantity=remaining_quantity,
+                        cost_basis=remaining_cost,
+                        currency=policy.base_currency,
+                    )
+                postings_list = [
+                    _posting(
+                        LedgerAccount.CASH,
+                        PostingDirection.DEBIT,
+                        net_proceeds,
+                        policy.base_currency,
+                    )
+                ]
+                if commission_fee:
+                    postings_list.append(
+                        _posting(
+                            LedgerAccount.COMMISSION_EXPENSE,
+                            PostingDirection.DEBIT,
+                            commission_fee,
+                            policy.base_currency,
+                        )
+                    )
+                if tax:
+                    postings_list.append(
+                        _posting(
+                            LedgerAccount.TAX_EXPENSE,
+                            PostingDirection.DEBIT,
+                            tax,
+                            policy.base_currency,
+                        )
+                    )
+                if cost_basis_removed:
+                    postings_list.append(
+                        _posting(
+                            LedgerAccount.POSITION_COST,
+                            PostingDirection.CREDIT,
+                            cost_basis_removed,
+                            policy.base_currency,
+                            instrument_id=order.instrument_id,
+                        )
+                    )
+                if trade_realized_pnl > 0:
+                    postings_list.append(
+                        _posting(
+                            LedgerAccount.REALIZED_PNL,
+                            PostingDirection.CREDIT,
+                            trade_realized_pnl,
+                            policy.base_currency,
+                        )
+                    )
+                elif trade_realized_pnl < 0:
+                    postings_list.append(
+                        _posting(
+                            LedgerAccount.REALIZED_PNL,
+                            PostingDirection.DEBIT,
+                            -trade_realized_pnl,
+                            policy.base_currency,
+                        )
+                    )
+                cash_delta = net_proceeds
+
+            fill = ExecutionFill(
+                order_digest=order.digest,
+                order_id=order.order_id,
+                instrument_id=order.instrument_id,
+                side=order.side,
+                currency=policy.base_currency,
+                executed_at=order.execution_at,
+                requested_quantity=order.requested_quantity,
+                executed_quantity=quantity,
+                raw_open=order.raw_open,
+                fill_price=fill_price,
+                raw_notional=raw_notional,
+                fill_notional=fill_notional,
+                slippage_amount=slippage_amount,
+                commission_fee=commission_fee,
+                tax=tax,
+                cost_basis_removed=cost_basis_removed,
+                realized_pnl=trade_realized_pnl,
+                cash_delta=cash_delta,
+            )
+            event = _event(
+                sequence=sequence,
+                kind=LedgerEventKind.TRADE_FILL,
+                ledger_id=state.ledger_id,
+                policy_digest=state.policy_digest,
+                occurred_at=order.execution_at,
+                batch_id=batch.batch_id,
+                session_id=batch.session_id,
+                batch_request_digest=request_digest,
+                order_id=order.order_id,
+                fill=fill,
+                postings=tuple(postings_list),
+                previous_hash=previous_hash,
+            )
+            appended.append(event)
+            previous_hash = event.event_hash
+            sequence += 1
+
+        receipt = BatchReceipt(
+            batch_id=batch.batch_id,
+            session_id=batch.session_id,
+            execution_at=batch.execution_at,
+            request_digest=request_digest,
+            first_event_sequence=appended[0].sequence,
+            last_event_sequence=appended[-1].sequence,
+            result_event_hash=appended[-1].event_hash,
+        )
+        events_buffer.extend(appended)
+        receipts_buffer.append(receipt)
+        last_event_time = appended[-1].occurred_at
+        if len(events_buffer) > 10_000 or len(receipts_buffer) > 9_999:
+            raise SimulationLedgerError("simulation ledger history exceeds its resource limit")
+        return tuple(appended)
 
     with localcontext(_DECIMAL_CONTEXT):
         state, policy = _validate_state_and_policy(state, policy, expected_last_event_hash)
@@ -1409,6 +1453,35 @@ def execute_simulation_run(
             raise SimulationLedgerError("batches must be a bounded non-empty tuple")
         if any(type(batch) is not SimulationBatch for batch in batches):
             raise SimulationLedgerError("batches must use the exact contract type")
+        receipts_by_batch = {receipt.batch_id: receipt for receipt in state.processed_batches}
+        committed_session_ids = {receipt.session_id for receipt in state.processed_batches}
+        committed_order_ids = {
+            event.order_id for event in state.events if event.order_id is not None
+        }
+        remaining_events = 10_000 - len(state.events)
+        total_new_orders = 0
+        total_submitted_orders = 0
+        for batch in batches:
+            if type(batch.orders) is not tuple:
+                raise SimulationLedgerError("batch orders must use a bounded tuple")
+            total_submitted_orders += len(batch.orders)
+            if total_submitted_orders > 9_999:
+                raise SimulationLedgerError(
+                    "simulation run input exceeds the order/event resource limit"
+                )
+            if batch.batch_id not in receipts_by_batch:
+                total_new_orders += len(batch.orders)
+            if total_new_orders > remaining_events:
+                raise SimulationLedgerError("simulation run exceeds the event resource limit")
+        raw_batch_ids = tuple(batch.batch_id for batch in batches)
+        if (
+            type(expected_request_digests) is not dict
+            or len(expected_request_digests) != len(raw_batch_ids)
+            or set(expected_request_digests) != set(raw_batch_ids)
+        ):
+            raise SimulationLedgerError(
+                "expected_request_digests must bind every batch ID exactly once"
+            )
         validated_batches = tuple(SimulationBatch.model_validate(batch) for batch in batches)
         ordered_batches = tuple(
             sorted(
@@ -1422,29 +1495,99 @@ def execute_simulation_run(
         )
         batch_ids = tuple(batch.batch_id for batch in ordered_batches)
         session_ids = tuple(batch.session_id for batch in ordered_batches)
-        order_ids = tuple(order.order_id for batch in ordered_batches for order in batch.orders)
         if len(set(batch_ids)) != len(batch_ids):
             raise IdempotencyConflictError("a simulation run cannot repeat a batch ID")
         if len(set(session_ids)) != len(session_ids):
             raise IdempotencyConflictError("a simulation run cannot repeat a session ID")
-        if len(set(order_ids)) != len(order_ids):
-            raise IdempotencyConflictError("a simulation run cannot repeat an order ID")
-        if len(state.events) + len(order_ids) > 10_000:
-            raise SimulationLedgerError("simulation run exceeds the event resource limit")
+        seen_order_ids: set[UUID] = set()
+        anchored_request_digests: dict[UUID, str] = {}
+        for batch in ordered_batches:
+            request_digest = _validate_request_anchor(
+                batch, expected_request_digests[batch.batch_id]
+            )
+            anchored_request_digests[batch.batch_id] = request_digest
+            existing_receipt = receipts_by_batch.get(batch.batch_id)
+            if existing_receipt is not None:
+                if not hmac.compare_digest(existing_receipt.request_digest, request_digest):
+                    raise IdempotencyConflictError("batch ID was reused with a different payload")
+                continue
+            if batch.session_id in committed_session_ids:
+                raise IdempotencyConflictError(
+                    "session ID was already committed under another batch"
+                )
+            batch_order_ids = {order.order_id for order in batch.orders}
+            if batch_order_ids & (committed_order_ids | seen_order_ids):
+                raise IdempotencyConflictError("order ID was already committed in another batch")
+            seen_order_ids.update(batch_order_ids)
 
-        current = state
+        rules = {rule.instrument_id: rule for rule in policy.instrument_rules}
+        positions = {position.instrument_id: position for position in state.positions}
+        cash = state.cash
+        realized_pnl = state.realized_pnl
+        events_buffer = list(state.events)
+        receipts_buffer = list(state.processed_batches)
+        previous_hash = state.last_event_hash
+        sequence = state.next_sequence
+        last_event_time = state.events[-1].occurred_at if len(state.events) > 1 else None
         request_digests: list[str] = []
         appended_events: list[LedgerEvent] = []
         for batch in ordered_batches:
-            result = _apply_validated_batch(current, policy, batch)
-            current = result.state
-            request_digests.append(result.request_digest)
-            appended_events.extend(result.appended_events)
-        return SimulationRunResult.model_construct(
+            request_digest = anchored_request_digests[batch.batch_id]
+            request_digests.append(request_digest)
+            if batch.batch_id in receipts_by_batch:
+                continue
+            appended_events.extend(_apply_new_batch(batch, request_digest))
+        next_positions = tuple(
+            sorted(positions.values(), key=lambda item: item.instrument_id.bytes)
+        )
+        if len(next_positions) > 1_000:
+            raise SimulationLedgerError("simulation positions exceed their resource limit")
+        current = SimulationLedgerState.model_construct(
+            ledger_id=state.ledger_id,
+            policy_digest=state.policy_digest,
+            base_currency=state.base_currency,
+            money_quantum=state.money_quantum,
+            cash=cash,
+            realized_pnl=realized_pnl,
+            positions=next_positions,
+            events=tuple(events_buffer),
+            processed_batches=tuple(receipts_buffer),
+            last_event_hash=previous_hash,
+            next_sequence=sequence,
+        )
+        return SimulationRunResult(
             request_digests=tuple(request_digests),
             appended_events=tuple(appended_events),
             state=current,
         )
+
+
+def execute_simulation_batch(
+    state: SimulationLedgerState,
+    policy: SimulationLedgerPolicy,
+    batch: SimulationBatch,
+    *,
+    expected_last_event_hash: str | None = None,
+    expected_request_digest: str | None = None,
+) -> SimulationBatchResult:
+    """Validate both external anchors, then apply one batch atomically."""
+
+    if type(batch) is not SimulationBatch:
+        raise SimulationLedgerError("batch must use the exact contract type")
+    run_result = execute_simulation_run(
+        state,
+        policy,
+        (batch,),
+        expected_last_event_hash=expected_last_event_hash,
+        expected_request_digests={batch.batch_id: expected_request_digest},
+    )
+    appended_events = run_result.appended_events
+    return SimulationBatchResult(
+        request_digest=run_result.request_digests[0],
+        replay_status="applied" if appended_events else "replayed",
+        appended_events=appended_events,
+        state=run_result.state,
+    )
 
 
 __all__ = [

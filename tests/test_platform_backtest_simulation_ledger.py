@@ -11,6 +11,7 @@ import pytest
 from hypothesis import given, settings, strategies as st
 from pydantic import ValidationError
 
+import tradingagents.platform.backtest.simulation_ledger as simulation_ledger_module
 from tradingagents.platform.backtest.contracts import canonical_digest, canonical_json_bytes
 from tradingagents.platform.backtest.simulation_ledger import (
     LEDGER_GENESIS_HASH,
@@ -22,9 +23,11 @@ from tradingagents.platform.backtest.simulation_ledger import (
     PostingDirection,
     ShortSaleError,
     SimulationBatch,
+    SimulationBatchResult,
     SimulationLedgerPolicy,
     SimulationLedgerState,
     SimulationOrder,
+    SimulationRunResult,
     SimulationSide,
     create_simulation_ledger,
     execute_simulation_batch as _production_execute_simulation_batch,
@@ -100,6 +103,7 @@ def execute_simulation_batch(
     batch: SimulationBatch,
     *,
     expected_last_event_hash: str | None = None,
+    expected_request_digest: str | None = None,
 ):
     return _production_execute_simulation_batch(
         state,
@@ -107,6 +111,9 @@ def execute_simulation_batch(
         batch,
         expected_last_event_hash=(
             state.last_event_hash if expected_last_event_hash is None else expected_last_event_hash
+        ),
+        expected_request_digest=(
+            batch.request_digest if expected_request_digest is None else expected_request_digest
         ),
     )
 
@@ -312,6 +319,83 @@ def test_batch_binds_one_complete_execution_session() -> None:
     assert original.request_digest != other_session.request_digest
 
 
+def test_external_request_digest_rejects_a_partial_session_subset() -> None:
+    policy = _policy(
+        initial_cash="20.00",
+        commission_bps="0",
+        tax_bps="0",
+        slippage_bps="0",
+    )
+    seeded = execute_simulation_batch(
+        create_simulation_ledger(policy),
+        policy,
+        _batch(1, _order(1, quantity="2", raw_open="10")),
+    )
+    execution_at = EXECUTED_AT + timedelta(days=1)
+    sell = _order(
+        2,
+        side=SimulationSide.SELL,
+        quantity="1",
+        raw_open="10",
+        execution_at=execution_at,
+    )
+    buy = _order(3, quantity="1", raw_open="10", execution_at=execution_at)
+    complete = _batch(2, sell, buy)
+    partial = SimulationBatch(
+        batch_id=complete.batch_id,
+        session_id=complete.session_id,
+        execution_at=complete.execution_at,
+        orders=(sell,),
+    )
+    with pytest.raises(ValueError, match="externally anchored request digest"):
+        execute_simulation_batch(
+            seeded.state,
+            policy,
+            partial,
+            expected_request_digest=complete.request_digest,
+        )
+    full_result = execute_simulation_batch(
+        seeded.state,
+        policy,
+        complete,
+        expected_request_digest=complete.request_digest,
+    )
+    assert full_result.state.cash == 0
+    assert full_result.state.position(STOCK_A).quantity == 2
+
+
+def test_external_request_digest_is_mandatory_well_formed_and_exact() -> None:
+    policy = _policy()
+    state = create_simulation_ledger(policy)
+    batch = _batch(1, _order(1))
+    for malformed in (None, "F" * 64, "0" * 63, 7):
+        with pytest.raises(ValueError, match="expected_request_digest|lowercase SHA-256"):
+            _production_execute_simulation_batch(
+                state,
+                policy,
+                batch,
+                expected_last_event_hash=state.last_event_hash,
+                expected_request_digest=malformed,
+            )
+    with pytest.raises(ValueError, match="externally anchored request digest"):
+        _production_execute_simulation_batch(
+            state,
+            policy,
+            batch,
+            expected_last_event_hash=state.last_event_hash,
+            expected_request_digest="f" * 64,
+        )
+
+    with pytest.raises(ValueError, match="bind every batch ID exactly once"):
+        execute_simulation_run(
+            state,
+            policy,
+            (batch,),
+            expected_last_event_hash=state.last_event_hash,
+            expected_request_digests={},
+        )
+
+
 def test_later_batch_cannot_backdate_the_hash_chain() -> None:
     policy = _policy()
     first = execute_simulation_batch(
@@ -335,6 +419,49 @@ def test_decimal_calculation_ignores_ambient_precision_rounding_and_traps() -> N
         context.traps[Rounded] = True
         repeated = execute_simulation_batch(state, policy, batch)
     assert canonical_json_bytes(repeated) == canonical_json_bytes(baseline)
+
+    payload = baseline.state.model_dump(mode="python")
+    with localcontext() as context:
+        context.prec = 2
+        context.traps[Inexact] = True
+        context.traps[Rounded] = True
+        rehydrated = SimulationLedgerState.model_validate(payload)
+    assert rehydrated == baseline.state
+
+
+def test_accumulated_decimal_overflow_is_rejected_before_result_escape() -> None:
+    policy = _policy(
+        initial_cash="9e37",
+        money_quantum="1",
+        commission_bps="0",
+        tax_bps="0",
+        slippage_bps="0",
+        instrument_rules=(
+            InstrumentSimulationRule(
+                instrument_id=STOCK_A,
+                currency="USD",
+                lot_size="1",
+                price_tick="1",
+            ),
+        ),
+    )
+    bought = execute_simulation_batch(
+        create_simulation_ledger(policy),
+        policy,
+        _batch(1, _order(1, quantity="1", raw_open="1")),
+    )
+    sell = _batch(
+        2,
+        _order(
+            2,
+            side=SimulationSide.SELL,
+            quantity="1",
+            raw_open="9e37",
+            execution_at=EXECUTED_AT + timedelta(days=1),
+        ),
+    )
+    with pytest.raises(ValueError, match="38 significant integer digits"):
+        execute_simulation_batch(bought.state, policy, sell)
 
 
 def test_batch_permutation_has_identical_digest_events_and_state() -> None:
@@ -427,6 +554,34 @@ def test_fill_digest_and_event_postings_are_semantically_bound() -> None:
         type(applied.appended_events[0]).model_validate(event_payload)
 
 
+def test_result_contracts_reject_impossible_digest_event_and_state_bindings() -> None:
+    policy = _policy()
+    initial = create_simulation_ledger(policy)
+    applied = execute_simulation_batch(initial, policy, _batch(1, _order(1)))
+    event = applied.appended_events[0]
+
+    with pytest.raises(ValidationError, match="replayed batch cannot append"):
+        SimulationBatchResult(
+            request_digest=applied.request_digest,
+            replay_status="replayed",
+            appended_events=(event,),
+            state=applied.state,
+        )
+    with pytest.raises(ValidationError, match="identify one committed receipt"):
+        SimulationBatchResult(
+            request_digest="f" * 64,
+            replay_status="replayed",
+            appended_events=(),
+            state=applied.state,
+        )
+    with pytest.raises(ValidationError, match="committed receipts|exact state suffix"):
+        SimulationRunResult(
+            request_digests=(applied.request_digest,),
+            appended_events=(event,),
+            state=initial,
+        )
+
+
 def test_self_consistent_rehashed_cost_basis_forgery_is_rejected_on_resume() -> None:
     policy = _policy(commission_bps="0", tax_bps="0", slippage_bps="0")
     bought = execute_simulation_batch(
@@ -513,6 +668,19 @@ def test_reducer_revalidates_instances_and_policy_state_binding() -> None:
             policy,
             _batch(1, _order(1)),
             expected_last_event_hash=self_consistent_but_wrong_quantum.last_event_hash,
+        )
+
+    cash_mutated = create_simulation_ledger(policy)
+    cash_mutated.__dict__["cash"] = Decimal("1000000.00")
+    anchored_hash = cash_mutated.last_event_hash
+    batch = _batch(1, _order(1, quantity="50", raw_open="10"))
+    with pytest.raises(ValidationError, match="reconcile"):
+        _production_execute_simulation_batch(
+            cash_mutated,
+            policy,
+            batch,
+            expected_last_event_hash=anchored_hash,
+            expected_request_digest=batch.request_digest,
         )
 
 
@@ -852,6 +1020,7 @@ def test_500_session_run_fold_and_anchored_resume_are_bounded() -> None:
         policy,
         tuple(reversed(batches)),
         expected_last_event_hash=initial.last_event_hash,
+        expected_request_digests={batch.batch_id: batch.request_digest for batch in batches},
     )
     assert perf_counter() - started < 20
     state = run_result.state
@@ -893,6 +1062,58 @@ def test_500_session_run_fold_and_anchored_resume_are_bounded() -> None:
     assert resumed_result.state.cash == Decimal("9499.00")
 
 
+def test_run_replays_a_maximum_size_committed_batch_without_capacity_failure() -> None:
+    policy = _policy(
+        initial_cash="9999",
+        money_quantum="1",
+        commission_bps="0",
+        tax_bps="0",
+        slippage_bps="0",
+        instrument_rules=(
+            InstrumentSimulationRule(
+                instrument_id=STOCK_A,
+                currency="USD",
+                lot_size="1",
+                price_tick="1",
+            ),
+        ),
+    )
+    orders = tuple(_order(index, quantity="1", raw_open="1") for index in range(1, 10_000))
+    batch = _batch(1, *orders)
+    initial = create_simulation_ledger(policy)
+    applied = execute_simulation_batch(initial, policy, batch)
+    assert len(applied.state.events) == 10_000
+
+    replay = execute_simulation_run(
+        applied.state,
+        policy,
+        (batch,),
+        expected_last_event_hash=applied.state.last_event_hash,
+        expected_request_digests={batch.batch_id: batch.request_digest},
+    )
+    assert replay.appended_events == ()
+    assert replay.state == applied.state
+
+
+def test_run_rejects_aggregate_event_overflow_before_batch_revalidation() -> None:
+    policy = _policy()
+    initial = create_simulation_ledger(policy)
+    repeated = _order(1)
+    first = _batch(1, repeated).model_copy(update={"orders": (repeated,) * 5_000})
+    second_order = _order(2, execution_at=EXECUTED_AT + timedelta(days=1))
+    second = _batch(2, second_order).model_copy(update={"orders": (second_order,) * 5_000})
+    started = perf_counter()
+    with pytest.raises(ValueError, match="event resource limit"):
+        execute_simulation_run(
+            initial,
+            policy,
+            (first, second),
+            expected_last_event_hash=initial.last_event_hash,
+            expected_request_digests={},
+        )
+    assert perf_counter() - started < 2
+
+
 def test_module_imports_are_pure_and_scope_exclusions_are_explicit() -> None:
     path = (
         Path(__file__).parents[1]
@@ -929,6 +1150,9 @@ def test_module_imports_are_pure_and_scope_exclusions_are_explicit() -> None:
     assert "full M5.2b" in source
     for forbidden in ("sqlalchemy", "requests", "httpx", "socket", "broker", "openai"):
         assert forbidden not in imported_roots
+    assert not hasattr(simulation_ledger_module, "_apply_validated_batch")
+    with pytest.raises(AttributeError):
+        getattr(simulation_ledger_module, "_apply_" + "validated_batch")
     forbidden_private_boundaries = (
         "_apply_validated_batch",
         "_assert_state_matches_policy",
