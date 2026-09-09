@@ -2,30 +2,36 @@
 
 from __future__ import annotations
 
+import ctypes
+import errno
 import hashlib
 import hmac
+import io
 import json
 import os
+import secrets
 import shutil
 import stat
 import tempfile
 from collections.abc import Sequence
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
-from decimal import Decimal
-from enum import StrEnum
 from pathlib import Path
 from typing import Any
 from uuid import UUID
 
 from .calendar import BacktestCalendar, calendar_provenance, schedule_digest
 from .contracts import (
+    M5_UNVERIFIED_LIMITATIONS,
     CorporateAction,
     DailyBar,
     DatasetLimitation,
+    ExecutionOpen,
     FxObservation,
     InstrumentSpec,
     MarketDatasetManifest,
+    canonical_json_bytes,
     market_dataset_binding_digest,
 )
 from .errors import BacktestDataCode, DatasetAlreadyExistsError, DatasetIntegrityError
@@ -33,40 +39,64 @@ from .errors import BacktestDataCode, DatasetAlreadyExistsError, DatasetIntegrit
 DATA_FILENAME = "market-data.jsonl"
 MANIFEST_FILENAME = "manifest.json"
 MANIFEST_SEAL_FILENAME = "manifest.sha256"
-MAX_DATASET_BYTES = 512 * 1024 * 1024
-MAX_DATASET_ROWS = 5_000_000
-MAX_JSON_RECORD_BYTES = 1024 * 1024
+MAX_DATASET_BYTES = 16 * 1024 * 1024
+MAX_DATASET_ROWS = 25_000
+MAX_JSON_RECORD_BYTES = 256 * 1024
 MAX_JSON_NESTING = 64
 
 
 @dataclass(frozen=True, slots=True)
-class FrozenMarketDataset:
+class _FrozenMarketDataset:
     manifest: MarketDatasetManifest
     instrument: InstrumentSpec
     bars: tuple[DailyBar, ...]
     corporate_actions: tuple[CorporateAction, ...]
     fx_observations: tuple[FxObservation, ...]
 
-    def eligible_at(self, decision_at: datetime) -> EligibleMarketView:
+    def eligible_at(
+        self,
+        decision_at: datetime,
+        *,
+        decision_session_date: date,
+    ) -> EligibleMarketView:
         """Project the full snapshot into a decision-time-safe immutable view."""
 
         if decision_at.tzinfo is None or decision_at.utcoffset() is None:
             raise DatasetIntegrityError("decision timestamp must include a timezone")
-        cutoff = decision_at.astimezone(UTC)
-        if self.instrument.available_at > cutoff:
+        decision_cutoff = decision_at.astimezone(UTC)
+        decision_bars = tuple(
+            item for item in self.bars if item.session_date == decision_session_date
+        )
+        if len(decision_bars) != 1:
+            raise DatasetIntegrityError("decision session has no unique frozen bar")
+        decision_bar = decision_bars[0]
+        if decision_bar.available_at is None:
             raise DatasetIntegrityError(
-                "instrument was not available at the decision timestamp",
+                "decision session bar has unknown availability",
                 code=BacktestDataCode.PIT_AVAILABILITY_UNKNOWN,
             )
-        decision_bars = tuple(item for item in self.bars if item.available_at == cutoff)
-        if len(decision_bars) != 1:
+        data_cutoff = decision_bar.available_at
+        if data_cutoff > decision_cutoff:
             raise DatasetIntegrityError(
-                "decision timestamp must equal one frozen session cutoff",
+                "decision timestamp precedes the frozen session cutoff",
                 code=BacktestDataCode.PIT_CUTOFF_MISMATCH,
             )
-        bars = tuple(item for item in self.bars if item.available_at <= cutoff)
+        if self.instrument.available_at > data_cutoff:
+            raise DatasetIntegrityError(
+                "instrument was not available at the frozen data cutoff",
+                code=BacktestDataCode.PIT_AVAILABILITY_UNKNOWN,
+            )
+        bars = tuple(
+            item
+            for item in self.bars
+            if (
+                item.session_date <= decision_session_date
+                and item.available_at is not None
+                and item.available_at <= data_cutoff
+            )
+        )
         eligible_actions = tuple(
-            item for item in self.corporate_actions if item.available_at <= cutoff
+            item for item in self.corporate_actions if item.available_at <= data_cutoff
         )
         latest_actions: dict[UUID, CorporateAction] = {}
         for item in eligible_actions:
@@ -79,24 +109,78 @@ class FrozenMarketDataset:
                 key=lambda item: (item.effective_date, str(item.action_id)),
             )
         )
-        fx = tuple(item for item in self.fx_observations if item.available_at <= cutoff)
+        visible_delisting_date = (
+            self.instrument.delisting_date
+            if any(action.action_type.value == "delisting" for action in actions)
+            else None
+        )
+        eligible_instrument = self.instrument.model_copy(
+            update={"delisting_date": visible_delisting_date}
+        )
+        fx = tuple(item for item in self.fx_observations if item.available_at <= data_cutoff)
         digest_payload = {
-            "decision_at": cutoff.isoformat(),
-            "instrument": self.instrument.model_dump(mode="python"),
+            "data_cutoff_at": data_cutoff,
+            "decision_at": decision_cutoff,
+            "decision_session_date": decision_session_date,
+            "instrument": eligible_instrument.model_dump(mode="python"),
             "daily_bars": [item.model_dump(mode="python") for item in bars],
             "corporate_actions": [item.model_dump(mode="python") for item in actions],
             "fx_observations": [item.model_dump(mode="python") for item in fx],
         }
-        eligible_digest = hashlib.sha256(_canonical_json_bytes(digest_payload)).hexdigest()
+        eligible_data_digest = hashlib.sha256(_canonical_json_bytes(digest_payload)).hexdigest()
+        authoritative_payload = {
+            "binding_digest": self.manifest.binding_digest,
+            "dataset_id": self.manifest.dataset_id,
+            "eligible_data_sha256": eligible_data_digest,
+            "limitations": self.manifest.limitations,
+            "manifest_digest": self.manifest.digest,
+            "source_vintage": self.manifest.source_vintage,
+            "tenant_id": self.manifest.tenant_id,
+        }
+        eligible_digest = hashlib.sha256(_canonical_json_bytes(authoritative_payload)).hexdigest()
         return EligibleMarketView(
-            decision_at=cutoff,
-            decision_session_date=decision_bars[0].session_date,
+            decision_at=decision_cutoff,
+            data_cutoff_at=data_cutoff,
+            decision_session_date=decision_bar.session_date,
             full_content_sha256=self.manifest.content_sha256,
+            eligible_data_sha256=eligible_data_digest,
             eligible_view_sha256=eligible_digest,
-            instrument=self.instrument,
+            tenant_id=self.manifest.tenant_id,
+            dataset_id=self.manifest.dataset_id,
+            manifest_digest=self.manifest.digest,
+            binding_digest=self.manifest.binding_digest,
+            source_vintage=self.manifest.source_vintage,
+            limitations=self.manifest.limitations,
+            quantitative_claims_eligible=self.manifest.quantitative_claims_eligible,
+            instrument=eligible_instrument,
             bars=bars,
             corporate_actions=actions,
             fx_observations=fx,
+        )
+
+    def execution_open_after(self, view: EligibleMarketView) -> ExecutionOpen:
+        """Expose only the first frozen raw open strictly after a decision."""
+
+        cutoff = view.decision_at
+        future = tuple(bar for bar in self.bars if bar.session_open_at > cutoff)
+        if not future:
+            raise DatasetIntegrityError(
+                "dataset has no frozen execution open after decision",
+                code=BacktestDataCode.NEXT_OPEN_UNAVAILABLE,
+            )
+        bar = min(future, key=lambda item: item.session_open_at)
+        return ExecutionOpen(
+            dataset_id=self.manifest.dataset_id,
+            manifest_digest=self.manifest.digest,
+            instrument_id=bar.instrument_id,
+            decision_session_date=view.decision_session_date,
+            decision_at=view.decision_at,
+            eligible_view_digest=view.eligible_view_sha256,
+            session_date=bar.session_date,
+            execution_at=bar.session_open_at,
+            raw_open=bar.open,
+            parent_bar_digest=bar.digest,
+            source_digest=bar.source_digest,
         )
 
 
@@ -105,9 +189,18 @@ class EligibleMarketView:
     """Only the records whose provenance was available by one decision time."""
 
     decision_at: datetime
+    data_cutoff_at: datetime
     decision_session_date: date
     full_content_sha256: str
+    eligible_data_sha256: str
     eligible_view_sha256: str
+    tenant_id: UUID
+    dataset_id: UUID
+    manifest_digest: str
+    binding_digest: str
+    source_vintage: str
+    limitations: tuple[DatasetLimitation, ...]
+    quantitative_claims_eligible: bool
     instrument: InstrumentSpec
     bars: tuple[DailyBar, ...]
     corporate_actions: tuple[CorporateAction, ...]
@@ -115,46 +208,16 @@ class EligibleMarketView:
 
 
 def _canonical_json_bytes(value: Any) -> bytes:
-    normalized = _canonical_value(value)
     try:
-        rendered = json.dumps(
-            normalized,
-            ensure_ascii=True,
-            allow_nan=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        )
+        return canonical_json_bytes(value)
     except (TypeError, ValueError) as exc:
         raise DatasetIntegrityError("dataset contains a non-canonical value") from exc
-    return rendered.encode("utf-8")
 
 
 def _record_bytes(kind: str, model: Any) -> bytes:
     return _canonical_json_bytes(
         {"kind": kind, "payload": model.model_dump(mode="python")}
     ) + b"\n"
-
-
-def _canonical_value(value: Any) -> Any:
-    if isinstance(value, Decimal):
-        if not value.is_finite():
-            raise DatasetIntegrityError("dataset contains a non-finite decimal")
-        return "0" if value == 0 else format(value.normalize(), "f")
-    if isinstance(value, datetime):
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise DatasetIntegrityError("dataset contains a timezone-naive timestamp")
-        return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
-    if isinstance(value, date):
-        return value.isoformat()
-    if isinstance(value, UUID):
-        return str(value)
-    if isinstance(value, StrEnum):
-        return value.value
-    if isinstance(value, dict):
-        return {key: _canonical_value(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_canonical_value(item) for item in value]
-    return value
 
 
 def _timestamp_sort_key(value: datetime) -> str:
@@ -176,8 +239,124 @@ class FrozenDatasetRepository:
             raise DatasetIntegrityError("dataset root cannot be a link or reparse point")
         self.root = requested_root.resolve()
         self.root.mkdir(parents=True, exist_ok=True)
-        if not self.root.is_dir() or self.root.is_symlink():
+        self._root_fd: int | None = None
+        if os.name == "posix":
+            before = self.root.lstat()
+            if (
+                not stat.S_ISDIR(before.st_mode)
+                or self._is_reparse(before)
+                or before.st_uid != os.geteuid()
+            ):
+                raise DatasetIntegrityError("dataset root must be an owned real directory")
+            flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+            try:
+                root_fd = os.open(self.root, flags)
+            except OSError as exc:
+                raise DatasetIntegrityError("dataset root could not be pinned safely") from exc
+            after = os.fstat(root_fd)
+            if (
+                not stat.S_ISDIR(after.st_mode)
+                or (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino)
+                or after.st_uid != os.geteuid()
+            ):
+                os.close(root_fd)
+                raise DatasetIntegrityError("dataset root identity changed while it was pinned")
+            os.fchmod(root_fd, stat.S_IRWXU)
+            if stat.S_IMODE(os.fstat(root_fd).st_mode) != stat.S_IRWXU:
+                os.close(root_fd)
+                raise DatasetIntegrityError("dataset root permissions could not be hardened")
+            self._root_fd = root_fd
+        elif not self.root.is_dir() or self.root.is_symlink():
             raise DatasetIntegrityError("dataset root must be a real directory")
+
+    def close(self) -> None:
+        if self._root_fd is not None:
+            os.close(self._root_fd)
+            self._root_fd = None
+
+    def __enter__(self) -> FrozenDatasetRepository:
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        with suppress(OSError):
+            self.close()
+
+    @staticmethod
+    def _require_uuid(value: object, label: str) -> UUID:
+        if type(value) is not UUID:
+            raise DatasetIntegrityError(
+                f"{label} must be a UUID",
+                code=BacktestDataCode.DATASET_INVALID,
+            )
+        return value
+
+    @staticmethod
+    def _require_digest(value: object, label: str) -> str:
+        if (
+            type(value) is not str
+            or len(value) != 64
+            or any(char not in "0123456789abcdef" for char in value)
+        ):
+            raise DatasetIntegrityError(
+                f"{label} is not a lowercase SHA-256",
+                code=BacktestDataCode.DATASET_INVALID,
+            )
+        return value
+
+    @staticmethod
+    def _require_datetime(value: object, label: str) -> datetime:
+        if type(value) is not datetime or value.tzinfo is None or value.utcoffset() is None:
+            raise DatasetIntegrityError(
+                f"{label} must be a timezone-aware datetime",
+                code=BacktestDataCode.DATASET_INVALID,
+            )
+        return value
+
+    @staticmethod
+    def _require_date(value: object, label: str) -> date:
+        if type(value) is not date:
+            raise DatasetIntegrityError(
+                f"{label} must be a date",
+                code=BacktestDataCode.DATASET_INVALID,
+            )
+        return value
+
+    @staticmethod
+    def _bounded_tuple(values: Sequence[Any], *, limit: int, label: str) -> tuple[Any, ...]:
+        result: list[Any] = []
+        for item in values:
+            if len(result) >= limit:
+                raise DatasetIntegrityError(f"dataset exceeds the {label} row limit")
+            result.append(item)
+        return tuple(result)
+
+    @staticmethod
+    def _revalidate_contract(value: object, model_class: type[Any], label: str) -> Any:
+        if type(value) is not model_class:
+            raise DatasetIntegrityError(f"{label} must use the exact typed contract")
+        try:
+            return model_class.model_validate(value.model_dump(mode="python"))
+        except ValueError as exc:
+            raise DatasetIntegrityError(f"{label} failed contract revalidation") from exc
+
+    @classmethod
+    def _bounded_contract_tuple(
+        cls,
+        values: Sequence[Any],
+        *,
+        model_class: type[Any],
+        limit: int,
+        label: str,
+    ) -> tuple[Any, ...]:
+        result: list[Any] = []
+        for item in values:
+            if len(result) >= limit:
+                raise DatasetIntegrityError(f"dataset exceeds the {label} row limit")
+            result.append(cls._revalidate_contract(item, model_class, label))
+        return tuple(result)
 
     def ingest(
         self,
@@ -191,13 +370,40 @@ class FrozenDatasetRepository:
         bars: Sequence[DailyBar],
         corporate_actions: Sequence[CorporateAction] = (),
         fx_observations: Sequence[FxObservation] = (),
-        limitations: Sequence[DatasetLimitation] = (),
+        limitations: Sequence[DatasetLimitation] = M5_UNVERIFIED_LIMITATIONS,
     ) -> MarketDatasetManifest:
         """Validate and atomically publish a new immutable snapshot."""
 
-        frozen_bars = tuple(bars)
-        frozen_actions = tuple(corporate_actions)
-        frozen_fx = tuple(fx_observations)
+        dataset_id = self._require_uuid(dataset_id, "dataset_id")
+        tenant_id = self._require_uuid(tenant_id, "tenant_id")
+        instrument = self._revalidate_contract(instrument, InstrumentSpec, "instrument")
+        frozen_bars = self._bounded_contract_tuple(
+            bars,
+            model_class=DailyBar,
+            limit=MAX_DATASET_ROWS - 1,
+            label="bar",
+        )
+        remaining = MAX_DATASET_ROWS - 1 - len(frozen_bars)
+        frozen_actions = self._bounded_contract_tuple(
+            corporate_actions,
+            model_class=CorporateAction,
+            limit=remaining,
+            label="corporate-action",
+        )
+        remaining -= len(frozen_actions)
+        frozen_fx = self._bounded_contract_tuple(
+            fx_observations,
+            model_class=FxObservation,
+            limit=remaining,
+            label="FX",
+        )
+        frozen_limitations = self._bounded_tuple(
+            limitations, limit=64, label="limitation"
+        )
+        if not frozen_limitations:
+            raise DatasetIntegrityError("dataset requires at least one explicit limitation")
+        if any(type(item) is not DatasetLimitation for item in frozen_limitations):
+            raise DatasetIntegrityError("dataset limitations must use the typed contract")
         self._validate_records(
             instrument,
             frozen_bars,
@@ -207,7 +413,7 @@ class FrozenDatasetRepository:
         )
         latest_record_availability = max(
             [instrument.available_at]
-            + [bar.available_at for bar in frozen_bars]
+            + [bar.fetched_at for bar in frozen_bars]
             + [action.available_at for action in frozen_actions]
             + [item.available_at for item in frozen_fx]
         )
@@ -248,19 +454,24 @@ class FrozenDatasetRepository:
                 ),
             )
         )
-        content = b"".join(
-            [
-                _record_bytes("instrument", instrument),
-                *(_record_bytes("daily_bar", bar) for bar in frozen_bars),
-                *(_record_bytes("corporate_action", action) for action in ordered_actions),
-                *(_record_bytes("fx_observation", item) for item in ordered_fx),
-            ]
-        )
-        if len(content) > MAX_DATASET_BYTES:
-            raise DatasetIntegrityError("dataset exceeds the byte limit")
         row_count = 1 + len(frozen_bars) + len(ordered_actions) + len(ordered_fx)
         if row_count > MAX_DATASET_ROWS:
             raise DatasetIntegrityError("dataset exceeds the row limit")
+        content_buffer = io.BytesIO()
+        for kind, items in (
+            ("instrument", (instrument,)),
+            ("daily_bar", frozen_bars),
+            ("corporate_action", ordered_actions),
+            ("fx_observation", ordered_fx),
+        ):
+            for item in items:
+                record = _record_bytes(kind, item)
+                if len(record) > MAX_JSON_RECORD_BYTES:
+                    raise DatasetIntegrityError("dataset record exceeds its byte limit")
+                if content_buffer.tell() + len(record) > MAX_DATASET_BYTES:
+                    raise DatasetIntegrityError("dataset exceeds the byte limit")
+                content_buffer.write(record)
+        content = content_buffer.getvalue()
 
         calendar_engine_version, timezone_database_version, settlement_policy_version = (
             calendar_provenance()
@@ -281,6 +492,7 @@ class FrozenDatasetRepository:
             source=source,
             source_vintage=source_vintage,
             instrument_digest=instrument.digest,
+            content_bytes=len(content),
             content_sha256=content_sha256,
             row_count=row_count,
             first_session=frozen_bars[0].session_date,
@@ -293,6 +505,7 @@ class FrozenDatasetRepository:
                 tenant_id=tenant_id,
                 dataset_id=dataset_id,
                 instrument_digest=instrument.digest,
+                content_bytes=len(content),
                 content_sha256=content_sha256,
                 schedule_digest=frozen_schedule_digest,
                 source_vintage=source_vintage,
@@ -300,26 +513,27 @@ class FrozenDatasetRepository:
                 timezone_database_version=timezone_database_version,
                 settlement_policy_version=settlement_policy_version,
             ),
-            limitations=tuple(limitations),
+            limitations=frozen_limitations,
         )
         manifest_bytes = _canonical_json_bytes(manifest.model_dump(mode="python")) + b"\n"
         manifest_seal = hashlib.sha256(manifest_bytes).hexdigest().encode("ascii") + b"\n"
         self._publish(dataset_id, content, manifest_bytes, manifest_seal)
         return manifest
 
-    def load(
+    def _load_verified(
         self,
         dataset_id: UUID,
         *,
         expected_tenant_id: UUID,
         expected_manifest_digest: str,
-    ) -> FrozenMarketDataset:
+    ) -> _FrozenMarketDataset:
         """Load a snapshot only after all byte and semantic checks pass."""
 
-        if len(expected_manifest_digest) != 64 or any(
-            char not in "0123456789abcdef" for char in expected_manifest_digest
-        ):
-            raise DatasetIntegrityError("expected manifest digest is not a lowercase SHA-256")
+        dataset_id = self._require_uuid(dataset_id, "dataset_id")
+        expected_tenant_id = self._require_uuid(expected_tenant_id, "expected_tenant_id")
+        expected_manifest_digest = self._require_digest(
+            expected_manifest_digest, "expected manifest digest"
+        )
         manifest_bytes, seal_bytes, content = self._read_dataset_files(dataset_id)
         expected_seal = hashlib.sha256(manifest_bytes).hexdigest().encode("ascii") + b"\n"
         if seal_bytes != expected_seal:
@@ -340,6 +554,8 @@ class FrozenDatasetRepository:
 
         if hashlib.sha256(content).hexdigest() != manifest.content_sha256:
             raise DatasetIntegrityError("dataset content hash does not match the manifest")
+        if len(content) != manifest.content_bytes:
+            raise DatasetIntegrityError("dataset content length does not match the manifest")
         records = self._parse_records(content, manifest.row_count)
         instrument, bars, actions, fx = records
         # Replay trusts the materialized, hashed schedule rather than consulting
@@ -358,7 +574,22 @@ class FrozenDatasetRepository:
             settlement_policy_version=manifest.settlement_policy_version,
         ) != manifest.schedule_digest:
             raise DatasetIntegrityError("dataset schedule does not match the manifest")
-        return FrozenMarketDataset(manifest, instrument, bars, actions, fx)
+        return _FrozenMarketDataset(manifest, instrument, bars, actions, fx)
+
+    def verify(
+        self,
+        dataset_id: UUID,
+        *,
+        expected_tenant_id: UUID,
+        expected_manifest_digest: str,
+    ) -> MarketDatasetManifest:
+        """Verify a snapshot without exposing future market records."""
+
+        return self._load_verified(
+            dataset_id,
+            expected_tenant_id=expected_tenant_id,
+            expected_manifest_digest=expected_manifest_digest,
+        ).manifest
 
     def load_eligible(
         self,
@@ -367,14 +598,55 @@ class FrozenDatasetRepository:
         expected_tenant_id: UUID,
         expected_manifest_digest: str,
         decision_at: datetime,
+        decision_session_date: date,
     ) -> EligibleMarketView:
-        return self.load(
+        decision_at = self._require_datetime(decision_at, "decision_at")
+        decision_session_date = self._require_date(
+            decision_session_date, "decision_session_date"
+        )
+        return self._load_verified(
             dataset_id,
             expected_tenant_id=expected_tenant_id,
             expected_manifest_digest=expected_manifest_digest,
-        ).eligible_at(decision_at)
+        ).eligible_at(decision_at, decision_session_date=decision_session_date)
+
+    def load_execution_open(
+        self,
+        dataset_id: UUID,
+        *,
+        expected_tenant_id: UUID,
+        expected_manifest_digest: str,
+        decision_at: datetime,
+        decision_session_date: date,
+        expected_eligible_view_digest: str,
+    ) -> ExecutionOpen:
+        decision_at = self._require_datetime(decision_at, "decision_at")
+        decision_session_date = self._require_date(
+            decision_session_date, "decision_session_date"
+        )
+        expected_eligible_view_digest = self._require_digest(
+            expected_eligible_view_digest, "expected eligible-view digest"
+        )
+        dataset = self._load_verified(
+            dataset_id,
+            expected_tenant_id=expected_tenant_id,
+            expected_manifest_digest=expected_manifest_digest,
+        )
+        view = dataset.eligible_at(
+            decision_at,
+            decision_session_date=decision_session_date,
+        )
+        if not hmac.compare_digest(
+            view.eligible_view_sha256, expected_eligible_view_digest
+        ):
+            raise DatasetIntegrityError(
+                "execution open does not match the authorized eligible view",
+                code=BacktestDataCode.DATASET_BINDING_MISMATCH,
+            )
+        return dataset.execution_open_after(view)
 
     def _dataset_dir(self, dataset_id: UUID) -> Path:
+        dataset_id = self._require_uuid(dataset_id, "dataset_id")
         candidate = self.root / str(dataset_id)
         if candidate.parent != self.root:
             raise DatasetIntegrityError("dataset path escaped its repository")
@@ -387,6 +659,9 @@ class FrozenDatasetRepository:
         manifest: bytes,
         seal: bytes,
     ) -> None:
+        if os.name == "posix":
+            self._publish_at(dataset_id, content, manifest, seal)
+            return
         destination = self._dataset_dir(dataset_id)
         claim = self.root / f".{dataset_id}.claim"
         try:
@@ -416,17 +691,131 @@ class FrozenDatasetRepository:
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
-        path.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+        path.chmod(stat.S_IRUSR)
+
+    def _publish_at(
+        self,
+        dataset_id: UUID,
+        content: bytes,
+        manifest: bytes,
+        seal: bytes,
+    ) -> None:
+        if self._root_fd is None:
+            raise DatasetIntegrityError("dataset root descriptor is closed")
+        root_fd = os.dup(self._root_fd)
+        leaf = str(self._require_uuid(dataset_id, "dataset_id"))
+        claim = f".{leaf}.claim"
+        temporary = f".{leaf}.{secrets.token_hex(16)}"
+        temp_fd: int | None = None
+        claimed = False
+        published = False
+        try:
+            try:
+                claim_fd = os.open(
+                    claim,
+                    os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0),
+                    0o400,
+                    dir_fd=root_fd,
+                )
+            except FileExistsError as exc:
+                raise DatasetAlreadyExistsError(
+                    "dataset identifier has already been claimed"
+                ) from exc
+            else:
+                os.close(claim_fd)
+                claimed = True
+            try:
+                os.stat(leaf, dir_fd=root_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                pass
+            else:
+                raise DatasetAlreadyExistsError("immutable dataset already exists")
+            os.mkdir(temporary, mode=0o700, dir_fd=root_fd)
+            flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+            temp_fd = os.open(temporary, flags, dir_fd=root_fd)
+            self._write_file_at(temp_fd, DATA_FILENAME, content)
+            self._write_file_at(temp_fd, MANIFEST_FILENAME, manifest)
+            self._write_file_at(temp_fd, MANIFEST_SEAL_FILENAME, seal)
+            os.fsync(temp_fd)
+            self._rename_directory_noreplace(root_fd, temporary, leaf)
+            published = True
+            os.fsync(root_fd)
+        except Exception:
+            if temp_fd is not None and not published:
+                for name in (DATA_FILENAME, MANIFEST_FILENAME, MANIFEST_SEAL_FILENAME):
+                    with suppress(FileNotFoundError):
+                        os.unlink(name, dir_fd=temp_fd)
+                os.close(temp_fd)
+                temp_fd = None
+            if not published:
+                with suppress(FileNotFoundError):
+                    os.rmdir(temporary, dir_fd=root_fd)
+                if claimed:
+                    with suppress(FileNotFoundError):
+                        os.unlink(claim, dir_fd=root_fd)
+            raise
+        finally:
+            if temp_fd is not None:
+                os.close(temp_fd)
+            os.close(root_fd)
+
+    @staticmethod
+    def _rename_directory_noreplace(directory_fd: int, source: str, destination: str) -> None:
+        if os.name != "posix":
+            raise DatasetIntegrityError("no-replace directory publication requires POSIX")
+        libc = ctypes.CDLL(None, use_errno=True)
+        renameat2 = getattr(libc, "renameat2", None)
+        if renameat2 is None:
+            raise DatasetIntegrityError("atomic no-replace publication is unavailable")
+        renameat2.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        renameat2.restype = ctypes.c_int
+        result = renameat2(
+            directory_fd,
+            os.fsencode(source),
+            directory_fd,
+            os.fsencode(destination),
+            1,
+        )
+        if result == 0:
+            return
+        error_number = ctypes.get_errno()
+        if error_number in {errno.EEXIST, errno.ENOTEMPTY}:
+            raise DatasetAlreadyExistsError("immutable dataset already exists")
+        raise DatasetIntegrityError("atomic no-replace publication failed") from OSError(
+            error_number, os.strerror(error_number)
+        )
+
+    @staticmethod
+    def _write_file_at(directory_fd: int, name: str, content: bytes) -> None:
+        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(name, flags, 0o400, dir_fd=directory_fd)
+        try:
+            view = memoryview(content)
+            while view:
+                written = os.write(fd, view)
+                view = view[written:]
+            os.fsync(fd)
+        finally:
+            os.close(fd)
 
     def _read_dataset_files(self, dataset_id: UUID) -> tuple[bytes, bytes, bytes]:
         """Read all components beneath one pinned directory handle on POSIX."""
 
         if os.name == "posix":
             directory_flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+            if self._root_fd is None:
+                raise DatasetIntegrityError("dataset root descriptor is closed")
             try:
-                root_fd = os.open(self.root, directory_flags)
+                root_fd = os.dup(self._root_fd)
                 try:
-                    dataset_fd = os.open(str(dataset_id), directory_flags, dir_fd=root_fd)
+                    leaf = str(self._require_uuid(dataset_id, "dataset_id"))
+                    dataset_fd = os.open(leaf, directory_flags, dir_fd=root_fd)
                 finally:
                     os.close(root_fd)
             except OSError as exc:
@@ -545,19 +934,36 @@ class FrozenDatasetRepository:
         tuple[CorporateAction, ...],
         tuple[FxObservation, ...],
     ]:
-        if not content.endswith(b"\n") or b"\r" in content:
+        if expected_count < 1 or expected_count > MAX_DATASET_ROWS:
+            raise DatasetIntegrityError("dataset row count exceeds the operational limit")
+        if not content.endswith(b"\n"):
             raise DatasetIntegrityError("dataset is not canonical JSONL")
-        lines = content.splitlines()
-        if len(lines) != expected_count or len(lines) > MAX_DATASET_ROWS:
-            raise DatasetIntegrityError("dataset row count does not match the manifest")
-        models: list[tuple[str, Any]] = []
         classes = {
             "instrument": InstrumentSpec,
             "daily_bar": DailyBar,
             "corporate_action": CorporateAction,
             "fx_observation": FxObservation,
         }
-        for line in lines:
+        order = {"instrument": 0, "daily_bar": 1, "corporate_action": 2, "fx_observation": 3}
+        instrument: InstrumentSpec | None = None
+        bars: list[DailyBar] = []
+        actions: list[CorporateAction] = []
+        fx: list[FxObservation] = []
+        previous_group = -1
+        count = 0
+        stream = io.BytesIO(content)
+        while True:
+            line_with_newline = stream.readline(MAX_JSON_RECORD_BYTES + 2)
+            if not line_with_newline:
+                break
+            count += 1
+            if count > expected_count or count > MAX_DATASET_ROWS:
+                raise DatasetIntegrityError("dataset row count does not match the manifest")
+            if len(line_with_newline) > MAX_JSON_RECORD_BYTES + 1:
+                raise DatasetIntegrityError("dataset record exceeds its byte limit")
+            if not line_with_newline.endswith(b"\n") or line_with_newline.endswith(b"\r\n"):
+                raise DatasetIntegrityError("dataset is not canonical JSONL")
+            line = line_with_newline[:-1]
             try:
                 raw = _strict_json_loads(line)
                 if not isinstance(raw, dict) or set(raw) != {"kind", "payload"}:
@@ -567,19 +973,29 @@ class FrozenDatasetRepository:
                 model = model_class.model_validate(raw["payload"])
             except (UnicodeDecodeError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
                 raise DatasetIntegrityError("dataset contains an invalid typed record") from exc
-            if line + b"\n" != _record_bytes(kind, model):
+            if line_with_newline != _record_bytes(kind, model):
                 raise DatasetIntegrityError("dataset record bytes are not canonical")
-            models.append((kind, model))
-        if not models or models[0][0] != "instrument" or sum(k == "instrument" for k, _ in models) != 1:
+            group = order[kind]
+            if group < previous_group:
+                raise DatasetIntegrityError("dataset record groups are not canonical")
+            previous_group = group
+            if kind == "instrument":
+                if count != 1 or instrument is not None:
+                    raise DatasetIntegrityError(
+                        "dataset must contain exactly one leading instrument"
+                    )
+                instrument = model
+            elif kind == "daily_bar":
+                bars.append(model)
+            elif kind == "corporate_action":
+                actions.append(model)
+            else:
+                fx.append(model)
+        if count != expected_count:
+            raise DatasetIntegrityError("dataset row count does not match the manifest")
+        if instrument is None:
             raise DatasetIntegrityError("dataset must contain exactly one leading instrument")
-        order = {"instrument": 0, "daily_bar": 1, "corporate_action": 2, "fx_observation": 3}
-        if [order[kind] for kind, _ in models] != sorted(order[kind] for kind, _ in models):
-            raise DatasetIntegrityError("dataset record groups are not canonical")
-        instrument = models[0][1]
-        bars = tuple(model for kind, model in models if kind == "daily_bar")
-        actions = tuple(model for kind, model in models if kind == "corporate_action")
-        fx = tuple(model for kind, model in models if kind == "fx_observation")
-        return instrument, bars, actions, fx
+        return instrument, tuple(bars), tuple(actions), tuple(fx)
 
     @staticmethod
     def _is_reparse(file_stat: os.stat_result) -> bool:
@@ -616,8 +1032,57 @@ class FrozenDatasetRepository:
                 calendar.validate_bar(instrument, bar)
             previous = bar.session_date
             seen.add(bar.session_date)
+        if calendar is not None:
+            expected_sessions = calendar.session_dates_in_range(
+                bars[0].session_date, bars[-1].session_date
+            )
+            if tuple(bar.session_date for bar in bars) != expected_sessions:
+                raise DatasetIntegrityError("dataset has a missing exchange session")
         if any(action.instrument_id != instrument.instrument_id for action in actions):
             raise DatasetIntegrityError("corporate action belongs to a different instrument")
+        revisions: dict[UUID, list[CorporateAction]] = {}
+        for action in actions:
+            revisions.setdefault(action.action_id, []).append(action)
+        for chain in revisions.values():
+            ordered = sorted(chain, key=lambda item: item.revision)
+            if [item.revision for item in ordered] != list(range(1, len(ordered) + 1)):
+                raise DatasetIntegrityError("corporate-action revisions must be contiguous from one")
+            first = ordered[0]
+            for previous_action, action in zip(ordered, ordered[1:], strict=False):
+                if (
+                    action.published_at <= previous_action.published_at
+                    or action.available_at <= previous_action.available_at
+                ):
+                    raise DatasetIntegrityError(
+                        "corporate-action revisions must advance publication and availability"
+                    )
+                if (
+                    action.instrument_id != first.instrument_id
+                    or action.action_type is not first.action_type
+                    or action.effective_date != first.effective_date
+                    or action.ex_date != first.ex_date
+                ):
+                    raise DatasetIntegrityError(
+                        "corporate-action revisions cannot rewrite identity or effective dates"
+                    )
+        delistings = [
+            action
+            for action in actions
+            if action.action_type.value == "delisting"
+        ]
+        if len({action.action_id for action in delistings}) > 1:
+            raise DatasetIntegrityError("dataset contains multiple logical delisting actions")
+        if instrument.delisting_date is None and delistings:
+            raise DatasetIntegrityError(
+                "delisting action requires a matching security-master delisting date"
+            )
+        if instrument.delisting_date is not None and (
+            not delistings
+            or any(action.effective_date != instrument.delisting_date for action in delistings)
+        ):
+            raise DatasetIntegrityError(
+                "security-master delisting requires matching corporate-action evidence"
+            )
         if any(item.available_at < item.observed_at for item in fx):
             raise DatasetIntegrityError("FX observation is available before it was observed")
 
@@ -625,7 +1090,7 @@ class FrozenDatasetRepository:
 def _strict_json_loads(content: bytes) -> Any:
     if len(content) > MAX_JSON_RECORD_BYTES:
         raise DatasetIntegrityError("JSON record exceeds its byte limit")
-    depth = 0
+    expected_closings: list[int] = []
     in_string = False
     escaped = False
     for byte in content:
@@ -640,14 +1105,14 @@ def _strict_json_loads(content: bytes) -> Any:
         if byte == 0x22:
             in_string = True
         elif byte in (0x7B, 0x5B):
-            depth += 1
-            if depth > MAX_JSON_NESTING:
+            expected_closings.append(0x7D if byte == 0x7B else 0x5D)
+            if len(expected_closings) > MAX_JSON_NESTING:
                 raise DatasetIntegrityError("JSON record exceeds its nesting limit")
-        elif byte in (0x7D, 0x5D):
-            depth -= 1
-            if depth < 0:
-                raise DatasetIntegrityError("JSON record has mismatched delimiters")
-    if in_string or depth != 0:
+        elif byte in (0x7D, 0x5D) and (
+            not expected_closings or expected_closings.pop() != byte
+        ):
+            raise DatasetIntegrityError("JSON record has mismatched delimiters")
+    if in_string or expected_closings:
         raise DatasetIntegrityError("JSON record is truncated or structurally invalid")
 
     def reject_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:

@@ -37,7 +37,14 @@ class CorporateActionType(StrEnum):
     DELISTING = "delisting"
 
 
+class AvailabilityBasis(StrEnum):
+    SOURCE_PUBLISHED = "source_published"
+    EXCHANGE_SETTLEMENT_POLICY = "exchange_settlement_policy"
+    UNKNOWN = "unknown"
+
+
 class DatasetLimitation(StrEnum):
+    BAR_AVAILABILITY_UNVERIFIED = "bar_availability_unverified"
     SURVIVORSHIP_UNVERIFIED = "survivorship_unverified"
     CORPORATE_ACTION_VINTAGE_UNVERIFIED = "corporate_action_vintage_unverified"
     DELISTING_COVERAGE_UNVERIFIED = "delisting_coverage_unverified"
@@ -45,12 +52,20 @@ class DatasetLimitation(StrEnum):
     VENDOR_ADJUSTMENT_STATUS_UNVERIFIED = "vendor_adjustment_status_unverified"
 
 
+M5_UNVERIFIED_LIMITATIONS = tuple(DatasetLimitation)
+
+
 class DecisionPolicy(StrEnum):
     SETTLED_SESSION_CLOSE = "settled_session_close"
 
 
 class FillPolicy(StrEnum):
-    NEXT_SESSION_RAW_OPEN = "next_session_raw_open"
+    FIRST_SESSION_RAW_OPEN_AFTER_DECISION = "first_session_raw_open_after_decision"
+
+
+class DatasetRole(StrEnum):
+    TRADEABLE = "tradeable"
+    BENCHMARK = "benchmark"
 
 
 class MissingDataPolicy(StrEnum):
@@ -58,11 +73,28 @@ class MissingDataPolicy(StrEnum):
 
 
 def _decimal_text(value: Decimal) -> str:
+    _bounded_decimal(value)
     if not value.is_finite():
         raise ValueError("canonical decimals must be finite")
     if value == 0:
         return "0"
-    return format(value.normalize(), "f")
+    sign, raw_digits, exponent = value.as_tuple()
+    digits = list(raw_digits)
+    while digits and digits[-1] == 0:
+        digits.pop()
+        exponent += 1
+    if not digits:
+        return "0"
+    rendered_digits = "".join(str(digit) for digit in digits)
+    if exponent >= 0:
+        rendered = rendered_digits + ("0" * exponent)
+    else:
+        point = len(rendered_digits) + exponent
+        if point > 0:
+            rendered = f"{rendered_digits[:point]}.{rendered_digits[point:]}"
+        else:
+            rendered = f"0.{('0' * -point)}{rendered_digits}"
+    return f"-{rendered}" if sign else rendered
 
 
 def _canonical_value(value: Any, *, depth: int = 0) -> Any:
@@ -102,11 +134,10 @@ def _canonical_value(value: Any, *, depth: int = 0) -> Any:
     if value is None:
         return None
     raise ValueError("canonical payload contains an unsupported scalar type")
-    return value
 
 
-def canonical_digest(value: BaseModel | dict[str, Any]) -> str:
-    """Return a stable SHA-256 digest without binary-float serialization."""
+def canonical_json_bytes(value: BaseModel | dict[str, Any]) -> bytes:
+    """Serialize a bounded contract payload without ambient Decimal context."""
 
     payload = value.model_dump(mode="python") if isinstance(value, BaseModel) else value
     canonical = json.dumps(
@@ -115,7 +146,13 @@ def canonical_digest(value: BaseModel | dict[str, Any]) -> str:
         sort_keys=True,
         separators=(",", ":"),
     )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return canonical.encode("utf-8")
+
+
+def canonical_digest(value: BaseModel | dict[str, Any]) -> str:
+    """Return a stable SHA-256 digest without binary-float serialization."""
+
+    return hashlib.sha256(canonical_json_bytes(value)).hexdigest()
 
 
 def market_dataset_binding_digest(
@@ -123,6 +160,7 @@ def market_dataset_binding_digest(
     tenant_id: UUID,
     dataset_id: UUID,
     instrument_digest: str,
+    content_bytes: int,
     content_sha256: str,
     schedule_digest: str,
     source_vintage: str,
@@ -135,6 +173,7 @@ def market_dataset_binding_digest(
     return canonical_digest(
         {
             "calendar_engine_version": calendar_engine_version,
+            "content_bytes": content_bytes,
             "content_sha256": content_sha256,
             "dataset_id": dataset_id,
             "instrument_digest": instrument_digest,
@@ -255,7 +294,10 @@ class DailyBar(BacktestContract):
     session_date: date
     session_open_at: datetime
     session_close_at: datetime
-    available_at: datetime
+    source_published_at: datetime | None = None
+    fetched_at: datetime
+    available_at: datetime | None
+    availability_basis: AvailabilityBasis
     open: Decimal
     high: Decimal
     low: Decimal
@@ -264,9 +306,12 @@ class DailyBar(BacktestContract):
     price_basis: Literal["raw"] = "raw"
     source_digest: Digest
 
-    _timestamps_are_utc = field_validator(
-        "session_open_at", "session_close_at", "available_at"
-    )(_utc)
+    _timestamps_are_utc = field_validator("session_open_at", "session_close_at", "fetched_at")(
+        _utc
+    )
+    _optional_timestamps_are_utc = field_validator("source_published_at", "available_at")(
+        lambda value: None if value is None else _utc(value)
+    )
     _decimal_input_is_exact = field_validator(
         "open", "high", "low", "close", "volume", mode="before"
     )(_reject_binary_float)
@@ -283,8 +328,24 @@ class DailyBar(BacktestContract):
 
     @model_validator(mode="after")
     def validate_bar(self):
-        if not self.session_open_at < self.session_close_at < self.available_at:
-            raise ValueError("bar timestamps must satisfy open < close < available")
+        if not self.session_open_at < self.session_close_at <= self.fetched_at:
+            raise ValueError("bar timestamps must satisfy open < close <= fetched")
+        if self.availability_basis is AvailabilityBasis.UNKNOWN:
+            if self.available_at is not None or self.source_published_at is not None:
+                raise ValueError("unknown bar availability cannot carry availability timestamps")
+        else:
+            if self.available_at is None or self.available_at <= self.session_close_at:
+                raise ValueError("known bar availability must follow the session close")
+            if self.available_at > self.fetched_at:
+                raise ValueError("bar cannot be available after it was fetched")
+            if self.availability_basis is AvailabilityBasis.SOURCE_PUBLISHED:
+                if (
+                    self.source_published_at is None
+                    or self.available_at < self.source_published_at
+                ):
+                    raise ValueError("source-published availability requires its publication time")
+            elif self.source_published_at is not None:
+                raise ValueError("settlement-policy availability cannot claim vendor publication")
         if self.low > self.high:
             raise ValueError("bar low cannot exceed high")
         if not self.low <= self.open <= self.high:
@@ -292,6 +353,35 @@ class DailyBar(BacktestContract):
         if not self.low <= self.close <= self.high:
             raise ValueError("bar close must be within low and high")
         return self
+
+
+class ExecutionOpen(BacktestContract):
+    dataset_id: UUID
+    manifest_digest: Digest
+    instrument_id: UUID
+    decision_session_date: date
+    decision_at: datetime
+    eligible_view_digest: Digest
+    session_date: date
+    execution_at: datetime
+    raw_open: Decimal
+    parent_bar_digest: Digest
+    source_digest: Digest
+
+    _timestamps_are_utc = field_validator("decision_at", "execution_at")(_utc)
+    _raw_open_is_exact = field_validator("raw_open", mode="before")(_reject_binary_float)
+
+    @field_validator("raw_open")
+    @classmethod
+    def validate_raw_open(cls, value: Decimal) -> Decimal:
+        return _positive(value)
+
+
+class DatasetReference(BacktestContract):
+    instrument_id: UUID
+    dataset_id: UUID
+    manifest_digest: Digest
+    role: DatasetRole
 
 
 class CorporateAction(BacktestContract):
@@ -396,6 +486,7 @@ class MarketDatasetManifest(BacktestContract):
     source: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9_.-]+$")
     source_vintage: str = Field(min_length=1, max_length=160)
     instrument_digest: Digest
+    content_bytes: int = Field(ge=1, le=16 * 1024 * 1024)
     content_sha256: Digest
     row_count: int = Field(ge=1)
     first_session: date
@@ -405,7 +496,8 @@ class MarketDatasetManifest(BacktestContract):
     timezone_database_version: str = Field(min_length=1, max_length=80)
     settlement_policy_version: str = Field(min_length=1, max_length=80)
     binding_digest: Digest
-    limitations: tuple[DatasetLimitation, ...] = Field(default=(), max_length=64)
+    coverage_status: Literal["unverified"] = "unverified"
+    limitations: tuple[DatasetLimitation, ...] = Field(min_length=1, max_length=64)
 
     _created_at_is_utc = field_validator("created_at")(_utc)
 
@@ -416,6 +508,8 @@ class MarketDatasetManifest(BacktestContract):
     ) -> tuple[DatasetLimitation, ...]:
         if len(set(value)) != len(value):
             raise ValueError("dataset limitations must be unique")
+        if value != M5_UNVERIFIED_LIMITATIONS:
+            raise ValueError("M5.0 requires canonical unverified coverage limitations")
         return value
 
     @model_validator(mode="after")
@@ -426,6 +520,7 @@ class MarketDatasetManifest(BacktestContract):
             tenant_id=self.tenant_id,
             dataset_id=self.dataset_id,
             instrument_digest=self.instrument_digest,
+            content_bytes=self.content_bytes,
             content_sha256=self.content_sha256,
             schedule_digest=self.schedule_digest,
             source_vintage=self.source_vintage,
@@ -441,7 +536,7 @@ class MarketDatasetManifest(BacktestContract):
     def quantitative_claims_eligible(self) -> bool:
         """False when source coverage or vintage remains explicitly unverified."""
 
-        return not self.limitations
+        return False
 
 
 class BacktestSpec(BacktestContract):
@@ -449,7 +544,7 @@ class BacktestSpec(BacktestContract):
     tenant_id: UUID
     schema_version: Literal[1] = 1
     created_at: datetime
-    dataset_manifest_digest: Digest
+    dataset_references: tuple[DatasetReference, ...] = Field(min_length=1, max_length=1_001)
     instrument_ids: tuple[UUID, ...] = Field(min_length=1, max_length=1_000)
     benchmark_instrument_id: UUID
     start_session: date
@@ -462,7 +557,9 @@ class BacktestSpec(BacktestContract):
     decision_policy: Literal[DecisionPolicy.SETTLED_SESSION_CLOSE] = (
         DecisionPolicy.SETTLED_SESSION_CLOSE
     )
-    fill_policy: Literal[FillPolicy.NEXT_SESSION_RAW_OPEN] = FillPolicy.NEXT_SESSION_RAW_OPEN
+    fill_policy: Literal[FillPolicy.FIRST_SESSION_RAW_OPEN_AFTER_DECISION] = (
+        FillPolicy.FIRST_SESSION_RAW_OPEN_AFTER_DECISION
+    )
     price_basis: Literal["raw"] = "raw"
     missing_data_policy: Literal[MissingDataPolicy.FAIL_CLOSED] = MissingDataPolicy.FAIL_CLOSED
     random_seed: int = Field(default=0, ge=0, le=2**63 - 1)
@@ -502,4 +599,26 @@ class BacktestSpec(BacktestContract):
             raise ValueError("backtest end session cannot precede start session")
         if len(set(self.instrument_ids)) != len(self.instrument_ids):
             raise ValueError("backtest instrument IDs must be unique")
+        if self.benchmark_instrument_id in self.instrument_ids:
+            raise ValueError("benchmark instrument must be distinct from tradeable instruments")
+        reference_ids = [item.instrument_id for item in self.dataset_references]
+        if len(set(reference_ids)) != len(reference_ids):
+            raise ValueError("each instrument requires exactly one dataset reference")
+        dataset_ids = [item.dataset_id for item in self.dataset_references]
+        if len(set(dataset_ids)) != len(dataset_ids):
+            raise ValueError("each dataset may bind exactly one instrument reference")
+        tradeable_ids = {
+            item.instrument_id
+            for item in self.dataset_references
+            if item.role is DatasetRole.TRADEABLE
+        }
+        benchmark_ids = [
+            item.instrument_id
+            for item in self.dataset_references
+            if item.role is DatasetRole.BENCHMARK
+        ]
+        if tradeable_ids != set(self.instrument_ids):
+            raise ValueError("tradeable dataset references must match every instrument")
+        if benchmark_ids != [self.benchmark_instrument_id]:
+            raise ValueError("exactly one dataset reference must bind the benchmark")
         return self

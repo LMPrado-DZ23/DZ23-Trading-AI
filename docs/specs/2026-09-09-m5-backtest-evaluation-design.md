@@ -145,3 +145,13 @@ Metamorphic leakage tests append or mutate future bars and require every prior
 feature, decision and fill to remain byte-identical. Reordering or duplicating
 input rows is rejected. A synthetic fixture proves mechanics only; performance
 claims require frozen real data and remain subject to dataset limitations.
+
+## M5.0 quantitative-claim boundary
+
+M5.0 deliberately emits `coverage_status="unverified"`, requires the complete
+canonical limitation set, and keeps `quantitative_claims_eligible=False`.
+Revision continuity is proven only inside one frozen snapshot. No Sharpe,
+alpha, return, ranking, model comparison, or other performance claim may be
+published until M5.5 provides an authoritative append-only lineage between
+dataset manifests and independently attested coverage for availability,
+survivorship, delistings, corporate actions, FX, and vendor adjustments.

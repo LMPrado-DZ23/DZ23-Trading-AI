@@ -1,17 +1,22 @@
 """M5.0 contracts are immutable, point-in-time, and digest-bound."""
 
 from datetime import UTC, date, datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, Inexact, Rounded, localcontext
 from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
 
 from tradingagents.platform.backtest import (
+    M5_UNVERIFIED_LIMITATIONS,
+    AvailabilityBasis,
     BacktestSpec,
     CorporateAction,
     DailyBar,
     DatasetLimitation,
+    DatasetReference,
+    DatasetRole,
+    ExecutionOpen,
     FxObservation,
     InstrumentSpec,
     MarketDatasetManifest,
@@ -47,7 +52,9 @@ def _bar(**overrides):
         "session_date": date(2026, 9, 8),
         "session_open_at": NOW - timedelta(hours=8),
         "session_close_at": NOW - timedelta(hours=1),
+        "fetched_at": NOW - timedelta(minutes=30),
         "available_at": NOW - timedelta(minutes=45),
+        "availability_basis": AvailabilityBasis.EXCHANGE_SETTLEMENT_POLICY,
         "open": Decimal("30.00"),
         "high": Decimal("32.00"),
         "low": Decimal("29.00"),
@@ -64,6 +71,7 @@ def _manifest(**overrides):
     tenant_id = overrides.pop("tenant_id", uuid4())
     instrument_digest = overrides.pop("instrument_digest", "b" * 64)
     content_sha256 = overrides.pop("content_sha256", "c" * 64)
+    content_bytes = overrides.pop("content_bytes", 12_345)
     schedule_digest = overrides.pop("schedule_digest", "d" * 64)
     source_vintage = overrides.pop("source_vintage", "vendor-snapshot-2026-09-09")
     calendar_engine_version = overrides.pop(
@@ -80,6 +88,7 @@ def _manifest(**overrides):
         "source": "dz23-test",
         "source_vintage": source_vintage,
         "instrument_digest": instrument_digest,
+        "content_bytes": content_bytes,
         "content_sha256": content_sha256,
         "row_count": 20,
         "first_session": date(2026, 8, 1),
@@ -92,6 +101,7 @@ def _manifest(**overrides):
             tenant_id=tenant_id,
             dataset_id=dataset_id,
             instrument_digest=instrument_digest,
+            content_bytes=content_bytes,
             content_sha256=content_sha256,
             schedule_digest=schedule_digest,
             source_vintage=source_vintage,
@@ -99,21 +109,42 @@ def _manifest(**overrides):
             timezone_database_version=timezone_database_version,
             settlement_policy_version=settlement_policy_version,
         ),
-        "limitations": (DatasetLimitation.SURVIVORSHIP_UNVERIFIED,),
+        "limitations": M5_UNVERIFIED_LIMITATIONS,
     }
     data.update(overrides)
     return MarketDatasetManifest(**data)
 
 
 def _spec(**overrides):
-    instrument_id = uuid4()
+    instrument_ids = overrides.pop("instrument_ids", (uuid4(),))
+    benchmark_id = overrides.pop("benchmark_instrument_id", uuid4())
+    dataset_references = overrides.pop(
+        "dataset_references",
+        tuple(
+            DatasetReference(
+                instrument_id=instrument_id,
+                dataset_id=uuid4(),
+                manifest_digest="e" * 64,
+                role="tradeable",
+            )
+            for instrument_id in instrument_ids
+        )
+        + (
+            DatasetReference(
+                instrument_id=benchmark_id,
+                dataset_id=uuid4(),
+                manifest_digest="f" * 64,
+                role="benchmark",
+            ),
+        ),
+    )
     data = {
         "backtest_id": uuid4(),
         "tenant_id": uuid4(),
         "created_at": NOW,
-        "dataset_manifest_digest": "e" * 64,
-        "instrument_ids": (instrument_id,),
-        "benchmark_instrument_id": uuid4(),
+        "dataset_references": dataset_references,
+        "instrument_ids": instrument_ids,
+        "benchmark_instrument_id": benchmark_id,
         "start_session": date(2025, 1, 1),
         "end_session": date(2025, 12, 31),
         "base_currency": "BRL",
@@ -368,7 +399,7 @@ def test_canonical_digest_rejects_ambiguous_python_scalars(payload):
 
 def test_backtest_spec_binds_honest_execution_assumptions():
     spec = _spec()
-    assert spec.fill_policy == "next_session_raw_open"
+    assert spec.fill_policy == "first_session_raw_open_after_decision"
     assert spec.price_basis == "raw"
     assert spec.missing_data_policy == "fail_closed"
     assert spec.digest != _spec(
@@ -399,3 +430,129 @@ def test_backtest_spec_binds_honest_execution_assumptions():
 def test_backtest_spec_rejects_unsafe_or_ambiguous_inputs(overrides):
     with pytest.raises(ValidationError):
         _spec(**overrides)
+
+
+def test_decimal_canonicalization_ignores_ambient_context_and_traps():
+    first = _bar(open=Decimal("30.45"), close=Decimal("31.00"))
+    second = _bar(
+        instrument_id=first.instrument_id,
+        open=Decimal("30.46"),
+        close=Decimal("31.00"),
+    )
+    baseline = first.digest
+
+    with localcontext() as context:
+        context.prec = 2
+        context.traps[Inexact] = True
+        context.traps[Rounded] = True
+        assert first.digest == baseline
+        assert second.digest != baseline
+
+
+def test_bar_availability_distinguishes_vendor_publication_policy_and_unknown():
+    vendor = _bar(
+        availability_basis=AvailabilityBasis.SOURCE_PUBLISHED,
+        source_published_at=NOW - timedelta(minutes=44),
+        available_at=NOW - timedelta(minutes=43),
+    )
+    unknown = _bar(
+        availability_basis=AvailabilityBasis.UNKNOWN,
+        source_published_at=None,
+        available_at=None,
+    )
+
+    assert vendor.available_at > vendor.source_published_at
+    assert unknown.available_at is None
+    with pytest.raises(ValidationError, match="unknown"):
+        _bar(availability_basis=AvailabilityBasis.UNKNOWN)
+    with pytest.raises(ValidationError, match="publication"):
+        _bar(
+            availability_basis=AvailabilityBasis.SOURCE_PUBLISHED,
+            source_published_at=None,
+        )
+
+
+def test_execution_open_is_a_minimal_raw_projection():
+    execution = ExecutionOpen(
+        dataset_id=uuid4(),
+        manifest_digest="c" * 64,
+        instrument_id=uuid4(),
+        decision_session_date=date(2026, 9, 8),
+        decision_at=NOW - timedelta(minutes=1),
+        eligible_view_digest="d" * 64,
+        session_date=date(2026, 9, 9),
+        execution_at=NOW,
+        raw_open=Decimal("30.25"),
+        parent_bar_digest="b" * 64,
+        source_digest=DIGEST,
+    )
+
+    assert set(execution.model_dump()) == {
+        "instrument_id",
+        "dataset_id",
+        "manifest_digest",
+        "decision_session_date",
+        "decision_at",
+        "eligible_view_digest",
+        "session_date",
+        "execution_at",
+        "raw_open",
+        "parent_bar_digest",
+        "source_digest",
+    }
+
+
+def test_backtest_spec_binds_every_instrument_and_unique_dataset():
+    spec = _spec()
+    shared = {
+        "instrument_ids": spec.instrument_ids,
+        "benchmark_instrument_id": spec.benchmark_instrument_id,
+    }
+    with pytest.raises(ValidationError, match="tradeable|benchmark"):
+        _spec(dataset_references=spec.dataset_references[:-1], **shared)
+
+    duplicated_dataset = spec.dataset_references[1].model_copy(
+        update={"dataset_id": spec.dataset_references[0].dataset_id}
+    )
+    with pytest.raises(ValidationError, match="dataset may bind"):
+        _spec(dataset_references=(spec.dataset_references[0], duplicated_dataset), **shared)
+
+    wrong_benchmark = spec.dataset_references[1].model_copy(
+        update={"role": DatasetRole.TRADEABLE}
+    )
+    with pytest.raises(ValidationError, match="tradeable|benchmark"):
+        _spec(dataset_references=(spec.dataset_references[0], wrong_benchmark), **shared)
+
+    with pytest.raises(ValidationError, match="distinct"):
+        _spec(
+            instrument_ids=spec.instrument_ids,
+            benchmark_instrument_id=spec.instrument_ids[0],
+        )
+
+
+def test_manifest_requires_positive_bounded_content_length_and_limitations():
+    with pytest.raises(ValidationError):
+        _manifest(content_bytes=0)
+    with pytest.raises(ValidationError):
+        _manifest(content_bytes=(16 * 1024 * 1024) + 1)
+    with pytest.raises(ValidationError):
+        _manifest(limitations=())
+    with pytest.raises(ValidationError, match="canonical"):
+        _manifest(limitations=tuple(reversed(M5_UNVERIFIED_LIMITATIONS)))
+
+
+def test_backtest_package_exports_the_supported_authority_api():
+    import tradingagents.platform.backtest as backtest
+
+    expected = {
+        "BacktestDataCode",
+        "BacktestDataError",
+        "DatasetAlreadyExistsError",
+        "DatasetIntegrityError",
+        "EligibleMarketView",
+        "ExecutionOpen",
+        "FrozenDatasetRepository",
+        "MarketCalendarError",
+    }
+    assert expected <= set(backtest.__all__)
+    assert all(hasattr(backtest, name) for name in expected)

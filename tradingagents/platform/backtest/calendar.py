@@ -10,11 +10,12 @@ from datetime import UTC, date, datetime, timedelta
 
 import exchange_calendars as xcals
 
-from .contracts import DailyBar, InstrumentSpec
+from .contracts import AvailabilityBasis, DailyBar, InstrumentSpec
 from .errors import MarketCalendarError
 
 SUPPORTED_CALENDARS = frozenset({"24/7", "XNYS", "BVMF"})
 DEFAULT_DAILY_BAR_LAG = timedelta(minutes=15)
+MAX_SESSION_RANGE_DAYS = 25_000
 SETTLEMENT_POLICY_VERSION = "daily-bar-settlement/1"
 
 
@@ -69,10 +70,26 @@ class BacktestCalendar:
             raise MarketCalendarError("date is not a session in the selected calendar") from exc
         return SessionWindow(session_date=session_date, open_at=open_at, close_at=close_at)
 
-    def bar_available_at(self, session_date: date) -> datetime:
-        """Return when a completed daily bar becomes admissible as evidence."""
+    def settlement_policy_available_at(self, session_date: date) -> datetime:
+        """Return the policy minimum, never a claim of vendor availability."""
 
         return self.session_window(session_date).close_at + self.daily_bar_lag
+
+    def session_dates_in_range(self, start: date, end: date) -> tuple[date, ...]:
+        """Materialize every labelled session between two inclusive endpoints."""
+
+        if end < start:
+            raise MarketCalendarError("session range end precedes its start")
+        if (end - start).days > MAX_SESSION_RANGE_DAYS:
+            raise MarketCalendarError("session range exceeds the operational limit")
+        try:
+            sessions = self._calendar.sessions_in_range(start.isoformat(), end.isoformat())
+        except (KeyError, ValueError) as exc:
+            raise MarketCalendarError("calendar could not materialize the session range") from exc
+        result = tuple(item.date() for item in sessions)
+        if not result or result[0] != start or result[-1] != end:
+            raise MarketCalendarError("dataset endpoints are not valid exchange sessions")
+        return result
 
     def next_session_open(self, session_date: date) -> datetime:
         """Return the next labelled session's open, independent of bar availability."""
@@ -119,8 +136,17 @@ class BacktestCalendar:
         expected = self.session_window(bar.session_date)
         if bar.session_open_at != expected.open_at or bar.session_close_at != expected.close_at:
             raise MarketCalendarError("bar timestamps do not match the frozen exchange schedule")
-        if bar.available_at != expected.close_at + self.daily_bar_lag:
-            raise MarketCalendarError("bar availability does not match the configured settlement lag")
+        minimum_available_at = expected.close_at + self.daily_bar_lag
+        if bar.availability_basis is AvailabilityBasis.UNKNOWN:
+            if bar.available_at is not None:
+                raise MarketCalendarError("unknown bar availability must remain unset")
+        elif bar.availability_basis is AvailabilityBasis.EXCHANGE_SETTLEMENT_POLICY:
+            if bar.available_at != minimum_available_at:
+                raise MarketCalendarError(
+                    "bar availability does not match the configured settlement lag"
+                )
+        elif bar.available_at is None or bar.available_at < minimum_available_at:
+            raise MarketCalendarError("vendor bar availability precedes the settlement policy")
 
 
 def schedule_digest(
@@ -156,7 +182,18 @@ def schedule_digest(
                 "session_date": bar.session_date.isoformat(),
                 "session_open_at": bar.session_open_at.astimezone(UTC).isoformat(),
                 "session_close_at": bar.session_close_at.astimezone(UTC).isoformat(),
-                "available_at": bar.available_at.astimezone(UTC).isoformat(),
+                "available_at": (
+                    bar.available_at.astimezone(UTC).isoformat()
+                    if bar.available_at is not None
+                    else None
+                ),
+                "availability_basis": bar.availability_basis,
+                "source_published_at": (
+                    bar.source_published_at.astimezone(UTC).isoformat()
+                    if bar.source_published_at is not None
+                    else None
+                ),
+                "fetched_at": bar.fetched_at.astimezone(UTC).isoformat(),
             }
             for bar in bars
         ],

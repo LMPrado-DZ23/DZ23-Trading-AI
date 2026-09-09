@@ -1,13 +1,18 @@
 """Deterministic point-in-time backtest contracts."""
 
 from tradingagents.platform.backtest.contracts import (
+    M5_UNVERIFIED_LIMITATIONS,
     AssetType,
+    AvailabilityBasis,
     BacktestSpec,
     CorporateAction,
     CorporateActionType,
     DailyBar,
     DatasetLimitation,
+    DatasetReference,
+    DatasetRole,
     DecisionPolicy,
+    ExecutionOpen,
     FillPolicy,
     FxObservation,
     InstrumentSpec,
@@ -15,12 +20,25 @@ from tradingagents.platform.backtest.contracts import (
     MarketDatasetManifest,
     MissingDataPolicy,
     canonical_digest,
+    canonical_json_bytes,
     market_dataset_binding_digest,
 )
-from tradingagents.platform.backtest.errors import BacktestDataCode, BacktestDataError
+from tradingagents.platform.backtest.errors import (
+    BacktestDataCode,
+    BacktestDataError,
+    DatasetAlreadyExistsError,
+    DatasetIntegrityError,
+    MarketCalendarError,
+)
+from tradingagents.platform.backtest.repository import (
+    EligibleMarketView,
+    FrozenDatasetRepository,
+)
 
 __all__ = [
+    "M5_UNVERIFIED_LIMITATIONS",
     "AssetType",
+    "AvailabilityBasis",
     "BacktestDataCode",
     "BacktestDataError",
     "BacktestSpec",
@@ -28,13 +46,22 @@ __all__ = [
     "CorporateActionType",
     "DailyBar",
     "DatasetLimitation",
+    "DatasetReference",
+    "DatasetRole",
+    "DatasetAlreadyExistsError",
+    "DatasetIntegrityError",
     "DecisionPolicy",
+    "EligibleMarketView",
+    "ExecutionOpen",
     "FillPolicy",
+    "FrozenDatasetRepository",
     "FxObservation",
     "InstrumentSpec",
     "MarketCalendar",
+    "MarketCalendarError",
     "MarketDatasetManifest",
     "MissingDataPolicy",
     "canonical_digest",
+    "canonical_json_bytes",
     "market_dataset_binding_digest",
 ]
