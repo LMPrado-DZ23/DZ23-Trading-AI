@@ -1446,3 +1446,20 @@ def test_postgresql_public_reservation_port_checks_ttl_before_finalization() -> 
     assert "p_mac,\n                false" in migration
     assert "FROM PUBLIC,tradingagents_worker" in migration
     assert "20260909_0024 is a one-way security migration" in migration
+
+
+def test_postgresql_reservation_replay_locks_before_ttl_precheck() -> None:
+    migration = (
+        Path(__file__).resolve().parents[1]
+        / "migrations"
+        / "versions"
+        / "20260909_0025_reservation_replay_lock.py"
+    ).read_text(encoding="utf-8")
+    portfolio_lock = migration.index("FROM public.portfolios")
+    ttl_precheck = migration.index("SELECT * INTO v_existing")
+    implementation = migration.index("portfolio_reserve_cash_v1_0022_impl")
+    assert portfolio_lock < ttl_precheck < implementation
+    first_verify = migration.index("p_mac,\n                false")
+    second_verify = migration.index("p_mac,\n                false", first_verify + 1)
+    assert first_verify < portfolio_lock < second_verify < ttl_precheck
+    assert "20260909_0025 is a one-way security migration" in migration

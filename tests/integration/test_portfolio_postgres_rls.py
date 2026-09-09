@@ -429,6 +429,113 @@ def test_postgres_rpc_ttl_mismatch_precedes_finalized_status() -> None:
 
 
 @pytest.mark.skipif(not APP_URL, reason="PostgreSQL app test URL is not configured")
+def test_postgres_rpc_serializes_ttl_precheck_before_concurrent_finalization() -> None:
+    engine = create_engine(APP_URL, pool_pre_ping=True)
+    factory = sessionmaker(engine, expire_on_commit=False)
+    identity = IdentityService(factory, token_hasher=TokenHasher(_TOKEN_PEPPER))
+    principal = _principal(identity, "TtlRace")
+    service = PortfolioService(
+        factory,
+        idempotency_digest_key=b"a" * 32,
+        capability_signing_key=_CAPABILITY_KEY,
+    )
+    _suitability, portfolio = _ready(service, principal, "TtlRace")
+    snapshot = _latest_snapshot(service, principal, portfolio.id)
+    purpose = "4" * 64
+    key_hash = service._key_hash("pg-ttl-race-replay")
+    reserve_sql = text(
+        "SELECT * FROM tradingagents_private.portfolio_reserve_cash_v1("
+        ":portfolio_id,:amount,:purpose,:key_hash,:ttl_microseconds,:snapshot_id,"
+        ":snapshot_digest,:cap_kid,:cap_session_id,:cap_token_hash,:cap_issued_at,"
+        ":cap_expires_at,:cap_nonce,:cap_mac)"
+    )
+    with factory() as clock_db, clock_db.begin():
+        service._set_portfolio_scope(clock_db, principal)
+        capability_now = service._database_now(clock_db)
+
+    def reserve_params(ttl_microseconds: int) -> dict[str, object]:
+        capability = service._mint_capability(
+            principal=principal,
+            audience="portfolio.reserve.v1",
+            fields=(
+                str(portfolio.id),
+                "1",
+                purpose,
+                key_hash,
+                str(ttl_microseconds),
+                str(snapshot.id),
+                snapshot.digest,
+            ),
+            now=capability_now,
+        )
+        return {
+            "portfolio_id": str(portfolio.id),
+            "amount": Decimal("1"),
+            "purpose": purpose,
+            "key_hash": key_hash,
+            "ttl_microseconds": ttl_microseconds,
+            "snapshot_id": str(snapshot.id),
+            "snapshot_digest": snapshot.digest,
+        } | capability
+
+    waiting_params = reserve_params(3_600_000_000)
+    winning_params = reserve_params(30_000_000)
+    holder = factory()
+    holder.begin()
+    service._set_portfolio_scope(holder, principal)
+    holder.scalar(
+        select(Portfolio)
+        .where(Portfolio.id == portfolio.id, Portfolio.tenant_id == principal.tenant_id)
+        .with_for_update()
+    )
+    entered = threading.Event()
+
+    def invoke_waiting_replay() -> str:
+        try:
+            with factory() as db, db.begin():
+                service._set_portfolio_scope(db, principal)
+                entered.set()
+                db.execute(reserve_sql, waiting_params).one()
+            return "unexpected-success"
+        except DBAPIError as exc:
+            return _primary_error(exc)
+
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(invoke_waiting_replay)
+            assert entered.wait(timeout=2)
+            time.sleep(0.5)
+            assert not future.done(), "conflicting replay did not wait for portfolio lock"
+            created = holder.execute(reserve_sql, winning_params).one()
+            release_now = service._database_now(holder)
+            release_capability = service._mint_capability(
+                principal=principal,
+                audience="portfolio.release.v1",
+                fields=(str(created.id),),
+                now=release_now,
+            )
+            released = holder.scalar(
+                text(
+                    "SELECT tradingagents_private.portfolio_release_cash_v1("
+                    ":reservation_id,:cap_kid,:cap_session_id,:cap_token_hash,"
+                    ":cap_issued_at,:cap_expires_at,:cap_nonce,:cap_mac)"
+                ),
+                {"reservation_id": str(created.id)} | release_capability,
+            )
+            assert released == "released"
+            holder.commit()
+            assert future.result(timeout=5) == "IDEMPOTENCY_PAYLOAD_MISMATCH"
+        with factory() as db, db.begin():
+            service._set_portfolio_scope(db, principal)
+            assert db.get(CashReservation, created.id).status == "released"
+    finally:
+        if holder.in_transaction():
+            holder.rollback()
+        holder.close()
+        engine.dispose()
+
+
+@pytest.mark.skipif(not APP_URL, reason="PostgreSQL app test URL is not configured")
 def test_release_capability_is_rechecked_after_waiting_for_portfolio_lock() -> None:
     engine = create_engine(APP_URL, pool_pre_ping=True)
     factory = sessionmaker(engine, expire_on_commit=False)
