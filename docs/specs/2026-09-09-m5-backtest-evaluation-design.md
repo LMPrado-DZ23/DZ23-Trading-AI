@@ -152,6 +152,16 @@ Splits adjust quantity and cost basis before the effective open. Dividends
 become cash only on a verified pay date. Delisting requires a versioned
 consideration policy and evidence. Missing required data fails closed.
 
+The M5.2b integration uses two separate immutable authorities. A price-free
+order authority fixes the complete session request and its PIT dataset
+bindings; a ledger checkpoint authority fixes the current policy, state and
+last event hash. The executor accepts neither a caller-supplied raw price nor a
+caller-supplied ledger anchor. It revalidates the frozen `BacktestSpec`, derives
+each next-open through the dataset repository authority, then invokes the pure
+ledger. File-backed authorities are limited to offline single-coordinator
+replay. Concurrent/public execution requires the PostgreSQL head, lease and
+fencing transition specified for M5.5.
+
 ## M5.3 — graph and rating adapter
 
 One parent backtest run creates child analysis jobs per session and symbol.

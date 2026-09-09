@@ -1347,6 +1347,49 @@ def verify_execution_price_authority(
     )
 
 
+def resolve_execution_price_authority(
+    repository: FrozenDatasetRepository,
+    dataset_id: UUID,
+    *,
+    expected_tenant_id: UUID,
+    expected_instrument_id: UUID,
+    expected_manifest_digest: str,
+    decision_at: datetime,
+    decision_session_date: date,
+    expected_eligible_view_digest: str,
+) -> ExecutionPriceBundle:
+    """Load and independently rederive the only execution price a reducer may consume.
+
+    Callers provide custody bindings, never an economic price object.  The
+    candidate is loaded from the frozen repository and then passed through the
+    non-virtual M5.2a verification boundary before it is returned.
+    """
+
+    if type(repository) is not FrozenDatasetRepository:
+        raise DatasetIntegrityError("execution pricing requires the repository authority")
+    candidate = FrozenDatasetRepository.load_execution_price(
+        repository,
+        dataset_id,
+        expected_tenant_id=expected_tenant_id,
+        expected_instrument_id=expected_instrument_id,
+        expected_manifest_digest=expected_manifest_digest,
+        decision_at=decision_at,
+        decision_session_date=decision_session_date,
+        expected_eligible_view_digest=expected_eligible_view_digest,
+    )
+    return verify_execution_price_authority(
+        repository,
+        candidate,
+        dataset_id,
+        expected_tenant_id=expected_tenant_id,
+        expected_instrument_id=expected_instrument_id,
+        expected_manifest_digest=expected_manifest_digest,
+        decision_at=decision_at,
+        decision_session_date=decision_session_date,
+        expected_eligible_view_digest=expected_eligible_view_digest,
+    )
+
+
 def _strict_json_loads(content: bytes) -> Any:
     if len(content) > MAX_JSON_RECORD_BYTES:
         raise DatasetIntegrityError("JSON record exceeds its byte limit")

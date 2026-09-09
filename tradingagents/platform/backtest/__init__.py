@@ -51,7 +51,21 @@ from tradingagents.platform.backtest.errors import (
 from tradingagents.platform.backtest.repository import (
     EligibleMarketView,
     FrozenDatasetRepository,
+    resolve_execution_price_authority,
     verify_execution_price_authority,
+)
+from tradingagents.platform.backtest.simulation_authority import (
+    AuthorizedOrderExecutionEvidence,
+    AuthorizedSimulationBatchResult,
+    AuthorizedSimulationOrder,
+    AuthorizedSimulationRequest,
+    FrozenSimulationAuthorityRepository,
+    SimulationAuthorityError,
+    SimulationCheckpointReference,
+    SimulationLedgerCheckpoint,
+    SimulationRequestAlreadyExistsError,
+    SimulationRequestReference,
+    execute_authorized_simulation_batch,
 )
 
 __all__ = [
@@ -60,6 +74,10 @@ __all__ = [
     "CANDLESTICK_POLICY_DIGEST",
     "CANDLESTICK_SCHEMA_VERSION",
     "AssetType",
+    "AuthorizedOrderExecutionEvidence",
+    "AuthorizedSimulationBatchResult",
+    "AuthorizedSimulationOrder",
+    "AuthorizedSimulationRequest",
     "AvailabilityBasis",
     "BacktestDataCode",
     "BacktestDataError",
@@ -88,6 +106,8 @@ __all__ = [
     "ExecutionPriceProvenance",
     "FillPolicy",
     "FrozenDatasetRepository",
+    "FrozenSimulationAuthorityRepository",
+    "resolve_execution_price_authority",
     "verify_execution_price_authority",
     "FxObservation",
     "InstrumentSpec",
@@ -96,8 +116,14 @@ __all__ = [
     "MarketDatasetManifest",
     "MissingDataPolicy",
     "PriorTrend",
+    "SimulationAuthorityError",
+    "SimulationCheckpointReference",
+    "SimulationLedgerCheckpoint",
+    "SimulationRequestAlreadyExistsError",
+    "SimulationRequestReference",
     "candlestick_bundle_to_untrusted_evidence",
     "canonical_digest",
     "canonical_json_bytes",
+    "execute_authorized_simulation_batch",
     "market_dataset_binding_digest",
 ]
