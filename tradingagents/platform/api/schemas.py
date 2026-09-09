@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from decimal import Decimal
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -270,6 +271,125 @@ class AnalysisJobResponse(ApiModel):
 class AnalysisJobDetailResponse(AnalysisJobResponse):
     result: dict[str, Any] | None
     manifest: dict[str, Any] | None
+
+
+class SuitabilityRequest(ApiModel):
+    requested_profile: Literal[
+        "preservation", "conservative", "moderate", "growth", "aggressive"
+    ]
+    horizon_years: int = Field(ge=0, le=80)
+    maximum_loss_percent: int = Field(ge=0, le=100)
+    emergency_fund_months: int = Field(ge=0, le=120)
+    income_stability: Literal["unstable", "variable", "stable"]
+    experience: Literal["none", "basic", "experienced"]
+
+
+class SuitabilityResponse(ApiModel):
+    id: UUID
+    version: int
+    requested_profile: str
+    maximum_profile: str
+    effective_profile: str
+    status: str
+    policy_version: int
+    digest: str
+    assessed_at: datetime
+    expires_at: datetime
+
+
+class PortfolioCreateRequest(ApiModel):
+    name: str = Field(min_length=2, max_length=120)
+    base_currency: str = Field(min_length=3, max_length=12, pattern=r"^[A-Za-z]+$")
+
+
+class PortfolioCreatedResponse(ApiModel):
+    id: UUID
+    name: str
+    base_currency: str
+    status: str
+
+
+class PortfolioOverviewResponse(ApiModel):
+    id: UUID
+    name: str
+    base_currency: str
+    status: str
+    effective_profile: str | None
+    mode: str | None
+    cash: Decimal
+    reserved_cash: Decimal
+    available_cash: Decimal
+
+
+class MandateRequest(ApiModel):
+    suitability_id: UUID
+    profile: Literal["preservation", "conservative", "moderate", "growth", "aggressive"]
+    mode: Literal["backtest", "shadow", "paper"]
+
+
+class MandateResponse(ApiModel):
+    id: UUID
+    portfolio_id: UUID
+    suitability_id: UUID
+    version: int
+    profile: str
+    mode: str
+    status: str
+    policy_version: int
+    policy_digest: str
+    digest: str
+    limits: dict[str, Any]
+    effective_at: datetime
+
+
+class MandateTransitionRequest(ApiModel):
+    target_status: Literal["active", "paused", "closed"]
+
+
+class PortfolioFundingRequest(ApiModel):
+    amount: Decimal = Field(gt=0, max_digits=36, decimal_places=12)
+    reference_id: str = Field(min_length=1, max_length=128)
+
+
+class SizingPreviewRequest(ApiModel):
+    conviction: Decimal = Field(ge=0, le=1, max_digits=18, decimal_places=12)
+    price: Decimal = Field(gt=0, max_digits=36, decimal_places=12)
+    realized_annual_volatility: Decimal = Field(gt=0, max_digits=18, decimal_places=12)
+    average_daily_notional: Decimal = Field(ge=0, max_digits=36, decimal_places=12)
+    current_weight: Decimal = Field(default=Decimal(0), ge=0, le=1)
+    trading_cost_bps: Decimal = Field(default=Decimal(0), ge=0, le=1000)
+    asset_class: Literal["crypto", "stock", "cash"] = "crypto"
+
+
+class SizingPreviewResponse(ApiModel):
+    target_weight: Decimal
+    target_notional: Decimal
+    order_notional: Decimal
+    quantity: Decimal
+    limited_by: tuple[str, ...]
+
+
+class SnapshotRequest(ApiModel):
+    prices: dict[str, Decimal] = Field(default_factory=dict)
+    captured_at: datetime | None = None
+
+
+class SnapshotResponse(ApiModel):
+    id: UUID
+    portfolio_id: UUID
+    sequence: int
+    cash: Decimal
+    reserved_cash: Decimal
+    market_value: Decimal
+    equity: Decimal
+    realized_pnl: Decimal
+    unrealized_pnl: Decimal
+    high_water_mark: Decimal
+    drawdown: Decimal
+    positions: dict[str, Any]
+    prices: dict[str, Any]
+    digest: str
+    captured_at: datetime
 
 
 class LlmProviderResponse(ApiModel):

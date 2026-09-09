@@ -22,6 +22,7 @@ from tradingagents.platform.api.identity import (
 )
 from tradingagents.platform.api.jobs import AnalysisJobServicePort
 from tradingagents.platform.api.llm_connections import LlmConnectionServicePort
+from tradingagents.platform.api.portfolio import PortfolioServicePort
 from tradingagents.platform.api.schemas import (
     AnalysisJobCreatedResponse,
     AnalysisJobDetailResponse,
@@ -39,6 +40,9 @@ from tradingagents.platform.api.schemas import (
     LlmConnectionResponse,
     LlmProviderResponse,
     LoginRequest,
+    MandateRequest,
+    MandateResponse,
+    MandateTransitionRequest,
     MessageResponse,
     MfaActivateRequest,
     MfaActivationResponse,
@@ -46,12 +50,22 @@ from tradingagents.platform.api.schemas import (
     MfaEnrollRequest,
     MfaVerificationResponse,
     MfaVerifyRequest,
+    PortfolioCreatedResponse,
+    PortfolioCreateRequest,
+    PortfolioFundingRequest,
+    PortfolioOverviewResponse,
     PrincipalResponse,
     PrivacyActionRequest,
     PrivacyResponse,
     RecoveryRequest,
     RegisterRequest,
     ResetPasswordRequest,
+    SizingPreviewRequest,
+    SizingPreviewResponse,
+    SnapshotRequest,
+    SnapshotResponse,
+    SuitabilityRequest,
+    SuitabilityResponse,
     SupabaseExchangeRequest,
     TermsResponse,
     VerificationTokenRequest,
@@ -87,6 +101,7 @@ def create_platform_app(
     broker_connection_service: BrokerConnectionServicePort | None = None,
     analysis_job_service: AnalysisJobServicePort | None = None,
     llm_connection_service: LlmConnectionServicePort | None = None,
+    portfolio_service: PortfolioServicePort | None = None,
 ) -> FastAPI:
     """Create an isolated API instance with explicit security dependencies."""
 
@@ -209,6 +224,15 @@ def create_platform_app(
                 "Os provedores de inteligência artificial estão indisponíveis.",
             )
         return llm_connection_service
+
+    def portfolios() -> PortfolioServicePort:
+        if portfolio_service is None:
+            raise _public_error(
+                503,
+                "PORTFOLIOS_UNAVAILABLE",
+                "As carteiras estão temporariamente indisponíveis.",
+            )
+        return portfolio_service
 
     async def enforce_rate(
         *, request: Request, scope: str, identity: str, limit: int, window: int
@@ -746,6 +770,194 @@ def create_platform_app(
             _raise_connection_error(exc)
         return MessageResponse(message="Credencial removida e conexão desativada.")
 
+    @app.post(
+        "/v1/portfolio/suitability",
+        response_model=SuitabilityResponse,
+        status_code=201,
+    )
+    async def assess_suitability(
+        payload: SuitabilityRequest,
+        request: Request,
+        context: Annotated[TenantRequestContext, Depends(require_session)],
+    ) -> SuitabilityResponse:
+        verify_csrf(request, security.csrf_secret)
+        require_verified(context)
+        await enforce_rate_key(
+            key=f"suitability:{context.tenant_id}:{context.principal.user_id}",
+            limit=10,
+            window=24 * 60 * 60,
+        )
+        answers = payload.model_dump(exclude={"requested_profile"})
+        try:
+            row = await portfolios().assess_suitability(
+                token=request.cookies[SESSION_COOKIE],
+                principal=context.principal,
+                requested_profile=payload.requested_profile,
+                answers=answers,
+            )
+        except IdentityError as exc:
+            _raise_portfolio_error(exc)
+        return SuitabilityResponse(**row)
+
+    @app.post("/v1/portfolios", response_model=PortfolioCreatedResponse, status_code=201)
+    async def create_portfolio(
+        payload: PortfolioCreateRequest,
+        request: Request,
+        context: Annotated[TenantRequestContext, Depends(require_session)],
+    ) -> PortfolioCreatedResponse:
+        verify_csrf(request, security.csrf_secret)
+        require_verified(context)
+        try:
+            row = await portfolios().create_portfolio(
+                token=request.cookies[SESSION_COOKIE],
+                principal=context.principal,
+                name=payload.name,
+                base_currency=payload.base_currency,
+            )
+        except IdentityError as exc:
+            _raise_portfolio_error(exc)
+        return PortfolioCreatedResponse(**row)
+
+    @app.get("/v1/portfolios", response_model=list[PortfolioOverviewResponse])
+    async def list_portfolios(
+        request: Request,
+        context: Annotated[TenantRequestContext, Depends(require_session)],
+    ) -> list[PortfolioOverviewResponse]:
+        require_verified(context)
+        try:
+            rows = await portfolios().list_portfolios(
+                token=request.cookies[SESSION_COOKIE], principal=context.principal
+            )
+        except IdentityError as exc:
+            _raise_portfolio_error(exc)
+        return [PortfolioOverviewResponse(**row) for row in rows]
+
+    @app.post(
+        "/v1/portfolios/{portfolio_id}/mandates",
+        response_model=MandateResponse,
+        status_code=201,
+    )
+    async def activate_portfolio_mandate(
+        portfolio_id: UUID,
+        payload: MandateRequest,
+        request: Request,
+        context: Annotated[TenantRequestContext, Depends(require_session)],
+    ) -> MandateResponse:
+        verify_csrf(request, security.csrf_secret)
+        require_verified(context)
+        try:
+            row = await portfolios().activate_mandate(
+                token=request.cookies[SESSION_COOKIE],
+                principal=context.principal,
+                portfolio_id=portfolio_id,
+                suitability_id=payload.suitability_id,
+                profile=payload.profile,
+                mode=payload.mode,
+            )
+        except IdentityError as exc:
+            _raise_portfolio_error(exc)
+        return MandateResponse(**row)
+
+    @app.patch(
+        "/v1/portfolios/{portfolio_id}/mandate",
+        response_model=MandateResponse,
+    )
+    async def transition_portfolio_mandate(
+        portfolio_id: UUID,
+        payload: MandateTransitionRequest,
+        request: Request,
+        context: Annotated[TenantRequestContext, Depends(require_session)],
+    ) -> MandateResponse:
+        verify_csrf(request, security.csrf_secret)
+        require_verified(context)
+        try:
+            row = await portfolios().transition_mandate(
+                token=request.cookies[SESSION_COOKIE],
+                principal=context.principal,
+                portfolio_id=portfolio_id,
+                target_status=payload.target_status,
+            )
+        except IdentityError as exc:
+            _raise_portfolio_error(exc)
+        return MandateResponse(**row)
+
+    @app.post(
+        "/v1/portfolios/{portfolio_id}/funding",
+        response_model=MessageResponse,
+        status_code=201,
+    )
+    async def record_portfolio_funding(
+        portfolio_id: UUID,
+        payload: PortfolioFundingRequest,
+        request: Request,
+        context: Annotated[TenantRequestContext, Depends(require_session)],
+        idempotency_key: Annotated[
+            str, Header(alias="Idempotency-Key", min_length=16, max_length=128)
+        ],
+    ) -> MessageResponse:
+        verify_csrf(request, security.csrf_secret)
+        require_verified(context)
+        try:
+            transaction_id = await portfolios().record_funding(
+                token=request.cookies[SESSION_COOKIE],
+                principal=context.principal,
+                portfolio_id=portfolio_id,
+                amount=payload.amount,
+                idempotency_key=idempotency_key,
+                reference_id=payload.reference_id,
+            )
+        except IdentityError as exc:
+            _raise_portfolio_error(exc)
+        return MessageResponse(message=f"Capital registrado no ledger: {transaction_id}.")
+
+    @app.post(
+        "/v1/portfolios/{portfolio_id}/sizing-preview",
+        response_model=SizingPreviewResponse,
+    )
+    async def preview_portfolio_sizing(
+        portfolio_id: UUID,
+        payload: SizingPreviewRequest,
+        request: Request,
+        context: Annotated[TenantRequestContext, Depends(require_session)],
+    ) -> SizingPreviewResponse:
+        verify_csrf(request, security.csrf_secret)
+        require_verified(context)
+        try:
+            row = await portfolios().deterministic_size(
+                token=request.cookies[SESSION_COOKIE],
+                principal=context.principal,
+                portfolio_id=portfolio_id,
+                data=payload.model_dump(),
+            )
+        except IdentityError as exc:
+            _raise_portfolio_error(exc)
+        return SizingPreviewResponse(**row)
+
+    @app.post(
+        "/v1/portfolios/{portfolio_id}/snapshots",
+        response_model=SnapshotResponse,
+        status_code=201,
+    )
+    async def capture_portfolio_snapshot(
+        portfolio_id: UUID,
+        payload: SnapshotRequest,
+        request: Request,
+        context: Annotated[TenantRequestContext, Depends(require_session)],
+    ) -> SnapshotResponse:
+        verify_csrf(request, security.csrf_secret)
+        require_verified(context)
+        try:
+            row = await portfolios().capture_snapshot(
+                token=request.cookies[SESSION_COOKIE],
+                principal=context.principal,
+                portfolio_id=portfolio_id,
+                prices=payload.prices,
+                captured_at=payload.captured_at,
+            )
+        except IdentityError as exc:
+            _raise_portfolio_error(exc)
+        return SnapshotResponse(**row)
+
     @app.post("/v1/jobs", response_model=AnalysisJobCreatedResponse, status_code=202)
     async def enqueue_analysis_job(
         payload: AnalysisJobRequest,
@@ -1013,6 +1225,35 @@ def _raise_llm_connection_error(exc: IdentityError) -> None:
         400,
         "LLM_CONNECTION_INVALID",
         "Não foi possível salvar este provedor. Revise os dados informados.",
+    ) from None
+
+
+def _raise_portfolio_error(exc: IdentityError) -> None:
+    code = str(exc)
+    if code in {"PORTFOLIO_NOT_FOUND", "RESERVATION_NOT_FOUND"}:
+        raise _public_error(404, code, "Carteira ou registro não encontrado.") from None
+    if code == "PORTFOLIO_FORBIDDEN":
+        raise _public_error(403, code, "Você não pode alterar esta carteira.") from None
+    if code in {"SUITABILITY_REQUIRED", "PROFILE_EXCEEDS_SUITABILITY"}:
+        raise _public_error(
+            409,
+            code,
+            "Complete o questionário de perfil antes de ativar esta configuração.",
+        ) from None
+    if code in {"CAPITAL_MODE_NOT_ENABLED", "CIRCUIT_BREAKER_OPEN"}:
+        raise _public_error(
+            409,
+            code,
+            "A operação foi bloqueada pelos controles de segurança da carteira.",
+        ) from None
+    if code == "INSUFFICIENT_AVAILABLE_CASH":
+        raise _public_error(409, code, "Saldo disponível insuficiente.") from None
+    if code in {"IDEMPOTENCY_PAYLOAD_MISMATCH", "PORTFOLIO_ALREADY_EXISTS"}:
+        raise _public_error(409, code, "A solicitação conflita com um registro existente.") from None
+    raise _public_error(
+        400,
+        "PORTFOLIO_INVALID",
+        "Não foi possível concluir a operação da carteira.",
     ) from None
 
 

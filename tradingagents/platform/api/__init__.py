@@ -9,6 +9,7 @@ from tradingagents.platform.api.identity import (
     IdentityServicePort,
 )
 from tradingagents.platform.api.identity_adapter import SqlAlchemyIdentityAdapter
+from tradingagents.platform.api.portfolio_adapter import SqlAlchemyPortfolioAdapter
 from tradingagents.platform.api.security import ApiSecuritySettings
 
 __all__ = [
@@ -19,5 +20,6 @@ __all__ = [
     "IdentityPrincipal",
     "IdentityServicePort",
     "SqlAlchemyIdentityAdapter",
+    "SqlAlchemyPortfolioAdapter",
     "create_platform_app",
 ]

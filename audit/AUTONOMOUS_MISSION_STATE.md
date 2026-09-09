@@ -3,11 +3,11 @@
 - **mission_id:** `tradingagents-dz23-a5-2026-09-08`
 - **objective:** concluir o TradingAgents DZ23 como plataforma web multiusuário pronta para usuários leigos, com carteira administrada, perfis de risco, execução CCXT segura e implantação verificada em `https://trading.dz23.online/`.
 - **state:** `VERIFYING`
-- **iteration:** 3
+- **iteration:** 4
 - **started_at:** 2026-09-08 America/Sao_Paulo
 - **last_heartbeat:** 2026-09-08
 - **last_progress_at:** 2026-09-08
-- **current_task:** congelar o segundo fix de auditoria do M3 e obter reauditoria independente antes de iniciar M4.
+- **current_task:** congelar M4 e obter auditoria independente antes de iniciar o motor de avaliação M5.
 
 ## Acceptance criteria
 
@@ -66,13 +66,20 @@
 - [x] Vetores PostgreSQL reais recusaram mutação/remoção de credencial, leitura cross-tenant, uso com lease falso e evento com ator falso.
 - [x] Falhas de quota/result/journal encerram subprocessos, não reenfileiram trabalho possivelmente faturado e preservam o workspace se o banco não confirmar o estado.
 - [x] Ledger de uso diferencia medição real de reserva conservadora; no POSIX a confirmação abrange descendentes do grupo, não apenas o líder.
+- [x] M3 aprovado por auditoria independente no commit `fec27f61`, sem BLOQUEANTE/ALTO.
+- [x] M4 implementou suitability versionada com perfil efetivo sempre mais restritivo.
+- [x] M4 definiu cinco políticas determinísticas com caps de volatilidade, posição, classe, correlação, liquidez, ordem e caixa mínimo.
+- [x] M4 implementou mandato versionado, pausa/retomada/fechamento e bloqueio explícito dos modos LIVE.
+- [x] M4 implementou ledger de dupla entrada, reservas concorrentes, snapshots, PnL e circuit breakers persistentes.
+- [x] M4 ligou a carteira à API autenticada sem aceitar quantidade executável como entrada.
+- [x] Migration 0019 validada em PostgreSQL com RLS forçado, histórico append-only e trigger diferido de balanço.
 
 ## Pending tasks
 
 - [x] Consolidar inventários Architect, Security e Product/UX.
 - [x] Fechar design e plano de marcos.
 - [x] Preparar ambiente Python reprodutível e reproduzir baseline.
-- [ ] Executar marcos M4–M10 do plano (M0–M3 implementados; M3 aguardando auditoria independente).
+- [ ] Executar marcos M5–M10 do plano (M0–M4 implementados; M4 aguardando auditoria independente).
 - [ ] Três auditorias independentes e fix loop final.
 - [ ] Release, push, deploy e validação de produção.
 
@@ -88,7 +95,7 @@
 
 ## Current failure
 
-- Nenhuma falha de código conhecida ativa no M3 após os fixes; o commit ainda depende de reauditoria independente. Google/Apple dependem da configuração dos respectivos provedores OAuth no painel do Supabase para o smoke externo.
+- Nenhuma falha de código conhecida ativa no M4; o marco depende de auditoria independente. Google/Apple dependem da configuração dos respectivos provedores OAuth no painel do Supabase para o smoke externo.
 - Fontes fundamentals/news/macro/social/Polymarket continuam deliberadamente indisponíveis na plataforma; não há alegação de cobertura PIT para elas.
 - O primeiro `.venv` ficou incompleto após interrupção do instalador; foi substituído por `.venv-a5` criado com `--no-compile` e instalação concluída com exit 0.
 
@@ -133,6 +140,10 @@
 - Evidência M3: `audit/m3-final-junit.xml` SHA-256 `baa78e902647dbbf33162137a788d3573f4abd585b0b1743bc983fd8b90944db`; `audit/m3-integration-junit.xml` SHA-256 `7c962cc7be893ab38eb8d585fc4f8eb8835bc6cfb171546d797b24544e09122d`.
 - Revalidação após credential/worker fencing: **1197 passed, 1 skipped, 71 subtests**; integração PostgreSQL/Redis **10 passed**.
 - Evidência revalidada: `audit/m3-fenced-final-junit.xml` SHA-256 `6c9c2a8058b4bb33003bf19e3d8961a85fd8aa2c7712bba2fb37051d87565ff2`; `audit/m3-credential-fencing-integration-junit.xml` SHA-256 `1d67e11688014d848084f6443d6a788d2585e779536f40056b9bff76d6021e44`.
+- M4 integral com PostgreSQL/Redis reais: **1224 passed, 1 skipped, 71 subtests**, 21 warnings; ruff e compileall verdes.
+- M4 PostgreSQL adversarial: RLS cross-tenant, append-only, corrida de reserva e ledger desbalanceado recusado; **1 passed**.
+- M4 migration PostgreSQL: `head -> base -> head` verde.
+- Evidência M4: `audit/m4-portfolio-junit.xml` SHA-256 `78039e5beadccbfb3615cb3a40d46c301bc16ab95f1a0bbdeb5bb4a49b52256d`.
 
 ## Commits
 
@@ -153,8 +164,8 @@
 
 ## Next action
 
-1. congelar M3 em commit e concluir a auditoria independente do marco;
-2. corrigir achados, se houver, e iniciar M4 somente após o veredito;
+1. congelar M4 em commit e concluir a auditoria independente do marco;
+2. corrigir achados, se houver, e iniciar M5 somente após o veredito;
 3. manter credenciais reais fora de chat, Git, fixtures e evidências;
 4. manter a integração IQ Option em marco separado: MCP oficial sob gate de capital; `iq-core` somente experimental/read-only, nunca rota LIVE;
 5. configurar Google e Apple no Supabase quando os Client IDs/secrets externos forem fornecidos, sem bloquear os demais marcos.

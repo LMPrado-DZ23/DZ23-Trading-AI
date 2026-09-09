@@ -22,6 +22,14 @@ def test_usage_accounting_basis_is_explicit_and_fail_closed() -> None:
         JobUsage(accounting_basis="unknown")
 
 
+@pytest.mark.parametrize("value", [True, 1.5, float("nan"), float("inf")])
+def test_usage_rejects_non_integer_counters_and_cost(value) -> None:
+    with pytest.raises(ValueError, match="integers"):
+        JobUsage(input_tokens=value, total_tokens=value)
+    with pytest.raises(ValueError, match="cost"):
+        JobUsage(estimated_cost_microusd=value)
+
+
 def _response(*, usage=None, fallback=None):
     return LLMResult(
         generations=[[ChatGeneration(message=AIMessage(content="ok", usage_metadata=usage))]],

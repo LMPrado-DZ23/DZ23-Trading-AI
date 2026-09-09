@@ -479,9 +479,9 @@ def test_postgres_credential_versions_and_worker_scope_are_fail_closed() -> None
                 "INSERT INTO analysis_job_usage_records "
                 "(id, tenant_id, job_id, run_id, attempt_number, lease_id, usage_digest, "
                 "input_tokens, output_tokens, total_tokens, llm_requests, "
-                "unmetered_llm_requests) VALUES "
+                "unmetered_llm_requests, accounting_basis) VALUES "
                 "(:id, :tenant_id, :job_id, :run_id, :attempt, :lease_id, :digest, "
-                "0, 0, 0, 0, 0)"
+                "0, 0, 0, 0, 0, 'measured')"
             ),
             {
                 "id": str(uuid4()),

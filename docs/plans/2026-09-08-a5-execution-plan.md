@@ -77,16 +77,20 @@ independente sobre o commit congelado.
 ## M4 — Carteira, suitability e motor de risco
 
 - [ ] implementar integralmente `ESPECIFICACAO_CARTEIRA_PERFIS_RISCO_A5.md`;
-- [ ] suitability versionado e perfil efetivo mais restritivo;
-- [ ] policies Preservação, Conservador, Moderado, Arrojado e Agressivo;
-- [ ] mandato e lifecycle;
-- [ ] ledger, caixa, reservas, posições, valuations e PnL;
-- [ ] sizing por volatilidade, liquidez, custo e caps;
-- [ ] correlação/concentração e rebalance bands;
-- [ ] circuit breakers persistentes;
-- [ ] snapshots e relatórios de risco.
+- [x] suitability versionado e perfil efetivo mais restritivo;
+- [x] policies Preservação, Conservador, Moderado, Arrojado e Agressivo;
+- [x] mandato e lifecycle;
+- [x] ledger, caixa, reservas, posições, valuations e PnL;
+- [x] sizing por volatilidade, liquidez, custo e caps;
+- [x] correlação/concentração e rebalance bands;
+- [x] circuit breakers persistentes;
+- [x] snapshots e relatórios de risco.
 
 **Gate:** property-based tests provam caps, precisão, concorrência e fail-closed; LLM não alcança quantidade executável.
+
+**Verificação do implementador:** concluída e registrada em
+`audit/M4_IMPLEMENTER_VERIFICATION.md`. A promoção depende de auditoria
+independente sobre o commit congelado.
 
 ## M5 — Backtest e avaliação
 

@@ -41,14 +41,17 @@ class JobUsage:
             self.llm_requests,
             self.unmetered_llm_requests,
         )
-        if any(isinstance(value, bool) or value < 0 for value in numeric):
+        if any(type(value) is not int or value < 0 for value in numeric):
             raise ValueError("usage counters must be non-negative integers")
         if self.total_tokens != self.input_tokens + self.output_tokens:
             raise ValueError("total_tokens must equal input_tokens plus output_tokens")
         if self.unmetered_llm_requests > self.llm_requests:
             raise ValueError("unmetered requests cannot exceed total requests")
-        if self.estimated_cost_microusd is not None and self.estimated_cost_microusd < 0:
-            raise ValueError("estimated cost cannot be negative")
+        if self.estimated_cost_microusd is not None and (
+            type(self.estimated_cost_microusd) is not int
+            or self.estimated_cost_microusd < 0
+        ):
+            raise ValueError("estimated cost must be a non-negative integer")
         if self.accounting_basis not in {"measured", "conservative_reservation"}:
             raise ValueError("usage accounting basis is invalid")
 

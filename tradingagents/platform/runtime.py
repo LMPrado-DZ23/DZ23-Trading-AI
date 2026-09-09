@@ -26,6 +26,7 @@ from tradingagents.platform.api.email_delivery import (
 )
 from tradingagents.platform.api.jobs_adapter import SqlAlchemyAnalysisJobAdapter
 from tradingagents.platform.api.llm_connections_adapter import SqlAlchemyLlmConnectionAdapter
+from tradingagents.platform.api.portfolio_adapter import SqlAlchemyPortfolioAdapter
 from tradingagents.platform.api.redis_rate_limit import RedisRateLimiter
 from tradingagents.platform.compliance import (
     AesGcmSecretCrypto,
@@ -42,6 +43,7 @@ from tradingagents.platform.connections import (
 from tradingagents.platform.identity import IdentityService, TokenHasher
 from tradingagents.platform.jobs import JobService
 from tradingagents.platform.llm_connections import LlmConnectionService
+from tradingagents.platform.portfolio import PortfolioService
 from tradingagents.platform.settings import (
     BrokerCredentialProvider,
     Environment,
@@ -198,6 +200,10 @@ def create_production_app(settings: PlatformSettings | None = None) -> FastAPI:
         pricing_catalog_version=pricing_catalog.version,
         pricing_catalog=pricing_catalog,
     )
+    portfolio_service = PortfolioService(
+        factory,
+        idempotency_digest_key=_derive_secret(master, "portfolio-idempotency-digest"),
+    )
     redis = Redis.from_url(
         effective.redis_url.get_secret_value(),
         decode_responses=False,
@@ -253,6 +259,10 @@ def create_production_app(settings: PlatformSettings | None = None) -> FastAPI:
             identity=identity,
             mfa=mfa,
             connections=llm_connection_service,
+        ),
+        portfolio_service=SqlAlchemyPortfolioAdapter(
+            identity=identity,
+            portfolios=portfolio_service,
         ),
     )
     app.state.database_engine = engine

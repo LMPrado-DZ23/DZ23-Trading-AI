@@ -11,6 +11,7 @@ from tradingagents.platform.connections import models as connection_models  # no
 from tradingagents.platform.identity import Base
 from tradingagents.platform.jobs import models as job_models  # noqa: F401
 from tradingagents.platform.llm_connections import models as llm_connection_models  # noqa: F401
+from tradingagents.platform.portfolio import models as portfolio_models  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:
