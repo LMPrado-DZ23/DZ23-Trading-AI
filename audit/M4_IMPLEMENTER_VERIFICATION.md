@@ -1,4 +1,10 @@
-# M4 — Portfolio, Suitability and Deterministic Risk Verification
+# M4 — Portfolio, Suitability and Deterministic Risk Verification (Superseded)
+
+This original implementer report is retained only as history. Its JUnit and
+candidate were removed after independent and PostgreSQL reviews found defects.
+The authoritative implementer evidence is now
+`audit/M4_FIX_IMPLEMENTER_VERIFICATION.md` and
+`audit/M4_POSTGRES_GATE_VERIFICATION.md`.
 
 - Base commit: `fec27f61a91f883397fcfc00289ce85e50621a6a`
 - Scope: deterministic portfolio policies, versioned suitability and mandates,
@@ -31,15 +37,13 @@
 - Every portfolio table has forced tenant RLS for the restricted application
   role.
 
-## Independent-ready evidence produced by implementer
+## Superseded evidence summary
 
 - Full suite with PostgreSQL 17 and Redis 7.4:
   `1224 passed, 1 skipped, 21 warnings, 71 subtests` in 180.13 seconds.
 - Only skip: optional live DeepSeek call without a process environment key.
-- JUnit: `audit/m4-portfolio-junit.xml`
-- JUnit SHA-256:
-  `78039e5beadccbfb3615cb3a40d46c301bc16ab95f1a0bbdeb5bb4a49b52256d`
-- JUnit size: `166761` bytes.
+- The original JUnit was deliberately removed so it cannot be mistaken for the
+  final gate. Its historical count is not promotion evidence.
 - PostgreSQL adversarial test proves cross-tenant invisibility, append-only
   history, two-process reservation serialization and database rejection of an
   unbalanced ledger transaction.

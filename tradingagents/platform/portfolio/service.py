@@ -278,20 +278,20 @@ class PortfolioService:
             maximum,
             key=lambda profile: _PROFILE_ORDER[profile],
         )
-        now = self._now()
-        payload = {
-            "tenant_id": str(principal.tenant_id),
-            "user_id": str(principal.user_id),
-            "requested_profile": requested_profile.value,
-            "maximum_profile": maximum.value,
-            "effective_profile": effective.value,
-            "policy_version": POLICY_VERSION,
-            "answers": answers,
-            "assessed_at": now.isoformat(),
-            "expires_at": (now + valid_for).isoformat(),
-        }
         with self._sessions() as db, db.begin():
             self._set_tenant_scope(db, principal.tenant_id)
+            now = self._database_now(db)
+            payload = {
+                "tenant_id": str(principal.tenant_id),
+                "user_id": str(principal.user_id),
+                "requested_profile": requested_profile.value,
+                "maximum_profile": maximum.value,
+                "effective_profile": effective.value,
+                "policy_version": POLICY_VERSION,
+                "answers": answers,
+                "assessed_at": now.isoformat(),
+                "expires_at": (now + valid_for).isoformat(),
+            }
             self._lock_serialization_key(
                 db, f"suitability:{principal.tenant_id}:{principal.user_id}"
             )
@@ -1232,39 +1232,29 @@ class PortfolioService:
         if not timedelta(seconds=30) <= ttl <= timedelta(hours=1):
             raise PortfolioError("RESERVATION_TTL_INVALID")
         key_hash = self._key_hash(idempotency_key)
-        now = self._now()
         try:
             with self._sessions() as db, db.begin():
                 self._set_tenant_scope(db, principal.tenant_id)
-                portfolio = db.scalar(
-                    select(Portfolio)
-                    .where(Portfolio.id == portfolio_id, Portfolio.tenant_id == principal.tenant_id)
-                    .with_for_update()
+                now = self._database_now(db)
+                portfolio, mandate = self._reservation_authorization_context(
+                    db,
+                    tenant_id=principal.tenant_id,
+                    portfolio_id=portfolio_id,
+                    now=now,
                 )
-                if portfolio is None or portfolio.status != "active":
-                    raise PortfolioError("PORTFOLIO_NOT_ACTIVE")
-                mandate = self._require_active_mandate(
-                    db, principal.tenant_id, portfolio_id, now
+                existing = self._validated_reservation_replay(
+                    db,
+                    tenant_id=principal.tenant_id,
+                    portfolio_id=portfolio_id,
+                    key_hash=key_hash,
+                    amount=amount,
+                    purpose_digest=purpose_digest,
+                    mandate_id=mandate.id,
+                    now=now,
                 )
-                if not db.scalar(
-                    select(func.count())
-                    .select_from(PortfolioSnapshot)
-                    .where(
-                        PortfolioSnapshot.tenant_id == principal.tenant_id,
-                        PortfolioSnapshot.portfolio_id == portfolio_id,
-                    )
-                ):
-                    raise PortfolioError("BASELINE_SNAPSHOT_REQUIRED")
-                if db.scalar(
-                    select(func.count())
-                    .select_from(CircuitBreaker)
-                    .where(
-                        CircuitBreaker.tenant_id == principal.tenant_id,
-                        CircuitBreaker.portfolio_id == portfolio_id,
-                        CircuitBreaker.status == "open",
-                    )
-                ):
-                    raise PortfolioError("CIRCUIT_BREAKER_OPEN")
+                if existing is not None:
+                    db.expunge(existing)
+                    return existing
                 cash, reserved = self._cash_balances(db, principal.tenant_id, portfolio_id, now)
                 if amount > cash - reserved:
                     raise PortfolioError("INSUFFICIENT_AVAILABLE_CASH")
@@ -1284,30 +1274,38 @@ class PortfolioService:
                 db.flush()
                 db.expunge(row)
                 return row
-        except IntegrityError:
+        except IntegrityError as exc:
+            if not self._is_reservation_idempotency_conflict(exc):
+                raise
             with self._sessions() as db, db.begin():
                 self._set_tenant_scope(db, principal.tenant_id)
-                existing = db.scalar(
-                    select(CashReservation).where(
-                        CashReservation.tenant_id == principal.tenant_id,
-                        CashReservation.portfolio_id == portfolio_id,
-                        CashReservation.idempotency_key_hash == key_hash,
-                    )
+                now = self._database_now(db)
+                _portfolio, mandate = self._reservation_authorization_context(
+                    db,
+                    tenant_id=principal.tenant_id,
+                    portfolio_id=portfolio_id,
+                    now=now,
                 )
-                if (
-                    existing is None
-                    or existing.amount != amount
-                    or existing.purpose_digest != purpose_digest
-                ):
-                    raise PortfolioError("IDEMPOTENCY_PAYLOAD_MISMATCH") from None
+                existing = self._validated_reservation_replay(
+                    db,
+                    tenant_id=principal.tenant_id,
+                    portfolio_id=portfolio_id,
+                    key_hash=key_hash,
+                    amount=amount,
+                    purpose_digest=purpose_digest,
+                    mandate_id=mandate.id,
+                    now=now,
+                )
+                if existing is None:
+                    raise exc
                 db.expunge(existing)
                 return existing
 
     def release_reservation(self, *, principal: IdentityPrincipal, reservation_id: UUID) -> str:
         self._authorize(principal, write=True)
-        now = self._now()
         with self._sessions() as db, db.begin():
             self._set_tenant_scope(db, principal.tenant_id)
+            now = self._database_now(db)
             row = db.scalar(
                 select(CashReservation)
                 .where(
@@ -1325,9 +1323,9 @@ class PortfolioService:
 
     def list_portfolios(self, *, principal: IdentityPrincipal) -> tuple[PortfolioOverview, ...]:
         self._authorize(principal)
-        now = self._now()
         with self._sessions() as db, db.begin():
             self._set_tenant_scope(db, principal.tenant_id)
+            now = self._database_now(db)
             rows = db.scalars(
                 select(Portfolio)
                 .where(Portfolio.tenant_id == principal.tenant_id)
@@ -1826,3 +1824,90 @@ class PortfolioService:
             )
         )
         return Decimal(cash or 0), Decimal(reserved or 0)
+
+    def _reservation_authorization_context(
+        self,
+        db: Session,
+        *,
+        tenant_id: UUID,
+        portfolio_id: UUID,
+        now: datetime,
+    ) -> tuple[Portfolio, PortfolioMandate]:
+        portfolio = db.scalar(
+            select(Portfolio)
+            .where(Portfolio.id == portfolio_id, Portfolio.tenant_id == tenant_id)
+            .with_for_update()
+        )
+        if portfolio is None or portfolio.status != "active":
+            raise PortfolioError("PORTFOLIO_NOT_ACTIVE")
+        mandate = self._require_active_mandate(db, tenant_id, portfolio_id, now)
+        if not db.scalar(
+            select(func.count())
+            .select_from(PortfolioSnapshot)
+            .where(
+                PortfolioSnapshot.tenant_id == tenant_id,
+                PortfolioSnapshot.portfolio_id == portfolio_id,
+            )
+        ):
+            raise PortfolioError("BASELINE_SNAPSHOT_REQUIRED")
+        if db.scalar(
+            select(func.count())
+            .select_from(CircuitBreaker)
+            .where(
+                CircuitBreaker.tenant_id == tenant_id,
+                CircuitBreaker.portfolio_id == portfolio_id,
+                CircuitBreaker.status == "open",
+            )
+        ):
+            raise PortfolioError("CIRCUIT_BREAKER_OPEN")
+        return portfolio, mandate
+
+    @staticmethod
+    def _validated_reservation_replay(
+        db: Session,
+        *,
+        tenant_id: UUID,
+        portfolio_id: UUID,
+        key_hash: str,
+        amount: Decimal,
+        purpose_digest: str,
+        mandate_id: UUID,
+        now: datetime,
+    ) -> CashReservation | None:
+        existing = db.scalar(
+            select(CashReservation)
+            .where(
+                CashReservation.tenant_id == tenant_id,
+                CashReservation.portfolio_id == portfolio_id,
+                CashReservation.idempotency_key_hash == key_hash,
+            )
+            .with_for_update()
+        )
+        if existing is None:
+            return None
+        if existing.amount != amount or not hmac.compare_digest(
+            existing.purpose_digest, purpose_digest
+        ):
+            raise PortfolioError("IDEMPOTENCY_PAYLOAD_MISMATCH")
+        if (
+            existing.status != "active"
+            or existing.expires_at <= now
+            or existing.mandate_id != mandate_id
+        ):
+            raise PortfolioError("IDEMPOTENCY_RESERVATION_FINALIZED")
+        return existing
+
+    @staticmethod
+    def _is_reservation_idempotency_conflict(exc: IntegrityError) -> bool:
+        original = exc.orig
+        diagnostic = getattr(original, "diag", None)
+        constraint_name = getattr(diagnostic, "constraint_name", None)
+        if constraint_name is not None:
+            return constraint_name == "uq_reservation_idempotency"
+        message = str(original).lower()
+        return (
+            "unique constraint failed" in message
+            and "portfolio_cash_reservations.tenant_id" in message
+            and "portfolio_cash_reservations.portfolio_id" in message
+            and "portfolio_cash_reservations.idempotency_key_hash" in message
+        )

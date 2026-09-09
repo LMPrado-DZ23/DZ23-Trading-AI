@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -14,10 +16,13 @@ from tradingagents.platform.api import (
     create_platform_app,
 )
 from tradingagents.platform.api.identity import IdentityError
+from tradingagents.platform.api.portfolio_adapter import SqlAlchemyPortfolioAdapter
 from tradingagents.platform.api.security import (
     SESSION_COOKIE,
     InMemorySlidingWindowRateLimiter,
 )
+from tradingagents.platform.identity import MembershipRole
+from tradingagents.platform.portfolio import PortfolioError
 
 
 class VerifiedIdentity:
@@ -78,6 +83,8 @@ class FakePortfolio:
 
     async def list_portfolios(self, **kwargs):
         self.calls.append(("list", kwargs))
+        if self.failure_code is not None:
+            raise IdentityError(self.failure_code)
         return (
             {
                 "id": self.portfolio_id,
@@ -176,6 +183,49 @@ def _client():
     client.cookies.set(SESSION_COOKIE, identity.session.token)
     csrf = client.get("/v1/auth/csrf").json()["csrf_token"]
     return client, portfolio, {"x-csrf-token": csrf}
+
+
+def test_sqlalchemy_adapter_translates_portfolio_list_clock_failure() -> None:
+    expected = IdentityPrincipal(
+        user_id=uuid4(),
+        tenant_id=uuid4(),
+        email="clock@example.test",
+        display_name="Clock User",
+        roles=("owner",),
+        email_verified=True,
+        session_id=uuid4(),
+        expires_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    profile = SimpleNamespace(
+        user_id=expected.user_id,
+        tenant_id=expected.tenant_id,
+        membership_id=uuid4(),
+        session_id=expected.session_id,
+        role=MembershipRole.OWNER,
+    )
+
+    class SyncIdentity:
+        @staticmethod
+        def authenticate_session_token(*, token):
+            assert token == "clock-token"
+            return profile
+
+    class FailingPortfolioService:
+        @staticmethod
+        def list_portfolios(*, principal):
+            assert principal.tenant_id == expected.tenant_id
+            raise PortfolioError("DATABASE_TIME_UNAVAILABLE")
+
+    adapter = SqlAlchemyPortfolioAdapter(
+        identity=SyncIdentity(), portfolios=FailingPortfolioService()
+    )
+    with pytest.raises(IdentityError, match="DATABASE_TIME_UNAVAILABLE"):
+        asyncio.run(
+            adapter.list_portfolios(
+                token="clock-token",
+                principal=expected,
+            )
+        )
 
 
 def test_suitability_and_portfolio_journey_is_explicit_and_authenticated() -> None:
@@ -345,6 +395,21 @@ def test_portfolio_error_contract_is_preserved_through_http_route(
     assert detail["code"] == code
     assert detail["retryable"] is retryable
     assert detail["action"]
+
+
+def test_portfolio_list_clock_failure_is_a_retryable_503() -> None:
+    client, portfolio, _headers = _client()
+    portfolio.failure_code = "DATABASE_TIME_UNAVAILABLE"
+
+    response = client.get("/v1/portfolios")
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == {
+        "code": "DATABASE_TIME_UNAVAILABLE",
+        "message": "O relógio transacional está temporariamente indisponível.",
+        "retryable": True,
+        "action": "retry_later",
+    }
 
 
 def test_breaker_resume_http_error_offers_only_an_existing_review_action() -> None:

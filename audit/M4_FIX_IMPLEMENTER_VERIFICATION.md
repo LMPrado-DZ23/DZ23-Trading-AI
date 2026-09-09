@@ -40,6 +40,11 @@
   correlation or executable quantity as trusted client input.
 - Allocation replay is bound to the same idempotency key and immutable request;
   a finalized reservation cannot be reused as a new order attempt.
+- Cash-reservation replay is accepted only while the reservation remains active,
+  unexpired and bound to the currently eligible mandate. It rechecks the risk
+  baseline and circuit breaker and never masks unrelated integrity violations.
+- PostgreSQL requires an operational mandate and baseline for both active and
+  consumed reservations; only release/expiry can unwind after authority loss.
 - Mandate pause provenance is persisted. Suitability reassessment records a
   dedicated pause reason, while an open circuit breaker takes precedence over
   suitability and exposes only the risk-review action.
@@ -48,49 +53,55 @@
 
 ## Reproduction
 
-- Final full local suite: `1260 passed, 12 skipped, 71 subtests passed`.
-- Final focused portfolio/API/audit suite: `69 passed`.
+- Final full suite with real PostgreSQL and Redis:
+  `1279 passed, 1 skipped, 71 subtests passed`.
+- Final focused portfolio/API/audit suite: `75 passed`.
 - Formerly flaky LGPD event-order test: `10/10 passed` after the monotonic-time fix.
 - SQLite migration compatibility test: `1 passed`.
 - Ruff: green for the repository (permission warnings only for stale sandbox
   temporary directories).
 - Compileall: green for `tradingagents`, `service` and `cli`.
-- PostgreSQL 0019 -> 0020 offline SQL generation: green.
-- Final JUnit: `audit/m4-fix-local-junit-6.xml`
-  - bytes: `177607`
-  - SHA-256: `57cb44dcf311e6d6fe2766f3619d32a1637df3222fd8ffa704cdd106fca583c9`
-- Final generated PostgreSQL SQL: `audit/m4-fix-postgresql-offline-6.sql`
-  - bytes: `22444`
-  - SHA-256: `cfcb5e344b0927ab5a6b62122fbddf0ea72a3a7f580ac63364202cd9190b9552`
-- Offline-generation log: `audit/m4-fix-postgresql-offline-6.log`
+- PostgreSQL 0019 -> 0020 online migration, offline generation and execution:
+  green.
+- Final full JUnit: `audit/m4-final-full-junit.xml`
+  - bytes: `175198`
+  - SHA-256: `eb73cc589f97ea8c6ced8788169d386c4fca637e51c8891df376bf00344c7e8c`
+- Final generated and executed PostgreSQL SQL:
+  `audit/m4-final-postgresql-offline.sql`
+  - bytes: `22484`
+  - SHA-256: `c8a14d591a6c5b070db15aaee72001f75a47e480112c64cbd8ff616aeab4afa6`
+- Offline-generation log: `audit/m4-final-postgresql-offline.log`
   - bytes: `341`
   - SHA-256: `5b42a7b0d1c408d037a1e826e99840b6f33eaa884c444b13fa7029f311ee9d82`
 - Diff secret scan for OpenAI, AWS, JWT and generic secret assignments: zero
   matches. `git diff --check`, Ruff and compileall are green.
+- Dynamic PostgreSQL report: `audit/M4_POSTGRES_GATE_VERIFICATION.md`.
 
 ## Independent review status
 
-- Product/API review: **approved for the M4 slice**, with no remaining blocker.
-- Deterministic allocator security review: **no BLOCKER or HIGH finding**;
-  approval is technical continuation evidence, not release authority.
-- PostgreSQL/RLS migration review: **approved statically with an external
-  execution gate**. No static blocker remains, but disposable PostgreSQL is
-  mandatory before promotion.
+- Independent re-review found three final defects after the first PostgreSQL
+  run: expired/stale reservation replay, `active -> consumed` without current
+  authority, and loss of the public database-time error contract. All three are
+  corrected and covered by local and real PostgreSQL tests.
+- The previous independent verdicts are superseded by these corrections. A
+  fresh review of the final commit is still required; this document does not
+  claim independent approval.
 - The allocator is currently an internal application port. M5/M6 must call it
   from the operational proposal/execution flow; this candidate does not claim
   end-to-end broker execution.
 
 ## Required independent gates
 
-- The 12 skipped tests are external integration tests: PostgreSQL, Redis and a
-  live DeepSeek smoke. They are not represented as passed.
-- Before promotion, run migration 0019 -> 0020, downgrade/re-upgrade and
-  `tests/integration/test_portfolio_postgres_rls.py` against disposable
-  PostgreSQL roles with forced RLS. Exercise a legacy paused mandate, active
-  reservation without baseline followed by release/expire, valid and invalid
-  legacy ledgers, a `NOBYPASSRLS` application role, deferred-trigger commits,
-  numeric rounding and concurrent reservation/funding/snapshot/reassessment.
+- The only remaining skipped test is the live DeepSeek smoke; it is not
+  represented as passed and is unrelated to M4.
+- Migration 0019 -> 0020, offline SQL execution, operational consumption gate,
+  `NOBYPASSRLS` roles, deferred-trigger commits, rounding and concurrent
+  reservation paths were exercised on disposable PostgreSQL 17. Earlier legacy
+  preflight/backfill checks remain recorded in the dynamic gate report. The
+  downgrade is intentionally forbidden and its fail-closed refusal was verified.
 - Independent review must attempt stale suitability insertion, pointer rollback,
   live-mode persistence, incomplete/cross-portfolio ledger events, replay after
   positions, forged valuation timelines and aggregate crypto-cap bypasses.
 - This implementer verification is evidence for review, never promotion authority.
+- The real database gate modified production code after the prior static
+  reviews; the final diff must be independently re-audited before promotion.

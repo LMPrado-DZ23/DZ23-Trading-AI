@@ -4,6 +4,7 @@ import importlib.util
 from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -21,6 +22,7 @@ from tradingagents.platform.identity import (
 )
 from tradingagents.platform.identity.models import Base
 from tradingagents.platform.portfolio import (
+    CashReservation,
     CircuitBreaker,
     Portfolio,
     PortfolioError,
@@ -101,6 +103,194 @@ def _valuation(service, *, available_offset: timedelta = timedelta()) -> Trusted
         observed_at=observed,
         available_at=observed + available_offset,
         evidence_digest="b" * 64,
+    )
+
+
+def _fund_snapshot_and_reserve(
+    runtime,
+    *,
+    label: str,
+    amount: Decimal = Decimal("10"),
+    ttl: timedelta = timedelta(minutes=10),
+) -> tuple[Portfolio, CashReservation]:
+    service, principal, _factory = runtime
+    portfolio, _mandate = _active(runtime)
+    service.record_funding(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("1000"),
+        idempotency_key=f"{label}-funding-0001",
+        reference_id=f"{label}-funding",
+    )
+    service.capture_trusted_snapshot(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        valuation=_valuation(service),
+    )
+    reservation = service.reserve_cash(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=amount,
+        purpose_digest="a" * 64,
+        idempotency_key=f"{label}-reservation-0001",
+        ttl=ttl,
+    )
+    return portfolio, reservation
+
+
+def test_reservation_replay_is_valid_only_while_active_and_current(
+    audited_portfolio_runtime,
+) -> None:
+    service, principal, _factory = audited_portfolio_runtime
+    portfolio, reservation = _fund_snapshot_and_reserve(
+        audited_portfolio_runtime,
+        label="active-replay",
+        amount=Decimal("800"),
+    )
+
+    replay = service.reserve_cash(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("800"),
+        purpose_digest="a" * 64,
+        idempotency_key="active-replay-reservation-0001",
+    )
+
+    assert replay.id == reservation.id
+    assert replay.status == "active"
+
+
+def test_expired_reservation_replay_fails_closed(
+    audited_portfolio_runtime, monkeypatch
+) -> None:
+    service, principal, _factory = audited_portfolio_runtime
+    portfolio, reservation = _fund_snapshot_and_reserve(
+        audited_portfolio_runtime,
+        label="expired-replay",
+        ttl=timedelta(seconds=30),
+    )
+    monkeypatch.setattr(
+        service, "_now", lambda: reservation.expires_at + timedelta(seconds=1)
+    )
+
+    with pytest.raises(PortfolioError, match="IDEMPOTENCY_RESERVATION_FINALIZED"):
+        service.reserve_cash(
+            principal=principal,
+            portfolio_id=portfolio.id,
+            amount=reservation.amount,
+            purpose_digest=reservation.purpose_digest,
+            idempotency_key="expired-replay-reservation-0001",
+            ttl=timedelta(seconds=30),
+        )
+
+
+def test_released_reservation_replay_fails_closed(audited_portfolio_runtime) -> None:
+    service, principal, _factory = audited_portfolio_runtime
+    portfolio, reservation = _fund_snapshot_and_reserve(
+        audited_portfolio_runtime,
+        label="released-replay",
+    )
+    assert (
+        service.release_reservation(principal=principal, reservation_id=reservation.id)
+        == "released"
+    )
+
+    with pytest.raises(PortfolioError, match="IDEMPOTENCY_RESERVATION_FINALIZED"):
+        service.reserve_cash(
+            principal=principal,
+            portfolio_id=portfolio.id,
+            amount=reservation.amount,
+            purpose_digest=reservation.purpose_digest,
+            idempotency_key="released-replay-reservation-0001",
+        )
+
+
+def test_stale_mandate_reservation_replay_fails_closed(
+    audited_portfolio_runtime,
+) -> None:
+    service, principal, _factory = audited_portfolio_runtime
+    portfolio, reservation = _fund_snapshot_and_reserve(
+        audited_portfolio_runtime,
+        label="stale-mandate-replay",
+    )
+    latest = service.assess_suitability(
+        principal=principal,
+        requested_profile=RiskProfile.PRESERVATION,
+        answers=_answers(conservative=True),
+    )
+    replacement = service.activate_mandate(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        suitability_id=latest.id,
+        profile=RiskProfile.PRESERVATION,
+        mode=RunMode.PAPER,
+    )
+    assert replacement.id != reservation.mandate_id
+
+    with pytest.raises(PortfolioError, match="IDEMPOTENCY_RESERVATION_FINALIZED"):
+        service.reserve_cash(
+            principal=principal,
+            portfolio_id=portfolio.id,
+            amount=reservation.amount,
+            purpose_digest=reservation.purpose_digest,
+            idempotency_key="stale-mandate-replay-reservation-0001",
+        )
+
+
+def test_reservation_replay_rechecks_circuit_breaker(audited_portfolio_runtime) -> None:
+    service, principal, factory = audited_portfolio_runtime
+    portfolio, reservation = _fund_snapshot_and_reserve(
+        audited_portfolio_runtime,
+        label="breaker-replay",
+    )
+    with factory() as db, db.begin():
+        db.add(
+            CircuitBreaker(
+                tenant_id=principal.tenant_id,
+                portfolio_id=portfolio.id,
+                mandate_id=reservation.mandate_id,
+                kind="maximum_drawdown",
+                status="open",
+                observed_value=Decimal("0.30"),
+                threshold_value=Decimal("0.25"),
+                evidence_digest="d" * 64,
+                triggered_at=service._now(),
+            )
+        )
+
+    with pytest.raises(PortfolioError, match="CIRCUIT_BREAKER_OPEN"):
+        service.reserve_cash(
+            principal=principal,
+            portfolio_id=portfolio.id,
+            amount=reservation.amount,
+            purpose_digest=reservation.purpose_digest,
+            idempotency_key="breaker-replay-reservation-0001",
+        )
+
+
+def test_only_reservation_idempotency_constraint_is_treated_as_replay() -> None:
+    unrelated = IntegrityError("INSERT", {}, RuntimeError("check constraint failed"))
+    assert PortfolioService._is_reservation_idempotency_conflict(unrelated) is False
+    postgres_unique = RuntimeError("duplicate key")
+    postgres_unique.diag = SimpleNamespace(  # type: ignore[attr-defined]
+        constraint_name="uq_reservation_idempotency"
+    )
+    assert (
+        PortfolioService._is_reservation_idempotency_conflict(
+            IntegrityError("INSERT", {}, postgres_unique)
+        )
+        is True
+    )
+    sqlite_unique = RuntimeError(
+        "UNIQUE constraint failed: portfolio_cash_reservations.tenant_id, "
+        "portfolio_cash_reservations.portfolio_id, "
+        "portfolio_cash_reservations.idempotency_key_hash"
+    )
+    assert (
+        PortfolioService._is_reservation_idempotency_conflict(
+            IntegrityError("INSERT", {}, sqlite_unique)
+        )
+        is True
     )
 
 

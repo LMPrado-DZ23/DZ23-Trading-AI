@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -92,7 +92,7 @@ def _ready(service: PortfolioService, principal: IdentityPrincipal, label: str):
 
 
 @pytest.mark.skipif(not APP_URL, reason="PostgreSQL app test URL is not configured")
-def test_portfolio_rls_append_only_balancing_and_reservation_race() -> None:
+def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -> None:
     engine = create_engine(APP_URL, pool_pre_ping=True)
     factory = sessionmaker(engine, expire_on_commit=False)
     identity = IdentityService(factory, token_hasher=TokenHasher(b"p" * 32))
@@ -177,6 +177,13 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race() -> None:
             },
         )
 
+    # Capital decisions use the database clock. A backward host-clock adjustment
+    # must not make the freshly committed mandate appear to be future-dated.
+    monkeypatch.setattr(
+        PortfolioService,
+        "_now",
+        staticmethod(lambda: datetime.now(UTC) - timedelta(days=1)),
+    )
     barrier = threading.Barrier(2)
 
     def reserve(index: int) -> str:
@@ -197,6 +204,60 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race() -> None:
     with ThreadPoolExecutor(max_workers=2) as pool:
         outcomes = tuple(pool.map(reserve, (1, 2)))
     assert sorted(outcomes) == ["INSUFFICIENT_AVAILABLE_CASH", "reserved"]
+    consume_guard = first_service.reserve_cash(
+        principal=first,
+        portfolio_id=portfolio.id,
+        amount=Decimal("1"),
+        purpose_digest="4" * 64,
+        idempotency_key="pg-consume-guard-0001",
+    )
+    expire_guard = first_service.reserve_cash(
+        principal=first,
+        portfolio_id=portfolio.id,
+        amount=Decimal("1"),
+        purpose_digest="3" * 64,
+        idempotency_key="pg-expire-guard-0001",
+    )
+    stale_replay_guard = first_service.reserve_cash(
+        principal=first,
+        portfolio_id=portfolio.id,
+        amount=Decimal("1"),
+        purpose_digest="2" * 64,
+        idempotency_key="pg-stale-replay-guard-0001",
+    )
+    expired_replay_id = uuid4()
+    with engine.begin() as connection:
+        connection.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(first.tenant_id)},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO portfolio_cash_reservations "
+                "(id, tenant_id, portfolio_id, mandate_id, idempotency_key_hash, "
+                "currency, amount, status, purpose_digest, expires_at, created_at) "
+                "VALUES (:id, :tenant, :portfolio, :mandate, :key_hash, 'BRL', 1, "
+                "'active', :purpose, clock_timestamp() - interval '1 second', "
+                "clock_timestamp() - interval '1 minute')"
+            ),
+            {
+                "id": str(expired_replay_id),
+                "tenant": str(first.tenant_id),
+                "portfolio": str(portfolio.id),
+                "mandate": str(stale_replay_guard.mandate_id),
+                "key_hash": first_service._key_hash("pg-expired-replay-0001"),
+                "purpose": "1" * 64,
+            },
+        )
+    with pytest.raises(PortfolioError, match="IDEMPOTENCY_RESERVATION_FINALIZED"):
+        first_service.reserve_cash(
+            principal=first,
+            portfolio_id=portfolio.id,
+            amount=Decimal("1"),
+            purpose_digest="1" * 64,
+            idempotency_key="pg-expired-replay-0001",
+            ttl=timedelta(seconds=30),
+        )
 
     # The database itself rejects a partially written double-entry event at commit.
     with pytest.raises(DBAPIError), engine.begin() as connection:
@@ -325,6 +386,39 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race() -> None:
     first_service.transition_mandate(
         principal=first, portfolio_id=portfolio.id, target_status="paused"
     )
+    # Consuming is a capital action and remains forbidden after the mandate is
+    # paused. Released/expired are fail-safe unwind transitions and remain legal.
+    with pytest.raises(DBAPIError), engine.begin() as connection:
+        connection.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(first.tenant_id)},
+        )
+        connection.execute(
+            text(
+                "UPDATE portfolio_cash_reservations SET status = 'consumed', "
+                "consumed_at = clock_timestamp() WHERE id = :id"
+            ),
+            {"id": str(consume_guard.id)},
+        )
+    with engine.begin() as connection:
+        connection.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(first.tenant_id)},
+        )
+        connection.execute(
+            text(
+                "UPDATE portfolio_cash_reservations SET status = 'released', "
+                "released_at = clock_timestamp() WHERE id = :released_id"
+            ),
+            {"released_id": str(consume_guard.id)},
+        )
+        connection.execute(
+            text(
+                "UPDATE portfolio_cash_reservations SET status = 'expired' "
+                "WHERE id = :expired_id"
+            ),
+            {"expired_id": str(expire_guard.id)},
+        )
     with pytest.raises(DBAPIError), engine.begin() as connection:
         connection.execute(
             text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
@@ -333,6 +427,20 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race() -> None:
         connection.execute(
             text("UPDATE portfolios SET current_mandate_id = :old WHERE id = :portfolio"),
             {"old": str(active_id), "portfolio": str(portfolio.id)},
+        )
+    replacement = first_service.transition_mandate(
+        principal=first,
+        portfolio_id=portfolio.id,
+        target_status="active",
+    )
+    assert replacement.id != stale_replay_guard.mandate_id
+    with pytest.raises(PortfolioError, match="IDEMPOTENCY_RESERVATION_FINALIZED"):
+        first_service.reserve_cash(
+            principal=first,
+            portfolio_id=portfolio.id,
+            amount=stale_replay_guard.amount,
+            purpose_digest=stale_replay_guard.purpose_digest,
+            idempotency_key="pg-stale-replay-guard-0001",
         )
 
     # A semantically inverted funding event is rejected even if its two postings balance.

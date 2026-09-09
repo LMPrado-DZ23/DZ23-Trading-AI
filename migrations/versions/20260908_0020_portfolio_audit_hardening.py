@@ -226,11 +226,11 @@ def upgrade() -> None:
                 "AND s.user_id = owner_id ORDER BY s.version DESC LIMIT 1; "
                 "IF latest_suitability IS NULL OR active_suitability <> latest_suitability "
                 "OR latest_status <> 'valid' OR latest_expires <= clock_timestamp() "
-                "OR CASE active_profile WHEN 'preservation' THEN 0 WHEN 'conservative' THEN 1 "
+                "OR (CASE active_profile WHEN 'preservation' THEN 0 WHEN 'conservative' THEN 1 "
                 "WHEN 'moderate' THEN 2 WHEN 'growth' THEN 3 WHEN 'aggressive' THEN 4 ELSE 99 END "
-                "> CASE latest_profile WHEN 'preservation' THEN 0 WHEN 'conservative' THEN 1 "
+                ") > (CASE latest_profile WHEN 'preservation' THEN 0 WHEN 'conservative' THEN 1 "
                 "WHEN 'moderate' THEN 2 WHEN 'growth' THEN 3 WHEN 'aggressive' THEN 4 ELSE -1 END "
-                "THEN RAISE EXCEPTION 'active mandate is incompatible with latest suitability'; "
+                ") THEN RAISE EXCEPTION 'active mandate is incompatible with latest suitability'; "
                 "END IF; END IF; RETURN NULL; END; $$"
             )
         )
@@ -593,7 +593,7 @@ def _create_operational_guard() -> None:
             "suitability_expires timestamptz; suitability_profile text; "
             "snapshot_count bigint; requires_operational boolean := true; BEGIN "
             "IF TG_TABLE_NAME = 'portfolio_cash_reservations' THEN "
-            "requires_operational := NEW.status = 'active'; "
+            "requires_operational := NEW.status IN ('active','consumed'); "
             "IF TG_OP = 'UPDATE' THEN "
             "IF OLD.tenant_id IS DISTINCT FROM NEW.tenant_id OR "
             "OLD.portfolio_id IS DISTINCT FROM NEW.portfolio_id OR "
@@ -628,14 +628,15 @@ def _create_operational_guard() -> None:
             "OR mandate_ended IS NOT NULL OR mandate_suitability <> latest_suitability "
             "OR suitability_status <> 'valid' OR suitability_assessed > clock_timestamp() "
             "OR suitability_expires <= clock_timestamp() OR "
-            "CASE mandate_profile WHEN 'preservation' THEN 0 WHEN 'conservative' THEN 1 "
+            "(CASE mandate_profile WHEN 'preservation' THEN 0 WHEN 'conservative' THEN 1 "
             "WHEN 'moderate' THEN 2 WHEN 'growth' THEN 3 WHEN 'aggressive' THEN 4 ELSE 99 END "
-            "> CASE suitability_profile WHEN 'preservation' THEN 0 WHEN 'conservative' THEN 1 "
+            ") > (CASE suitability_profile WHEN 'preservation' THEN 0 WHEN 'conservative' THEN 1 "
             "WHEN 'moderate' THEN 2 WHEN 'growth' THEN 3 WHEN 'aggressive' THEN 4 ELSE -1 END "
-            "THEN IF requires_operational THEN RAISE EXCEPTION "
+            ") THEN IF requires_operational THEN RAISE EXCEPTION "
             "'portfolio has no operational mandate'; END IF; END IF; "
             "IF TG_TABLE_NAME = 'portfolio_cash_reservations' THEN "
-            "IF NEW.status = 'active' AND NEW.mandate_id IS DISTINCT FROM active_mandate THEN "
+            "IF NEW.status IN ('active','consumed') AND "
+            "NEW.mandate_id IS DISTINCT FROM active_mandate THEN "
             "RAISE EXCEPTION 'cash reservation mandate does not match portfolio'; END IF; "
             "IF requires_operational THEN SELECT count(*) INTO snapshot_count "
             "FROM public.portfolio_snapshots s WHERE s.tenant_id = NEW.tenant_id "
@@ -914,188 +915,10 @@ def _upgrade_sqlite(timestamp: sa.DateTime, money: sa.Numeric) -> None:
             "valuation_observed_at <= valuation_available_at AND "
             "valuation_available_at <= captured_at",
         )
+
+
 def downgrade() -> None:
     raise RuntimeError(
         "M4_SECURITY_DOWNGRADE_FORBIDDEN: this migration cannot be downgraded because "
         "doing so would remove capital and ledger safety boundaries"
     )
-    if op.get_bind().dialect.name == "sqlite":
-        _downgrade_sqlite()
-        return
-    op.execute(
-        sa.text(
-            "DROP TRIGGER IF EXISTS suitability_active_mandate_guard "
-            "ON portfolio_suitability_assessments"
-        )
-    )
-    op.execute(
-        sa.text("DROP TRIGGER IF EXISTS mandate_current_pointer ON portfolio_mandates")
-    )
-    op.execute(
-        sa.text("DROP TRIGGER IF EXISTS portfolio_current_mandate_pointer ON portfolios")
-    )
-    op.execute(sa.text("DROP FUNCTION IF EXISTS portfolio_assert_current_mandate()"))
-    op.execute(
-        sa.text(
-            "DROP TRIGGER IF EXISTS portfolio_ledger_complete_posting "
-            "ON portfolio_ledger_postings"
-        )
-    )
-    op.execute(
-        sa.text(
-            "DROP TRIGGER IF EXISTS portfolio_ledger_complete_transaction "
-            "ON portfolio_ledger_transactions"
-        )
-    )
-    op.execute(sa.text("DROP FUNCTION IF EXISTS portfolio_assert_complete_ledger()"))
-
-    for constraint in (
-        "ck_snapshot_valuation_timeline",
-        "ck_snapshot_valuation_digest",
-        "ck_snapshot_valuation_source",
-        "ck_snapshot_daily_drawdown",
-        "ck_snapshot_nav",
-        "ck_snapshot_unit_count",
-    ):
-        op.drop_constraint(constraint, "portfolio_snapshots", type_="check")
-    for column in (
-        "valuation_digest",
-        "valuation_available_at",
-        "valuation_observed_at",
-        "valuation_source",
-        "daily_drawdown",
-        "high_water_nav",
-        "nav_per_unit",
-        "unit_count",
-    ):
-        op.drop_column("portfolio_snapshots", column)
-
-    op.drop_constraint("ck_position_asset_class", "portfolio_positions", type_="check")
-    op.drop_column("portfolio_positions", "asset_class")
-
-    op.drop_constraint(
-        "fk_ledger_posting_transaction",
-        "portfolio_ledger_postings",
-        type_="foreignkey",
-    )
-    op.create_foreign_key(
-        "fk_ledger_posting_transaction",
-        "portfolio_ledger_postings",
-        "portfolio_ledger_transactions",
-        ["transaction_id", "tenant_id"],
-        ["id", "tenant_id"],
-        ondelete="RESTRICT",
-    )
-    op.drop_constraint(
-        "uq_ledger_transaction_identity_portfolio",
-        "portfolio_ledger_transactions",
-        type_="unique",
-    )
-    for constraint in (
-        "ck_ledger_transaction_nav",
-        "ck_ledger_transaction_provenance_coherence",
-        "ck_ledger_transaction_verification",
-        "ck_ledger_transaction_provenance",
-    ):
-        op.drop_constraint(constraint, "portfolio_ledger_transactions", type_="check")
-    for column in ("nav_per_unit", "unit_delta", "verification_status", "provenance"):
-        op.drop_column("portfolio_ledger_transactions", column)
-
-    op.drop_constraint("fk_portfolio_current_mandate", "portfolios", type_="foreignkey")
-    op.drop_constraint(
-        "uq_mandate_identity_portfolio", "portfolio_mandates", type_="unique"
-    )
-    op.drop_constraint("ck_mandate_mode", "portfolio_mandates", type_="check")
-    op.create_check_constraint(
-        "ck_mandate_mode",
-        "portfolio_mandates",
-        "mode IN ('backtest','shadow','paper')",
-    )
-    for constraint in ("ck_portfolio_nav_positive", "ck_portfolio_unit_count"):
-        op.drop_constraint(constraint, "portfolios", type_="check")
-    for column in ("last_nav_per_unit", "unit_count", "current_mandate_id"):
-        op.drop_column("portfolios", column)
-
-    op.execute(
-        sa.text(
-            "CREATE FUNCTION portfolio_assert_balanced_ledger() RETURNS trigger "
-            "LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$ "
-            "DECLARE tx uuid; total numeric; BEGIN "
-            "tx := COALESCE(NEW.transaction_id, OLD.transaction_id); "
-            "SELECT COALESCE(sum(quantity), 0) INTO total "
-            "FROM public.portfolio_ledger_postings WHERE transaction_id = tx; "
-            "IF total <> 0 THEN RAISE EXCEPTION 'ledger transaction is not balanced'; "
-            "END IF; RETURN NULL; END; $$"
-        )
-    )
-    op.execute(
-        sa.text(
-            "CREATE CONSTRAINT TRIGGER portfolio_ledger_balanced "
-            "AFTER INSERT OR UPDATE OR DELETE ON portfolio_ledger_postings "
-            "DEFERRABLE INITIALLY DEFERRED FOR EACH ROW "
-            "EXECUTE FUNCTION portfolio_assert_balanced_ledger()"
-        )
-    )
-
-
-def _downgrade_sqlite() -> None:
-    with op.batch_alter_table("portfolio_snapshots") as batch:
-        for constraint in (
-            "ck_snapshot_valuation_timeline",
-            "ck_snapshot_valuation_digest",
-            "ck_snapshot_valuation_source",
-            "ck_snapshot_daily_drawdown",
-            "ck_snapshot_nav",
-            "ck_snapshot_unit_count",
-        ):
-            batch.drop_constraint(constraint, type_="check")
-        for column in (
-            "valuation_digest",
-            "valuation_available_at",
-            "valuation_observed_at",
-            "valuation_source",
-            "daily_drawdown",
-            "high_water_nav",
-            "nav_per_unit",
-            "unit_count",
-        ):
-            batch.drop_column(column)
-    with op.batch_alter_table("portfolio_positions") as batch:
-        batch.drop_constraint("ck_position_asset_class", type_="check")
-        batch.drop_column("asset_class")
-    with op.batch_alter_table("portfolio_ledger_postings") as batch:
-        batch.drop_constraint("fk_ledger_posting_transaction", type_="foreignkey")
-        batch.create_foreign_key(
-            "fk_ledger_posting_transaction",
-            "portfolio_ledger_transactions",
-            ["transaction_id", "tenant_id"],
-            ["id", "tenant_id"],
-            ondelete="RESTRICT",
-        )
-    with op.batch_alter_table("portfolio_ledger_transactions") as batch:
-        batch.drop_constraint(
-            "uq_ledger_transaction_identity_portfolio", type_="unique"
-        )
-        for constraint in (
-            "ck_ledger_transaction_nav",
-            "ck_ledger_transaction_provenance_coherence",
-            "ck_ledger_transaction_verification",
-            "ck_ledger_transaction_provenance",
-        ):
-            batch.drop_constraint(constraint, type_="check")
-        for column in ("nav_per_unit", "unit_delta", "verification_status", "provenance"):
-            batch.drop_column(column)
-    with op.batch_alter_table("portfolios") as batch:
-        batch.drop_constraint("fk_portfolio_current_mandate", type_="foreignkey")
-        batch.drop_constraint("ck_portfolio_nav_positive", type_="check")
-        batch.drop_constraint("ck_portfolio_unit_count", type_="check")
-        batch.drop_column("last_nav_per_unit")
-        batch.drop_column("unit_count")
-        batch.drop_column("current_mandate_id")
-    with op.batch_alter_table("portfolio_mandates") as batch:
-        batch.drop_constraint("uq_mandate_identity_portfolio", type_="unique")
-        batch.drop_constraint("ck_mandate_mode", type_="check")
-        batch.create_check_constraint(
-            "ck_mandate_mode",
-            "mode IN ('backtest','shadow','paper')",
-        )

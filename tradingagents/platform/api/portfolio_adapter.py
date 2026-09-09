@@ -108,7 +108,10 @@ class SqlAlchemyPortfolioAdapter:
 
     async def list_portfolios(self, *, token, principal):
         actor = await self._principal(token, principal)
-        rows = await self._run_sync(self._portfolios.list_portfolios, principal=actor)
+        try:
+            rows = await self._run_sync(self._portfolios.list_portfolios, principal=actor)
+        except PortfolioError as exc:
+            raise ApiIdentityError(str(exc)) from exc
         return tuple(asdict(row) for row in rows)
 
     async def get_latest_snapshot(self, *, token, principal, portfolio_id):
