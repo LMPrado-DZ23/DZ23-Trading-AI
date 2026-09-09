@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from decimal import Decimal
 from typing import Any, Protocol, runtime_checkable
 from uuid import UUID
@@ -64,22 +63,3 @@ class PortfolioServicePort(Protocol):
     async def list_portfolios(
         self, *, token: str, principal: IdentityPrincipal
     ) -> tuple[dict[str, Any], ...]: ...
-
-    async def deterministic_size(
-        self,
-        *,
-        token: str,
-        principal: IdentityPrincipal,
-        portfolio_id: UUID,
-        data: dict[str, Any],
-    ) -> dict[str, Any]: ...
-
-    async def capture_snapshot(
-        self,
-        *,
-        token: str,
-        principal: IdentityPrincipal,
-        portfolio_id: UUID,
-        prices: dict[str, Decimal],
-        captured_at: datetime | None,
-    ) -> dict[str, Any]: ...

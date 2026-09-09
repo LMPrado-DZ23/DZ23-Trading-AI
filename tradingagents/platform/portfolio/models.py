@@ -80,6 +80,11 @@ class Portfolio(Base):
     base_currency: Mapped[str] = mapped_column(String(12), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     balance_version: Mapped[int] = mapped_column(nullable=False, default=0)
+    current_mandate_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    unit_count: Mapped[Decimal] = mapped_column(Numeric(36, 12), nullable=False, default=0)
+    last_nav_per_unit: Mapped[Decimal] = mapped_column(
+        Numeric(36, 12), nullable=False, default=1
+    )
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), nullable=False, default=utc_now, onupdate=utc_now
@@ -92,10 +97,23 @@ class Portfolio(Base):
             name="fk_portfolio_owner_membership",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["current_mandate_id", "tenant_id", "id"],
+            [
+                "portfolio_mandates.id",
+                "portfolio_mandates.tenant_id",
+                "portfolio_mandates.portfolio_id",
+            ],
+            name="fk_portfolio_current_mandate",
+            ondelete="RESTRICT",
+            use_alter=True,
+        ),
         UniqueConstraint("tenant_id", "id", name="uq_portfolio_tenant_id"),
         UniqueConstraint("tenant_id", "owner_user_id", "name", name="uq_portfolio_owner_name"),
         CheckConstraint("status IN ('active','paused','closed')", name="ck_portfolio_status"),
         CheckConstraint("balance_version >= 0", name="ck_portfolio_balance_version"),
+        CheckConstraint("unit_count >= 0", name="ck_portfolio_unit_count"),
+        CheckConstraint("last_nav_per_unit > 0", name="ck_portfolio_nav_positive"),
         CheckConstraint("base_currency = upper(base_currency)", name="ck_portfolio_currency_upper"),
         Index("ix_portfolio_tenant_owner", "tenant_id", "owner_user_id"),
     )
@@ -142,6 +160,9 @@ class PortfolioMandate(Base):
         ),
         UniqueConstraint("tenant_id", "portfolio_id", "version", name="uq_mandate_version"),
         UniqueConstraint("tenant_id", "id", name="uq_mandate_tenant_id"),
+        UniqueConstraint(
+            "id", "tenant_id", "portfolio_id", name="uq_mandate_identity_portfolio"
+        ),
         CheckConstraint("version >= 1", name="ck_mandate_version"),
         CheckConstraint("policy_version >= 1", name="ck_mandate_policy_version"),
         CheckConstraint(
@@ -149,7 +170,7 @@ class PortfolioMandate(Base):
             name="ck_mandate_profile",
         ),
         CheckConstraint(
-            "mode IN ('backtest','shadow','paper','live_supervised','live_automated')",
+            "mode IN ('backtest','shadow','paper')",
             name="ck_mandate_mode",
         ),
         CheckConstraint(
@@ -176,6 +197,10 @@ class LedgerTransaction(Base):
     reference_id: Mapped[str] = mapped_column(String(128), nullable=False)
     currency: Mapped[str] = mapped_column(String(12), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(36, 12), nullable=False)
+    provenance: Mapped[str] = mapped_column(String(32), nullable=False)
+    verification_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    unit_delta: Mapped[Decimal] = mapped_column(Numeric(36, 12), nullable=False, default=0)
+    nav_per_unit: Mapped[Decimal] = mapped_column(Numeric(36, 12), nullable=False, default=1)
     digest: Mapped[str] = mapped_column(String(64), nullable=False)
     created_by_user_id: Mapped[UUID] = mapped_column(nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
@@ -196,9 +221,29 @@ class LedgerTransaction(Base):
         ),
         UniqueConstraint("tenant_id", "id", name="uq_ledger_transaction_tenant_id"),
         UniqueConstraint(
+            "id", "tenant_id", "portfolio_id", name="uq_ledger_transaction_identity_portfolio"
+        ),
+        UniqueConstraint(
             "tenant_id", "portfolio_id", "idempotency_key_hash", name="uq_ledger_idempotency"
         ),
         CheckConstraint("amount > 0", name="ck_ledger_transaction_amount"),
+        CheckConstraint(
+            "provenance IN ('user_declared','broker_reconciled','internal')",
+            name="ck_ledger_transaction_provenance",
+        ),
+        CheckConstraint(
+            "verification_status IN ('unverified','verified','internal')",
+            name="ck_ledger_transaction_verification",
+        ),
+        CheckConstraint(
+            "(provenance = 'user_declared' AND verification_status = 'unverified' "
+            "AND unit_delta <> 0) OR "
+            "(provenance = 'broker_reconciled' AND verification_status = 'verified') OR "
+            "(provenance = 'internal' AND verification_status = 'internal' "
+            "AND unit_delta = 0)",
+            name="ck_ledger_transaction_provenance_coherence",
+        ),
+        CheckConstraint("nav_per_unit > 0", name="ck_ledger_transaction_nav"),
         CheckConstraint("length(digest) = 64", name="ck_ledger_transaction_digest"),
         CheckConstraint("currency = upper(currency)", name="ck_ledger_transaction_currency"),
         Index("ix_ledger_transaction_portfolio_time", "tenant_id", "portfolio_id", "occurred_at"),
@@ -219,8 +264,12 @@ class LedgerPosting(Base):
 
     __table_args__ = (
         ForeignKeyConstraint(
-            ["transaction_id", "tenant_id"],
-            ["portfolio_ledger_transactions.id", "portfolio_ledger_transactions.tenant_id"],
+            ["transaction_id", "tenant_id", "portfolio_id"],
+            [
+                "portfolio_ledger_transactions.id",
+                "portfolio_ledger_transactions.tenant_id",
+                "portfolio_ledger_transactions.portfolio_id",
+            ],
             name="fk_ledger_posting_transaction",
             ondelete="RESTRICT",
         ),
@@ -286,6 +335,7 @@ class PortfolioPosition(Base):
     tenant_id: Mapped[UUID] = mapped_column(nullable=False)
     portfolio_id: Mapped[UUID] = mapped_column(nullable=False)
     symbol: Mapped[str] = mapped_column(String(64), nullable=False)
+    asset_class: Mapped[str] = mapped_column(String(16), nullable=False)
     quantity: Mapped[Decimal] = mapped_column(Numeric(36, 12), nullable=False)
     average_cost: Mapped[Decimal] = mapped_column(Numeric(36, 12), nullable=False)
     realized_pnl: Mapped[Decimal] = mapped_column(Numeric(36, 12), nullable=False, default=0)
@@ -301,6 +351,9 @@ class PortfolioPosition(Base):
         ),
         UniqueConstraint("tenant_id", "portfolio_id", "symbol", name="uq_position_symbol"),
         CheckConstraint("quantity >= 0", name="ck_position_quantity"),
+        CheckConstraint(
+            "asset_class IN ('crypto','stock')", name="ck_position_asset_class"
+        ),
         CheckConstraint("average_cost >= 0", name="ck_position_average_cost"),
         CheckConstraint("version >= 1", name="ck_position_version"),
         Index("ix_position_portfolio", "tenant_id", "portfolio_id"),
@@ -322,9 +375,17 @@ class PortfolioSnapshot(Base):
     unrealized_pnl: Mapped[Decimal] = mapped_column(Numeric(36, 12), nullable=False)
     high_water_mark: Mapped[Decimal] = mapped_column(Numeric(36, 12), nullable=False)
     drawdown: Mapped[Decimal] = mapped_column(Numeric(18, 12), nullable=False)
+    unit_count: Mapped[Decimal] = mapped_column(Numeric(36, 12), nullable=False)
+    nav_per_unit: Mapped[Decimal] = mapped_column(Numeric(36, 12), nullable=False)
+    high_water_nav: Mapped[Decimal] = mapped_column(Numeric(36, 12), nullable=False)
+    daily_drawdown: Mapped[Decimal] = mapped_column(Numeric(18, 12), nullable=False)
     positions: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     prices: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    valuation_source: Mapped[str] = mapped_column(String(32), nullable=False)
+    valuation_observed_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    valuation_available_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    valuation_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     captured_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
 
     __table_args__ = (
@@ -339,6 +400,26 @@ class PortfolioSnapshot(Base):
         CheckConstraint("cash >= 0 AND reserved_cash >= 0", name="ck_snapshot_cash"),
         CheckConstraint("equity >= 0 AND high_water_mark >= 0", name="ck_snapshot_equity"),
         CheckConstraint("drawdown >= 0 AND drawdown <= 1", name="ck_snapshot_drawdown"),
+        CheckConstraint("unit_count > 0", name="ck_snapshot_unit_count"),
+        CheckConstraint(
+            "nav_per_unit > 0 AND high_water_nav > 0", name="ck_snapshot_nav"
+        ),
+        CheckConstraint(
+            "daily_drawdown >= 0 AND daily_drawdown <= 1",
+            name="ck_snapshot_daily_drawdown",
+        ),
+        CheckConstraint(
+            "valuation_source IN ('broker_reconciliation','market_data_pit')",
+            name="ck_snapshot_valuation_source",
+        ),
+        CheckConstraint(
+            "length(valuation_digest) = 64", name="ck_snapshot_valuation_digest"
+        ),
+        CheckConstraint(
+            "valuation_observed_at <= valuation_available_at AND "
+            "valuation_available_at <= captured_at",
+            name="ck_snapshot_valuation_timeline",
+        ),
         CheckConstraint("length(digest) = 64", name="ck_snapshot_digest"),
         Index("ix_snapshot_portfolio_time", "tenant_id", "portfolio_id", "captured_at"),
     )

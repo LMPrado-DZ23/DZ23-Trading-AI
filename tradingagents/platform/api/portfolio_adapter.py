@@ -100,45 +100,6 @@ class SqlAlchemyPortfolioAdapter:
         rows = await self._run_sync(self._portfolios.list_portfolios, principal=actor)
         return tuple(asdict(row) for row in rows)
 
-    async def deterministic_size(self, *, token, principal, portfolio_id, data):
-        actor = await self._principal(token, principal)
-        return await self._invoke(
-            self._portfolios.deterministic_size,
-            principal=actor,
-            portfolio_id=portfolio_id,
-            **data,
-        )
-
-    async def capture_snapshot(
-        self, *, token, principal, portfolio_id, prices, captured_at: datetime | None
-    ):
-        actor = await self._principal(token, principal)
-        row = await self._invoke(
-            self._portfolios.capture_snapshot,
-            principal=actor,
-            portfolio_id=portfolio_id,
-            prices=prices,
-            captured_at=captured_at,
-        )
-        return self._public(
-            row,
-            "id",
-            "portfolio_id",
-            "sequence",
-            "cash",
-            "reserved_cash",
-            "market_value",
-            "equity",
-            "realized_pnl",
-            "unrealized_pnl",
-            "high_water_mark",
-            "drawdown",
-            "positions",
-            "prices",
-            "digest",
-            "captured_at",
-        )
-
     @classmethod
     def _mandate_public(cls, row):
         return cls._public(

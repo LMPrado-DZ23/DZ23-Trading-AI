@@ -2,12 +2,12 @@
 
 - **mission_id:** `tradingagents-dz23-a5-2026-09-08`
 - **objective:** concluir o TradingAgents DZ23 como plataforma web multiusuário pronta para usuários leigos, com carteira administrada, perfis de risco, execução CCXT segura e implantação verificada em `https://trading.dz23.online/`.
-- **state:** `VERIFYING`
-- **iteration:** 4
+- **state:** `FIXING`
+- **iteration:** 5
 - **started_at:** 2026-09-08 America/Sao_Paulo
 - **last_heartbeat:** 2026-09-08
 - **last_progress_at:** 2026-09-08
-- **current_task:** congelar M4 e obter auditoria independente antes de iniciar o motor de avaliação M5.
+- **current_task:** concluir a candidata de correção do M4, reproduzir PostgreSQL real e devolver para auditoria independente antes do M5.
 
 ## Acceptance criteria
 
@@ -26,6 +26,7 @@
 ## Verified identity
 
 - **execution checkout:** `C:\TradingAgents-Handoff\codex-execucao\tradingagents-dz23`
+- **active M4 repair clone:** `C:\Users\zodyp\Documents\Codex\2026-09-06\referenced-chatgpt-conversation-this-is-an\work\tradingagents-a5-m4-fix-2` from frozen `784d16e`
 - **branch:** `feat/a5-end-user-platform`
 - **base:** `4cdd1fcabfaf89411b4e44d0b8e6b2a5359a3ef7`
 - **remote:** `https://github.com/lmpradodz23-design/tradingagents-dz23.git`
@@ -79,7 +80,7 @@
 - [x] Consolidar inventários Architect, Security e Product/UX.
 - [x] Fechar design e plano de marcos.
 - [x] Preparar ambiente Python reprodutível e reproduzir baseline.
-- [ ] Executar marcos M5–M10 do plano (M0–M4 implementados; M4 aguardando auditoria independente).
+- [ ] Executar marcos M5–M10 do plano (M0–M3 aprovados; M4 original reprovado e correção em verificação).
 - [ ] Três auditorias independentes e fix loop final.
 - [ ] Release, push, deploy e validação de produção.
 
@@ -95,7 +96,7 @@
 
 ## Current failure
 
-- Nenhuma falha de código conhecida ativa no M4; o marco depende de auditoria independente. Google/Apple dependem da configuração dos respectivos provedores OAuth no painel do Supabase para o smoke externo.
+- O commit M4 `784d16e` foi reprovado: suitability/mandato efetivo, drawdown diário, confiança de valuation/sizing, caps agregados e invariantes do ledger tinham bypasses. A candidata local corrige esses achados, mas PostgreSQL/Redis não estão acessíveis neste sandbox e a promoção continua proibida até reprodução real e auditoria independente.
 - Fontes fundamentals/news/macro/social/Polymarket continuam deliberadamente indisponíveis na plataforma; não há alegação de cobertura PIT para elas.
 - O primeiro `.venv` ficou incompleto após interrupção do instalador; foi substituído por `.venv-a5` criado com `--no-compile` e instalação concluída com exit 0.
 
@@ -144,6 +145,10 @@
 - M4 PostgreSQL adversarial: RLS cross-tenant, append-only, corrida de reserva e ledger desbalanceado recusado; **1 passed**.
 - M4 migration PostgreSQL: `head -> base -> head` verde.
 - Evidência M4: `audit/m4-portfolio-junit.xml` SHA-256 `78039e5beadccbfb3615cb3a40d46c301bc16ab95f1a0bbdeb5bb4a49b52256d`.
+- Correção M4 local: **1228 passed, 12 skipped, 71 subtests**; foco de carteira **37 passed**; ruff/compileall verdes.
+- Evidência da correção: `audit/m4-fix-local-junit-2.xml` SHA-256 `df0e60c7017a03c60226515f6342394db751d449b60c50aaf002117efb32294f`.
+- A ordenação instável de eventos LGPD foi reproduzida, corrigida por timestamp monotônico sob lock e passou **10/10** repetições focais.
+- Migration 0020: geração SQL PostgreSQL verde; execução PostgreSQL real permanece pendente porque as portas locais 55432/56379 estão fechadas neste contexto.
 
 ## Commits
 
@@ -164,7 +169,7 @@
 
 ## Next action
 
-1. congelar M4 em commit e concluir a auditoria independente do marco;
+1. congelar a correção M4 em novo commit, reproduzir migration/testes em PostgreSQL real e concluir auditoria independente;
 2. corrigir achados, se houver, e iniciar M5 somente após o veredito;
 3. manter credenciais reais fora de chat, Git, fixtures e evidências;
 4. manter a integração IQ Option em marco separado: MCP oficial sob gate de capital; `iq-core` somente experimental/read-only, nunca rota LIVE;

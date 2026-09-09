@@ -358,6 +358,7 @@ class ComplianceService:
                     actor_user_id=principal.user_id,
                     from_status=None,
                     to_status=PrivacyRequestStatus.REQUESTED.value,
+                    occurred_at=now,
                 )
             )
             self._audit(
@@ -396,6 +397,7 @@ class ComplianceService:
             )
             if request is None:
                 raise ComplianceAuthorizationDenied("privacy request is unavailable")
+            event_at = max(now, request.updated_at + timedelta(microseconds=1))
             current = PrivacyRequestStatus(request.status)
             if current is not expected_status:
                 raise ComplianceConflict("privacy request changed concurrently")
@@ -448,9 +450,9 @@ class ComplianceService:
                 PrivacyRequestStatus.EXPIRED,
                 PrivacyRequestStatus.CANCELLED,
             }:
-                request.completed_at = now
+                request.completed_at = event_at
             request.status = target_status.value
-            request.updated_at = now
+            request.updated_at = event_at
             db.add(
                 PrivacyRequestEvent(
                     tenant_id=principal.tenant_id,
@@ -459,6 +461,7 @@ class ComplianceService:
                     from_status=current.value,
                     to_status=target_status.value,
                     reason_code=request.rejection_code,
+                    occurred_at=event_at,
                 )
             )
             self._audit(

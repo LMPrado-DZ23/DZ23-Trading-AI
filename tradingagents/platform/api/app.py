@@ -60,10 +60,6 @@ from tradingagents.platform.api.schemas import (
     RecoveryRequest,
     RegisterRequest,
     ResetPasswordRequest,
-    SizingPreviewRequest,
-    SizingPreviewResponse,
-    SnapshotRequest,
-    SnapshotResponse,
     SuitabilityRequest,
     SuitabilityResponse,
     SupabaseExchangeRequest,
@@ -908,55 +904,12 @@ def create_platform_app(
             )
         except IdentityError as exc:
             _raise_portfolio_error(exc)
-        return MessageResponse(message=f"Capital registrado no ledger: {transaction_id}.")
-
-    @app.post(
-        "/v1/portfolios/{portfolio_id}/sizing-preview",
-        response_model=SizingPreviewResponse,
-    )
-    async def preview_portfolio_sizing(
-        portfolio_id: UUID,
-        payload: SizingPreviewRequest,
-        request: Request,
-        context: Annotated[TenantRequestContext, Depends(require_session)],
-    ) -> SizingPreviewResponse:
-        verify_csrf(request, security.csrf_secret)
-        require_verified(context)
-        try:
-            row = await portfolios().deterministic_size(
-                token=request.cookies[SESSION_COOKIE],
-                principal=context.principal,
-                portfolio_id=portfolio_id,
-                data=payload.model_dump(),
+        return MessageResponse(
+            message=(
+                "Saldo PAPER/SHADOW informado pelo usuário e marcado como não verificado: "
+                f"{transaction_id}."
             )
-        except IdentityError as exc:
-            _raise_portfolio_error(exc)
-        return SizingPreviewResponse(**row)
-
-    @app.post(
-        "/v1/portfolios/{portfolio_id}/snapshots",
-        response_model=SnapshotResponse,
-        status_code=201,
-    )
-    async def capture_portfolio_snapshot(
-        portfolio_id: UUID,
-        payload: SnapshotRequest,
-        request: Request,
-        context: Annotated[TenantRequestContext, Depends(require_session)],
-    ) -> SnapshotResponse:
-        verify_csrf(request, security.csrf_secret)
-        require_verified(context)
-        try:
-            row = await portfolios().capture_snapshot(
-                token=request.cookies[SESSION_COOKIE],
-                principal=context.principal,
-                portfolio_id=portfolio_id,
-                prices=payload.prices,
-                captured_at=payload.captured_at,
-            )
-        except IdentityError as exc:
-            _raise_portfolio_error(exc)
-        return SnapshotResponse(**row)
+        )
 
     @app.post("/v1/jobs", response_model=AnalysisJobCreatedResponse, status_code=202)
     async def enqueue_analysis_job(

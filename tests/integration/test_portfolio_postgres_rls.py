@@ -103,6 +103,62 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race() -> None:
             {"id": str(suitability.id)},
         )
 
+    # Database policy is stricter than the enum: M4 cannot persist a live mandate.
+    with pytest.raises(DBAPIError), engine.begin() as connection:
+        connection.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(first.tenant_id)},
+        )
+        live_mandate_id = uuid4()
+        connection.execute(
+            text(
+                "INSERT INTO portfolio_mandates "
+                "(id, tenant_id, portfolio_id, suitability_id, version, profile, mode, "
+                "status, policy_version, policy_digest, digest, limits, "
+                "created_by_user_id, effective_at, created_at) "
+                "SELECT :id, tenant_id, portfolio_id, suitability_id, version + 1, "
+                "profile, 'live_automated', 'active', policy_version, policy_digest, "
+                ":digest, limits, created_by_user_id, clock_timestamp(), clock_timestamp() "
+                "FROM portfolio_mandates WHERE id = "
+                "(SELECT current_mandate_id FROM portfolios WHERE id = :portfolio)"
+            ),
+            {
+                "id": str(live_mandate_id),
+                "portfolio": str(portfolio.id),
+                "digest": "8" * 64,
+            },
+        )
+        connection.execute(
+            text("UPDATE portfolios SET current_mandate_id = :id WHERE id = :portfolio"),
+            {"id": str(live_mandate_id), "portfolio": str(portfolio.id)},
+        )
+
+    # A direct newer suitability insert cannot leave the previous mandate active.
+    with pytest.raises(DBAPIError), engine.begin() as connection:
+        connection.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(first.tenant_id)},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO portfolio_suitability_assessments "
+                "(id, tenant_id, user_id, version, requested_profile, maximum_profile, "
+                "effective_profile, status, policy_version, answers, digest, "
+                "assessed_at, expires_at) "
+                "SELECT :id, :tenant, :actor, max(version) + 1, 'preservation', "
+                "'preservation', 'preservation', 'valid', 1, CAST('{}' AS json), "
+                ":digest, clock_timestamp(), clock_timestamp() + interval '30 days' "
+                "FROM portfolio_suitability_assessments WHERE tenant_id = :tenant "
+                "AND user_id = :actor"
+            ),
+            {
+                "id": str(uuid4()),
+                "tenant": str(first.tenant_id),
+                "actor": str(first.user_id),
+                "digest": "9" * 64,
+            },
+        )
+
     barrier = threading.Barrier(2)
 
     def reserve(index: int) -> str:
@@ -136,9 +192,11 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race() -> None:
                 "INSERT INTO portfolio_ledger_transactions "
                 "(id, tenant_id, portfolio_id, idempotency_key_hash, event_type, "
                 "reference_type, reference_id, currency, amount, digest, "
+                "provenance, verification_status, unit_delta, nav_per_unit, "
                 "created_by_user_id, occurred_at) VALUES "
                 "(:id, :tenant, :portfolio, :idem, 'funding', 'test', 'unbalanced', "
-                "'BRL', 1, :digest, :actor, clock_timestamp())"
+                "'BRL', 1, :digest, 'internal', 'internal', 0, 1, "
+                ":actor, clock_timestamp())"
             ),
             {
                 "id": str(transaction_id),
@@ -161,5 +219,101 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race() -> None:
                 "tx": str(transaction_id),
                 "portfolio": str(portfolio.id),
             },
+        )
+
+    # A transaction without postings is invalid even when its numeric sum would be zero.
+    with pytest.raises(DBAPIError), engine.begin() as connection:
+        connection.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(first.tenant_id)},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO portfolio_ledger_transactions "
+                "(id, tenant_id, portfolio_id, idempotency_key_hash, event_type, "
+                "reference_type, reference_id, currency, amount, digest, "
+                "provenance, verification_status, unit_delta, nav_per_unit, "
+                "created_by_user_id, occurred_at) VALUES "
+                "(:id, :tenant, :portfolio, :idem, 'fee', 'test', 'empty', "
+                "'BRL', 1, :digest, 'internal', 'internal', 0, 1, "
+                ":actor, clock_timestamp())"
+            ),
+            {
+                "id": str(uuid4()),
+                "tenant": str(first.tenant_id),
+                "portfolio": str(portfolio.id),
+                "idem": "d" * 64,
+                "digest": "c" * 64,
+                "actor": str(first.user_id),
+            },
+        )
+
+    # Postings cannot be redirected into another portfolio owned by the same tenant.
+    other_same_tenant = first_service.create_portfolio(
+        principal=first, name="Carteira Cross Posting", base_currency="BRL"
+    )
+    with pytest.raises(DBAPIError), engine.begin() as connection:
+        connection.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(first.tenant_id)},
+        )
+        transaction_id = uuid4()
+        connection.execute(
+            text(
+                "INSERT INTO portfolio_ledger_transactions "
+                "(id, tenant_id, portfolio_id, idempotency_key_hash, event_type, "
+                "reference_type, reference_id, currency, amount, digest, "
+                "provenance, verification_status, unit_delta, nav_per_unit, "
+                "created_by_user_id, occurred_at) VALUES "
+                "(:id, :tenant, :portfolio, :idem, 'fee', 'test', 'cross-portfolio', "
+                "'BRL', 1, :digest, 'internal', 'internal', 0, 1, "
+                ":actor, clock_timestamp())"
+            ),
+            {
+                "id": str(transaction_id),
+                "tenant": str(first.tenant_id),
+                "portfolio": str(portfolio.id),
+                "idem": "b" * 64,
+                "digest": "a" * 64,
+                "actor": str(first.user_id),
+            },
+        )
+        for account, quantity in (("cash", 1), ("external", -1)):
+            connection.execute(
+                text(
+                    "INSERT INTO portfolio_ledger_postings "
+                    "(id, tenant_id, transaction_id, portfolio_id, account, asset, quantity) "
+                    "VALUES (:id, :tenant, :tx, :portfolio, :account, 'BRL', :quantity)"
+                ),
+                {
+                    "id": str(uuid4()),
+                    "tenant": str(first.tenant_id),
+                    "tx": str(transaction_id),
+                    "portfolio": str(other_same_tenant.id),
+                    "account": account,
+                    "quantity": quantity,
+                },
+            )
+
+    # The mutable pointer cannot be rolled back to an older active history event.
+    with factory() as db, db.begin():
+        db.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(first.tenant_id)},
+        )
+        active_id = db.scalar(
+            select(Portfolio.current_mandate_id).where(Portfolio.id == portfolio.id)
+        )
+    first_service.transition_mandate(
+        principal=first, portfolio_id=portfolio.id, target_status="paused"
+    )
+    with pytest.raises(DBAPIError), engine.begin() as connection:
+        connection.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(first.tenant_id)},
+        )
+        connection.execute(
+            text("UPDATE portfolios SET current_mandate_id = :old WHERE id = :portfolio"),
+            {"old": str(active_id), "portfolio": str(portfolio.id)},
         )
     engine.dispose()

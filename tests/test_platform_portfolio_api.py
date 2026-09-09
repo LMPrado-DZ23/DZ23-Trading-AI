@@ -109,16 +109,6 @@ class FakePortfolio:
         self.calls.append(("funding", kwargs))
         return uuid4()
 
-    async def deterministic_size(self, **kwargs):
-        self.calls.append(("sizing", kwargs))
-        return {
-            "target_weight": Decimal("0.1"),
-            "target_notional": Decimal("100"),
-            "order_notional": Decimal("50"),
-            "quantity": Decimal("0.5"),
-            "limited_by": ("order_cap",),
-        }
-
 
 def _client():
     identity = VerifiedIdentity()
@@ -164,9 +154,9 @@ def test_suitability_and_portfolio_journey_is_explicit_and_authenticated() -> No
     assert [name for name, _kwargs in portfolio.calls] == ["assess", "create", "list"]
 
 
-def test_public_sizing_input_cannot_supply_executable_quantity() -> None:
+def test_untrusted_clients_cannot_create_sizing_or_valuation_inputs() -> None:
     client, portfolio, headers = _client()
-    response = client.post(
+    sizing = client.post(
         f"/v1/portfolios/{portfolio.portfolio_id}/sizing-preview",
         headers=headers,
         json={
@@ -177,8 +167,13 @@ def test_public_sizing_input_cannot_supply_executable_quantity() -> None:
             "quantity": "999999",
         },
     )
-    assert response.status_code == 422
-    assert not [call for call in portfolio.calls if call[0] == "sizing"]
+    snapshot = client.post(
+        f"/v1/portfolios/{portfolio.portfolio_id}/snapshots",
+        headers=headers,
+        json={"prices": {"BTC/USDT": "1"}, "captured_at": "2000-01-01T00:00:00Z"},
+    )
+    assert sizing.status_code == 404
+    assert snapshot.status_code == 404
 
 
 def test_live_mode_is_not_in_the_mandate_api_schema() -> None:

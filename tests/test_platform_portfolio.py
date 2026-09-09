@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -24,6 +23,7 @@ from tradingagents.platform.portfolio import (
     PortfolioError,
     PortfolioService,
     SizingInput,
+    TrustedValuation,
     cap_target_weights,
     policy_for,
     size_position,
@@ -91,6 +91,17 @@ def _active_portfolio(runtime, profile=RiskProfile.MODERATE):
         mode=RunMode.PAPER,
     )
     return portfolio, mandate
+
+
+def _trusted_valuation(service, prices=None) -> TrustedValuation:
+    observed = service._now()
+    return TrustedValuation(
+        prices=prices or {},
+        source="market_data_pit",
+        observed_at=observed,
+        available_at=observed,
+        evidence_digest="e" * 64,
+    )
 
 
 def test_suitability_always_selects_the_more_restrictive_profile(portfolio_runtime) -> None:
@@ -313,6 +324,12 @@ def test_allocation_caps_correlated_cluster_and_preserves_cash_floor() -> None:
             ("ETH/USDT", "SOL/USDT"): Decimal("0.85"),
             ("AAPL", "BTC/USDT"): Decimal("0.10"),
         },
+        asset_classes={
+            "BTC/USDT": "crypto",
+            "ETH/USDT": "crypto",
+            "SOL/USDT": "crypto",
+            "AAPL": "stock",
+        },
     )
     crypto_cluster = sum(weights[symbol] for symbol in ("BTC/USDT", "ETH/USDT", "SOL/USDT"))
     assert crypto_cluster <= policy.max_correlated_bucket_weight
@@ -353,12 +370,10 @@ def test_drawdown_opens_persistent_circuit_breaker(portfolio_runtime) -> None:
         idempotency_key="funding-breaker-0001",
         reference_id="deposit-breaker",
     )
-    captured = service._now() + timedelta(seconds=1)
-    first = service.capture_snapshot(
+    first = service.capture_trusted_snapshot(
         principal=principal,
         portfolio_id=portfolio.id,
-        prices={},
-        captured_at=captured,
+        valuation=_trusted_valuation(service),
     )
     assert first.equity == Decimal("1000")
     # A cash withdrawal is represented in the double-entry ledger internally.
@@ -367,16 +382,16 @@ def test_drawdown_opens_persistent_circuit_breaker(portfolio_runtime) -> None:
         portfolio_id=portfolio.id,
         amount=Decimal("100"),
         idempotency_key="withdraw-breaker-0001",
-        event_type="withdrawal",
-        reference_type="test",
+        event_type="fee",
+        reference_type="internal",
         reference_id="withdrawal-1",
         cash_direction=-1,
+        affects_units=False,
     )
-    second = service.capture_snapshot(
+    second = service.capture_trusted_snapshot(
         principal=principal,
         portfolio_id=portfolio.id,
-        prices={},
-        captured_at=captured + timedelta(hours=1),
+        valuation=_trusted_valuation(service),
     )
     assert second.drawdown == Decimal("0.1")
     with pytest.raises(PortfolioError, match="CIRCUIT_BREAKER_OPEN"):

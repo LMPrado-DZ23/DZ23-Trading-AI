@@ -351,47 +351,6 @@ class PortfolioFundingRequest(ApiModel):
     reference_id: str = Field(min_length=1, max_length=128)
 
 
-class SizingPreviewRequest(ApiModel):
-    conviction: Decimal = Field(ge=0, le=1, max_digits=18, decimal_places=12)
-    price: Decimal = Field(gt=0, max_digits=36, decimal_places=12)
-    realized_annual_volatility: Decimal = Field(gt=0, max_digits=18, decimal_places=12)
-    average_daily_notional: Decimal = Field(ge=0, max_digits=36, decimal_places=12)
-    current_weight: Decimal = Field(default=Decimal(0), ge=0, le=1)
-    trading_cost_bps: Decimal = Field(default=Decimal(0), ge=0, le=1000)
-    asset_class: Literal["crypto", "stock", "cash"] = "crypto"
-
-
-class SizingPreviewResponse(ApiModel):
-    target_weight: Decimal
-    target_notional: Decimal
-    order_notional: Decimal
-    quantity: Decimal
-    limited_by: tuple[str, ...]
-
-
-class SnapshotRequest(ApiModel):
-    prices: dict[str, Decimal] = Field(default_factory=dict)
-    captured_at: datetime | None = None
-
-
-class SnapshotResponse(ApiModel):
-    id: UUID
-    portfolio_id: UUID
-    sequence: int
-    cash: Decimal
-    reserved_cash: Decimal
-    market_value: Decimal
-    equity: Decimal
-    realized_pnl: Decimal
-    unrealized_pnl: Decimal
-    high_water_mark: Decimal
-    drawdown: Decimal
-    positions: dict[str, Any]
-    prices: dict[str, Any]
-    digest: str
-    captured_at: datetime
-
-
 class LlmProviderResponse(ApiModel):
     slug: str
     display_name: str

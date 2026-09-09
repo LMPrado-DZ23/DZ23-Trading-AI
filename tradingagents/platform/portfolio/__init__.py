@@ -20,7 +20,11 @@ from tradingagents.platform.portfolio.policies import (
     policy_for,
     size_position,
 )
-from tradingagents.platform.portfolio.service import PortfolioError, PortfolioService
+from tradingagents.platform.portfolio.service import (
+    PortfolioError,
+    PortfolioService,
+    TrustedValuation,
+)
 
 __all__ = [
     "POLICY_VERSION",
@@ -38,6 +42,7 @@ __all__ = [
     "SizingInput",
     "SizingResult",
     "SuitabilityRecord",
+    "TrustedValuation",
     "cap_target_weights",
     "policy_for",
     "size_position",

@@ -103,7 +103,12 @@ def test_correlated_allocation_never_breaks_cluster_or_gross_caps(values, profil
         (f"ASSET-{index}", f"ASSET-{index + 1}"): Decimal("0.90")
         for index in range(len(values) - 1)
     }
-    capped = cap_target_weights(policy, weights, correlations)
+    capped = cap_target_weights(
+        policy,
+        weights,
+        correlations,
+        asset_classes=dict.fromkeys(weights, "crypto"),
+    )
     assert sum(capped.values()) <= policy.max_correlated_bucket_weight
     assert sum(capped.values()) <= Decimal(1) - policy.minimum_cash_weight
     assert all(Decimal(0) <= value <= policy.max_position_weight for value in capped.values())

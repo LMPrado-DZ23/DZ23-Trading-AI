@@ -139,13 +139,29 @@ def cap_target_weights(
     raw_weights: dict[str, Decimal],
     correlations: dict[tuple[str, str], Decimal],
     *,
+    asset_classes: dict[str, str] | None = None,
     correlated_threshold: Decimal = Decimal("0.80"),
 ) -> dict[str, Decimal]:
-    """Apply position, gross exposure, cash and correlated-cluster caps."""
+    """Apply position, asset-class, correlation, gross and cash-floor caps.
+
+    ``asset_classes`` is mandatory for non-empty allocations.  Inferring a
+    class from a symbol would make the crypto limit bypassable through aliases.
+    """
 
     if not raw_weights:
         return {}
     symbols = tuple(sorted(raw_weights))
+    if asset_classes is None or set(asset_classes) != set(symbols):
+        raise ValueError("asset classes must cover every allocation symbol exactly")
+    if any(asset_classes[symbol] not in {"crypto", "stock"} for symbol in symbols):
+        raise ValueError("unsupported allocation asset class")
+    if (
+        not isinstance(correlated_threshold, Decimal)
+        or not correlated_threshold.is_finite()
+        or correlated_threshold < Decimal("-1")
+        or correlated_threshold > _ONE
+    ):
+        raise ValueError("correlation threshold is outside the allowed range")
     parent = {symbol: symbol for symbol in symbols}
 
     def find(symbol: str) -> str:
@@ -167,7 +183,12 @@ def cap_target_weights(
         _finite_nonnegative("target_weight", value)
         capped[symbol] = min(value, policy.max_position_weight)
     for pair, correlation in correlations.items():
-        if len(pair) != 2 or pair[0] not in capped or pair[1] not in capped:
+        if (
+            not isinstance(pair, tuple)
+            or len(pair) != 2
+            or pair[0] not in capped
+            or pair[1] not in capped
+        ):
             raise ValueError("correlation references an unknown symbol")
         if not isinstance(correlation, Decimal) or not correlation.is_finite():
             raise ValueError("correlation must be a finite Decimal")
@@ -184,6 +205,12 @@ def cap_target_weights(
             scale = policy.max_correlated_bucket_weight / total
             for symbol in members:
                 capped[symbol] *= scale
+    crypto_symbols = [symbol for symbol in symbols if asset_classes[symbol] == "crypto"]
+    crypto_total = sum((capped[symbol] for symbol in crypto_symbols), _ZERO)
+    if crypto_total > policy.max_crypto_weight:
+        scale = policy.max_crypto_weight / crypto_total
+        for symbol in crypto_symbols:
+            capped[symbol] *= scale
     gross = sum(capped.values(), _ZERO)
     gross_cap = _ONE - policy.minimum_cash_weight
     if gross > gross_cap:
