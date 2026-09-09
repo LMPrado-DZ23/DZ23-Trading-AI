@@ -2,12 +2,12 @@
 
 - **mission_id:** `tradingagents-dz23-a5-2026-09-08`
 - **objective:** concluir o TradingAgents DZ23 como plataforma web multiusuário pronta para usuários leigos, com carteira administrada, perfis de risco, execução CCXT segura e implantação verificada em `https://trading.dz23.online/`.
-- **state:** `CHECKPOINTING`
-- **iteration:** 9
+- **state:** `EXECUTING`
+- **iteration:** 10
 - **started_at:** 2026-09-08 America/Sao_Paulo
 - **last_heartbeat:** 2026-09-09
 - **last_progress_at:** 2026-09-09
-- **current_task:** congelar a capacidade assinada de portfólio, gerar candidato substituto e executar nova auditoria independente antes de promover M4.
+- **current_task:** executar M5.0: contratos, dataset congelado, calendário, security master e fronteira PIT do motor de backtest.
 
 ## Acceptance criteria
 
@@ -74,13 +74,15 @@
 - [x] M4 implementou ledger de dupla entrada, reservas concorrentes, snapshots, PnL e circuit breakers persistentes.
 - [x] M4 ligou a carteira à API autenticada sem aceitar quantidade executável como entrada.
 - [x] Migration 0019 validada em PostgreSQL com RLS forçado, histórico append-only e trigger diferido de balanço.
+- [x] M4 final congelado no commit `6eeae2b84752fe23e0e6b3e0bd6335bbdc19c71e` e aprovado por três revisões independentes.
+- [x] PostgreSQL limpo 0001→0025, upgrades incrementais, 8 integrações, 45 testes adversariais independentes e suíte integral 1308/2/71 reproduzidos.
 
 ## Pending tasks
 
 - [x] Consolidar inventários Architect, Security e Product/UX.
 - [x] Fechar design e plano de marcos.
 - [x] Preparar ambiente Python reprodutível e reproduzir baseline.
-- [ ] Executar marcos M5–M10 do plano (M0–M3 aprovados; correção M4 passou no PostgreSQL real e aguarda re-auditoria final).
+- [ ] Executar marcos M5–M10 do plano (M0–M4 concluídos; M5 em execução).
 - [ ] Três auditorias independentes e fix loop final.
 - [ ] Release, push, deploy e validação de produção.
 
@@ -94,15 +96,13 @@
 - **needed:** instalar a chave privada correspondente em `C:\Users\zodyp\.ssh\dz23` ou autorizar outra chave pública local no VPS.
 - **impact:** desenvolvimento, testes locais, artifacts e auditorias continuam; somente inspeção/deploy/smoke remoto ficam pendentes.
 
-## Current failure
+## Current limitations
 
-- A candidata `689487294e49c9090ce9eaca39f86893c0b48ba6` foi reprovada: GUCs de
-  tenant/sessão ainda eram autoridade forjável; o preflight não existia no SQL
-  offline; breaker/snapshot podiam ser alterados sob escopo falso; TTL
-  fracionário regrediu. A correção usa capacidades HMAC vinculadas à sessão,
-  backend, transação e parâmetros, nonce de uso único, preflight SQL comum e TTL
-  em microssegundos. A suíte real está verde, mas promoção continua proibida até
-  nova auditoria independente do novo commit e bundles.
+- M4 está concluído, mas reserva ainda não pode ser consumida. O M6 deve criar
+  uma porta separada e vinculada a job/lease/alocação/intenção de ordem antes de
+  qualquer worker conseguir gastar caixa.
+- A instalação limpa por Alembic em SQLite falha na migration histórica 0009;
+  PostgreSQL é o banco de produção e o fluxo local será corrigido no M9.
 - Fontes fundamentals/news/macro/social/Polymarket continuam deliberadamente indisponíveis na plataforma; não há alegação de cobertura PIT para elas.
 - O primeiro `.venv` ficou incompleto após interrupção do instalador; foi substituído por `.venv-a5` criado com `--no-compile` e instalação concluída com exit 0.
 
@@ -178,6 +178,12 @@
   portas privadas de reserve/release; guard role sem login/BYPASSRLS; sessão,
   tenant e RBAC derivados; consumo inexistente; PostgreSQL focal **1 passed**,
   integração **11 passed**, carteira/API/SQLite **75 passed**.
+- Candidata M4 final `6eeae2b`: suíte integral com PostgreSQL/Redis reais
+  **1308 passed, 2 skipped, 71 subtests**; integração limpa **8 passed**;
+  fresh migration 0001→0025 e upgrades 0022→0025 verdes; Ruff/compileall verdes.
+- Auditoria adversarial independente da candidata M4: PostgreSQL 16 descartável,
+  migração limpa, **8 integrações** e **45 testes focais** verdes; três
+  pareceres independentes aprovaram sem novo achado.
 
 ## Commits
 
@@ -198,8 +204,9 @@
 
 ## Next action
 
-1. congelar a fronteira privada de reservas em novo commit e regenerar bundles;
-2. executar re-auditoria independente e iniciar M5 somente após o veredito;
+1. implementar M5.0 sem consultar vendor durante replay: contratos imutáveis,
+   dataset congelado, calendário e security master PIT;
+2. submeter M5.0 a gate independente antes do ledger/fill M5.2;
 3. manter credenciais reais fora de chat, Git, fixtures e evidências;
 4. manter a integração IQ Option em marco separado: MCP oficial sob gate de capital; `iq-core` somente experimental/read-only, nunca rota LIVE;
 5. configurar Google e Apple no Supabase quando os Client IDs/secrets externos forem fornecidos, sem bloquear os demais marcos.

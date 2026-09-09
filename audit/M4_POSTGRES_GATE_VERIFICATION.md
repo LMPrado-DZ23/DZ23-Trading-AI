@@ -1,5 +1,14 @@
 # M4 PostgreSQL 17 Dynamic Gate Verification
 
+> **Superseding final gate (2026-09-09):** migrations 0022–0025 add private
+> replay/release capability binding, database-consistent TTL precedence and
+> post-lock revalidation. Commit
+> `6eeae2b84752fe23e0e6b3e0bd6335bbdc19c71e` passed a clean migration to 0025,
+> every incremental upgrade from 0022, 8 fresh PostgreSQL/Redis integrations,
+> and the full **1308 passed, 2 skipped, 71 subtests** suite. Three independent
+> reviews approved it. The historical detail below remains evidence of the
+> earlier boundary evolution, not the final commit identity.
+
 - Date: `2026-09-09` (`America/Sao_Paulo`).
 - Superseded candidates: `1cc9584d2e4be987ba11d48ce15dafdb4180b4ce`,
   `feecf5500447d45ed656f0d364e0ace3004630f0` and

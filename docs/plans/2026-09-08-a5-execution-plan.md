@@ -76,7 +76,7 @@ independente sobre o commit congelado.
 
 ## M4 — Carteira, suitability e motor de risco
 
-- [ ] implementar integralmente `ESPECIFICACAO_CARTEIRA_PERFIS_RISCO_A5.md`;
+- [x] implementar integralmente `ESPECIFICACAO_CARTEIRA_PERFIS_RISCO_A5.md`;
 - [x] suitability versionado e perfil efetivo mais restritivo;
 - [x] policies Preservação, Conservador, Moderado, Arrojado e Agressivo;
 - [x] mandato e lifecycle;
@@ -88,9 +88,10 @@ independente sobre o commit congelado.
 
 **Gate:** property-based tests provam caps, precisão, concorrência e fail-closed; LLM não alcança quantidade executável.
 
-**Verificação do implementador:** concluída e registrada em
-`audit/M4_IMPLEMENTER_VERIFICATION.md`. A promoção depende de auditoria
-independente sobre o commit congelado.
+**Gate concluído:** commit congelado `6eeae2b`; três revisões independentes
+aprovaram a fronteira final. Evidência consolidada em
+`audit/M4_FINAL_INDEPENDENT_REVIEW.md`. A conclusão do marco não promove release,
+não habilita LIVE e não substitui a decisão humana de promoção.
 
 ## M5 — Backtest e avaliação
 

@@ -1,5 +1,13 @@
 # M4 Audit Fix — Implementer Verification
 
+> **Final checkpoint:** the superseding frozen code commit is
+> `6eeae2b84752fe23e0e6b3e0bd6335bbdc19c71e`. Migration 0025 closes the final
+> reservation replay TOCTOU by locking the portfolio and repeating capability
+> verification before TTL validation and entry into the protected 0022
+> implementation. The final suite is **1308 passed, 2 skipped, 71 subtests**;
+> fresh PostgreSQL/Redis integration is **8 passed**. Three independent reviews
+> approved the final boundary. See `audit/M4_FINAL_INDEPENDENT_REVIEW.md`.
+
 - Base commit: `784d16e0605a49ad146415fc7ee726e76efa716c`
 - Scope: corrections to the independently reported M4 portfolio, suitability,
   ledger, valuation, allocation and API trust-boundary findings.
