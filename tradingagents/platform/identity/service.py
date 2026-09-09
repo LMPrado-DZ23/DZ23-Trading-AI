@@ -96,6 +96,7 @@ class SessionProfile:
     role: MembershipRole
     expires_at: datetime
     email_verified: bool
+    session_token_hash: str = field(default="", repr=False)
 
 
 @dataclass(frozen=True)
@@ -105,6 +106,7 @@ class IdentityPrincipal:
     membership_id: UUID
     session_id: UUID
     role: MembershipRole
+    session_token_hash: str = field(default="", repr=False)
 
 
 class IdentityService:
@@ -609,6 +611,7 @@ class IdentityService:
                 membership_id=membership.id,
                 session_id=user_session.id,
                 role=MembershipRole(membership.role),
+                session_token_hash=token_hash,
             )
 
     def authenticate_session_token(self, *, token: str, touch: bool = False) -> SessionProfile:
@@ -640,6 +643,7 @@ class IdentityService:
                 role=MembershipRole(membership.role),
                 expires_at=user_session.expires_at,
                 email_verified=user.email_verified_at is not None,
+                session_token_hash=user_session.token_hash,
             )
 
     def tenant_id_by_slug(self, slug: str) -> UUID:

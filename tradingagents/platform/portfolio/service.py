@@ -5,6 +5,9 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import re
+import secrets
+import struct
 import threading
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
@@ -48,6 +51,8 @@ _PROFILE_ORDER = {
     RiskProfile.AGGRESSIVE: 4,
 }
 _ZERO = Decimal("0")
+_CAPABILITY_KID = "portfolio-capability-v1"
+_CAPABILITY_TTL_SECONDS = 20
 
 
 class PortfolioError(RuntimeError):
@@ -197,11 +202,15 @@ class PortfolioService:
         session_factory: sessionmaker[Session],
         *,
         idempotency_digest_key: bytes,
+        capability_signing_key: bytes | None = None,
     ) -> None:
         if len(idempotency_digest_key) < 32:
             raise ValueError("portfolio idempotency key must contain at least 32 bytes")
         self._sessions = session_factory
         self._digest_key = idempotency_digest_key
+        if capability_signing_key is not None and len(capability_signing_key) < 32:
+            raise ValueError("portfolio capability key must contain at least 32 bytes")
+        self._capability_key = capability_signing_key
         self._reservation_lock = threading.Lock()
         self._suitability_lock = threading.Lock()
 
@@ -217,19 +226,83 @@ class PortfolioService:
                 {"tenant_id": str(tenant_id)},
             )
 
-    @classmethod
-    def _set_reservation_scope(
-        cls, db: Session, principal: IdentityPrincipal
+    @staticmethod
+    def _capability_message(*fields: str) -> bytes:
+        message = bytearray(b"TA-CAP-V1\0")
+        for field in fields:
+            encoded = field.encode("utf-8")
+            if len(encoded) > 4096:
+                raise PortfolioError("PORTFOLIO_CAPABILITY_INVALID")
+            message.extend(struct.pack(">I", len(encoded)))
+            message.extend(encoded)
+        return bytes(message)
+
+    def _mint_capability(
+        self,
+        *,
+        principal: IdentityPrincipal,
+        audience: str,
+        fields: tuple[str, ...],
+        now: datetime,
+    ) -> dict[str, Any]:
+        if self._capability_key is None or not re.fullmatch(
+            r"[0-9a-f]{64}", principal.session_token_hash
+        ):
+            raise PortfolioError("PORTFOLIO_CAPABILITY_UNAVAILABLE")
+        issued_at = int(now.timestamp())
+        expires_at = issued_at + _CAPABILITY_TTL_SECONDS
+        nonce = secrets.token_hex(32)
+        common = (
+            audience,
+            str(principal.session_id),
+            principal.session_token_hash,
+            *fields,
+            str(issued_at),
+            str(expires_at),
+            nonce,
+        )
+        message = self._capability_message(*common)
+        mac = hmac.new(self._capability_key, message, hashlib.sha256).hexdigest()
+        return {
+            "cap_kid": _CAPABILITY_KID,
+            "cap_session_id": str(principal.session_id),
+            "cap_token_hash": principal.session_token_hash,
+            "cap_issued_at": issued_at,
+            "cap_expires_at": expires_at,
+            "cap_nonce": nonce,
+            "cap_mac": mac,
+        }
+
+    def _set_portfolio_scope(
+        self, db: Session, principal: IdentityPrincipal
     ) -> None:
-        cls._set_tenant_scope(db, principal.tenant_id)
-        if db.get_bind().dialect.name == "postgresql":
-            db.execute(
-                text(
-                    "SELECT set_config('app.portfolio_session_id', "
-                    ":session_id, true)"
-                ),
-                {"session_id": str(principal.session_id)},
-            )
+        PortfolioService._set_tenant_scope(db, principal.tenant_id)
+        if db.get_bind().dialect.name != "postgresql":
+            return
+        backend_pid, transaction_id, database_now = db.execute(
+            text("SELECT pg_backend_pid(), txid_current(), clock_timestamp()")
+        ).one()
+        capability = self._mint_capability(
+            principal=principal,
+            audience="portfolio.session.v1",
+            fields=(str(backend_pid), str(transaction_id)),
+            now=database_now,
+        )
+        db.execute(
+            text(
+                "SELECT set_config('app.portfolio_session_id', :cap_session_id, true), "
+                "set_config('app.portfolio_token_hash', :cap_token_hash, true), "
+                "set_config('app.portfolio_context_kid', :cap_kid, true), "
+                "set_config('app.portfolio_context_issued_at', CAST(:cap_issued_at AS text), true), "
+                "set_config('app.portfolio_context_expires_at', CAST(:cap_expires_at AS text), true), "
+                "set_config('app.portfolio_context_nonce', :cap_nonce, true), "
+                "set_config('app.portfolio_context_mac', :cap_mac, true), "
+                "set_config('app.portfolio_context_backend_pid', CAST(:backend_pid AS text), true), "
+                "set_config('app.portfolio_context_txid', CAST(:transaction_id AS text), true)"
+            ),
+            capability
+            | {"backend_pid": backend_pid, "transaction_id": transaction_id},
+        )
 
     @staticmethod
     def _authorize(principal: IdentityPrincipal, *, write: bool = False) -> None:
@@ -256,6 +329,21 @@ class PortfolioService:
         if value < 0 or (positive and value <= 0):
             raise PortfolioError(f"{name.upper()}_INVALID")
         return value
+
+    @staticmethod
+    def _canonical_decimal(value: Decimal) -> str:
+        rendered = format(value, "f")
+        if "." in rendered:
+            rendered = rendered.rstrip("0").rstrip(".")
+        return "0" if rendered in {"", "-0"} else rendered
+
+    @staticmethod
+    def _ttl_microseconds(ttl: timedelta) -> int:
+        return (
+            ttl.days * 86_400_000_000
+            + ttl.seconds * 1_000_000
+            + ttl.microseconds
+        )
 
     def assess_suitability(
         self,
@@ -293,7 +381,7 @@ class PortfolioService:
             key=lambda profile: _PROFILE_ORDER[profile],
         )
         with self._sessions() as db, db.begin():
-            self._set_tenant_scope(db, principal.tenant_id)
+            self._set_portfolio_scope(db, principal)
             now = self._database_now(db)
             payload = {
                 "tenant_id": str(principal.tenant_id),
@@ -491,7 +579,7 @@ class PortfolioService:
             raise PortfolioError("PORTFOLIO_INPUT_INVALID")
         try:
             with self._sessions() as db, db.begin():
-                self._set_tenant_scope(db, principal.tenant_id)
+                self._set_portfolio_scope(db, principal)
                 row = Portfolio(
                     tenant_id=principal.tenant_id,
                     owner_user_id=principal.user_id,
@@ -521,7 +609,7 @@ class PortfolioService:
         if mode not in {RunMode.BACKTEST, RunMode.SHADOW, RunMode.PAPER}:
             raise PortfolioError("CAPITAL_MODE_NOT_ENABLED")
         with self._sessions() as db, db.begin():
-            self._set_tenant_scope(db, principal.tenant_id)
+            self._set_portfolio_scope(db, principal)
             now = self._database_now(db)
             owner_user_id = db.scalar(
                 select(Portfolio.owner_user_id).where(
@@ -645,7 +733,7 @@ class PortfolioService:
         if target_status not in {"active", "paused", "closed"}:
             raise PortfolioError("MANDATE_TRANSITION_INVALID")
         with self._sessions() as db, db.begin():
-            self._set_tenant_scope(db, principal.tenant_id)
+            self._set_portfolio_scope(db, principal)
             now = self._database_now(db)
             owner_user_id: UUID | None = None
             if target_status == "active":
@@ -816,7 +904,7 @@ class PortfolioService:
         key_hash = self._key_hash(idempotency_key)
         try:
             with self._sessions() as db, db.begin():
-                self._set_tenant_scope(db, principal.tenant_id)
+                self._set_portfolio_scope(db, principal)
                 now = self._database_now(db)
                 portfolio = db.scalar(
                     select(Portfolio)
@@ -948,7 +1036,7 @@ class PortfolioService:
                 return row
         except IntegrityError:
             with self._sessions() as db, db.begin():
-                self._set_tenant_scope(db, principal.tenant_id)
+                self._set_portfolio_scope(db, principal)
                 existing = db.scalar(
                     select(LedgerTransaction).where(
                         LedgerTransaction.tenant_id == principal.tenant_id,
@@ -1000,10 +1088,8 @@ class PortfolioService:
         key_hash = self._key_hash(idempotency_key)
         if not timedelta(seconds=30) <= ttl <= timedelta(hours=1):
             raise PortfolioError("RESERVATION_TTL_INVALID")
-        if not ttl.total_seconds().is_integer():
-            raise PortfolioError("RESERVATION_TTL_INVALID")
         with self._reservation_lock, self._sessions() as db, db.begin():
-            self._set_reservation_scope(db, principal)
+            self._set_portfolio_scope(db, principal)
             now = self._database_now(db)
             self._validate_allocation(proposal, now=now)
             portfolio = db.scalar(
@@ -1185,6 +1271,7 @@ class PortfolioService:
                 )
             reservation = self._create_reservation(
                 db,
+                principal=principal,
                 portfolio=portfolio,
                 mandate=mandate,
                 key_hash=key_hash,
@@ -1243,12 +1330,10 @@ class PortfolioService:
             raise PortfolioError("PURPOSE_DIGEST_INVALID")
         if not timedelta(seconds=30) <= ttl <= timedelta(hours=1):
             raise PortfolioError("RESERVATION_TTL_INVALID")
-        if not ttl.total_seconds().is_integer():
-            raise PortfolioError("RESERVATION_TTL_INVALID")
         key_hash = self._key_hash(idempotency_key)
         try:
             with self._sessions() as db, db.begin():
-                self._set_reservation_scope(db, principal)
+                self._set_portfolio_scope(db, principal)
                 now = self._database_now(db)
                 portfolio, mandate = self._reservation_authorization_context(
                     db,
@@ -1274,6 +1359,7 @@ class PortfolioService:
                     raise PortfolioError("INSUFFICIENT_AVAILABLE_CASH")
                 row = self._create_reservation(
                     db,
+                    principal=principal,
                     portfolio=portfolio,
                     mandate=mandate,
                     key_hash=key_hash,
@@ -1288,7 +1374,7 @@ class PortfolioService:
             if not self._is_reservation_idempotency_conflict(exc):
                 raise
             with self._sessions() as db, db.begin():
-                self._set_reservation_scope(db, principal)
+                self._set_portfolio_scope(db, principal)
                 now = self._database_now(db)
                 _portfolio, mandate = self._reservation_authorization_context(
                     db,
@@ -1314,14 +1400,22 @@ class PortfolioService:
     def release_reservation(self, *, principal: IdentityPrincipal, reservation_id: UUID) -> str:
         self._authorize(principal, write=True)
         with self._sessions() as db, db.begin():
-            self._set_reservation_scope(db, principal)
+            self._set_portfolio_scope(db, principal)
             if db.get_bind().dialect.name == "postgresql":
+                now = self._database_now(db)
+                capability = self._mint_capability(
+                    principal=principal,
+                    audience="portfolio.release.v1",
+                    fields=(str(reservation_id),),
+                    now=now,
+                )
                 status = db.scalar(
                     text(
                         "SELECT tradingagents_private.portfolio_release_cash_v1("
-                        ":reservation_id)"
+                        ":reservation_id, :cap_kid, :cap_session_id, :cap_token_hash, "
+                        ":cap_issued_at, :cap_expires_at, :cap_nonce, :cap_mac)"
                     ),
-                    {"reservation_id": reservation_id},
+                    {"reservation_id": reservation_id} | capability,
                 )
                 if not isinstance(status, str):
                     raise PortfolioError("RESERVATION_NOT_FOUND")
@@ -1342,10 +1436,11 @@ class PortfolioService:
                 row.released_at = now
             return row.status
 
-    @staticmethod
     def _create_reservation(
+        self,
         db: Session,
         *,
+        principal: IdentityPrincipal,
         portfolio: Portfolio,
         mandate: PortfolioMandate,
         key_hash: str,
@@ -1355,10 +1450,25 @@ class PortfolioService:
         now: datetime,
     ) -> CashReservation:
         if db.get_bind().dialect.name == "postgresql":
+            ttl_microseconds = self._ttl_microseconds(ttl)
+            capability = self._mint_capability(
+                principal=principal,
+                audience="portfolio.reserve.v1",
+                fields=(
+                    str(portfolio.id),
+                    self._canonical_decimal(amount),
+                    purpose_digest,
+                    key_hash,
+                    str(ttl_microseconds),
+                ),
+                now=now,
+            )
             statement = select(CashReservation).from_statement(
                 text(
                     "SELECT * FROM tradingagents_private.portfolio_reserve_cash_v1("
-                    ":portfolio_id, :amount, :purpose_digest, :key_hash, :ttl_seconds)"
+                    ":portfolio_id, :amount, :purpose_digest, :key_hash, :ttl_microseconds, "
+                    ":cap_kid, :cap_session_id, :cap_token_hash, :cap_issued_at, "
+                    ":cap_expires_at, :cap_nonce, :cap_mac)"
                 )
             )
             row = db.scalars(
@@ -1368,8 +1478,9 @@ class PortfolioService:
                     "amount": amount,
                     "purpose_digest": purpose_digest,
                     "key_hash": key_hash,
-                    "ttl_seconds": int(ttl.total_seconds()),
-                },
+                    "ttl_microseconds": ttl_microseconds,
+                }
+                | capability,
             ).one()
             db.expire(portfolio, ["balance_version"])
             return row
@@ -1383,6 +1494,7 @@ class PortfolioService:
             status="active",
             purpose_digest=purpose_digest,
             expires_at=now + ttl,
+            created_at=now,
         )
         db.add(row)
         portfolio.balance_version += 1
@@ -1392,7 +1504,7 @@ class PortfolioService:
     def list_portfolios(self, *, principal: IdentityPrincipal) -> tuple[PortfolioOverview, ...]:
         self._authorize(principal)
         with self._sessions() as db, db.begin():
-            self._set_tenant_scope(db, principal.tenant_id)
+            self._set_portfolio_scope(db, principal)
             now = self._database_now(db)
             rows = db.scalars(
                 select(Portfolio)
@@ -1484,7 +1596,7 @@ class PortfolioService:
 
         self._authorize(principal)
         with self._sessions() as db, db.begin():
-            self._set_tenant_scope(db, principal.tenant_id)
+            self._set_portfolio_scope(db, principal)
             if not db.scalar(
                 select(func.count()).select_from(Portfolio).where(
                     Portfolio.id == portfolio_id,
@@ -1535,7 +1647,7 @@ class PortfolioService:
     ) -> PortfolioSnapshot:
         self._authorize(principal, write=True)
         with self._sessions() as db, db.begin():
-            self._set_tenant_scope(db, principal.tenant_id)
+            self._set_portfolio_scope(db, principal)
             now = self._database_now(db)
             portfolio = db.scalar(
                 select(Portfolio)

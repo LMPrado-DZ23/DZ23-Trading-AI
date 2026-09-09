@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -27,6 +29,11 @@ from tradingagents.platform.portfolio import (
 )
 
 APP_URL = os.environ.get("TRADINGAGENTS_TEST_POSTGRES_APP_URL")
+_TOKEN_PEPPER = b"p" * 32
+_CAPABILITY_MASTER = b"test-session-token-pepper-32-bytes-minimum-2026"
+_CAPABILITY_KEY = hmac.new(
+    _CAPABILITY_MASTER, b"portfolio-capability-v1", hashlib.sha256
+).digest()
 
 
 def _principal(identity: IdentityService, label: str) -> IdentityPrincipal:
@@ -51,6 +58,9 @@ def _principal(identity: IdentityService, label: str) -> IdentityPrincipal:
         membership_id=row.membership_id,
         session_id=session.session_id,
         role=MembershipRole.OWNER,
+        session_token_hash=TokenHasher(_TOKEN_PEPPER).digest(
+            session.token, purpose=f"session:{row.tenant_id}"
+        ),
     )
 
 
@@ -86,7 +96,7 @@ def _ready(service: PortfolioService, principal: IdentityPrincipal, label: str):
     # Keep trusted valuation timestamps on the same clock used by the
     # PostgreSQL timeline gate. Host/container clocks can differ slightly.
     with service._sessions() as db, db.begin():
-        service._set_tenant_scope(db, principal.tenant_id)
+        service._set_portfolio_scope(db, principal)
         observed = service._database_now(db)
     service.capture_trusted_snapshot(
         principal=principal,
@@ -106,21 +116,58 @@ def _ready(service: PortfolioService, principal: IdentityPrincipal, label: str):
 def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -> None:
     engine = create_engine(APP_URL, pool_pre_ping=True)
     factory = sessionmaker(engine, expire_on_commit=False)
-    identity = IdentityService(factory, token_hasher=TokenHasher(b"p" * 32))
+    identity = IdentityService(factory, token_hasher=TokenHasher(_TOKEN_PEPPER))
     first = _principal(identity, "A")
     second = _principal(identity, "B")
-    first_service = PortfolioService(factory, idempotency_digest_key=b"a" * 32)
-    second_service = PortfolioService(factory, idempotency_digest_key=b"a" * 32)
+    first_service = PortfolioService(
+        factory,
+        idempotency_digest_key=b"a" * 32,
+        capability_signing_key=_CAPABILITY_KEY,
+    )
+    second_service = PortfolioService(
+        factory,
+        idempotency_digest_key=b"a" * 32,
+        capability_signing_key=_CAPABILITY_KEY,
+    )
     suitability, portfolio = _ready(first_service, first, "A")
     _other_suitability, other_portfolio = _ready(second_service, second, "B")
 
-    with factory() as db, db.begin():
+    # A caller-controlled tenant GUC is not authentication. Without a signed,
+    # transaction-bound session context, even same-tenant rows fail closed.
+    with pytest.raises(DBAPIError), factory() as db, db.begin():
         db.execute(
             text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
             {"tenant_id": str(first.tenant_id)},
         )
-        assert db.scalar(select(Portfolio).where(Portfolio.id == other_portfolio.id)) is None
-        assert db.scalar(select(Portfolio).where(Portfolio.id == portfolio.id)) is not None
+        db.scalar(select(Portfolio).where(Portfolio.id == portfolio.id))
+    assert {item.id for item in first_service.list_portfolios(principal=first)} == {
+        portfolio.id
+    }
+    assert {item.id for item in second_service.list_portfolios(principal=second)} == {
+        other_portfolio.id
+    }
+
+    # Reproduce the original cross-tenant finding: the app role can discover a
+    # victim session through the legacy identity RLS, but that session id plus a
+    # forged tenant GUC is still insufficient to cross the portfolio boundary.
+    with pytest.raises(DBAPIError), engine.begin() as connection:
+        connection.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(second.tenant_id)},
+        )
+        discovered = connection.scalar(
+            text("SELECT id FROM identity_sessions WHERE id = :session_id"),
+            {"session_id": str(second.session_id)},
+        )
+        assert discovered == second.session_id
+        connection.execute(
+            text("SELECT set_config('app.portfolio_session_id', :session_id, true)"),
+            {"session_id": str(second.session_id)},
+        )
+        connection.scalar(
+            text("SELECT count(*) FROM portfolios WHERE id = :portfolio_id"),
+            {"portfolio_id": str(other_portfolio.id)},
+        )
 
     with pytest.raises(DBAPIError), engine.begin() as connection:
         connection.execute(
@@ -198,7 +245,11 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -
     barrier = threading.Barrier(2)
 
     def reserve(index: int) -> str:
-        local = PortfolioService(factory, idempotency_digest_key=b"a" * 32)
+        local = PortfolioService(
+            factory,
+            idempotency_digest_key=b"a" * 32,
+            capability_signing_key=_CAPABILITY_KEY,
+        )
         barrier.wait()
         try:
             local.reserve_cash(
@@ -240,6 +291,55 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -
         purpose_digest="2" * 64,
         idempotency_key="pg-stale-replay-guard-0001",
     )
+    fractional_ttl = first_service.reserve_cash(
+        principal=first,
+        portfolio_id=portfolio.id,
+        amount=Decimal("1"),
+        purpose_digest="a" * 64,
+        idempotency_key="pg-fractional-ttl-0001",
+        ttl=timedelta(seconds=30, microseconds=1),
+    )
+    assert fractional_ttl.expires_at - fractional_ttl.created_at == timedelta(
+        seconds=30, microseconds=1
+    )
+
+    # Operation capabilities bind every capital parameter and are one-use.
+    cap_key_hash = first_service._key_hash("pg-capability-replay-0001")
+    cap_now = datetime.now(UTC)
+    reserve_capability = first_service._mint_capability(
+        principal=first,
+        audience="portfolio.reserve.v1",
+        fields=(
+            str(portfolio.id),
+            "1",
+            "b" * 64,
+            cap_key_hash,
+            "30000000",
+        ),
+        now=cap_now,
+    )
+    capability_sql = text(
+        "SELECT * FROM tradingagents_private.portfolio_reserve_cash_v1("
+        ":portfolio_id,:amount,:purpose,:key_hash,:ttl_microseconds,:cap_kid,"
+        ":cap_session_id,:cap_token_hash,:cap_issued_at,:cap_expires_at,"
+        ":cap_nonce,:cap_mac)"
+    )
+    capability_params = {
+        "portfolio_id": str(portfolio.id),
+        "amount": Decimal("1"),
+        "purpose": "b" * 64,
+        "key_hash": cap_key_hash,
+        "ttl_microseconds": 30_000_000,
+    } | reserve_capability
+    with pytest.raises(DBAPIError), factory() as db, db.begin():
+        first_service._set_portfolio_scope(db, first)
+        db.execute(capability_sql, capability_params | {"amount": Decimal("2")})
+    with factory() as db, db.begin():
+        first_service._set_portfolio_scope(db, first)
+        db.execute(capability_sql, capability_params).one()
+    with pytest.raises(DBAPIError), factory() as db, db.begin():
+        first_service._set_portfolio_scope(db, first)
+        db.execute(capability_sql, capability_params)
     with engine.begin() as connection:
         connection.execute(
             text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
@@ -267,7 +367,8 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -
             text(
                 "SELECT has_function_privilege(current_user, "
                 "'tradingagents_private.portfolio_reserve_cash_v1"
-                "(uuid,numeric,text,text,integer)', 'EXECUTE')"
+                "(uuid,numeric,text,text,bigint,text,uuid,text,bigint,bigint,text,text)', "
+                "'EXECUTE')"
             )
         )
         assert connection.scalar(
@@ -562,11 +663,9 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -
             )
 
     # The mutable pointer cannot be rolled back to an older active history event.
+    breaker_id = uuid4()
     with factory() as db, db.begin():
-        db.execute(
-            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
-            {"tenant_id": str(first.tenant_id)},
-        )
+        first_service._set_portfolio_scope(db, first)
         active_id = db.scalar(
             select(Portfolio.current_mandate_id).where(Portfolio.id == portfolio.id)
         )
@@ -610,10 +709,7 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -
             },
         )
     with factory() as db, db.begin():
-        db.execute(
-            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
-            {"tenant_id": str(first.tenant_id)},
-        )
+        first_service._set_portfolio_scope(db, first)
         version_before_release = db.scalar(
             select(Portfolio.balance_version).where(Portfolio.id == portfolio.id)
         )
@@ -632,10 +728,7 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -
         == "released"
     )
     with factory() as db, db.begin():
-        db.execute(
-            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
-            {"tenant_id": str(first.tenant_id)},
-        )
+        first_service._set_portfolio_scope(db, first)
         assert db.scalar(
             select(Portfolio.balance_version).where(Portfolio.id == portfolio.id)
         ) == version_before_release + 1
@@ -736,12 +829,9 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -
 
     # A direct caller of the narrow RPC cannot reserve while the deterministic
     # circuit breaker is open, even with an otherwise valid session scope.
-    with engine.begin() as connection:
-        connection.execute(
-            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
-            {"tenant_id": str(first.tenant_id)},
-        )
-        connection.execute(
+    with factory() as db, db.begin():
+        first_service._set_portfolio_scope(db, first)
+        db.execute(
             text(
                 "INSERT INTO portfolio_circuit_breakers "
                 "(id, tenant_id, portfolio_id, mandate_id, kind, status, "
@@ -750,12 +840,24 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -
                 "'open', 0.30, 0.20, :digest, clock_timestamp())"
             ),
             {
-                "id": str(uuid4()),
+                "id": str(breaker_id),
                 "tenant": str(first.tenant_id),
                 "portfolio": str(portfolio.id),
                 "mandate": str(replacement.id),
                 "digest": "c" * 64,
             },
+        )
+    with pytest.raises(DBAPIError), engine.begin() as connection:
+        connection.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(first.tenant_id)},
+        )
+        connection.execute(
+            text(
+                "UPDATE portfolio_circuit_breakers SET status='reset', "
+                "reset_at=clock_timestamp(), reset_by_user_id=:user_id WHERE id=:id"
+            ),
+            {"id": str(breaker_id), "user_id": str(first.user_id)},
         )
     with pytest.raises(DBAPIError), engine.begin() as connection:
         connection.execute(

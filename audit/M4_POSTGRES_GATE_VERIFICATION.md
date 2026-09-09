@@ -51,18 +51,30 @@
    actor, role, portfolio, mandate, currency and database time; bind the opaque
    authenticated session; and reject unsafe values before taking authority.
    Consuming a reservation is intentionally unavailable in M4.
+10. A second independent review proved that those tenant/session GUCs were
+    themselves forgeable. Migration 0021 requires a server-minted HMAC
+    capability bound to session token hash, backend PID and transaction id for
+    every application portfolio access. Reserve/release use separate one-time,
+    parameter-bound capabilities.
+11. PostgreSQL offline SQL previously skipped the Python legacy preflight. The
+    full preflight is now emitted before M4 DDL in both plans. A deliberately
+    incomplete ledger transaction was rejected with the schema version left at
+    0019.
+12. Integer-only TTL validation rejected valid fractional values. TTLs now cross
+    the Python/SQL boundary as exact microseconds.
 
 All artifacts generated before these corrections, including the `1cc9584`
 bundles and `m4-fix-*-6/9/10/11/12` evidence, were removed as superseded.
 
 ## PostgreSQL assertions
 
-- Fresh online migration from an empty PostgreSQL 17 database through 0020:
+- Fresh online migration from an empty PostgreSQL 17 database through 0021:
   passed.
 - Generated offline SQL starts with `BEGIN`, ends with `COMMIT`, contains the
   `active/consumed` operational gate and the grouped `CASE` comparison.
 - Offline SQL was applied with `ON_ERROR_STOP=1` to a second disposable database
-  prepared at 0019. It committed and left `alembic_version=20260908_0020`.
+  prepared at 0019. It committed and left `alembic_version=20260909_0021`, with
+  zero capability keys and readiness false.
 - The installed function body contains
   `requires_operational := NEW.status IN ('active','consumed')`.
 - Direct `active -> consumed` after mandate pause is rejected by PostgreSQL.
@@ -89,6 +101,9 @@ bundles and `m4-fix-*-6/9/10/11/12` evidence, were removed as superseded.
 - `tradingagents_reservation_api` is `NOLOGIN`, `NOSUPERUSER`, `NOCREATEDB`,
   `NOCREATEROLE`, `NOINHERIT`, `NOREPLICATION`, `NOBYPASSRLS` and has no role
   memberships.
+- A forged victim tenant plus a discovered victim session id cannot read a
+  portfolio without the signed transaction capability. Amount tampering and
+  operation-capability replay are rejected.
 - `tradingagents_app` and `tradingagents_worker` are `NOSUPERUSER`,
   `NOCREATEDB`, `NOCREATEROLE`, `NOINHERIT`, `NOREPLICATION` and `NOBYPASSRLS`.
 - Downgrade 0020 -> 0019 exits non-zero with
@@ -103,25 +118,30 @@ bundles and `m4-fix-*-6/9/10/11/12` evidence, were removed as superseded.
 - Focused PostgreSQL RLS/race/operational-transition test: `1 passed`.
   - `audit/m4-final-postgresql-junit.xml`
   - bytes: `401`
-  - SHA-256 `f139c4f6a5b1781555a42e74ea519f9d6c7cc2a71d5a287c06b76d627bf296eb`
+  - SHA-256 `66af43b49966ed7433a121894cae0ff481760cbfc19cb5d96f20c41c844d597b`
 - PostgreSQL/Redis integration directory: `11 passed`.
   - `audit/m4-final-integration-junit.xml`
-  - bytes: `1915`
-  - SHA-256 `158cddb60f86f38dfe333a542b0b5337d459eb22bd6bdda509f2143d9a1d2cb1`
-- Full suite with real PostgreSQL and Redis: `1279 passed, 1 skipped`,
-  `71 subtests passed`, `21 warnings`.
+  - bytes: `1914`
+  - SHA-256 `a13105902e6a90e0ac88236a93d161384e69fc3241d8be13600714cbca0962c2`
+- Full suite with real PostgreSQL and Redis: `1282 passed, 1 skipped`,
+  `71 subtests passed`, `22 warnings`.
   - Only skip: opt-in live DeepSeek request, unrelated to M4.
   - `audit/m4-final-full-junit.xml`
-  - bytes: `175202`
-  - SHA-256 `55581db123995028cf646bfffb0576c947532017b899b88cf81073ca19ce8d7c`
+  - bytes: `175612`
+  - SHA-256 `b4812cf0132b73e5ab1bd0071de6591329ff991abe46ed64783f56c7898f1477`
 - Executed offline SQL:
   - `audit/m4-final-postgresql-offline.sql`
-  - bytes: `36993`
-  - SHA-256 `4b734a16543ac2deb8811a0f9722d19485f7f09757d391f4cb7e0297bb33b4c1`
+  - bytes: `60824`
+  - SHA-256 `158e32cb99cd6565cdb246e0227625c81d9dd9ea1e1c900ca01020be8df138ab`
 - Offline generation log:
   - `audit/m4-final-postgresql-offline.log`
-  - bytes: `341`
-  - SHA-256 `5b42a7b0d1c408d037a1e826e99840b6f33eaa884c444b13fa7029f311ee9d82`
+  - bytes: `489`
+  - SHA-256 `effd8a8743ecd81e67de389c3da2e143c1a8a4e578b7c17b80760a01e8e01fe7`
+- The executed offline plan intentionally left the private capability-key table
+  empty and returned `portfolio_capability_ready(...) = false`. This is the
+  required fail-closed state: offline SQL contains no secret. Production must
+  run the online migration with `TRADINGAGENTS_SESSION_TOKEN_PEPPER` so the key
+  is derived and provisioned through parameter-bound SQL.
 - Ruff, compileall and `git diff --check`: passed.
 
 ## Gate conclusion

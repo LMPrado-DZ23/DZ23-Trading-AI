@@ -68,6 +68,8 @@ def create_production_app(settings: PlatformSettings | None = None) -> FastAPI:
 
     effective = settings or PlatformSettings()
     master = effective.session_token_pepper.get_secret_value().encode("utf-8")
+    portfolio_capability_key = _derive_secret(master, "portfolio-capability-v1")
+    portfolio_capability_fingerprint = hashlib.sha256(portfolio_capability_key).hexdigest()
     engine = create_engine(
         effective.database_url.get_secret_value(),
         pool_pre_ping=True,
@@ -87,6 +89,11 @@ def create_production_app(settings: PlatformSettings | None = None) -> FastAPI:
                 "FROM pg_roles WHERE rolname = current_user"
             )
             row = cursor.fetchone()
+            cursor.execute(
+                "SELECT tradingagents_private.portfolio_capability_ready(%s,%s)",
+                ("portfolio-capability-v1", portfolio_capability_fingerprint),
+            )
+            capability_ready = cursor.fetchone()
         finally:
             cursor.close()
         if (
@@ -96,6 +103,8 @@ def create_production_app(settings: PlatformSettings | None = None) -> FastAPI:
             or any(value is not False for value in row[1:])
         ):
             raise RuntimeError("database runtime role is unsafe or does not match configuration")
+        if capability_ready != (True,):
+            raise RuntimeError("portfolio capability key is missing or does not match runtime")
 
     factory = sessionmaker(engine, expire_on_commit=False)
     identity = IdentityService(
@@ -203,6 +212,7 @@ def create_production_app(settings: PlatformSettings | None = None) -> FastAPI:
     portfolio_service = PortfolioService(
         factory,
         idempotency_digest_key=_derive_secret(master, "portfolio-idempotency-digest"),
+        capability_signing_key=portfolio_capability_key,
     )
     redis = Redis.from_url(
         effective.redis_url.get_secret_value(),

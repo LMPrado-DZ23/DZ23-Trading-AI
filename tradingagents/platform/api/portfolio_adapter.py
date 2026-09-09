@@ -183,6 +183,7 @@ class SqlAlchemyPortfolioAdapter:
             membership_id=profile.membership_id,
             session_id=profile.session_id,
             role=profile.role,
+            session_token_hash=getattr(profile, "session_token_hash", ""),
         )
 
     @staticmethod

@@ -19,7 +19,9 @@ def upgrade() -> None:
     timestamp = sa.DateTime(timezone=True)
     money = sa.Numeric(36, 12)
     bind = op.get_bind()
-    if not context.is_offline_mode():
+    if bind.dialect.name == "postgresql":
+        _emit_postgres_preflight()
+    elif not context.is_offline_mode():
         _run_preflight(bind)
     if bind.dialect.name == "postgresql":
         op.execute(
@@ -518,6 +520,47 @@ def _run_preflight(bind: sa.Connection) -> None:
             "M4_INVALID_LEGACY_LEDGER: reconcile incomplete or inconsistent postings "
             "before migration"
         )
+
+
+def _emit_postgres_preflight() -> None:
+    """Emit the legacy-data guard into online and offline PostgreSQL plans."""
+
+    op.execute(
+        sa.text(
+            "DO $$ BEGIN "
+            "IF EXISTS (SELECT 1 FROM public.portfolio_mandates WHERE mode NOT IN "
+            "('backtest','shadow','paper')) THEN RAISE EXCEPTION "
+            "'M4_UNSUPPORTED_LIVE_MANDATE'; END IF; "
+            "IF EXISTS (SELECT 1 FROM (SELECT tenant_id, portfolio_id FROM "
+            "public.portfolio_ledger_transactions GROUP BY tenant_id, portfolio_id "
+            "HAVING sum(CASE WHEN event_type IN "
+            "('funding','paper_funding','shadow_funding') THEN amount WHEN event_type IN "
+            "('withdrawal','paper_withdrawal','shadow_withdrawal') THEN -amount ELSE 0 END) < 0"
+            ") unsafe_units) THEN RAISE EXCEPTION 'M4_NEGATIVE_LEGACY_UNITS'; END IF; "
+            "IF EXISTS (SELECT 1 FROM public.portfolio_mandates WHERE "
+            "(status = 'closed' AND (ended_at IS NULL OR ended_at < effective_at)) OR "
+            "(status <> 'closed' AND ended_at IS NOT NULL)) THEN RAISE EXCEPTION "
+            "'M4_INVALID_MANDATE_LIFECYCLE'; END IF; "
+            "IF EXISTS (SELECT 1 FROM (SELECT t.id FROM "
+            "public.portfolio_ledger_transactions t LEFT JOIN "
+            "public.portfolio_ledger_postings p ON p.transaction_id = t.id "
+            "GROUP BY t.id, t.tenant_id, t.portfolio_id, t.currency, t.amount, t.event_type "
+            "HAVING count(p.id) <> 2 OR COALESCE(sum(p.quantity), 0) <> 0 OR "
+            "sum(CASE WHEN p.account = 'cash' THEN 1 ELSE 0 END) <> 1 OR "
+            "sum(CASE WHEN p.account = 'external' THEN 1 ELSE 0 END) <> 1 OR "
+            "sum(CASE WHEN p.tenant_id <> t.tenant_id OR p.portfolio_id <> t.portfolio_id "
+            "OR p.asset <> t.currency THEN 1 ELSE 0 END) <> 0 OR "
+            "max(CASE WHEN p.account = 'cash' THEN abs(p.quantity) END) <> t.amount OR "
+            "(t.event_type IN ('funding','paper_funding','shadow_funding','broker_funding') "
+            "AND max(CASE WHEN p.account = 'cash' THEN p.quantity END) <= 0) OR "
+            "(t.event_type IN ('withdrawal','paper_withdrawal','shadow_withdrawal',"
+            "'broker_withdrawal','fee') AND max(CASE WHEN p.account = 'cash' "
+            "THEN p.quantity END) >= 0) OR t.event_type NOT IN "
+            "('funding','paper_funding','shadow_funding','broker_funding','withdrawal',"
+            "'paper_withdrawal','shadow_withdrawal','broker_withdrawal','fee')) invalid_ledger) "
+            "THEN RAISE EXCEPTION 'M4_INVALID_LEGACY_LEDGER'; END IF; END $$"
+        )
+    )
 
 
 def _replace_ledger_guard() -> None:

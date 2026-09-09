@@ -3,11 +3,11 @@
 - **mission_id:** `tradingagents-dz23-a5-2026-09-08`
 - **objective:** concluir o TradingAgents DZ23 como plataforma web multiusuário pronta para usuários leigos, com carteira administrada, perfis de risco, execução CCXT segura e implantação verificada em `https://trading.dz23.online/`.
 - **state:** `CHECKPOINTING`
-- **iteration:** 8
+- **iteration:** 9
 - **started_at:** 2026-09-08 America/Sao_Paulo
 - **last_heartbeat:** 2026-09-09
 - **last_progress_at:** 2026-09-09
-- **current_task:** congelar a fronteira privada de mutação de reservas, gerar candidato substituto e executar nova auditoria independente antes de promover M4.
+- **current_task:** congelar a capacidade assinada de portfólio, gerar candidato substituto e executar nova auditoria independente antes de promover M4.
 
 ## Acceptance criteria
 
@@ -96,13 +96,13 @@
 
 ## Current failure
 
-- A candidata `f6cd577f28604dbfe74999d35a9a1b29aba2438a` foi reprovada: o papel da
-  aplicação ainda podia inserir/alterar reservas diretamente e contornar caixa,
-  moeda, TTL, circuit breaker e versionamento. O bypass foi fechado revogando
-  DML e instalando portas privadas `SECURITY DEFINER` vinculadas à sessão e ao
-  RBAC; consumo permanece indisponível no M4. A suíte real está verde, mas a
-  promoção continua proibida até nova auditoria independente do novo commit e
-  bundles.
+- A candidata `689487294e49c9090ce9eaca39f86893c0b48ba6` foi reprovada: GUCs de
+  tenant/sessão ainda eram autoridade forjável; o preflight não existia no SQL
+  offline; breaker/snapshot podiam ser alterados sob escopo falso; TTL
+  fracionário regrediu. A correção usa capacidades HMAC vinculadas à sessão,
+  backend, transação e parâmetros, nonce de uso único, preflight SQL comum e TTL
+  em microssegundos. A suíte real está verde, mas promoção continua proibida até
+  nova auditoria independente do novo commit e bundles.
 - Fontes fundamentals/news/macro/social/Polymarket continuam deliberadamente indisponíveis na plataforma; não há alegação de cobertura PIT para elas.
 - O primeiro `.venv` ficou incompleto após interrupção do instalador; foi substituído por `.venv-a5` criado com `--no-compile` e instalação concluída com exit 0.
 
@@ -165,8 +165,15 @@
   sem mandato ou após expiração, inserção direta como `consumed` recusada e
   concorrência verdes; integração **11 passed**.
 - Suíte integral final com serviços reais: **1279 passed, 1 skipped, 71 subtests**.
+- Correção de capacidade M4 com PostgreSQL/Redis reais: **1282 passed, 1 skipped,
+  71 subtests**; cross-tenant com sessão da vítima, alteração de parâmetros,
+  replay de nonce, reset direto de breaker e ledger legado incompleto foram
+  recusados.
 - Evidência: `audit/m4-final-full-junit.xml` SHA-256
-  `55581db123995028cf646bfffb0576c947532017b899b88cf81073ca19ce8d7c`.
+  `b4812cf0132b73e5ab1bd0071de6591329ff991abe46ed64783f56c7898f1477`.
+- O plano SQL offline chega a `20260909_0021` sem materializar a chave privada e
+  mantém readiness falso; provisionamento de produção é exclusivamente pela
+  migration online com `TRADINGAGENTS_SESSION_TOKEN_PEPPER`.
 - Fix final da fronteira de reservas: aplicação/worker/PUBLIC sem DML; duas
   portas privadas de reserve/release; guard role sem login/BYPASSRLS; sessão,
   tenant e RBAC derivados; consumo inexistente; PostgreSQL focal **1 passed**,

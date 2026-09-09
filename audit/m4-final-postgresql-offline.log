@@ -2,3 +2,4 @@ INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
 INFO  [alembic.runtime.migration] Generating static SQL
 INFO  [alembic.runtime.migration] Will assume transactional DDL.
 INFO  [alembic.runtime.migration] Running upgrade 20260908_0019 -> 20260908_0020, Close portfolio audit findings around authority, ledger and valuation.
+INFO  [alembic.runtime.migration] Running upgrade 20260908_0020 -> 20260909_0021, Bind portfolio authority to an authenticated session capability.

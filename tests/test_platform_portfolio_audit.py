@@ -1121,3 +1121,39 @@ def test_postgresql_guards_cover_table_shape_and_reservation_updates() -> None:
     assert '"AFTER INSERT OR UPDATE",' in migration
     assert "NEW.mandate_id IS DISTINCT FROM active_mandate" in migration
     assert '["mandate_id", "tenant_id", "portfolio_id"]' in migration
+
+
+def test_postgresql_offline_plan_contains_preflight_before_m4_ddl() -> None:
+    migration = (
+        Path(__file__).resolve().parents[1]
+        / "migrations"
+        / "versions"
+        / "20260908_0020_portfolio_audit_hardening.py"
+    ).read_text(encoding="utf-8")
+    assert migration.index("_emit_postgres_preflight()") < migration.index(
+        'op.add_column("portfolios"'
+    )
+    for finding in (
+        "M4_UNSUPPORTED_LIVE_MANDATE",
+        "M4_NEGATIVE_LEGACY_UNITS",
+        "M4_INVALID_MANDATE_LIFECYCLE",
+        "M4_INVALID_LEGACY_LEDGER",
+    ):
+        assert finding in migration
+
+
+def test_portfolio_capability_migration_is_parameter_bound_and_fail_closed() -> None:
+    migration = (
+        Path(__file__).resolve().parents[1]
+        / "migrations"
+        / "versions"
+        / "20260909_0021_portfolio_capabilities.py"
+    ).read_text(encoding="utf-8")
+    assert "portfolio_current_tenant(false)" in migration
+    assert "portfolio_current_tenant(true)" in migration
+    assert "p_expires_at - p_issued_at > 30" in migration
+    assert "PORTFOLIO_CAPABILITY_REPLAY" in migration
+    assert "p_ttl_microseconds" in migration
+    assert "TRADINGAGENTS_SESSION_TOKEN_PEPPER" in migration
+    assert "key_material=EXCLUDED.key_material" in migration
+    assert "20260909_0021 is a one-way security migration" in migration

@@ -59,6 +59,18 @@
 - Reservation consumption is unavailable in M4 by design. M6 must introduce a
   separate job/lease/allocation/order-intent-bound consume port before an order
   worker can spend reserved cash.
+- Independent review of commit `6894872` proved that tenant and session GUCs
+  were still caller-controlled authority. Migration 0021 replaces every
+  application portfolio RLS policy with a short HMAC-SHA256 capability bound to
+  the opaque session token hash, PostgreSQL backend PID and transaction id. The
+  database derives tenant, user, membership and current role only after
+  verifying the capability and active session.
+- Reserve/release capabilities additionally bind the exact resource, canonical
+  amount, purpose, idempotency digest and TTL. Their random nonce is consumed
+  once in a private table, so altered parameters and replay fail closed.
+- The PostgreSQL legacy preflight is emitted as SQL for online and offline plans
+  before M4 DDL. Fractional TTLs are preserved exactly in microseconds on both
+  SQLite and PostgreSQL.
 - Mandate pause provenance is persisted. Suitability reassessment records a
   dedicated pause reason, while an open circuit breaker takes precedence over
   suitability and exposes only the risk-review action.
@@ -68,31 +80,36 @@
 ## Reproduction
 
 - Final full suite with real PostgreSQL and Redis:
-  `1279 passed, 1 skipped, 71 subtests passed`.
-- Final focused portfolio/API/audit suite: `75 passed`.
+  `1282 passed, 1 skipped, 71 subtests passed`.
+- Final focused portfolio/API/audit suite: `78 passed`.
 - Formerly flaky LGPD event-order test: `10/10 passed` after the monotonic-time fix.
 - SQLite migration compatibility test: `1 passed`.
 - Ruff: green for the repository (permission warnings only for stale sandbox
   temporary directories).
 - Compileall: green for `tradingagents`, `service` and `cli`.
-- PostgreSQL 0019 -> 0020 online migration, offline generation and execution:
+- PostgreSQL 0019 -> 0021 online migration, offline generation and execution:
   green.
 - Final full JUnit: `audit/m4-final-full-junit.xml`
-  - bytes: `175202`
-  - SHA-256: `55581db123995028cf646bfffb0576c947532017b899b88cf81073ca19ce8d7c`
+  - bytes: `175612`
+  - SHA-256: `b4812cf0132b73e5ab1bd0071de6591329ff991abe46ed64783f56c7898f1477`
 - Final PostgreSQL focal JUnit: `audit/m4-final-postgresql-junit.xml`
   - bytes: `401`
-  - SHA-256: `f139c4f6a5b1781555a42e74ea519f9d6c7cc2a71d5a287c06b76d627bf296eb`
+  - SHA-256: `66af43b49966ed7433a121894cae0ff481760cbfc19cb5d96f20c41c844d597b`
 - Final integration JUnit: `audit/m4-final-integration-junit.xml`
-  - bytes: `1915`
-  - SHA-256: `158cddb60f86f38dfe333a542b0b5337d459eb22bd6bdda509f2143d9a1d2cb1`
+  - bytes: `1914`
+  - SHA-256: `a13105902e6a90e0ac88236a93d161384e69fc3241d8be13600714cbca0962c2`
 - Final generated and executed PostgreSQL SQL:
   `audit/m4-final-postgresql-offline.sql`
-  - bytes: `36993`
-  - SHA-256: `4b734a16543ac2deb8811a0f9722d19485f7f09757d391f4cb7e0297bb33b4c1`
+  - bytes: `60824`
+  - SHA-256: `158e32cb99cd6565cdb246e0227625c81d9dd9ea1e1c900ca01020be8df138ab`
 - Offline-generation log: `audit/m4-final-postgresql-offline.log`
-  - bytes: `341`
-  - SHA-256: `5b42a7b0d1c408d037a1e826e99840b6f33eaa884c444b13fa7029f311ee9d82`
+  - bytes: `489`
+  - SHA-256: `effd8a8743ecd81e67de389c3da2e143c1a8a4e578b7c17b80760a01e8e01fe7`
+- The offline SQL deliberately provisions no capability key. Applying it to a
+  database at `20260908_0019` reaches `20260909_0021` with zero private keys and
+  `portfolio_capability_ready(...) = false`; production readiness therefore
+  fails closed. Production provisioning must use the online migration with a
+  valid `TRADINGAGENTS_SESSION_TOKEN_PEPPER`.
 - Diff secret scan for OpenAI, AWS, JWT and generic secret assignments: zero
   matches. `git diff --check`, Ruff and compileall are green.
 - Dynamic PostgreSQL report: `audit/M4_POSTGRES_GATE_VERIFICATION.md`.
@@ -107,6 +124,11 @@
 - Candidate `f6cd577f28604dbfe74999d35a9a1b29aba2438a` was then rejected because
   direct reservation DML remained a capital-control bypass. That bypass is
   closed by ACL revocation and the private mutation ports described above.
+- Candidate `689487294e49c9090ce9eaca39f86893c0b48ba6` was rejected because the
+  private ports and portfolio RLS still trusted caller-settable tenant/session
+  GUCs, offline migration omitted the legacy-data preflight, and fractional TTLs
+  regressed. Signed transaction/operation capabilities, the SQL preflight and
+  microsecond TTL path close those findings in this candidate.
 - The previous independent verdicts are superseded by these corrections. A
   fresh review of the final commit is still required; this document does not
   claim independent approval.
@@ -118,7 +140,7 @@
 
 - The only remaining skipped test is the live DeepSeek smoke; it is not
   represented as passed and is unrelated to M4.
-- Migration 0019 -> 0020, offline SQL execution, operational consumption gate,
+- Migration 0019 -> 0021, offline SQL preflight, operational consumption gate,
   `NOBYPASSRLS` roles, deferred-trigger commits, rounding and concurrent
   reservation paths were exercised on disposable PostgreSQL 17. Earlier legacy
   preflight/backfill checks remain recorded in the dynamic gate report. The

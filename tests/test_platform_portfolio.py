@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from datetime import timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -219,6 +220,33 @@ def test_cash_reservation_cannot_exceed_available_balance(portfolio_runtime) -> 
         service.release_reservation(principal=principal, reservation_id=reservation.id)
         == "released"
     )
+
+
+def test_cash_reservation_preserves_fractional_ttl(portfolio_runtime) -> None:
+    service, principal, _factory = portfolio_runtime
+    portfolio, _mandate = _active_portfolio(portfolio_runtime)
+    service.record_funding(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("100"),
+        idempotency_key="funding-fractional-ttl-0001",
+        reference_id="deposit-fractional-ttl",
+    )
+    service.capture_trusted_snapshot(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        valuation=_trusted_valuation(service),
+    )
+    ttl = timedelta(seconds=30, microseconds=1)
+    reservation = service.reserve_cash(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("1"),
+        purpose_digest="f" * 64,
+        idempotency_key="reservation-fractional-ttl-0001",
+        ttl=ttl,
+    )
+    assert reservation.expires_at - reservation.created_at == ttl
 
 
 def test_mandate_pause_is_versioned_and_old_active_row_cannot_be_reused(
