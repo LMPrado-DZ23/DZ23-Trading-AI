@@ -46,4 +46,3 @@ JUnit was verified as:
   introspection.
 - M5.0 limitations remain active and
   `quantitative_claims_eligible=False`.
-
