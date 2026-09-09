@@ -388,6 +388,13 @@ class ExecutionOpen(BacktestContract):
 class ExecutionPriceProjection(BacktestContract):
     """Economic next-open input, isolated from the rest of the D+1 bar."""
 
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        str_strip_whitespace=True,
+        revalidate_instances="always",
+    )
+
     projection_version: Literal["execution-price/1"] = "execution-price/1"
     instrument_id: UUID
     decision_session_date: date
@@ -421,6 +428,13 @@ class ExecutionPriceProjection(BacktestContract):
 class ExecutionPriceProvenance(BacktestContract):
     """Full custody binding kept outside the economic fill digest."""
 
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        str_strip_whitespace=True,
+        revalidate_instances="always",
+    )
+
     provenance_version: Literal["execution-price-provenance/1"] = "execution-price-provenance/1"
     dataset_id: UUID
     manifest_digest: Digest
@@ -439,6 +453,13 @@ class ExecutionPriceProvenance(BacktestContract):
 
 
 class ExecutionPriceBundle(BacktestContract):
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        str_strip_whitespace=True,
+        revalidate_instances="always",
+    )
+
     price: ExecutionPriceProjection
     provenance: ExecutionPriceProvenance
     bundle_digest: Digest
@@ -457,6 +478,22 @@ class ExecutionPriceBundle(BacktestContract):
         if self.bundle_digest != expected:
             raise ValueError("execution-price bundle digest does not match its children")
         return self
+
+
+def revalidate_execution_price_bundle(value: object) -> ExecutionPriceBundle:
+    """Rebuild a bundle at the authoritative simulator boundary.
+
+    Pydantic's ``model_copy`` deliberately skips validation. Consumers must use
+    the value returned here instead of trusting a caller-provided instance.
+    """
+
+    if type(value) is not ExecutionPriceBundle:
+        raise ValueError("execution-price bundle must use the exact typed contract")
+    if type(value.price) is not ExecutionPriceProjection:
+        raise ValueError("execution-price projection must use the exact typed contract")
+    if type(value.provenance) is not ExecutionPriceProvenance:
+        raise ValueError("execution-price provenance must use the exact typed contract")
+    return ExecutionPriceBundle.model_validate(value.model_dump(mode="python"))
 
 
 class DatasetReference(BacktestContract):

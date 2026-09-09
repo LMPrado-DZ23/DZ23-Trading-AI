@@ -41,6 +41,7 @@ from .contracts import (
     MarketDatasetManifest,
     canonical_json_bytes,
     market_dataset_binding_digest,
+    revalidate_execution_price_bundle,
 )
 from .errors import BacktestDataCode, DatasetAlreadyExistsError, DatasetIntegrityError
 
@@ -288,6 +289,8 @@ class FrozenDatasetRepository:
     This class deliberately has no vendor callback, clock, HTTP client, or cache
     fallback. Missing or corrupt frozen evidence stops the replay.
     """
+
+    __slots__ = ("root", "_root_fd")
 
     def __init__(self, root: str | os.PathLike[str]) -> None:
         requested_root = Path(root)
@@ -742,6 +745,7 @@ class FrozenDatasetRepository:
         dataset_id: UUID,
         *,
         expected_tenant_id: UUID,
+        expected_instrument_id: UUID,
         expected_manifest_digest: str,
         decision_at: datetime,
         decision_session_date: date,
@@ -751,6 +755,9 @@ class FrozenDatasetRepository:
 
         if type(self) is not FrozenDatasetRepository:
             raise DatasetIntegrityError("execution pricing requires the repository authority")
+        expected_instrument_id = FrozenDatasetRepository._require_uuid(
+            expected_instrument_id, "expected_instrument_id"
+        )
         decision_at = FrozenDatasetRepository._require_datetime(decision_at, "decision_at")
         decision_session_date = FrozenDatasetRepository._require_date(
             decision_session_date, "decision_session_date"
@@ -776,6 +783,11 @@ class FrozenDatasetRepository:
                 code=BacktestDataCode.DATASET_BINDING_MISMATCH,
             )
         execution = dataset.execution_open_after(view)
+        if execution.instrument_id != expected_instrument_id:
+            raise DatasetIntegrityError(
+                "execution price does not match the authorized instrument",
+                code=BacktestDataCode.DATASET_BINDING_MISMATCH,
+            )
         price_payload = {
             "projection_version": "execution-price/1",
             "instrument_id": execution.instrument_id,
@@ -808,11 +820,61 @@ class FrozenDatasetRepository:
             "price_digest": price.projection_digest,
             "provenance_digest": provenance.provenance_digest,
         }
-        return ExecutionPriceBundle(
-            price=price,
-            provenance=provenance,
-            bundle_digest=hashlib.sha256(_canonical_json_bytes(bundle_payload)).hexdigest(),
+        return revalidate_execution_price_bundle(
+            ExecutionPriceBundle(
+                price=price,
+                provenance=provenance,
+                bundle_digest=hashlib.sha256(_canonical_json_bytes(bundle_payload)).hexdigest(),
+            )
         )
+
+    def _verify_execution_price(
+        self,
+        candidate: ExecutionPriceBundle,
+        dataset_id: UUID,
+        *,
+        expected_tenant_id: UUID,
+        expected_instrument_id: UUID,
+        expected_manifest_digest: str,
+        decision_at: datetime,
+        decision_session_date: date,
+        expected_eligible_view_digest: str,
+    ) -> ExecutionPriceBundle:
+        """Rederive and compare a candidate before authoritative consumption.
+
+        Self-digests prove internal consistency, not origin. A simulator must
+        source every expected value here from its authenticated run and order
+        state, then consume only the rederived return value.
+        """
+
+        if type(self) is not FrozenDatasetRepository:
+            raise DatasetIntegrityError("execution pricing requires the repository authority")
+        try:
+            checked = revalidate_execution_price_bundle(candidate)
+        except ValueError as exc:
+            raise DatasetIntegrityError(
+                "execution-price candidate failed deep contract revalidation",
+                code=BacktestDataCode.DATASET_BINDING_MISMATCH,
+            ) from exc
+        authoritative = FrozenDatasetRepository.load_execution_price(
+            self,
+            dataset_id,
+            expected_tenant_id=expected_tenant_id,
+            expected_instrument_id=expected_instrument_id,
+            expected_manifest_digest=expected_manifest_digest,
+            decision_at=decision_at,
+            decision_session_date=decision_session_date,
+            expected_eligible_view_digest=expected_eligible_view_digest,
+        )
+        if not hmac.compare_digest(
+            _canonical_json_bytes(checked.model_dump(mode="python")),
+            _canonical_json_bytes(authoritative.model_dump(mode="python")),
+        ):
+            raise DatasetIntegrityError(
+                "execution-price candidate does not match frozen market data",
+                code=BacktestDataCode.DATASET_BINDING_MISMATCH,
+            )
+        return authoritative
 
     def _dataset_dir(self, dataset_id: UUID) -> Path:
         dataset_id = self._require_uuid(dataset_id, "dataset_id")
@@ -1254,6 +1316,35 @@ class FrozenDatasetRepository:
             )
         if any(item.available_at < item.observed_at for item in fx):
             raise DatasetIntegrityError("FX observation is available before it was observed")
+
+
+def verify_execution_price_authority(
+    repository: FrozenDatasetRepository,
+    candidate: ExecutionPriceBundle,
+    dataset_id: UUID,
+    *,
+    expected_tenant_id: UUID,
+    expected_instrument_id: UUID,
+    expected_manifest_digest: str,
+    decision_at: datetime,
+    decision_session_date: date,
+    expected_eligible_view_digest: str,
+) -> ExecutionPriceBundle:
+    """Non-virtual execution-price authority boundary for future reducers."""
+
+    if type(repository) is not FrozenDatasetRepository:
+        raise DatasetIntegrityError("execution pricing requires the repository authority")
+    return FrozenDatasetRepository._verify_execution_price(
+        repository,
+        candidate,
+        dataset_id,
+        expected_tenant_id=expected_tenant_id,
+        expected_instrument_id=expected_instrument_id,
+        expected_manifest_digest=expected_manifest_digest,
+        decision_at=decision_at,
+        decision_session_date=decision_session_date,
+        expected_eligible_view_digest=expected_eligible_view_digest,
+    )
 
 
 def _strict_json_loads(content: bytes) -> Any:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import os
@@ -7,7 +8,7 @@ import stat
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -19,10 +20,14 @@ from tradingagents.platform.backtest.contracts import (
     CorporateAction,
     CorporateActionType,
     DailyBar,
+    ExecutionPriceBundle,
     ExecutionPriceProjection,
+    ExecutionPriceProvenance,
     FxObservation,
     InstrumentSpec,
     MarketCalendar,
+    canonical_digest,
+    revalidate_execution_price_bundle,
 )
 from tradingagents.platform.backtest.errors import (
     BacktestDataCode,
@@ -38,6 +43,7 @@ from tradingagents.platform.backtest.repository import (
     FrozenDatasetRepository,
     _record_bytes,
     _strict_json_loads,
+    verify_execution_price_authority,
 )
 
 INSTRUMENT_ID = UUID("10000000-0000-0000-0000-000000000001")
@@ -1001,6 +1007,7 @@ def _execution_price_fixture(
     bundle = repository.load_execution_price(
         DATASET_ID,
         expected_tenant_id=TENANT_ID,
+        expected_instrument_id=instrument.instrument_id,
         expected_manifest_digest=manifest.digest,
         decision_at=decision_bar.available_at,
         decision_session_date=decision_bar.session_date,
@@ -1048,25 +1055,168 @@ def test_execution_price_contract_rejects_economic_digest_tampering(tmp_path: Pa
         )
 
 
-def test_execution_price_requires_exact_repository_authority(tmp_path: Path) -> None:
-    repository, manifest, view, _bundle = _execution_price_fixture(tmp_path / "source")
+def test_execution_price_deep_revalidation_rejects_preconstructed_tampering(
+    tmp_path: Path,
+) -> None:
+    bundle = _execution_price_fixture(tmp_path)[-1]
+    other = _execution_price_fixture(
+        tmp_path / "other", future_open="101", future_high="111"
+    )[-1]
+    cases = (
+        bundle.model_copy(
+            update={
+                "price": bundle.price.model_copy(update={"raw_open": Decimal("999999")})
+            }
+        ),
+        bundle.model_copy(
+            update={
+                "provenance": bundle.provenance.model_copy(
+                    update={"dataset_id": uuid4()}
+                )
+            }
+        ),
+        bundle.model_copy(update={"bundle_digest": "0" * 64}),
+        bundle.model_copy(update={"price": other.price}),
+    )
 
-    class ForgedRepository(FrozenDatasetRepository):
+    for forged in cases:
+        with pytest.raises(ValueError):
+            ExecutionPriceBundle.model_validate(forged)
+        with pytest.raises(ValueError):
+            revalidate_execution_price_bundle(forged)
+
+
+def test_execution_price_boundary_rejects_contract_subclasses(tmp_path: Path) -> None:
+    bundle = _execution_price_fixture(tmp_path)[-1]
+
+    class ForgedBundle(ExecutionPriceBundle):
         pass
 
-    attacker = ForgedRepository(tmp_path / "attacker")
-    with pytest.raises(DatasetIntegrityError, match="repository authority"):
-        attacker.load_execution_price(
+    forged = ForgedBundle.model_construct(**bundle.model_dump(mode="python"))
+    with pytest.raises(ValueError, match="exact typed contract"):
+        revalidate_execution_price_bundle(forged)
+
+
+def test_repository_rejects_self_consistent_forged_execution_price(tmp_path: Path) -> None:
+    repository, manifest, view, bundle = _execution_price_fixture(tmp_path)
+    forged_price_payload = bundle.price.model_dump(
+        mode="python", exclude={"projection_digest"}
+    ) | {
+        "instrument_id": uuid4(),
+        "raw_open": Decimal("999999"),
+        "execution_at": bundle.price.execution_at + timedelta(minutes=1),
+    }
+    forged_price = ExecutionPriceProjection(
+        **forged_price_payload,
+        projection_digest=canonical_digest(forged_price_payload),
+    )
+    forged_provenance_payload = bundle.provenance.model_dump(
+        mode="python", exclude={"provenance_digest"}
+    ) | {"projection_digest": forged_price.projection_digest}
+    forged_provenance = ExecutionPriceProvenance(
+        **forged_provenance_payload,
+        provenance_digest=canonical_digest(forged_provenance_payload),
+    )
+    forged_bundle_payload = {
+        "bundle_version": "execution-price-bundle/1",
+        "price_digest": forged_price.projection_digest,
+        "provenance_digest": forged_provenance.provenance_digest,
+    }
+    forged = ExecutionPriceBundle(
+        price=forged_price,
+        provenance=forged_provenance,
+        bundle_digest=canonical_digest(forged_bundle_payload),
+    )
+
+    with pytest.raises(DatasetIntegrityError, match="does not match frozen market data"):
+        verify_execution_price_authority(
+            repository,
+            forged,
             DATASET_ID,
             expected_tenant_id=TENANT_ID,
+            expected_instrument_id=INSTRUMENT_ID,
             expected_manifest_digest=manifest.digest,
             decision_at=view.decision_at,
             decision_session_date=view.decision_session_date,
             expected_eligible_view_digest=view.eligible_view_sha256,
         )
+
+    assert verify_execution_price_authority(
+        repository,
+        bundle,
+        DATASET_ID,
+        expected_tenant_id=TENANT_ID,
+        expected_instrument_id=INSTRUMENT_ID,
+        expected_manifest_digest=manifest.digest,
+        decision_at=view.decision_at,
+        decision_session_date=view.decision_session_date,
+        expected_eligible_view_digest=view.eligible_view_sha256,
+    ) == bundle
+
+
+def test_production_code_has_no_direct_execution_price_consumer() -> None:
+    package_root = Path(__file__).parents[1] / "tradingagents"
+    allowed = {
+        package_root / "platform" / "backtest" / "contracts.py",
+        package_root / "platform" / "backtest" / "repository.py",
+        package_root / "platform" / "backtest" / "__init__.py",
+    }
+    protected = {
+        "ExecutionPriceBundle",
+        "ExecutionPriceProjection",
+        "ExecutionPriceProvenance",
+    }
+    violations: list[str] = []
+    for path in package_root.rglob("*.py"):
+        if path in allowed:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        referenced = {
+            node.id for node in ast.walk(tree) if isinstance(node, ast.Name)
+        } | {
+            node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)
+        }
+        overlap = sorted(referenced & protected)
+        if overlap:
+            violations.append(f"{path.relative_to(package_root)}: {', '.join(overlap)}")
+    assert not violations, (
+        "production consumers must resolve execution prices through the non-virtual "
+        f"repository authority boundary: {violations}"
+    )
+
+
+def test_execution_price_requires_exact_repository_authority(tmp_path: Path) -> None:
+    repository, manifest, view, bundle = _execution_price_fixture(tmp_path / "source")
+
+    class ForgedRepository(FrozenDatasetRepository):
+        def load_execution_price(self, *args, **kwargs):
+            return bundle.model_copy(
+                update={
+                    "price": bundle.price.model_copy(
+                        update={"raw_open": Decimal("999999")}
+                    )
+                }
+            )
+
+    attacker = ForgedRepository(tmp_path / "attacker")
+    with pytest.raises(DatasetIntegrityError, match="repository authority"):
+        verify_execution_price_authority(
+            attacker,
+            bundle,
+            DATASET_ID,
+            expected_tenant_id=TENANT_ID,
+            expected_instrument_id=INSTRUMENT_ID,
+            expected_manifest_digest=manifest.digest,
+            decision_at=view.decision_at,
+            decision_session_date=view.decision_session_date,
+            expected_eligible_view_digest=view.eligible_view_sha256,
+        )
+    with pytest.raises(AttributeError):
+        repository.load_execution_price = lambda *args, **kwargs: bundle  # type: ignore[method-assign]
     assert repository.load_execution_price(
         DATASET_ID,
         expected_tenant_id=TENANT_ID,
+        expected_instrument_id=INSTRUMENT_ID,
         expected_manifest_digest=manifest.digest,
         decision_at=view.decision_at,
         decision_session_date=view.decision_session_date,

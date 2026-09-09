@@ -40,6 +40,7 @@ from tradingagents.platform.backtest.contracts import (
     canonical_digest,
     canonical_json_bytes,
     market_dataset_binding_digest,
+    revalidate_execution_price_bundle,
 )
 from tradingagents.platform.backtest.errors import (
     BacktestDataCode,
@@ -51,6 +52,7 @@ from tradingagents.platform.backtest.errors import (
 from tradingagents.platform.backtest.repository import (
     EligibleMarketView,
     FrozenDatasetRepository,
+    verify_execution_price_authority,
 )
 
 __all__ = [
@@ -87,6 +89,7 @@ __all__ = [
     "ExecutionPriceProvenance",
     "FillPolicy",
     "FrozenDatasetRepository",
+    "verify_execution_price_authority",
     "FxObservation",
     "InstrumentSpec",
     "MarketCalendar",
@@ -98,4 +101,5 @@ __all__ = [
     "canonical_digest",
     "canonical_json_bytes",
     "market_dataset_binding_digest",
+    "revalidate_execution_price_bundle",
 ]

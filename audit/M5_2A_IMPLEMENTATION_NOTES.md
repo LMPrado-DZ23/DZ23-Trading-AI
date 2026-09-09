@@ -14,9 +14,13 @@ postings, corporate-action settlement or portfolio state.
 - `ExecutionPriceProvenance` separately binds the projection to the frozen
   dataset, manifest, eligible decision view and full parent bar/source digests.
 - `ExecutionPriceBundle` validates both children and their binding.
-- `FrozenDatasetRepository.load_execution_price()` is the only public producer,
-  revalidates tenant, manifest and eligible-view authority from frozen bytes,
-  and rejects repository subclasses.
+- `FrozenDatasetRepository.load_execution_price()` produces evidence after
+  revalidating tenant, instrument, manifest and eligible-view bindings from
+  frozen bytes. A produced bundle is not authority by itself.
+- `verify_execution_price_authority()` is the non-virtual consumer boundary: it
+  rejects repository subclasses, deeply rebuilds exact contract types, reopens
+  the frozen dataset through the base implementation and compares the complete
+  candidate with the rederived value.
 - Changing D+1 high, low, close or volume while retaining the same raw open
   leaves the economic projection byte-identical and changes only full
   provenance. Changing the raw open changes the economic projection.
@@ -29,8 +33,10 @@ while retaining complete chain-of-custody evidence. The existing
 
 - No broker, order, target, side, quantity, ledger, database, service, LLM,
   network or wall-clock dependency is introduced.
-- A later simulation reducer must receive projections produced internally from
-  trusted dataset identifiers. Client-built projections are not authority.
+- A later simulation reducer must accept authenticated run/order bindings and
+  call `verify_execution_price_authority()` internally. It must never accept a
+  projection or bundle as authority. A structural test currently rejects any
+  direct production consumer outside the contracts/repository boundary.
 - Dataset limitations remain active and quantitative claims remain disabled.
 
 ## Verification
@@ -45,3 +51,38 @@ while retaining complete chain-of-custody evidence. The existing
 - JUnit bytes: `205427`
 - JUnit SHA-256:
   `39c3e555cfbf4ae162fa8a77ec61f62c44787b3d63ba54557294d5ac348b9ef7`
+
+## Independent rejection and correction
+
+All three independent reviews rejected commit `c2e5110` on authority-boundary
+attacks. The original self-digests detected accidental mutation but a caller
+could recalculate them, or could pass a stale `model_copy()` instance. Virtual
+dispatch also allowed a repository subclass or an instance method shadow to
+skip the original guard.
+
+The correction is fail closed:
+
+- all three execution-price contracts revalidate existing instances;
+- the authoritative boundary performs exact-type dump-and-rebuild validation;
+- the complete candidate is compared with a value rederived from frozen bytes;
+- `expected_instrument_id` is required alongside tenant/manifest/view/session;
+- the public boundary calls the exact base implementation non-virtually;
+- `FrozenDatasetRepository` has slots, preventing instance method shadowing;
+- adversarial tests cover stale nested models, child swapping, subclasses,
+  virtual override and a fully self-consistent forged bundle with recalculated
+  hashes.
+
+Correction verification on Windows/Python 3.14:
+
+- Backtest contracts + repository + candlestick suite: `164 passed, 5 skipped`;
+  the five skips are POSIX-only filesystem controls.
+- Full local suite: `1455 passed, 24 skipped, 71 subtests passed`; 18 integration
+  cases lacked PostgreSQL/Redis URLs, one DeepSeek live test lacked credentials,
+  and five filesystem cases are POSIX-only. This is 1,479 collected tests, four
+  more than the pre-correction full run.
+- Optional Bedrock extra installed; its transport-policy test passed.
+- Ruff, compileall and `git diff --check`: green.
+- Correction JUnit: `audit/m5-2a-correction-junit.xml`
+- JUnit bytes: `212941`
+- JUnit SHA-256:
+  `545a8ecd09a8a895706b5ffb175e069a30b126cb9d9d53e623fb5ba9806d474e`
