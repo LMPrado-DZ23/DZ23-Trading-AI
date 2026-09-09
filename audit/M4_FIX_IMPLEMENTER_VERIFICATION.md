@@ -56,7 +56,7 @@
   role, portfolio, mandate, currency, TTL and database time. It enforces cash,
   breaker, suitability, replay and balance-version invariants in one lock
   order. The release port is idempotent and increments the version once.
-- Reservation consumption is unavailable in M4 by design. M5 must introduce a
+- Reservation consumption is unavailable in M4 by design. M6 must introduce a
   separate job/lease/allocation/order-intent-bound consume port before an order
   worker can spend reserved cash.
 - Mandate pause provenance is persisted. Suitability reassessment records a
@@ -110,7 +110,7 @@
 - The previous independent verdicts are superseded by these corrections. A
   fresh review of the final commit is still required; this document does not
   claim independent approval.
-- The allocator is currently an internal application port. M5/M6 must call it
+- The allocator is currently an internal application port. M6 must call it
   from the operational proposal/execution flow; this candidate does not claim
   end-to-end broker execution.
 
