@@ -900,6 +900,77 @@ def test_internal_allocator_applies_aggregate_caps_and_reserves_atomically(
     assert replay.reservation.id == result.reservation.id
 
 
+def test_allocator_replaces_elapsed_sqlite_reservation_without_permanent_lockout(
+    audited_portfolio_runtime,
+    monkeypatch,
+) -> None:
+    service, principal, factory = audited_portfolio_runtime
+    portfolio, _mandate = _active(audited_portfolio_runtime)
+    service.record_funding(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("1000"),
+        idempotency_key="allocator-expiry-funding-0001",
+        reference_id="allocator-expiry-funding",
+    )
+    service.capture_trusted_snapshot(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        valuation=_valuation(service),
+    )
+    observed = service._now()
+    proposal = TrustedAllocationRequest(
+        raw_target_weights={"BTC/BRL": Decimal("0.05")},
+        correlations={},
+        assets={
+            "BTC/BRL": TrustedAssetAllocation(
+                symbol="BTC/BRL",
+                asset_class="crypto",
+                price=Decimal("500000"),
+                conviction=Decimal("1"),
+                realized_annual_volatility=Decimal("0.10"),
+                average_daily_notional=Decimal("1000000"),
+            )
+        },
+        source="analysis_pit",
+        observed_at=observed,
+        available_at=observed,
+        evidence_digest="9" * 64,
+    )
+    first = service.allocate_and_reserve(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        proposal=proposal,
+        idempotency_key="allocator-expiry-reservation-0001",
+        ttl=timedelta(seconds=30),
+    )
+    with factory() as db:
+        version_after_first = db.get(Portfolio, portfolio.id).balance_version
+
+    after_expiry = first.reservation.expires_at + timedelta(microseconds=1)
+    monkeypatch.setattr(service, "_now", lambda: after_expiry)
+    second = service.allocate_and_reserve(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        proposal=proposal,
+        idempotency_key="allocator-expiry-reservation-0002",
+        ttl=timedelta(seconds=30),
+    )
+
+    with factory() as db:
+        assert db.get(CashReservation, first.reservation.id).status == "expired"
+        assert db.get(CashReservation, second.reservation.id).status == "active"
+        assert db.get(Portfolio, portfolio.id).balance_version == version_after_first + 2
+    with pytest.raises(PortfolioError, match="IDEMPOTENCY_RESERVATION_FINALIZED"):
+        service.allocate_and_reserve(
+            principal=principal,
+            portfolio_id=portfolio.id,
+            proposal=proposal,
+            idempotency_key="allocator-expiry-reservation-0001",
+            ttl=timedelta(seconds=30),
+        )
+
+
 def test_allocator_counts_existing_exposure_before_reserving_new_crypto(
     audited_portfolio_runtime,
 ) -> None:

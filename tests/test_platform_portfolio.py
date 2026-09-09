@@ -22,6 +22,7 @@ from tradingagents.platform.identity.models import Base
 from tradingagents.platform.portfolio import (
     CashReservation,
     LedgerPosting,
+    Portfolio,
     PortfolioError,
     PortfolioService,
     SizingInput,
@@ -277,6 +278,61 @@ def test_cash_reservation_preserves_fractional_ttl(portfolio_runtime) -> None:
         ttl=ttl,
     )
     assert reservation.expires_at - reservation.created_at == ttl
+
+
+def test_expired_sqlite_reservation_is_materialized_before_new_reservation(
+    portfolio_runtime,
+    monkeypatch,
+) -> None:
+    service, principal, factory = portfolio_runtime
+    portfolio, _mandate = _active_portfolio(portfolio_runtime)
+    service.record_funding(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("100"),
+        idempotency_key="funding-expired-reservation-0001",
+        reference_id="deposit-expired-reservation",
+    )
+    service.capture_trusted_snapshot(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        valuation=_trusted_valuation(service),
+    )
+    first = service.reserve_cash(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("40"),
+        purpose_digest="a" * 64,
+        idempotency_key="expired-reservation-0001",
+        ttl=timedelta(seconds=30),
+    )
+    with factory() as db:
+        version_after_first = db.get(Portfolio, portfolio.id).balance_version
+
+    after_expiry = first.expires_at + timedelta(microseconds=1)
+    monkeypatch.setattr(service, "_now", lambda: after_expiry)
+    second = service.reserve_cash(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("60"),
+        purpose_digest="b" * 64,
+        idempotency_key="expired-reservation-0002",
+        ttl=timedelta(seconds=30),
+    )
+
+    with factory() as db:
+        assert db.get(CashReservation, first.id).status == "expired"
+        assert db.get(CashReservation, second.id).status == "active"
+        assert db.get(Portfolio, portfolio.id).balance_version == version_after_first + 2
+    with pytest.raises(PortfolioError, match="IDEMPOTENCY_RESERVATION_FINALIZED"):
+        service.reserve_cash(
+            principal=principal,
+            portfolio_id=portfolio.id,
+            amount=Decimal("40"),
+            purpose_digest="a" * 64,
+            idempotency_key="expired-reservation-0001",
+            ttl=timedelta(seconds=30),
+        )
 
 
 def test_mandate_pause_is_versioned_and_old_active_row_cannot_be_reused(

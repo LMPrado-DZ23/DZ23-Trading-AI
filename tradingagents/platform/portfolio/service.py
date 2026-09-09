@@ -1116,6 +1116,12 @@ class PortfolioService:
             mandate = self._require_active_mandate(
                 db, principal.tenant_id, portfolio_id, now
             )
+            self._expire_local_reservations(
+                db,
+                tenant_id=principal.tenant_id,
+                portfolio=portfolio,
+                now=now,
+            )
             existing_reservation = db.scalar(
                 select(CashReservation).where(
                     CashReservation.tenant_id == principal.tenant_id,
@@ -1391,6 +1397,12 @@ class PortfolioService:
                     db,
                     tenant_id=principal.tenant_id,
                     portfolio_id=portfolio_id,
+                    now=now,
+                )
+                self._expire_local_reservations(
+                    db,
+                    tenant_id=principal.tenant_id,
+                    portfolio=portfolio,
                     now=now,
                 )
                 existing = self._validated_reservation_replay(
@@ -2191,6 +2203,40 @@ class PortfolioService:
             )
         )
         return Decimal(cash or 0), Decimal(reserved or 0)
+
+    @staticmethod
+    def _expire_local_reservations(
+        db: Session,
+        *,
+        tenant_id: UUID,
+        portfolio: Portfolio,
+        now: datetime,
+    ) -> int:
+        """Materialize elapsed reservation state in local SQLite transactions.
+
+        PostgreSQL performs this transition inside the authoritative security-
+        definer operation port after locking the portfolio row. SQLite has no
+        equivalent operation port, so callers must do it before replay and
+        uniqueness checks while holding the service reservation lock.
+        """
+
+        if db.get_bind().dialect.name == "postgresql":
+            return 0
+        expired = db.scalars(
+            select(CashReservation).where(
+                CashReservation.tenant_id == tenant_id,
+                CashReservation.portfolio_id == portfolio.id,
+                CashReservation.status == "active",
+                CashReservation.expires_at <= now,
+            )
+        ).all()
+        if not expired:
+            return 0
+        for reservation in expired:
+            reservation.status = "expired"
+        portfolio.balance_version += 1
+        db.flush()
+        return len(expired)
 
     def _reservation_authorization_context(
         self,
