@@ -86,3 +86,14 @@ Correction verification on Windows/Python 3.14:
 - JUnit bytes: `212941`
 - JUnit SHA-256:
   `545a8ecd09a8a895706b5ffb175e069a30b126cb9d9d53e623fb5ba9806d474e`
+
+The first correction review then found that adding slots invalidated a POSIX
+race test which had monkeypatched one repository instance. The production
+slots remain necessary to prevent instance method shadowing; the test now
+patches the static method on the class and retains the same race behavior. The
+structural guard was also widened from `tradingagents/` to
+all production roots (`tradingagents/`, `service/`, `cli/`, `main.py`) and now
+detects aliased imports, string lookups and direct `load_execution_price` or
+private verification references. Focused Windows authority tests and Ruff are
+green. The corrected Linux contracts/repository suite is `111 passed` under
+WSL; independent Linux review remains required before M5.2a can be approved.

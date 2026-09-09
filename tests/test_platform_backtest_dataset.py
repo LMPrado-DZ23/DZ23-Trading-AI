@@ -1155,7 +1155,8 @@ def test_repository_rejects_self_consistent_forged_execution_price(tmp_path: Pat
 
 
 def test_production_code_has_no_direct_execution_price_consumer() -> None:
-    package_root = Path(__file__).parents[1] / "tradingagents"
+    repository_root = Path(__file__).parents[1]
+    package_root = repository_root / "tradingagents"
     allowed = {
         package_root / "platform" / "backtest" / "contracts.py",
         package_root / "platform" / "backtest" / "repository.py",
@@ -1165,9 +1166,17 @@ def test_production_code_has_no_direct_execution_price_consumer() -> None:
         "ExecutionPriceBundle",
         "ExecutionPriceProjection",
         "ExecutionPriceProvenance",
+        "_verify_execution_price",
+        "load_execution_price",
     }
     violations: list[str] = []
-    for path in package_root.rglob("*.py"):
+    production_paths = [
+        *package_root.rglob("*.py"),
+        *(repository_root / "service").rglob("*.py"),
+        *(repository_root / "cli").rglob("*.py"),
+        repository_root / "main.py",
+    ]
+    for path in production_paths:
         if path in allowed:
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -1175,10 +1184,19 @@ def test_production_code_has_no_direct_execution_price_consumer() -> None:
             node.id for node in ast.walk(tree) if isinstance(node, ast.Name)
         } | {
             node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)
+        } | {
+            alias.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+            for alias in node.names
+        } | {
+            node.value
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
         }
         overlap = sorted(referenced & protected)
         if overlap:
-            violations.append(f"{path.relative_to(package_root)}: {', '.join(overlap)}")
+            violations.append(f"{path.relative_to(repository_root)}: {', '.join(overlap)}")
     assert not violations, (
         "production consumers must resolve execution prices through the non-virtual "
         f"repository authority boundary: {violations}"
@@ -1517,13 +1535,17 @@ def test_atomic_publish_never_replaces_racing_destination(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repository = FrozenDatasetRepository(tmp_path)
-    original = repository._rename_directory_noreplace
+    original = FrozenDatasetRepository._rename_directory_noreplace
 
     def race(directory_fd: int, source: str, destination: str) -> None:
         os.mkdir(destination, dir_fd=directory_fd)
         original(directory_fd, source, destination)
 
-    monkeypatch.setattr(repository, "_rename_directory_noreplace", race)
+    monkeypatch.setattr(
+        FrozenDatasetRepository,
+        "_rename_directory_noreplace",
+        staticmethod(race),
+    )
     with pytest.raises(DatasetAlreadyExistsError):
         _ingest(repository)
     assert (tmp_path / str(DATASET_ID)).is_dir()
