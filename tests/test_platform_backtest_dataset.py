@@ -26,8 +26,8 @@ from tradingagents.platform.backtest.contracts import (
     FxObservation,
     InstrumentSpec,
     MarketCalendar,
+    _revalidate_execution_price_bundle,
     canonical_digest,
-    revalidate_execution_price_bundle,
 )
 from tradingagents.platform.backtest.errors import (
     BacktestDataCode,
@@ -1083,7 +1083,7 @@ def test_execution_price_deep_revalidation_rejects_preconstructed_tampering(
         with pytest.raises(ValueError):
             ExecutionPriceBundle.model_validate(forged)
         with pytest.raises(ValueError):
-            revalidate_execution_price_bundle(forged)
+            _revalidate_execution_price_bundle(forged)
 
 
 def test_execution_price_boundary_rejects_contract_subclasses(tmp_path: Path) -> None:
@@ -1094,7 +1094,7 @@ def test_execution_price_boundary_rejects_contract_subclasses(tmp_path: Path) ->
 
     forged = ForgedBundle.model_construct(**bundle.model_dump(mode="python"))
     with pytest.raises(ValueError, match="exact typed contract"):
-        revalidate_execution_price_bundle(forged)
+        _revalidate_execution_price_bundle(forged)
 
 
 def test_repository_rejects_self_consistent_forged_execution_price(tmp_path: Path) -> None:
@@ -1155,6 +1155,10 @@ def test_repository_rejects_self_consistent_forged_execution_price(tmp_path: Pat
 
 
 def test_production_code_has_no_direct_execution_price_consumer() -> None:
+    import tradingagents.platform.backtest as public_backtest
+
+    assert not hasattr(public_backtest, "revalidate_execution_price_bundle")
+    assert not hasattr(public_backtest, "_revalidate_execution_price_bundle")
     repository_root = Path(__file__).parents[1]
     package_root = repository_root / "tradingagents"
     allowed = {
@@ -1166,8 +1170,10 @@ def test_production_code_has_no_direct_execution_price_consumer() -> None:
         "ExecutionPriceBundle",
         "ExecutionPriceProjection",
         "ExecutionPriceProvenance",
+        "_revalidate_execution_price_bundle",
         "_verify_execution_price",
         "load_execution_price",
+        "revalidate_execution_price_bundle",
     }
     violations: list[str] = []
     production_paths = [

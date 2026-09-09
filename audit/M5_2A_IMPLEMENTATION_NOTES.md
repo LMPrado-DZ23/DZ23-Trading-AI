@@ -97,3 +97,12 @@ detects aliased imports, string lookups and direct `load_execution_price` or
 private verification references. Focused Windows authority tests and Ruff are
 green. The corrected Linux contracts/repository suite is `111 passed` under
 WSL; independent Linux review remains required before M5.2a can be approved.
+
+The test-audit review then identified that the structure-only deep-revalidation
+helper was still exported and had an authority-sounding docstring. A plausible
+future reducer could have imported that helper, accepted a self-consistent
+forgery and remained invisible to the guard. The helper is now private, absent
+from the package API, explicitly documented as non-authoritative, and both its
+old public name and private name are protected by the structural scan. M5.2b
+must additionally exercise its actual reducer end to end with the same
+self-consistent forgery before its accounting gate can pass.

@@ -39,9 +39,9 @@ from .contracts import (
     FxObservation,
     InstrumentSpec,
     MarketDatasetManifest,
+    _revalidate_execution_price_bundle,
     canonical_json_bytes,
     market_dataset_binding_digest,
-    revalidate_execution_price_bundle,
 )
 from .errors import BacktestDataCode, DatasetAlreadyExistsError, DatasetIntegrityError
 
@@ -820,7 +820,7 @@ class FrozenDatasetRepository:
             "price_digest": price.projection_digest,
             "provenance_digest": provenance.provenance_digest,
         }
-        return revalidate_execution_price_bundle(
+        return _revalidate_execution_price_bundle(
             ExecutionPriceBundle(
                 price=price,
                 provenance=provenance,
@@ -850,7 +850,7 @@ class FrozenDatasetRepository:
         if type(self) is not FrozenDatasetRepository:
             raise DatasetIntegrityError("execution pricing requires the repository authority")
         try:
-            checked = revalidate_execution_price_bundle(candidate)
+            checked = _revalidate_execution_price_bundle(candidate)
         except ValueError as exc:
             raise DatasetIntegrityError(
                 "execution-price candidate failed deep contract revalidation",

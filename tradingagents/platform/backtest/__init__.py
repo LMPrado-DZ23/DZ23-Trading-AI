@@ -40,7 +40,6 @@ from tradingagents.platform.backtest.contracts import (
     canonical_digest,
     canonical_json_bytes,
     market_dataset_binding_digest,
-    revalidate_execution_price_bundle,
 )
 from tradingagents.platform.backtest.errors import (
     BacktestDataCode,
@@ -101,5 +100,4 @@ __all__ = [
     "canonical_digest",
     "canonical_json_bytes",
     "market_dataset_binding_digest",
-    "revalidate_execution_price_bundle",
 ]

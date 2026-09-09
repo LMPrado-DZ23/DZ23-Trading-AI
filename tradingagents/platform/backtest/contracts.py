@@ -480,11 +480,11 @@ class ExecutionPriceBundle(BacktestContract):
         return self
 
 
-def revalidate_execution_price_bundle(value: object) -> ExecutionPriceBundle:
-    """Rebuild a bundle at the authoritative simulator boundary.
+def _revalidate_execution_price_bundle(value: object) -> ExecutionPriceBundle:
+    """Rebuild a bundle for internal structural validation only.
 
-    Pydantic's ``model_copy`` deliberately skips validation. Consumers must use
-    the value returned here instead of trusting a caller-provided instance.
+    This does not prove origin. Authoritative consumers must rederive and compare
+    against the frozen repository through ``verify_execution_price_authority``.
     """
 
     if type(value) is not ExecutionPriceBundle:
