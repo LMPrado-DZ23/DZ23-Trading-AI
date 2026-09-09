@@ -712,6 +712,8 @@ def test_full_snapshot_loader_remains_private_to_repository_module() -> None:
     project = Path(__file__).parents[1]
     sources = tuple((project / "tradingagents").rglob("*.py")) + tuple(
         (project / "service").rglob("*.py")
+    ) + tuple(
+        (project / "cli").rglob("*.py")
     )
     authority = project / "tradingagents" / "platform" / "backtest" / "repository.py"
     for source in sources:

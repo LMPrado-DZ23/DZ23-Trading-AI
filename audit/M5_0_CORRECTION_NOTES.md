@@ -27,7 +27,8 @@ was also rejected after an independent reviewer proved that the public
 `ExecutionOpen` contract accepted a fill at or before its decision. The second
 correction moves the temporal invariant into the contract, binds execution to
 a strictly later session, canonicalizes dataset-reference order, and expands
-the structural private-loader guard across all production Python modules.
+the structural private-loader guard across the installed `tradingagents/`,
+`service/`, and `cli/` production modules.
 
 ## Reproduction before freeze
 
@@ -35,9 +36,9 @@ the structural private-loader guard across all production Python modules.
 - Full suite with PostgreSQL 16 and Redis 7: `1411 passed, 2 skipped, 71 subtests`.
 - Ruff over `tradingagents` and `tests`: pass.
 - Compileall over `tradingagents` and `service`: pass.
-- JUnit: `audit/m5-0-r2-full-junit.xml`.
+- JUnit: `audit/m5-0-r3-full-junit.xml`.
 - JUnit bytes: `195522`.
-- JUnit SHA-256: `39ed03fe8250feb5473123ba27d6b49ab2d204c95a72ed7eaee8ba7819cef455`.
+- JUnit SHA-256: `290710a6c3ee125aab8dbb35fed16ae08022bf6907416763a64629c8cf34642d`.
 
 The skips are the credential-gated DeepSeek live call and the Windows-only
 `taskkill` failure path. Neither is silently counted as passed.
