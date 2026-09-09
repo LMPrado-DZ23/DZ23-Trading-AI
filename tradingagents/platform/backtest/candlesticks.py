@@ -29,7 +29,7 @@ from .contracts import (
     canonical_digest,
     canonical_json_bytes,
 )
-from .repository import EligibleMarketView
+from .repository import EligibleMarketView, _eligible_data_sha256
 
 CANDLESTICK_SCHEMA_VERSION = "candlestick-evidence/1"
 CANDLESTICK_DETECTOR_VERSION = "dz23-candlestick/1.0.0"
@@ -284,26 +284,18 @@ class CandlestickEvidenceBundle(BacktestContract):
         return self
 
 
-def _view_digest_payload(view: EligibleMarketView) -> tuple[dict[str, object], dict[str, object]]:
-    data = {
-        "data_cutoff_at": view.data_cutoff_at,
-        "decision_at": view.decision_at,
-        "decision_session_date": view.decision_session_date,
-        "instrument": view.instrument.model_dump(mode="python"),
-        "daily_bars": [item.model_dump(mode="python") for item in view.bars],
-        "corporate_actions": [item.model_dump(mode="python") for item in view.corporate_actions],
-        "fx_observations": [item.model_dump(mode="python") for item in view.fx_observations],
-    }
-    authority = {
+def _view_authority_payload(
+    view: EligibleMarketView, eligible_data_sha256: Digest
+) -> dict[str, object]:
+    return {
         "binding_digest": view.binding_digest,
         "dataset_id": view.dataset_id,
-        "eligible_data_sha256": canonical_digest(data),
+        "eligible_data_sha256": eligible_data_sha256,
         "limitations": view.limitations,
         "manifest_digest": view.manifest_digest,
         "source_vintage": view.source_vintage,
         "tenant_id": view.tenant_id,
     }
-    return data, authority
 
 
 def _validate_view(view: EligibleMarketView) -> None:
@@ -383,9 +375,16 @@ def _validate_view(view: EligibleMarketView) -> None:
     }
     if len(fx_keys) != len(view.fx_observations):
         raise CandlestickEvidenceError("eligible-view contains duplicate FX observations")
-    data, authority = _view_digest_payload(view)
-    data_digest = hashlib.sha256(canonical_json_bytes(data)).hexdigest()
-    authority["eligible_data_sha256"] = data_digest
+    data_digest = _eligible_data_sha256(
+        data_cutoff_at=view.data_cutoff_at,
+        decision_at=view.decision_at,
+        decision_session_date=view.decision_session_date,
+        instrument=view.instrument,
+        bars=view.bars,
+        corporate_actions=view.corporate_actions,
+        fx_observations=view.fx_observations,
+    )
+    authority = _view_authority_payload(view, data_digest)
     view_digest = hashlib.sha256(canonical_json_bytes(authority)).hexdigest()
     if not hmac.compare_digest(data_digest, view.eligible_data_sha256):
         raise CandlestickEvidenceError("eligible-view data digest does not match its records")

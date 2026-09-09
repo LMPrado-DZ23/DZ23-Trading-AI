@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, Inexact, Rounded, localcontext
 from pathlib import Path
+from typing import get_type_hints
 from uuid import UUID
 
 import pytest
@@ -124,6 +125,7 @@ def _prepare(
     unknown_indices: frozenset[int] = frozenset(),
     split_index: int | None = None,
     split_indices: tuple[int, ...] = (),
+    historical_split_count: int = 0,
     volume_overrides: dict[int, str] | None = None,
 ):
     start = date(2026, 1, 1)
@@ -137,9 +139,15 @@ def _prepare(
         )
         for index, values in enumerate(prices)
     )
-    if split_index is not None and split_indices:
-        raise ValueError("use split_index or split_indices, not both")
-    resolved_split_indices = (split_index,) if split_index is not None else split_indices
+    split_modes = sum((split_index is not None, bool(split_indices), historical_split_count > 0))
+    if split_modes > 1:
+        raise ValueError("use only one split fixture mode")
+    if historical_split_count < 0:
+        raise ValueError("historical split count cannot be negative")
+    if historical_split_count:
+        resolved_split_indices = (0,) * historical_split_count
+    else:
+        resolved_split_indices = (split_index,) if split_index is not None else split_indices
     action_rows: list[CorporateAction] = []
     for sequence, index in enumerate(resolved_split_indices, start=1):
         split_day = start + timedelta(days=index)
@@ -168,10 +176,13 @@ def _prepare(
     actions = tuple(action_rows)
     dataset_id = UUID(f"20000000-0000-0000-0000-{dataset_number:012d}")
     repository = FrozenDatasetRepository(root)
+    latest_record_at = max(
+        [bar.fetched_at for bar in bars] + [action.available_at for action in actions]
+    )
     manifest = repository.ingest(
         dataset_id=dataset_id,
         tenant_id=TENANT_ID,
-        created_at=CREATED_AT,
+        created_at=max(CREATED_AT, latest_record_at + timedelta(days=1)),
         source="candlestick-fixture",
         source_vintage="fixture-1",
         instrument=_instrument(),
@@ -435,6 +446,46 @@ def test_many_historical_splits_stay_bounded_and_json_parseable(tmp_path: Path) 
     )
 
 
+@pytest.mark.parametrize("split_count", (10_001, 24_993))
+def test_public_derivation_supports_full_dataset_action_limit(
+    tmp_path: Path, split_count: int
+) -> None:
+    import json
+
+    prepared = _prepare(
+        tmp_path,
+        _neutral_prices(),
+        dataset_number=13,
+        historical_split_count=split_count,
+    )
+    bundle = prepared.derive()
+    evidence = candlestick_bundle_to_untrusted_evidence(bundle)
+    assert bundle.features.split_action_count == split_count
+    assert bundle.features.split_context_digest is not None
+    assert json.loads(evidence.content)["split_action_count"] == split_count
+    assert "[TRUNCATED" not in evidence.content
+    assert evidence.digest == bundle.feature_digest
+
+
+def test_streaming_eligible_digest_preserves_existing_canonical_preimage(
+    tmp_path: Path,
+) -> None:
+    view = _prepare(tmp_path, _neutral_prices(), split_index=0).view()
+    legacy_payload = {
+        "data_cutoff_at": view.data_cutoff_at,
+        "decision_at": view.decision_at,
+        "decision_session_date": view.decision_session_date,
+        "instrument": view.instrument.model_dump(mode="python"),
+        "daily_bars": [item.model_dump(mode="python") for item in view.bars],
+        "corporate_actions": [item.model_dump(mode="python") for item in view.corporate_actions],
+        "fx_observations": [item.model_dump(mode="python") for item in view.fx_observations],
+    }
+    assert (
+        view.eligible_data_sha256
+        == hashlib.sha256(canonical_json_bytes(legacy_payload)).hexdigest()
+    )
+
+
 def test_zero_range_is_typed_and_empty(tmp_path: Path) -> None:
     prices = _neutral_prices()[:-1] + (("10", "10", "10", "10"),)
     bundle = _prepare(tmp_path, prices).derive()
@@ -620,17 +671,40 @@ def test_bundle_rejects_forged_feature_or_ordinal_binding(tmp_path: Path) -> Non
         )
 
 
-def test_public_derivation_reloads_repository_authority(
+def test_public_derivation_bypasses_overridable_load_seam(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     prepared = _prepare(tmp_path, _neutral_prices())
 
     def forbidden(*_args, **_kwargs):
-        raise AssertionError("repository authority was consulted")
+        raise AssertionError("overridable load seam was consulted")
 
     monkeypatch.setattr(FrozenDatasetRepository, "load_eligible", forbidden)
-    with pytest.raises(AssertionError, match="authority was consulted"):
-        prepared.derive()
+    assert prepared.derive().features.status is CandlestickEvaluationStatus.EVALUATED
+
+
+def test_public_derivation_rejects_repository_subclasses(tmp_path: Path) -> None:
+    prepared = _prepare(tmp_path / "authority", _neutral_prices())
+    forged_view = replace(prepared.view(), bar_ordinals=(0, 1, 2, 3, 4, 5))
+
+    class ForgedRepository(FrozenDatasetRepository):
+        def load_eligible(self, *_args, **_kwargs):
+            return forged_view
+
+    attacker = ForgedRepository(tmp_path / "attacker")
+    with pytest.raises(DatasetIntegrityError, match="repository authority"):
+        attacker.derive_candlestick_bundle(
+            prepared.dataset_id,
+            expected_tenant_id=TENANT_ID,
+            expected_manifest_digest=prepared.manifest_digest,
+            decision_at=prepared.decision_at,
+            decision_session_date=prepared.decision_session_date,
+        )
+
+
+def test_public_derivation_return_annotation_is_introspectable() -> None:
+    hints = get_type_hints(FrozenDatasetRepository.derive_candlestick_bundle)
+    assert "return" in hints
 
 
 def test_internal_detector_rejects_mutated_view_records(tmp_path: Path) -> None:
@@ -715,61 +789,163 @@ def test_public_derivation_rejects_wrong_external_authority(tmp_path: Path) -> N
         )
 
 
-def test_detector_has_no_io_agent_or_capital_imports() -> None:
+def _import_manifest(source: str):
+    tree = ast.parse(source)
+    return {
+        (
+            "import" if isinstance(node, ast.Import) else "from",
+            node.level if isinstance(node, ast.ImportFrom) else 0,
+            node.module if isinstance(node, ast.ImportFrom) else "",
+            tuple((alias.name, alias.asname) for alias in node.names),
+        )
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+    }
+
+
+def _detector_allowed_imports():
+    return {
+        ("from", 0, "__future__", (("annotations", None),)),
+        ("import", 0, "", (("hashlib", None),)),
+        ("import", 0, "", (("hmac", None),)),
+        ("from", 0, "datetime", (("UTC", None), ("date", None), ("datetime", None))),
+        (
+            "from",
+            0,
+            "decimal",
+            (
+                ("ROUND_HALF_EVEN", None),
+                ("Context", None),
+                ("Decimal", None),
+                ("localcontext", None),
+            ),
+        ),
+        ("from", 0, "enum", (("StrEnum", None),)),
+        ("from", 0, "typing", (("Literal", None),)),
+        ("from", 0, "uuid", (("UUID", None),)),
+        (
+            "from",
+            0,
+            "pydantic",
+            (("Field", None), ("field_validator", None), ("model_validator", None)),
+        ),
+        (
+            "from",
+            0,
+            "tradingagents.dataflows.evidence",
+            (("MAX_CONTENT_CHARS", None), ("UntrustedEvidence", None)),
+        ),
+        (
+            "from",
+            1,
+            "contracts",
+            (
+                ("BacktestContract", None),
+                ("CorporateAction", None),
+                ("CorporateActionType", None),
+                ("DailyBar", None),
+                ("Digest", None),
+                ("FxObservation", None),
+                ("InstrumentSpec", None),
+                ("canonical_digest", None),
+                ("canonical_json_bytes", None),
+            ),
+        ),
+        (
+            "from",
+            1,
+            "repository",
+            (("EligibleMarketView", None), ("_eligible_data_sha256", None)),
+        ),
+    }
+
+
+def _forbidden_dynamic_names(source: str) -> set[str]:
+    tree = ast.parse(source)
+    return {
+        node.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name)
+        and node.id in {"__import__", "compile", "eval", "exec", "open"}
+    }
+
+
+def _detector_source_conforms_to_pure_import_policy(source: str) -> bool:
+    return _import_manifest(source) == _detector_allowed_imports() and not _forbidden_dynamic_names(
+        source
+    )
+
+
+def test_detector_has_only_allowlisted_pure_imports_and_builtins() -> None:
     source_path = (
         Path(__file__).parents[1] / "tradingagents" / "platform" / "backtest" / "candlesticks.py"
     )
-    tree = ast.parse(source_path.read_text(encoding="utf-8"))
-    imported: set[str] = set()
+    assert _detector_source_conforms_to_pure_import_policy(source_path.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize(
+    "payload",
+    (
+        "import socket as s\ns.create_connection(('example.invalid', 1))",
+        "import subprocess\nsubprocess.run(['false'])",
+        "from socket import create_connection\ncreate_connection(('x', 1))",
+        "__import__('socket')",
+        "open('/tmp/x')",
+    ),
+)
+def test_detector_import_policy_rejects_known_ast_bypass_shapes(payload: str) -> None:
+    source = (
+        Path(__file__).parents[1] / "tradingagents" / "platform" / "backtest" / "candlesticks.py"
+    ).read_text(encoding="utf-8")
+    assert not _detector_source_conforms_to_pure_import_policy(f"{source}\n{payload}\n")
+
+
+def _references_private_detector(source: str) -> bool:
+    private_name = "_derive_candlestick_bundle_from_view"
+    tree = ast.parse(source)
     for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            imported.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom):
-            module = node.module or ""
-            imported.add(module)
-            imported.update(f"{module}.{alias.name}" for alias in node.names)
-    forbidden = {
-        "os",
-        "pathlib",
-        "requests",
-        "httpx",
-        "pandas",
-        "numpy",
-        "stockstats",
-        "yfinance",
-        "talib",
-        "brokers",
-        "portfolio",
-        "agents",
-        "signal_processing",
-        "FrozenDatasetRepository",
-    }
-    assert not any(
-        any(part == item for part in name.split(".")) for name in imported for item in forbidden
-    )
-    attribute_calls = {
-        node.func.attr
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-    }
-    direct_calls = {
-        node.func.id
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-    }
-    forbidden_calls = {"open", "getenv", "urlopen", "request", "now", "utcnow"}
-    assert not (forbidden_calls & attribute_calls)
-    assert not (forbidden_calls & direct_calls)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == private_name:
+            return True
+        if isinstance(node, ast.Name) and node.id == private_name:
+            return True
+        if isinstance(node, ast.Attribute) and node.attr == private_name:
+            return True
+        if isinstance(node, (ast.Import, ast.ImportFrom)) and any(
+            alias.name == private_name for alias in node.names
+        ):
+            return True
+        if isinstance(node, ast.Constant) and node.value == private_name:
+            return True
+    return False
 
 
 def test_private_view_detector_has_no_production_consumer_outside_authority() -> None:
-    package_root = Path(__file__).parents[1] / "tradingagents"
+    project_root = Path(__file__).parents[1]
     private_name = "_derive_candlestick_bundle_from_view"
-    consumers = []
-    for path in package_root.rglob("*.py"):
-        if private_name in path.read_text(encoding="utf-8"):
-            consumers.append(path.relative_to(package_root).as_posix())
+    consumers: list[str] = []
+    for root_name in ("tradingagents", "service", "cli"):
+        for path in (project_root / root_name).rglob("*.py"):
+            source = path.read_text(encoding="utf-8")
+            if private_name in source and _references_private_detector(source):
+                consumers.append(path.relative_to(project_root).as_posix())
     assert sorted(consumers) == [
-        "platform/backtest/candlesticks.py",
-        "platform/backtest/repository.py",
+        "tradingagents/platform/backtest/candlesticks.py",
+        "tradingagents/platform/backtest/repository.py",
     ]
+
+
+@pytest.mark.parametrize(
+    "source",
+    (
+        "from tradingagents.platform.backtest.candlesticks import "
+        "_derive_candlestick_bundle_from_view",
+        "import tradingagents.platform.backtest.candlesticks as c\n"
+        "c._derive_candlestick_bundle_from_view(view)",
+        "_derive_candlestick_bundle_from_view(view)",
+        "getattr(module, '_derive_candlestick_bundle_from_view')(view)",
+    ),
+)
+def test_private_detector_guard_catches_import_attribute_name_and_dynamic_access(
+    source: str,
+) -> None:
+    assert _references_private_detector(source)

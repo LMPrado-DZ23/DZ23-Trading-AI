@@ -50,19 +50,30 @@ actions, validates FX and instrument cutoff invariants, and strengthens the
 structural guard. The original findings and their regression tests remain in
 the frozen tree.
 
+The second independent review of commit
+`c79592bcd3951d250eb61c54ba4a834088bf9e02` found that the repository's
+eligible-view digest still passed an entire action list through the generic
+10,000-element canonical limit, that a subclass could override the virtual
+`load_eligible` seam, and that the structural guard omitted `service/` and
+`cli/`. The repository now hashes the same canonical preimage incrementally,
+with regression proof of byte compatibility, and derives only through its exact
+authority implementation. Tests cross both 10,001 actions and the exact 25,000
+dataset-row ceiling. The AST guard is now an exact import allowlist, rejects
+dynamic I/O/import shapes and scans every executable Python root.
+
 ## Verification
 
-- Focused contract + M5.1 suite: `96 passed` (including a 30-example
+- Focused contract + M5.1 suite: `110 passed` (including a 30-example
   property-based OHLC run and the independent-review regressions).
 - Full suite with disposable PostgreSQL 16 and Redis 7:
-  `1455 passed, 2 skipped, 71 subtests passed`.
+  `1469 passed, 2 skipped, 71 subtests passed`.
 - Skips: DeepSeek live credential absent; Windows-only taskkill failure path.
 - Ruff: green.
 - Compileall: green.
 - JUnit: `audit/m5-1-full-junit.xml`
-- JUnit bytes: `202204`
+- JUnit bytes: `204855`
 - JUnit SHA-256:
-  `b394fd94bb1c7e21d3a3efd4db45bd676139ca95eed637ee5a70140c93891a37`
+  `60f7a006995c1712c1587f3a547223dfd80e1babe3070a38fe7e5641221a5b0c`
 
 ## Independent-review gate
 

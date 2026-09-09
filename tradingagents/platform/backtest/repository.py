@@ -23,6 +23,8 @@ from uuid import UUID
 
 if TYPE_CHECKING:
     from .candlesticks import CandlestickEvidenceBundle
+else:
+    CandlestickEvidenceBundle = Any
 
 from .calendar import BacktestCalendar, calendar_provenance, schedule_digest
 from .contracts import (
@@ -123,16 +125,15 @@ class _FrozenMarketDataset:
             update={"delisting_date": visible_delisting_date}
         )
         fx = tuple(item for item in self.fx_observations if item.available_at <= data_cutoff)
-        digest_payload = {
-            "data_cutoff_at": data_cutoff,
-            "decision_at": decision_cutoff,
-            "decision_session_date": decision_session_date,
-            "instrument": eligible_instrument.model_dump(mode="python"),
-            "daily_bars": [item.model_dump(mode="python") for item in bars],
-            "corporate_actions": [item.model_dump(mode="python") for item in actions],
-            "fx_observations": [item.model_dump(mode="python") for item in fx],
-        }
-        eligible_data_digest = hashlib.sha256(_canonical_json_bytes(digest_payload)).hexdigest()
+        eligible_data_digest = _eligible_data_sha256(
+            data_cutoff_at=data_cutoff,
+            decision_at=decision_cutoff,
+            decision_session_date=decision_session_date,
+            instrument=eligible_instrument,
+            bars=bars,
+            corporate_actions=actions,
+            fx_observations=fx,
+        )
         authoritative_payload = {
             "binding_digest": self.manifest.binding_digest,
             "dataset_id": self.manifest.dataset_id,
@@ -225,6 +226,53 @@ def _record_bytes(kind: str, model: Any) -> bytes:
     return _canonical_json_bytes(
         {"kind": kind, "payload": model.model_dump(mode="python")}
     ) + b"\n"
+
+
+def _eligible_data_sha256(
+    *,
+    data_cutoff_at: datetime,
+    decision_at: datetime,
+    decision_session_date: date,
+    instrument: InstrumentSpec,
+    bars: tuple[DailyBar, ...],
+    corporate_actions: tuple[CorporateAction, ...],
+    fx_observations: tuple[FxObservation, ...],
+) -> str:
+    """Hash the canonical eligible-view preimage without an unbounded list.
+
+    The emitted bytes are identical to ``canonical_json_bytes`` for views below
+    its generic 10,000-item sequence limit.  Dataset-specific row and byte caps
+    are enforced before this internal helper is reached.
+    """
+
+    if 1 + len(bars) + len(corporate_actions) + len(fx_observations) > MAX_DATASET_ROWS:
+        raise DatasetIntegrityError("eligible view exceeds the dataset row limit")
+    digest = hashlib.sha256()
+    digest.update(b'{"corporate_actions":[')
+    for index, item in enumerate(corporate_actions):
+        if index:
+            digest.update(b",")
+        digest.update(_canonical_json_bytes(item.model_dump(mode="python")))
+    digest.update(b'],"daily_bars":[')
+    for index, item in enumerate(bars):
+        if index:
+            digest.update(b",")
+        digest.update(_canonical_json_bytes(item.model_dump(mode="python")))
+    digest.update(b'],"data_cutoff_at":')
+    digest.update(_canonical_json_bytes(data_cutoff_at))
+    digest.update(b',"decision_at":')
+    digest.update(_canonical_json_bytes(decision_at))
+    digest.update(b',"decision_session_date":')
+    digest.update(_canonical_json_bytes(decision_session_date))
+    digest.update(b',"fx_observations":[')
+    for index, item in enumerate(fx_observations):
+        if index:
+            digest.update(b",")
+        digest.update(_canonical_json_bytes(item.model_dump(mode="python")))
+    digest.update(b'],"instrument":')
+    digest.update(_canonical_json_bytes(instrument.model_dump(mode="python")))
+    digest.update(b"}")
+    return digest.hexdigest()
 
 
 def _timestamp_sort_key(value: datetime) -> str:
@@ -634,11 +682,19 @@ class FrozenDatasetRepository:
 
         from .candlesticks import _derive_candlestick_bundle_from_view
 
-        view = self.load_eligible(
+        if type(self) is not FrozenDatasetRepository:
+            raise DatasetIntegrityError("candlestick derivation requires the repository authority")
+        decision_at = FrozenDatasetRepository._require_datetime(decision_at, "decision_at")
+        decision_session_date = FrozenDatasetRepository._require_date(
+            decision_session_date, "decision_session_date"
+        )
+        view = FrozenDatasetRepository._load_verified(
+            self,
             dataset_id,
             expected_tenant_id=expected_tenant_id,
             expected_manifest_digest=expected_manifest_digest,
-            decision_at=decision_at,
+        ).eligible_at(
+            decision_at,
             decision_session_date=decision_session_date,
         )
         return _derive_candlestick_bundle_from_view(view)
