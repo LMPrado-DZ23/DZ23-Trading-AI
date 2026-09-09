@@ -19,6 +19,7 @@ from tradingagents.platform.backtest.contracts import (
     CorporateAction,
     CorporateActionType,
     DailyBar,
+    ExecutionPriceProjection,
     FxObservation,
     InstrumentSpec,
     MarketCalendar,
@@ -956,6 +957,121 @@ def test_continuous_execution_open_is_strictly_after_decision_and_minimal(
             expected_eligible_view_digest="f" * 64,
         )
     assert caught.value.code is BacktestDataCode.DATASET_BINDING_MISMATCH
+
+
+def _execution_price_fixture(
+    root: Path,
+    *,
+    future_open: str = "100",
+    future_high: str = "110",
+    future_low: str = "90",
+    future_close: str = "105",
+    future_volume: str = "1000000",
+):
+    repository = FrozenDatasetRepository(root)
+    instrument = _instrument()
+    decision_bar = _bar(date(2024, 1, 2), instrument=instrument)
+    future_bar = _bar(date(2024, 1, 3), instrument=instrument).model_copy(
+        update={
+            "open": Decimal(future_open),
+            "high": Decimal(future_high),
+            "low": Decimal(future_low),
+            "close": Decimal(future_close),
+            "volume": Decimal(future_volume),
+        }
+    )
+    manifest = repository.ingest(
+        dataset_id=DATASET_ID,
+        tenant_id=TENANT_ID,
+        created_at=CREATED_AT,
+        source="test.vendor",
+        source_vintage="execution-price-projection",
+        instrument=instrument,
+        bars=(decision_bar, future_bar),
+        limitations=M5_UNVERIFIED_LIMITATIONS,
+    )
+    assert decision_bar.available_at is not None
+    view = repository.load_eligible(
+        DATASET_ID,
+        expected_tenant_id=TENANT_ID,
+        expected_manifest_digest=manifest.digest,
+        decision_at=decision_bar.available_at,
+        decision_session_date=decision_bar.session_date,
+    )
+    bundle = repository.load_execution_price(
+        DATASET_ID,
+        expected_tenant_id=TENANT_ID,
+        expected_manifest_digest=manifest.digest,
+        decision_at=decision_bar.available_at,
+        decision_session_date=decision_bar.session_date,
+        expected_eligible_view_digest=view.eligible_view_sha256,
+    )
+    return repository, manifest, view, bundle
+
+
+def test_execution_price_is_stable_when_only_future_non_open_fields_change(
+    tmp_path: Path,
+) -> None:
+    first = _execution_price_fixture(tmp_path / "first")[-1]
+    second = _execution_price_fixture(
+        tmp_path / "second",
+        future_high="120",
+        future_low="80",
+        future_close="99",
+        future_volume="77",
+    )[-1]
+    assert first.price == second.price
+    assert first.price.projection_digest == second.price.projection_digest
+    assert first.provenance.provenance_digest != second.provenance.provenance_digest
+    assert first.bundle_digest != second.bundle_digest
+    assert not hasattr(first.price, "high")
+    assert not hasattr(first.price, "volume")
+
+
+def test_execution_price_changes_only_when_raw_open_changes(tmp_path: Path) -> None:
+    first = _execution_price_fixture(tmp_path / "first")[-1]
+    second = _execution_price_fixture(
+        tmp_path / "second",
+        future_open="101",
+        future_high="111",
+    )[-1]
+    assert first.price.raw_open == Decimal("100")
+    assert second.price.raw_open == Decimal("101")
+    assert first.price.projection_digest != second.price.projection_digest
+
+
+def test_execution_price_contract_rejects_economic_digest_tampering(tmp_path: Path) -> None:
+    bundle = _execution_price_fixture(tmp_path)[-1]
+    with pytest.raises(ValueError, match="execution-price digest"):
+        ExecutionPriceProjection.model_validate(
+            bundle.price.model_dump(mode="python") | {"raw_open": Decimal("99")}
+        )
+
+
+def test_execution_price_requires_exact_repository_authority(tmp_path: Path) -> None:
+    repository, manifest, view, _bundle = _execution_price_fixture(tmp_path / "source")
+
+    class ForgedRepository(FrozenDatasetRepository):
+        pass
+
+    attacker = ForgedRepository(tmp_path / "attacker")
+    with pytest.raises(DatasetIntegrityError, match="repository authority"):
+        attacker.load_execution_price(
+            DATASET_ID,
+            expected_tenant_id=TENANT_ID,
+            expected_manifest_digest=manifest.digest,
+            decision_at=view.decision_at,
+            decision_session_date=view.decision_session_date,
+            expected_eligible_view_digest=view.eligible_view_sha256,
+        )
+    assert repository.load_execution_price(
+        DATASET_ID,
+        expected_tenant_id=TENANT_ID,
+        expected_manifest_digest=manifest.digest,
+        decision_at=view.decision_at,
+        decision_session_date=view.decision_session_date,
+        expected_eligible_view_digest=view.eligible_view_sha256,
+    ).price.raw_open == Decimal("100")
 
 
 def test_ingest_revalidates_preconstructed_contract_instances(tmp_path: Path) -> None:

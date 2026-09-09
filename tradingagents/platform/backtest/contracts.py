@@ -385,6 +385,80 @@ class ExecutionOpen(BacktestContract):
         return self
 
 
+class ExecutionPriceProjection(BacktestContract):
+    """Economic next-open input, isolated from the rest of the D+1 bar."""
+
+    projection_version: Literal["execution-price/1"] = "execution-price/1"
+    instrument_id: UUID
+    decision_session_date: date
+    decision_at: datetime
+    session_date: date
+    execution_at: datetime
+    raw_open: Decimal
+    price_basis: Literal["raw"] = "raw"
+    projection_digest: Digest
+
+    _timestamps_are_utc = field_validator("decision_at", "execution_at")(_utc)
+    _raw_open_is_exact = field_validator("raw_open", mode="before")(_reject_binary_float)
+
+    @field_validator("raw_open")
+    @classmethod
+    def validate_raw_open(cls, value: Decimal) -> Decimal:
+        return _positive(value)
+
+    @model_validator(mode="after")
+    def validate_projection(self):
+        if self.execution_at <= self.decision_at:
+            raise ValueError("execution price must follow the decision")
+        if self.session_date <= self.decision_session_date:
+            raise ValueError("execution price session must follow the decision session")
+        expected = canonical_digest(self.model_dump(mode="python", exclude={"projection_digest"}))
+        if self.projection_digest != expected:
+            raise ValueError("execution-price digest does not match its economic fields")
+        return self
+
+
+class ExecutionPriceProvenance(BacktestContract):
+    """Full custody binding kept outside the economic fill digest."""
+
+    provenance_version: Literal["execution-price-provenance/1"] = "execution-price-provenance/1"
+    dataset_id: UUID
+    manifest_digest: Digest
+    eligible_view_digest: Digest
+    projection_digest: Digest
+    parent_bar_digest: Digest
+    source_digest: Digest
+    provenance_digest: Digest
+
+    @model_validator(mode="after")
+    def validate_provenance(self):
+        expected = canonical_digest(self.model_dump(mode="python", exclude={"provenance_digest"}))
+        if self.provenance_digest != expected:
+            raise ValueError("execution-price provenance digest does not match its fields")
+        return self
+
+
+class ExecutionPriceBundle(BacktestContract):
+    price: ExecutionPriceProjection
+    provenance: ExecutionPriceProvenance
+    bundle_digest: Digest
+
+    @model_validator(mode="after")
+    def validate_bundle(self):
+        if self.price.projection_digest != self.provenance.projection_digest:
+            raise ValueError("execution-price provenance references another projection")
+        expected = canonical_digest(
+            {
+                "bundle_version": "execution-price-bundle/1",
+                "price_digest": self.price.projection_digest,
+                "provenance_digest": self.provenance.provenance_digest,
+            }
+        )
+        if self.bundle_digest != expected:
+            raise ValueError("execution-price bundle digest does not match its children")
+        return self
+
+
 class DatasetReference(BacktestContract):
     instrument_id: UUID
     dataset_id: UUID

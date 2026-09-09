@@ -33,6 +33,9 @@ from .contracts import (
     DailyBar,
     DatasetLimitation,
     ExecutionOpen,
+    ExecutionPriceBundle,
+    ExecutionPriceProjection,
+    ExecutionPriceProvenance,
     FxObservation,
     InstrumentSpec,
     MarketDatasetManifest,
@@ -733,6 +736,83 @@ class FrozenDatasetRepository:
                 code=BacktestDataCode.DATASET_BINDING_MISMATCH,
             )
         return dataset.execution_open_after(view)
+
+    def load_execution_price(
+        self,
+        dataset_id: UUID,
+        *,
+        expected_tenant_id: UUID,
+        expected_manifest_digest: str,
+        decision_at: datetime,
+        decision_session_date: date,
+        expected_eligible_view_digest: str,
+    ) -> ExecutionPriceBundle:
+        """Return a narrow raw-open projection and separate full provenance."""
+
+        if type(self) is not FrozenDatasetRepository:
+            raise DatasetIntegrityError("execution pricing requires the repository authority")
+        decision_at = FrozenDatasetRepository._require_datetime(decision_at, "decision_at")
+        decision_session_date = FrozenDatasetRepository._require_date(
+            decision_session_date, "decision_session_date"
+        )
+        expected_eligible_view_digest = FrozenDatasetRepository._require_digest(
+            expected_eligible_view_digest, "expected eligible-view digest"
+        )
+        dataset = FrozenDatasetRepository._load_verified(
+            self,
+            dataset_id,
+            expected_tenant_id=expected_tenant_id,
+            expected_manifest_digest=expected_manifest_digest,
+        )
+        view = dataset.eligible_at(
+            decision_at,
+            decision_session_date=decision_session_date,
+        )
+        if not hmac.compare_digest(
+            view.eligible_view_sha256, expected_eligible_view_digest
+        ):
+            raise DatasetIntegrityError(
+                "execution price does not match the authorized eligible view",
+                code=BacktestDataCode.DATASET_BINDING_MISMATCH,
+            )
+        execution = dataset.execution_open_after(view)
+        price_payload = {
+            "projection_version": "execution-price/1",
+            "instrument_id": execution.instrument_id,
+            "decision_session_date": execution.decision_session_date,
+            "decision_at": execution.decision_at,
+            "session_date": execution.session_date,
+            "execution_at": execution.execution_at,
+            "raw_open": execution.raw_open,
+            "price_basis": "raw",
+        }
+        price = ExecutionPriceProjection(
+            **price_payload,
+            projection_digest=hashlib.sha256(_canonical_json_bytes(price_payload)).hexdigest(),
+        )
+        provenance_payload = {
+            "provenance_version": "execution-price-provenance/1",
+            "dataset_id": execution.dataset_id,
+            "manifest_digest": execution.manifest_digest,
+            "eligible_view_digest": execution.eligible_view_digest,
+            "projection_digest": price.projection_digest,
+            "parent_bar_digest": execution.parent_bar_digest,
+            "source_digest": execution.source_digest,
+        }
+        provenance = ExecutionPriceProvenance(
+            **provenance_payload,
+            provenance_digest=hashlib.sha256(_canonical_json_bytes(provenance_payload)).hexdigest(),
+        )
+        bundle_payload = {
+            "bundle_version": "execution-price-bundle/1",
+            "price_digest": price.projection_digest,
+            "provenance_digest": provenance.provenance_digest,
+        }
+        return ExecutionPriceBundle(
+            price=price,
+            provenance=provenance,
+            bundle_digest=hashlib.sha256(_canonical_json_bytes(bundle_payload)).hexdigest(),
+        )
 
     def _dataset_dir(self, dataset_id: UUID) -> Path:
         dataset_id = self._require_uuid(dataset_id, "dataset_id")
