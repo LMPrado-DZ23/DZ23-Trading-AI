@@ -217,6 +217,20 @@ class PortfolioService:
                 {"tenant_id": str(tenant_id)},
             )
 
+    @classmethod
+    def _set_reservation_scope(
+        cls, db: Session, principal: IdentityPrincipal
+    ) -> None:
+        cls._set_tenant_scope(db, principal.tenant_id)
+        if db.get_bind().dialect.name == "postgresql":
+            db.execute(
+                text(
+                    "SELECT set_config('app.portfolio_session_id', "
+                    ":session_id, true)"
+                ),
+                {"session_id": str(principal.session_id)},
+            )
+
     @staticmethod
     def _authorize(principal: IdentityPrincipal, *, write: bool = False) -> None:
         allowed = {"owner", "admin", "operator"}
@@ -986,8 +1000,10 @@ class PortfolioService:
         key_hash = self._key_hash(idempotency_key)
         if not timedelta(seconds=30) <= ttl <= timedelta(hours=1):
             raise PortfolioError("RESERVATION_TTL_INVALID")
+        if not ttl.total_seconds().is_integer():
+            raise PortfolioError("RESERVATION_TTL_INVALID")
         with self._reservation_lock, self._sessions() as db, db.begin():
-            self._set_tenant_scope(db, principal.tenant_id)
+            self._set_reservation_scope(db, principal)
             now = self._database_now(db)
             self._validate_allocation(proposal, now=now)
             portfolio = db.scalar(
@@ -1167,20 +1183,16 @@ class PortfolioService:
                     lines=tuple(lines),
                     reservation=existing_reservation,
                 )
-            reservation = CashReservation(
-                tenant_id=principal.tenant_id,
-                portfolio_id=portfolio_id,
-                mandate_id=mandate.id,
-                idempotency_key_hash=key_hash,
-                currency=portfolio.base_currency,
+            reservation = self._create_reservation(
+                db,
+                portfolio=portfolio,
+                mandate=mandate,
+                key_hash=key_hash,
                 amount=total,
-                status="active",
                 purpose_digest=allocation_digest,
-                expires_at=now + ttl,
+                ttl=ttl,
+                now=now,
             )
-            db.add(reservation)
-            portfolio.balance_version += 1
-            db.flush()
             db.expunge(reservation)
             return AllocationReservation(
                 portfolio_id=portfolio_id,
@@ -1231,10 +1243,12 @@ class PortfolioService:
             raise PortfolioError("PURPOSE_DIGEST_INVALID")
         if not timedelta(seconds=30) <= ttl <= timedelta(hours=1):
             raise PortfolioError("RESERVATION_TTL_INVALID")
+        if not ttl.total_seconds().is_integer():
+            raise PortfolioError("RESERVATION_TTL_INVALID")
         key_hash = self._key_hash(idempotency_key)
         try:
             with self._sessions() as db, db.begin():
-                self._set_tenant_scope(db, principal.tenant_id)
+                self._set_reservation_scope(db, principal)
                 now = self._database_now(db)
                 portfolio, mandate = self._reservation_authorization_context(
                     db,
@@ -1258,27 +1272,23 @@ class PortfolioService:
                 cash, reserved = self._cash_balances(db, principal.tenant_id, portfolio_id, now)
                 if amount > cash - reserved:
                     raise PortfolioError("INSUFFICIENT_AVAILABLE_CASH")
-                row = CashReservation(
-                    tenant_id=principal.tenant_id,
-                    portfolio_id=portfolio_id,
-                    mandate_id=mandate.id,
-                    idempotency_key_hash=key_hash,
-                    currency=portfolio.base_currency,
+                row = self._create_reservation(
+                    db,
+                    portfolio=portfolio,
+                    mandate=mandate,
+                    key_hash=key_hash,
                     amount=amount,
-                    status="active",
                     purpose_digest=purpose_digest,
-                    expires_at=now + ttl,
+                    ttl=ttl,
+                    now=now,
                 )
-                db.add(row)
-                portfolio.balance_version += 1
-                db.flush()
                 db.expunge(row)
                 return row
         except IntegrityError as exc:
             if not self._is_reservation_idempotency_conflict(exc):
                 raise
             with self._sessions() as db, db.begin():
-                self._set_tenant_scope(db, principal.tenant_id)
+                self._set_reservation_scope(db, principal)
                 now = self._database_now(db)
                 _portfolio, mandate = self._reservation_authorization_context(
                     db,
@@ -1304,7 +1314,18 @@ class PortfolioService:
     def release_reservation(self, *, principal: IdentityPrincipal, reservation_id: UUID) -> str:
         self._authorize(principal, write=True)
         with self._sessions() as db, db.begin():
-            self._set_tenant_scope(db, principal.tenant_id)
+            self._set_reservation_scope(db, principal)
+            if db.get_bind().dialect.name == "postgresql":
+                status = db.scalar(
+                    text(
+                        "SELECT tradingagents_private.portfolio_release_cash_v1("
+                        ":reservation_id)"
+                    ),
+                    {"reservation_id": reservation_id},
+                )
+                if not isinstance(status, str):
+                    raise PortfolioError("RESERVATION_NOT_FOUND")
+                return status
             now = self._database_now(db)
             row = db.scalar(
                 select(CashReservation)
@@ -1320,6 +1341,53 @@ class PortfolioService:
                 row.status = "released"
                 row.released_at = now
             return row.status
+
+    @staticmethod
+    def _create_reservation(
+        db: Session,
+        *,
+        portfolio: Portfolio,
+        mandate: PortfolioMandate,
+        key_hash: str,
+        amount: Decimal,
+        purpose_digest: str,
+        ttl: timedelta,
+        now: datetime,
+    ) -> CashReservation:
+        if db.get_bind().dialect.name == "postgresql":
+            statement = select(CashReservation).from_statement(
+                text(
+                    "SELECT * FROM tradingagents_private.portfolio_reserve_cash_v1("
+                    ":portfolio_id, :amount, :purpose_digest, :key_hash, :ttl_seconds)"
+                )
+            )
+            row = db.scalars(
+                statement,
+                {
+                    "portfolio_id": portfolio.id,
+                    "amount": amount,
+                    "purpose_digest": purpose_digest,
+                    "key_hash": key_hash,
+                    "ttl_seconds": int(ttl.total_seconds()),
+                },
+            ).one()
+            db.expire(portfolio, ["balance_version"])
+            return row
+        row = CashReservation(
+            tenant_id=portfolio.tenant_id,
+            portfolio_id=portfolio.id,
+            mandate_id=mandate.id,
+            idempotency_key_hash=key_hash,
+            currency=portfolio.base_currency,
+            amount=amount,
+            status="active",
+            purpose_digest=purpose_digest,
+            expires_at=now + ttl,
+        )
+        db.add(row)
+        portfolio.balance_version += 1
+        db.flush()
+        return row
 
     def list_portfolios(self, *, principal: IdentityPrincipal) -> tuple[PortfolioOverview, ...]:
         self._authorize(principal)
@@ -1875,13 +1943,11 @@ class PortfolioService:
         now: datetime,
     ) -> CashReservation | None:
         existing = db.scalar(
-            select(CashReservation)
-            .where(
+            select(CashReservation).where(
                 CashReservation.tenant_id == tenant_id,
                 CashReservation.portfolio_id == portfolio_id,
                 CashReservation.idempotency_key_hash == key_hash,
             )
-            .with_for_update()
         )
         if existing is None:
             return None

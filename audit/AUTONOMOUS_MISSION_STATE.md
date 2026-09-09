@@ -2,12 +2,12 @@
 
 - **mission_id:** `tradingagents-dz23-a5-2026-09-08`
 - **objective:** concluir o TradingAgents DZ23 como plataforma web multiusuário pronta para usuários leigos, com carteira administrada, perfis de risco, execução CCXT segura e implantação verificada em `https://trading.dz23.online/`.
-- **state:** `AUDITING`
-- **iteration:** 7
+- **state:** `CHECKPOINTING`
+- **iteration:** 8
 - **started_at:** 2026-09-08 America/Sao_Paulo
-- **last_heartbeat:** 2026-09-08
-- **last_progress_at:** 2026-09-08
-- **current_task:** congelar os fixes encontrados pelo PostgreSQL real e executar nova auditoria independente do diff final antes de promover o M4.
+- **last_heartbeat:** 2026-09-09
+- **last_progress_at:** 2026-09-09
+- **current_task:** congelar a fronteira privada de mutação de reservas, gerar candidato substituto e executar nova auditoria independente antes de promover M4.
 
 ## Acceptance criteria
 
@@ -96,11 +96,13 @@
 
 ## Current failure
 
-- Não há falha interna conhecida na candidata M4. O último ciclo independente
-  encontrou replay de reserva expirada/obsoleta, consumo sem mandato no trigger
-  PostgreSQL, perda do contrato 503 na listagem e consumo SQL direto após
-  expiração. Os quatro foram corrigidos e a suíte real ficou verde. A promoção
-  continua proibida até a re-auditoria independente do commit e bundles finais.
+- A candidata `f6cd577f28604dbfe74999d35a9a1b29aba2438a` foi reprovada: o papel da
+  aplicação ainda podia inserir/alterar reservas diretamente e contornar caixa,
+  moeda, TTL, circuit breaker e versionamento. O bypass foi fechado revogando
+  DML e instalando portas privadas `SECURITY DEFINER` vinculadas à sessão e ao
+  RBAC; consumo permanece indisponível no M4. A suíte real está verde, mas a
+  promoção continua proibida até nova auditoria independente do novo commit e
+  bundles.
 - Fontes fundamentals/news/macro/social/Polymarket continuam deliberadamente indisponíveis na plataforma; não há alegação de cobertura PIT para elas.
 - O primeiro `.venv` ficou incompleto após interrupção do instalador; foi substituído por `.venv-a5` criado com `--no-compile` e instalação concluída com exit 0.
 
@@ -164,7 +166,11 @@
   concorrência verdes; integração **11 passed**.
 - Suíte integral final com serviços reais: **1279 passed, 1 skipped, 71 subtests**.
 - Evidência: `audit/m4-final-full-junit.xml` SHA-256
-  `0156f75226ff9444b4217b485bf1ea5eb301ba5f8d5c0b28f1b58ac46bd289ac`.
+  `55581db123995028cf646bfffb0576c947532017b899b88cf81073ca19ce8d7c`.
+- Fix final da fronteira de reservas: aplicação/worker/PUBLIC sem DML; duas
+  portas privadas de reserve/release; guard role sem login/BYPASSRLS; sessão,
+  tenant e RBAC derivados; consumo inexistente; PostgreSQL focal **1 passed**,
+  integração **11 passed**, carteira/API/SQLite **75 passed**.
 
 ## Commits
 
@@ -185,7 +191,7 @@
 
 ## Next action
 
-1. congelar os fixes finais do gate M4 em novo commit e regenerar os bundles;
+1. congelar a fronteira privada de reservas em novo commit e regenerar bundles;
 2. executar re-auditoria independente e iniciar M5 somente após o veredito;
 3. manter credenciais reais fora de chat, Git, fixtures e evidências;
 4. manter a integração IQ Option em marco separado: MCP oficial sob gate de capital; `iq-core` somente experimental/read-only, nunca rota LIVE;

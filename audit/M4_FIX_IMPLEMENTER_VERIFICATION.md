@@ -48,6 +48,17 @@
 - PostgreSQL also requires every reservation to be inserted as `active` and
   refuses to consume an expired reservation even when its stale row label has
   not yet been changed. Future-dated consumption is refused as well.
+- PostgreSQL application, worker and public roles cannot mutate reservation
+  rows directly. The application can reserve and release only through private,
+  versioned `SECURITY DEFINER` ports owned by a dedicated non-login guard role
+  with a fixed search path, forced RLS and no unsafe attributes or memberships.
+- The reserve port binds the actual opaque session and derives tenant, actor,
+  role, portfolio, mandate, currency, TTL and database time. It enforces cash,
+  breaker, suitability, replay and balance-version invariants in one lock
+  order. The release port is idempotent and increments the version once.
+- Reservation consumption is unavailable in M4 by design. M5 must introduce a
+  separate job/lease/allocation/order-intent-bound consume port before an order
+  worker can spend reserved cash.
 - Mandate pause provenance is persisted. Suitability reassessment records a
   dedicated pause reason, while an open circuit breaker takes precedence over
   suitability and exposes only the risk-review action.
@@ -58,7 +69,7 @@
 
 - Final full suite with real PostgreSQL and Redis:
   `1279 passed, 1 skipped, 71 subtests passed`.
-- Final focused portfolio/API/audit suite: `60 passed`.
+- Final focused portfolio/API/audit suite: `75 passed`.
 - Formerly flaky LGPD event-order test: `10/10 passed` after the monotonic-time fix.
 - SQLite migration compatibility test: `1 passed`.
 - Ruff: green for the repository (permission warnings only for stale sandbox
@@ -67,12 +78,18 @@
 - PostgreSQL 0019 -> 0020 online migration, offline generation and execution:
   green.
 - Final full JUnit: `audit/m4-final-full-junit.xml`
-  - bytes: `175198`
-  - SHA-256: `0156f75226ff9444b4217b485bf1ea5eb301ba5f8d5c0b28f1b58ac46bd289ac`
+  - bytes: `175202`
+  - SHA-256: `55581db123995028cf646bfffb0576c947532017b899b88cf81073ca19ce8d7c`
+- Final PostgreSQL focal JUnit: `audit/m4-final-postgresql-junit.xml`
+  - bytes: `401`
+  - SHA-256: `f139c4f6a5b1781555a42e74ea519f9d6c7cc2a71d5a287c06b76d627bf296eb`
+- Final integration JUnit: `audit/m4-final-integration-junit.xml`
+  - bytes: `1915`
+  - SHA-256: `158cddb60f86f38dfe333a542b0b5337d459eb22bd6bdda509f2143d9a1d2cb1`
 - Final generated and executed PostgreSQL SQL:
   `audit/m4-final-postgresql-offline.sql`
-  - bytes: `22803`
-  - SHA-256: `952ed50f8ac60d8ca06c72e6e61e4e4276bd5421426a3f15aee8fbb5a20fcf17`
+  - bytes: `36993`
+  - SHA-256: `4b734a16543ac2deb8811a0f9722d19485f7f09757d391f4cb7e0297bb33b4c1`
 - Offline-generation log: `audit/m4-final-postgresql-offline.log`
   - bytes: `341`
   - SHA-256: `5b42a7b0d1c408d037a1e826e99840b6f33eaa884c444b13fa7029f311ee9d82`
@@ -87,6 +104,9 @@
   authority, loss of the public database-time error contract, and direct SQL
   consumption of an expired reservation. All four are corrected and covered by
   local and real PostgreSQL tests.
+- Candidate `f6cd577f28604dbfe74999d35a9a1b29aba2438a` was then rejected because
+  direct reservation DML remained a capital-control bypass. That bypass is
+  closed by ACL revocation and the private mutation ports described above.
 - The previous independent verdicts are superseded by these corrections. A
   fresh review of the final commit is still required; this document does not
   claim independent approval.

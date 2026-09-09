@@ -1,8 +1,10 @@
 # M4 PostgreSQL 17 Dynamic Gate Verification
 
 - Date: `2026-09-09` (`America/Sao_Paulo`).
-- Superseded candidates: `1cc9584d2e4be987ba11d48ce15dafdb4180b4ce`
-  and `feecf5500447d45ed656f0d364e0ace3004630f0`.
+- Superseded candidates: `1cc9584d2e4be987ba11d48ce15dafdb4180b4ce`,
+  `feecf5500447d45ed656f0d364e0ace3004630f0` and
+  `f6cd577f28604dbfe74999d35a9a1b29aba2438a`. The last candidate was rejected
+  because the application role could mutate cash reservations directly.
 - Database: PostgreSQL `17.11`, official image
   `postgres@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73`.
 - Cache: Redis `7.4.11`.
@@ -40,6 +42,15 @@
    trusted valuation that the database compared with `clock_timestamp()`. The
    fixture now obtains the observation time from the same transaction database
    clock, eliminating cross-host clock drift from the security proof.
+9. Application and worker roles could bypass deterministic cash, currency,
+   TTL, circuit-breaker and version checks with direct reservation DML. Direct
+   `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`, `REFERENCES` and `TRIGGER`
+   privileges are now revoked. Reservation and release mutations are exposed
+   only through two private, versioned `SECURITY DEFINER` ports owned by a
+   dedicated `NOLOGIN`/`NOBYPASSRLS` guard role. The ports derive tenant,
+   actor, role, portfolio, mandate, currency and database time; bind the opaque
+   authenticated session; and reject unsafe values before taking authority.
+   Consuming a reservation is intentionally unavailable in M4.
 
 All artifacts generated before these corrections, including the `1cc9584`
 bundles and `m4-fix-*-6/9/10/11/12` evidence, were removed as superseded.
@@ -65,6 +76,19 @@ bundles and `m4-fix-*-6/9/10/11/12` evidence, were removed as superseded.
   mandate or break the two-writer reservation serialization.
 - Concurrent reservations of 60 against 100 yield exactly one success and one
   `INSUFFICIENT_AVAILABLE_CASH`.
+- `tradingagents_app`, `tradingagents_worker` and `PUBLIC` have no direct
+  reservation mutation privilege. A direct oversized, wrong-currency,
+  long-TTL insert and direct `consumed` update are rejected.
+- The private reserve port rejects non-finite/non-positive amounts, TTL outside
+  30..3600 seconds, insufficient cash, stale mandate, open circuit breaker and
+  a session/tenant mismatch. Currency, expiry, mandate and status are derived.
+- The private release port changes `balance_version` exactly once and is
+  idempotent. There is no private or public consume port in M4.
+- Both ports have fixed `pg_catalog` search paths, force row security, are owned
+  by `tradingagents_reservation_api`, and are not executable by `PUBLIC`.
+- `tradingagents_reservation_api` is `NOLOGIN`, `NOSUPERUSER`, `NOCREATEDB`,
+  `NOCREATEROLE`, `NOINHERIT`, `NOREPLICATION`, `NOBYPASSRLS` and has no role
+  memberships.
 - `tradingagents_app` and `tradingagents_worker` are `NOSUPERUSER`,
   `NOCREATEDB`, `NOCREATEROLE`, `NOINHERIT`, `NOREPLICATION` and `NOBYPASSRLS`.
 - Downgrade 0020 -> 0019 exits non-zero with
@@ -78,20 +102,25 @@ bundles and `m4-fix-*-6/9/10/11/12` evidence, were removed as superseded.
 
 - Focused PostgreSQL RLS/race/operational-transition test: `1 passed`.
   - `audit/m4-final-postgresql-junit.xml`
-  - SHA-256 `3022e48def714ef68524e487622656d36f28ebee2b5c91142420e32f6297c35c`
+  - bytes: `401`
+  - SHA-256 `f139c4f6a5b1781555a42e74ea519f9d6c7cc2a71d5a287c06b76d627bf296eb`
 - PostgreSQL/Redis integration directory: `11 passed`.
   - `audit/m4-final-integration-junit.xml`
-  - SHA-256 `800534ef45b1185fa7a6d61bf2caa6b1e635cf50643ecbe455d1a491e5991164`
+  - bytes: `1915`
+  - SHA-256 `158cddb60f86f38dfe333a542b0b5337d459eb22bd6bdda509f2143d9a1d2cb1`
 - Full suite with real PostgreSQL and Redis: `1279 passed, 1 skipped`,
-  `71 subtests passed`, `22 warnings`.
+  `71 subtests passed`, `21 warnings`.
   - Only skip: opt-in live DeepSeek request, unrelated to M4.
   - `audit/m4-final-full-junit.xml`
-  - SHA-256 `0156f75226ff9444b4217b485bf1ea5eb301ba5f8d5c0b28f1b58ac46bd289ac`
+  - bytes: `175202`
+  - SHA-256 `55581db123995028cf646bfffb0576c947532017b899b88cf81073ca19ce8d7c`
 - Executed offline SQL:
   - `audit/m4-final-postgresql-offline.sql`
-  - SHA-256 `952ed50f8ac60d8ca06c72e6e61e4e4276bd5421426a3f15aee8fbb5a20fcf17`
+  - bytes: `36993`
+  - SHA-256 `4b734a16543ac2deb8811a0f9722d19485f7f09757d391f4cb7e0297bb33b4c1`
 - Offline generation log:
   - `audit/m4-final-postgresql-offline.log`
+  - bytes: `341`
   - SHA-256 `5b42a7b0d1c408d037a1e826e99840b6f33eaa884c444b13fa7029f311ee9d82`
 - Ruff, compileall and `git diff --check`: passed.
 

@@ -439,6 +439,7 @@ def upgrade() -> None:
         _replace_ledger_guard()
         _create_operational_guard()
         _create_derived_state_guard()
+        _create_reservation_ports()
 
 
 def _run_preflight(bind: sa.Connection) -> None:
@@ -596,6 +597,9 @@ def _create_operational_guard() -> None:
             "requires_operational := NEW.status IN ('active','consumed'); "
             "IF TG_OP = 'INSERT' AND NEW.status <> 'active' THEN "
             "RAISE EXCEPTION 'cash reservation must be created active'; END IF; "
+            "IF NEW.status = 'consumed' THEN RAISE EXCEPTION "
+            "'cash reservation consumption is unavailable before execution fencing'; "
+            "END IF; "
             "IF TG_OP = 'UPDATE' THEN "
             "IF OLD.tenant_id IS DISTINCT FROM NEW.tenant_id OR "
             "OLD.portfolio_id IS DISTINCT FROM NEW.portfolio_id OR "
@@ -640,9 +644,13 @@ def _create_operational_guard() -> None:
             "IF NEW.status IN ('active','consumed') AND "
             "NEW.mandate_id IS DISTINCT FROM active_mandate THEN "
             "RAISE EXCEPTION 'cash reservation mandate does not match portfolio'; END IF; "
-            "IF NEW.status = 'consumed' AND (NEW.expires_at <= clock_timestamp() OR "
-            "NEW.consumed_at > clock_timestamp()) THEN RAISE EXCEPTION "
-            "'expired or future-dated cash reservation cannot be consumed'; END IF; "
+            "IF TG_OP = 'INSERT' AND (NEW.created_at > clock_timestamp() OR "
+            "NEW.expires_at < NEW.created_at + interval '30 seconds' OR "
+            "NEW.expires_at > NEW.created_at + interval '1 hour') THEN "
+            "RAISE EXCEPTION 'cash reservation timeline is invalid'; END IF; "
+            "IF NEW.status = 'released' AND (NEW.released_at < NEW.created_at OR "
+            "NEW.released_at > clock_timestamp()) THEN RAISE EXCEPTION "
+            "'cash reservation release timeline is invalid'; END IF; "
             "IF requires_operational THEN SELECT count(*) INTO snapshot_count "
             "FROM public.portfolio_snapshots s WHERE s.tenant_id = NEW.tenant_id "
             "AND s.portfolio_id = NEW.portfolio_id; "
@@ -668,6 +676,310 @@ def _create_operational_guard() -> None:
                 "EXECUTE FUNCTION portfolio_assert_operational_mandate()"
             )
         )
+
+
+def _create_reservation_ports() -> None:
+    op.execute(
+        sa.text(
+            "DO $$ DECLARE role_row record; BEGIN "
+            "SELECT rolsuper, rolcreatedb, rolcreaterole, rolinherit, rolreplication, "
+            "rolbypassrls, rolcanlogin INTO role_row FROM pg_roles "
+            "WHERE rolname = 'tradingagents_reservation_api'; "
+            "IF NOT FOUND THEN CREATE ROLE tradingagents_reservation_api NOLOGIN "
+            "NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS; "
+            "ELSIF role_row.rolsuper OR role_row.rolcreatedb OR role_row.rolcreaterole "
+            "OR role_row.rolinherit OR role_row.rolreplication OR role_row.rolbypassrls "
+            "OR role_row.rolcanlogin THEN RAISE EXCEPTION "
+            "'existing tradingagents_reservation_api role has unsafe attributes'; "
+            "END IF; IF EXISTS (SELECT 1 FROM pg_auth_members membership "
+            "JOIN pg_roles guard ON guard.rolname = 'tradingagents_reservation_api' "
+            "WHERE membership.roleid = guard.oid OR membership.member = guard.oid) "
+            "THEN RAISE EXCEPTION 'tradingagents_reservation_api must have no memberships'; "
+            "END IF; END $$"
+        )
+    )
+    op.execute(
+        sa.text(
+            "CREATE SCHEMA IF NOT EXISTS tradingagents_private "
+            "AUTHORIZATION tradingagents_reservation_api"
+        )
+    )
+    op.execute(
+        sa.text(
+            "ALTER SCHEMA tradingagents_private OWNER TO tradingagents_reservation_api"
+        )
+    )
+    op.execute(sa.text("REVOKE ALL ON SCHEMA tradingagents_private FROM PUBLIC"))
+    op.execute(
+        sa.text(
+            "REVOKE CREATE ON SCHEMA public FROM PUBLIC, tradingagents_app, "
+            "tradingagents_worker"
+        )
+    )
+    op.execute(
+        sa.text(
+            "GRANT USAGE ON SCHEMA public, tradingagents_private "
+            "TO tradingagents_reservation_api"
+        )
+    )
+    op.execute(
+        sa.text("GRANT USAGE ON SCHEMA tradingagents_private TO tradingagents_app")
+    )
+    op.execute(
+        sa.text(
+            "REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER "
+            "ON public.portfolio_cash_reservations FROM tradingagents_app, "
+            "tradingagents_worker, PUBLIC"
+        )
+    )
+    op.execute(
+        sa.text(
+            "GRANT SELECT ON public.identity_sessions, public.identity_memberships, "
+            "public.identity_users, public.identity_tenants, public.portfolios, "
+            "public.portfolio_mandates, public.portfolio_suitability_assessments, "
+            "public.portfolio_ledger_postings, public.portfolio_snapshots, "
+            "public.portfolio_circuit_breakers, public.portfolio_cash_reservations "
+            "TO tradingagents_reservation_api"
+        )
+    )
+    op.execute(
+        sa.text(
+            "GRANT INSERT, UPDATE ON public.portfolio_cash_reservations "
+            "TO tradingagents_reservation_api"
+        )
+    )
+    op.execute(
+        sa.text(
+            "GRANT UPDATE (balance_version) ON public.portfolios "
+            "TO tradingagents_reservation_api"
+        )
+    )
+    session_id = (
+        "NULLIF(current_setting('app.portfolio_session_id', true), '')::uuid"
+    )
+    tenant_id = "NULLIF(current_setting('app.tenant_id', true), '')::uuid"
+    for table in (
+        "identity_sessions",
+        "identity_memberships",
+        "identity_users",
+        "identity_tenants",
+    ):
+        if table == "identity_sessions":
+            predicate = f"id = {session_id}"
+        elif table == "identity_memberships":
+            predicate = (
+                "EXISTS (SELECT 1 FROM public.identity_sessions scoped_session "
+                f"WHERE scoped_session.id = {session_id} "
+                f"AND scoped_session.membership_id = {table}.id)"
+            )
+        elif table == "identity_users":
+            predicate = (
+                "EXISTS (SELECT 1 FROM public.identity_sessions scoped_session "
+                f"WHERE scoped_session.id = {session_id} "
+                f"AND scoped_session.user_id = {table}.id)"
+            )
+        else:
+            predicate = (
+                "EXISTS (SELECT 1 FROM public.identity_sessions scoped_session "
+                f"WHERE scoped_session.id = {session_id} "
+                f"AND scoped_session.tenant_id = {table}.id)"
+            )
+        op.execute(
+            sa.text(
+                f'CREATE POLICY "{table}_reservation_api" ON public."{table}" '
+                "FOR SELECT TO tradingagents_reservation_api "
+                f"USING ({predicate})"
+            )
+        )
+    for table in (
+        "portfolio_mandates",
+        "portfolio_suitability_assessments",
+        "portfolio_ledger_postings",
+        "portfolio_snapshots",
+        "portfolio_circuit_breakers",
+    ):
+        op.execute(
+            sa.text(
+                f'CREATE POLICY "{table}_reservation_api" ON public."{table}" '
+                "FOR SELECT TO tradingagents_reservation_api "
+                f"USING (tenant_id = {tenant_id})"
+            )
+        )
+    op.execute(
+        sa.text(
+            "CREATE POLICY portfolios_reservation_api ON public.portfolios "
+            "FOR ALL TO tradingagents_reservation_api "
+            f"USING (tenant_id = {tenant_id}) WITH CHECK (tenant_id = {tenant_id})"
+        )
+    )
+    op.execute(
+        sa.text(
+            "CREATE POLICY cash_reservations_reservation_api "
+            "ON public.portfolio_cash_reservations FOR ALL "
+            "TO tradingagents_reservation_api "
+            f"USING (tenant_id = {tenant_id}) WITH CHECK (tenant_id = {tenant_id})"
+        )
+    )
+    op.execute(
+        sa.text(
+            "CREATE FUNCTION tradingagents_private.portfolio_reserve_cash_v1("
+            "p_portfolio_id uuid, p_amount numeric, p_purpose_digest text, "
+            "p_idempotency_key_hash text, p_ttl_seconds integer) "
+            "RETURNS public.portfolio_cash_reservations LANGUAGE plpgsql "
+            "SECURITY DEFINER SET search_path = pg_catalog SET row_security = on AS $$ "
+            "DECLARE v_session uuid; v_tenant uuid; v_user uuid; v_membership uuid; "
+            "v_role text; v_now timestamptz := clock_timestamp(); "
+            "v_portfolio public.portfolios%ROWTYPE; "
+            "v_mandate public.portfolio_mandates%ROWTYPE; "
+            "v_suitability public.portfolio_suitability_assessments%ROWTYPE; "
+            "v_latest_mandate uuid; v_existing public.portfolio_cash_reservations%ROWTYPE; "
+            "v_created public.portfolio_cash_reservations%ROWTYPE; "
+            "v_cash numeric; v_reserved numeric; BEGIN "
+            "BEGIN v_session := NULLIF(current_setting('app.portfolio_session_id', true), '')::uuid; "
+            "EXCEPTION WHEN others THEN RAISE EXCEPTION 'PORTFOLIO_SESSION_REQUIRED' "
+            "USING ERRCODE = 'P0001'; END; "
+            "SELECT s.tenant_id, s.user_id, s.membership_id, m.role INTO "
+            "v_tenant, v_user, v_membership, v_role FROM public.identity_sessions s "
+            "JOIN public.identity_memberships m ON m.id = s.membership_id "
+            "AND m.tenant_id = s.tenant_id AND m.user_id = s.user_id "
+            "JOIN public.identity_users u ON u.id = s.user_id "
+            "JOIN public.identity_tenants t ON t.id = s.tenant_id "
+            "WHERE s.id = v_session AND s.revoked_at IS NULL AND s.expires_at > v_now "
+            "AND m.is_active AND u.is_active AND t.is_active; "
+            "IF NOT FOUND OR v_role NOT IN ('owner','admin','operator') OR "
+            "v_tenant IS DISTINCT FROM NULLIF(current_setting('app.tenant_id', true), '')::uuid "
+            "THEN RAISE EXCEPTION 'PORTFOLIO_SESSION_FORBIDDEN' USING ERRCODE = 'P0001'; END IF; "
+            "IF p_amount IS NULL OR p_amount <= 0 OR "
+            "p_amount::text IN ('NaN','Infinity','-Infinity') OR "
+            "p_amount IS DISTINCT FROM round(p_amount, 12) THEN RAISE EXCEPTION "
+            "'RESERVATION_AMOUNT_INVALID' USING ERRCODE = 'P0001'; END IF; "
+            "IF p_ttl_seconds IS NULL OR p_ttl_seconds NOT BETWEEN 30 AND 3600 "
+            "THEN RAISE EXCEPTION 'RESERVATION_TTL_INVALID' USING ERRCODE = 'P0001'; END IF; "
+            "IF p_purpose_digest IS NULL OR p_purpose_digest !~ '^[0-9a-f]{64}$' "
+            "THEN RAISE EXCEPTION 'PURPOSE_DIGEST_INVALID' USING ERRCODE = 'P0001'; END IF; "
+            "IF p_idempotency_key_hash IS NULL OR "
+            "p_idempotency_key_hash !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION "
+            "'IDEMPOTENCY_KEY_INVALID' USING ERRCODE = 'P0001'; END IF; "
+            "SELECT * INTO v_portfolio FROM public.portfolios WHERE tenant_id = v_tenant "
+            "AND id = p_portfolio_id FOR UPDATE; "
+            "IF NOT FOUND OR v_portfolio.status <> 'active' THEN RAISE EXCEPTION "
+            "'PORTFOLIO_NOT_ACTIVE' USING ERRCODE = 'P0001'; END IF; "
+            "SELECT id INTO v_latest_mandate FROM public.portfolio_mandates "
+            "WHERE tenant_id = v_tenant AND portfolio_id = p_portfolio_id "
+            "ORDER BY version DESC LIMIT 1; "
+            "SELECT * INTO v_mandate FROM public.portfolio_mandates "
+            "WHERE tenant_id = v_tenant AND portfolio_id = p_portfolio_id "
+            "AND id = v_portfolio.current_mandate_id; "
+            "SELECT * INTO v_suitability FROM public.portfolio_suitability_assessments "
+            "WHERE tenant_id = v_tenant AND user_id = v_portfolio.owner_user_id "
+            "ORDER BY version DESC LIMIT 1; "
+            "IF v_mandate.id IS NULL OR v_mandate.id IS DISTINCT FROM v_latest_mandate "
+            "OR v_mandate.status <> 'active' OR v_mandate.mode NOT IN "
+            "('backtest','shadow','paper') OR v_mandate.effective_at > v_now "
+            "OR v_mandate.ended_at IS NOT NULL OR v_suitability.id IS NULL "
+            "OR v_mandate.suitability_id IS DISTINCT FROM v_suitability.id "
+            "OR v_suitability.status <> 'valid' OR v_suitability.assessed_at > v_now "
+            "OR v_suitability.expires_at <= v_now OR "
+            "(CASE v_mandate.profile WHEN 'preservation' THEN 0 WHEN 'conservative' THEN 1 "
+            "WHEN 'moderate' THEN 2 WHEN 'growth' THEN 3 WHEN 'aggressive' THEN 4 ELSE 99 END) "
+            "> (CASE v_suitability.effective_profile WHEN 'preservation' THEN 0 "
+            "WHEN 'conservative' THEN 1 WHEN 'moderate' THEN 2 WHEN 'growth' THEN 3 "
+            "WHEN 'aggressive' THEN 4 ELSE -1 END) THEN RAISE EXCEPTION "
+            "'ACTIVE_MANDATE_REQUIRED' USING ERRCODE = 'P0001'; END IF; "
+            "IF NOT EXISTS (SELECT 1 FROM public.portfolio_snapshots WHERE "
+            "tenant_id = v_tenant AND portfolio_id = p_portfolio_id) THEN RAISE EXCEPTION "
+            "'BASELINE_SNAPSHOT_REQUIRED' USING ERRCODE = 'P0001'; END IF; "
+            "IF EXISTS (SELECT 1 FROM public.portfolio_circuit_breakers WHERE "
+            "tenant_id = v_tenant AND portfolio_id = p_portfolio_id AND status = 'open') "
+            "THEN RAISE EXCEPTION 'CIRCUIT_BREAKER_OPEN' USING ERRCODE = 'P0001'; END IF; "
+            "SELECT * INTO v_existing FROM public.portfolio_cash_reservations WHERE "
+            "tenant_id = v_tenant AND portfolio_id = p_portfolio_id "
+            "AND idempotency_key_hash = p_idempotency_key_hash FOR UPDATE; "
+            "IF FOUND THEN IF v_existing.amount IS DISTINCT FROM p_amount OR "
+            "v_existing.purpose_digest IS DISTINCT FROM p_purpose_digest THEN "
+            "RAISE EXCEPTION 'IDEMPOTENCY_PAYLOAD_MISMATCH' USING ERRCODE = 'P0001'; END IF; "
+            "IF v_existing.status <> 'active' OR v_existing.expires_at <= v_now OR "
+            "v_existing.mandate_id IS DISTINCT FROM v_mandate.id THEN RAISE EXCEPTION "
+            "'IDEMPOTENCY_RESERVATION_FINALIZED' USING ERRCODE = 'P0001'; END IF; "
+            "RETURN v_existing; END IF; "
+            "SELECT COALESCE(sum(quantity), 0) INTO v_cash FROM public.portfolio_ledger_postings "
+            "WHERE tenant_id = v_tenant AND portfolio_id = p_portfolio_id "
+            "AND account = 'cash' AND asset = v_portfolio.base_currency; "
+            "SELECT COALESCE(sum(amount), 0) INTO v_reserved "
+            "FROM public.portfolio_cash_reservations WHERE tenant_id = v_tenant "
+            "AND portfolio_id = p_portfolio_id AND status = 'active' AND expires_at > v_now; "
+            "IF p_amount > v_cash - v_reserved THEN RAISE EXCEPTION "
+            "'INSUFFICIENT_AVAILABLE_CASH' USING ERRCODE = 'P0001'; END IF; "
+            "INSERT INTO public.portfolio_cash_reservations (id, tenant_id, portfolio_id, "
+            "mandate_id, idempotency_key_hash, currency, amount, status, purpose_digest, "
+            "expires_at, created_at) VALUES (gen_random_uuid(), v_tenant, p_portfolio_id, "
+            "v_mandate.id, p_idempotency_key_hash, v_portfolio.base_currency, p_amount, "
+            "'active', p_purpose_digest, v_now + make_interval(secs => p_ttl_seconds), v_now) "
+            "RETURNING * INTO v_created; UPDATE public.portfolios SET balance_version = "
+            "balance_version + 1 WHERE tenant_id = v_tenant AND id = p_portfolio_id; "
+            "RETURN v_created; END; $$"
+        )
+    )
+    op.execute(
+        sa.text(
+            "ALTER FUNCTION tradingagents_private.portfolio_reserve_cash_v1("
+            "uuid,numeric,text,text,integer) OWNER TO tradingagents_reservation_api"
+        )
+    )
+    op.execute(
+        sa.text(
+            "CREATE FUNCTION tradingagents_private.portfolio_release_cash_v1("
+            "p_reservation_id uuid) RETURNS text LANGUAGE plpgsql SECURITY DEFINER "
+            "SET search_path = pg_catalog SET row_security = on AS $$ "
+            "DECLARE v_session uuid; v_tenant uuid; v_role text; v_portfolio uuid; "
+            "v_status text; v_now timestamptz := clock_timestamp(); BEGIN "
+            "BEGIN v_session := NULLIF(current_setting('app.portfolio_session_id', true), '')::uuid; "
+            "EXCEPTION WHEN others THEN RAISE EXCEPTION 'PORTFOLIO_SESSION_REQUIRED' "
+            "USING ERRCODE = 'P0001'; END; "
+            "SELECT s.tenant_id, m.role INTO v_tenant, v_role "
+            "FROM public.identity_sessions s JOIN public.identity_memberships m "
+            "ON m.id = s.membership_id AND m.tenant_id = s.tenant_id AND m.user_id = s.user_id "
+            "JOIN public.identity_users u ON u.id = s.user_id "
+            "JOIN public.identity_tenants t ON t.id = s.tenant_id WHERE s.id = v_session "
+            "AND s.revoked_at IS NULL AND s.expires_at > v_now AND m.is_active "
+            "AND u.is_active AND t.is_active; IF NOT FOUND OR v_role NOT IN "
+            "('owner','admin','operator') OR v_tenant IS DISTINCT FROM "
+            "NULLIF(current_setting('app.tenant_id', true), '')::uuid THEN "
+            "RAISE EXCEPTION 'PORTFOLIO_SESSION_FORBIDDEN' USING ERRCODE = 'P0001'; END IF; "
+            "SELECT portfolio_id INTO v_portfolio FROM public.portfolio_cash_reservations "
+            "WHERE tenant_id = v_tenant AND id = p_reservation_id; "
+            "IF NOT FOUND THEN RETURN NULL; END IF; PERFORM 1 FROM public.portfolios "
+            "WHERE tenant_id = v_tenant AND id = v_portfolio FOR UPDATE; "
+            "SELECT status INTO v_status FROM public.portfolio_cash_reservations WHERE "
+            "tenant_id = v_tenant AND portfolio_id = v_portfolio AND id = p_reservation_id "
+            "FOR UPDATE; IF v_status = 'active' THEN UPDATE "
+            "public.portfolio_cash_reservations SET status = 'released', released_at = v_now "
+            "WHERE tenant_id = v_tenant AND portfolio_id = v_portfolio "
+            "AND id = p_reservation_id; UPDATE public.portfolios SET balance_version = "
+            "balance_version + 1 WHERE tenant_id = v_tenant AND id = v_portfolio; "
+            "RETURN 'released'; END IF; RETURN v_status; END; $$"
+        )
+    )
+    op.execute(
+        sa.text(
+            "ALTER FUNCTION tradingagents_private.portfolio_release_cash_v1(uuid) "
+            "OWNER TO tradingagents_reservation_api"
+        )
+    )
+    for signature in (
+        "tradingagents_private.portfolio_reserve_cash_v1(uuid,numeric,text,text,integer)",
+        "tradingagents_private.portfolio_release_cash_v1(uuid)",
+    ):
+        op.execute(sa.text(f"REVOKE ALL ON FUNCTION {signature} FROM PUBLIC"))
+        op.execute(
+            sa.text(f"GRANT EXECUTE ON FUNCTION {signature} TO tradingagents_app")
+        )
+    op.execute(
+        sa.text(
+            "ALTER DEFAULT PRIVILEGES FOR ROLE tradingagents_reservation_api "
+            "IN SCHEMA tradingagents_private REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC"
+        )
+    )
 
 
 def _create_derived_state_guard() -> None:

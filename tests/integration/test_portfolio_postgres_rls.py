@@ -31,18 +31,25 @@ APP_URL = os.environ.get("TRADINGAGENTS_TEST_POSTGRES_APP_URL")
 
 def _principal(identity: IdentityService, label: str) -> IdentityPrincipal:
     suffix = uuid4().hex[:10]
+    email = f"portfolio-{label.lower()}-{suffix}@example.test"
+    password = "correct horse battery staple"
     row = identity.register_tenant(
         tenant_name=f"Portfolio {label}",
         tenant_slug=f"portfolio-{label.lower()}-{suffix}",
-        owner_email=f"portfolio-{label.lower()}-{suffix}@example.test",
+        owner_email=email,
         display_name=f"Owner {label}",
-        password="correct horse battery staple",
+        password=password,
+    )
+    session = identity.authenticate(
+        tenant_id=row.tenant_id,
+        email=email,
+        password=password,
     )
     return IdentityPrincipal(
         tenant_id=row.tenant_id,
         user_id=row.user_id,
         membership_id=row.membership_id,
-        session_id=uuid4(),
+        session_id=session.session_id,
         role=MembershipRole.OWNER,
     )
 
@@ -215,6 +222,10 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -
         purpose_digest="4" * 64,
         idempotency_key="pg-consume-guard-0001",
     )
+    assert consume_guard.currency == "BRL"
+    assert timedelta(seconds=30) <= (
+        consume_guard.expires_at - consume_guard.created_at
+    ) <= timedelta(hours=1)
     expire_guard = first_service.reserve_cash(
         principal=first,
         portfolio_id=portfolio.id,
@@ -229,8 +240,84 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -
         purpose_digest="2" * 64,
         idempotency_key="pg-stale-replay-guard-0001",
     )
-    expired_replay_id = uuid4()
     with engine.begin() as connection:
+        connection.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(first.tenant_id)},
+        )
+        assert not connection.scalar(
+            text(
+                "SELECT has_table_privilege(current_user, "
+                "'public.portfolio_cash_reservations', 'INSERT')"
+            )
+        )
+        assert not connection.scalar(
+            text(
+                "SELECT has_table_privilege(current_user, "
+                "'public.portfolio_cash_reservations', 'UPDATE')"
+            )
+        )
+        assert not connection.scalar(
+            text(
+                "SELECT has_table_privilege(current_user, "
+                "'public.portfolio_cash_reservations', 'DELETE')"
+            )
+        )
+        assert connection.scalar(
+            text(
+                "SELECT has_function_privilege(current_user, "
+                "'tradingagents_private.portfolio_reserve_cash_v1"
+                "(uuid,numeric,text,text,integer)', 'EXECUTE')"
+            )
+        )
+        assert connection.scalar(
+            text(
+                "SELECT to_regprocedure("
+                "'tradingagents_private.portfolio_consume_cash_v1(uuid)') IS NULL"
+            )
+        )
+        assert connection.scalar(
+            text(
+                "SELECT count(*) = 2 AND bool_and(p.prosecdef) AND "
+                "bool_and(pg_get_userbyid(p.proowner) = "
+                "'tradingagents_reservation_api') AND "
+                "bool_and(array_to_string(p.proconfig, ',') LIKE "
+                "'%search_path=pg_catalog%') AND "
+                "bool_and(array_to_string(p.proconfig, ',') LIKE '%row_security=on%') "
+                "FROM pg_proc p JOIN pg_namespace n "
+                "ON n.oid = p.pronamespace WHERE n.nspname = 'tradingagents_private' "
+                "AND p.proname IN "
+                "('portfolio_reserve_cash_v1','portfolio_release_cash_v1')"
+            )
+        )
+        assert connection.scalar(
+            text(
+                "SELECT NOT EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n "
+                "ON n.oid = p.pronamespace CROSS JOIN LATERAL "
+                "aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) acl "
+                "WHERE n.nspname = 'tradingagents_private' AND acl.grantee = 0 "
+                "AND acl.privilege_type = 'EXECUTE')"
+            )
+        )
+        role_state = connection.execute(
+            text(
+                "SELECT rolcanlogin, rolsuper, rolcreatedb, rolcreaterole, rolinherit, "
+                "rolreplication, rolbypassrls FROM pg_roles "
+                "WHERE rolname = 'tradingagents_reservation_api'"
+            )
+        ).one()
+        assert not any(role_state)
+        assert connection.scalar(
+            text(
+                "SELECT NOT EXISTS (SELECT 1 FROM pg_auth_members membership "
+                "JOIN pg_roles guard ON guard.rolname = "
+                "'tradingagents_reservation_api' WHERE membership.roleid = guard.oid "
+                "OR membership.member = guard.oid)"
+            )
+        )
+
+    # The web role cannot manufacture reservation rows or status transitions.
+    with pytest.raises(DBAPIError), engine.begin() as connection:
         connection.execute(
             text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
             {"tenant_id": str(first.tenant_id)},
@@ -240,27 +327,64 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -
                 "INSERT INTO portfolio_cash_reservations "
                 "(id, tenant_id, portfolio_id, mandate_id, idempotency_key_hash, "
                 "currency, amount, status, purpose_digest, expires_at, created_at) "
-                "VALUES (:id, :tenant, :portfolio, :mandate, :key_hash, 'BRL', 1, "
-                "'active', :purpose, clock_timestamp() - interval '1 second', "
-                "clock_timestamp() - interval '1 minute')"
+                "VALUES (:id, :tenant, :portfolio, :mandate, :key_hash, 'USD', 999999999, "
+                "'active', :purpose, clock_timestamp() + interval '100 years', "
+                "clock_timestamp())"
             ),
             {
-                "id": str(expired_replay_id),
+                "id": str(uuid4()),
                 "tenant": str(first.tenant_id),
                 "portfolio": str(portfolio.id),
                 "mandate": str(stale_replay_guard.mandate_id),
-                "key_hash": first_service._key_hash("pg-expired-replay-0001"),
+                "key_hash": "1" * 64,
                 "purpose": "1" * 64,
             },
         )
-    with pytest.raises(PortfolioError, match="IDEMPOTENCY_RESERVATION_FINALIZED"):
-        first_service.reserve_cash(
-            principal=first,
-            portfolio_id=portfolio.id,
-            amount=Decimal("1"),
-            purpose_digest="1" * 64,
-            idempotency_key="pg-expired-replay-0001",
-            ttl=timedelta(seconds=30),
+    for invalid_amount in ("NaN", "Infinity", "-Infinity"):
+        with pytest.raises(DBAPIError), engine.begin() as connection:
+            connection.execute(
+                text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+                {"tenant_id": str(first.tenant_id)},
+            )
+            connection.execute(
+                text(
+                    "SELECT set_config('app.portfolio_session_id', :session_id, true)"
+                ),
+                {"session_id": str(first.session_id)},
+            )
+            connection.execute(
+                text(
+                    "SELECT * FROM tradingagents_private.portfolio_reserve_cash_v1("
+                    ":portfolio, CAST(:amount AS numeric), :purpose, :key_hash, 60)"
+                ),
+                {
+                    "portfolio": str(portfolio.id),
+                    "amount": invalid_amount,
+                    "purpose": "9" * 64,
+                    "key_hash": invalid_amount.encode().hex().ljust(64, "0")[:64],
+                },
+            )
+    with pytest.raises(DBAPIError), engine.begin() as connection:
+        connection.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(first.tenant_id)},
+        )
+        connection.execute(
+            text(
+                "SELECT set_config('app.portfolio_session_id', :session_id, true)"
+            ),
+            {"session_id": str(first.session_id)},
+        )
+        connection.execute(
+            text(
+                "SELECT * FROM tradingagents_private.portfolio_reserve_cash_v1("
+                ":portfolio, 1, :purpose, :key_hash, 29)"
+            ),
+            {
+                "portfolio": str(portfolio.id),
+                "purpose": "8" * 64,
+                "key_hash": "7" * 64,
+            },
         )
     with pytest.raises(DBAPIError), engine.begin() as connection:
         connection.execute(
@@ -272,8 +396,11 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -
                 "UPDATE portfolio_cash_reservations SET status = 'consumed', "
                 "consumed_at = clock_timestamp() WHERE id = :id"
             ),
-            {"id": str(expired_replay_id)},
+            {"id": str(consume_guard.id)},
         )
+
+    # The narrow RPC independently rejects an oversized reserve and a tenant
+    # scope that does not match the authenticated session capability.
     with pytest.raises(DBAPIError), engine.begin() as connection:
         connection.execute(
             text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
@@ -281,20 +408,41 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -
         )
         connection.execute(
             text(
-                "INSERT INTO portfolio_cash_reservations "
-                "(id, tenant_id, portfolio_id, mandate_id, idempotency_key_hash, "
-                "currency, amount, status, purpose_digest, expires_at, consumed_at, "
-                "created_at) VALUES (:id, :tenant, :portfolio, :mandate, :key_hash, "
-                "'BRL', 1, 'consumed', :purpose, clock_timestamp() + interval '1 minute', "
-                "clock_timestamp(), clock_timestamp())"
+                "SELECT set_config('app.portfolio_session_id', :session_id, true)"
+            ),
+            {"session_id": str(first.session_id)},
+        )
+        connection.execute(
+            text(
+                "SELECT * FROM tradingagents_private.portfolio_reserve_cash_v1("
+                ":portfolio, 999999999, :purpose, :key_hash, 3600)"
             ),
             {
-                "id": str(uuid4()),
-                "tenant": str(first.tenant_id),
                 "portfolio": str(portfolio.id),
-                "mandate": str(stale_replay_guard.mandate_id),
                 "key_hash": "0" * 64,
                 "purpose": "0" * 64,
+            },
+        )
+    with pytest.raises(DBAPIError), engine.begin() as connection:
+        connection.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(second.tenant_id)},
+        )
+        connection.execute(
+            text(
+                "SELECT set_config('app.portfolio_session_id', :session_id, true)"
+            ),
+            {"session_id": str(first.session_id)},
+        )
+        connection.execute(
+            text(
+                "SELECT * FROM tradingagents_private.portfolio_reserve_cash_v1("
+                ":portfolio, 1, :purpose, :key_hash, 60)"
+            ),
+            {
+                "portfolio": str(other_portfolio.id),
+                "key_hash": "a" * 64,
+                "purpose": "b" * 64,
             },
         )
 
@@ -425,8 +573,8 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -
     first_service.transition_mandate(
         principal=first, portfolio_id=portfolio.id, target_status="paused"
     )
-    # Consuming is a capital action and remains forbidden after the mandate is
-    # paused. Released/expired are fail-safe unwind transitions and remain legal.
+    # Consuming is unavailable in M4. Release stays available through the
+    # narrow risk-reducing RPC after a mandate pause; direct DML remains denied.
     with pytest.raises(DBAPIError), engine.begin() as connection:
         connection.execute(
             text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
@@ -439,17 +587,62 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -
             ),
             {"id": str(consume_guard.id)},
         )
-    with engine.begin() as connection:
+    with pytest.raises(DBAPIError), engine.begin() as connection:
         connection.execute(
             text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
             {"tenant_id": str(first.tenant_id)},
         )
         connection.execute(
             text(
-                "UPDATE portfolio_cash_reservations SET status = 'released', "
-                "released_at = clock_timestamp() WHERE id = :released_id"
+                "SELECT set_config('app.portfolio_session_id', :session_id, true)"
             ),
-            {"released_id": str(consume_guard.id)},
+            {"session_id": str(first.session_id)},
+        )
+        connection.execute(
+            text(
+                "SELECT * FROM tradingagents_private.portfolio_reserve_cash_v1("
+                ":portfolio, 1, :purpose, :key_hash, 60)"
+            ),
+            {
+                "portfolio": str(portfolio.id),
+                "purpose": "6" * 64,
+                "key_hash": "5" * 64,
+            },
+        )
+    with factory() as db, db.begin():
+        db.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(first.tenant_id)},
+        )
+        version_before_release = db.scalar(
+            select(Portfolio.balance_version).where(Portfolio.id == portfolio.id)
+        )
+    assert (
+        first_service.release_reservation(
+            principal=first,
+            reservation_id=consume_guard.id,
+        )
+        == "released"
+    )
+    assert (
+        first_service.release_reservation(
+            principal=first,
+            reservation_id=consume_guard.id,
+        )
+        == "released"
+    )
+    with factory() as db, db.begin():
+        db.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(first.tenant_id)},
+        )
+        assert db.scalar(
+            select(Portfolio.balance_version).where(Portfolio.id == portfolio.id)
+        ) == version_before_release + 1
+    with pytest.raises(DBAPIError), engine.begin() as connection:
+        connection.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(first.tenant_id)},
         )
         connection.execute(
             text(
@@ -540,4 +733,50 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race(monkeypatch) -
                 text(f"UPDATE portfolios SET {assignment} WHERE id = :portfolio"),
                 {"portfolio": str(portfolio.id)},
             )
+
+    # A direct caller of the narrow RPC cannot reserve while the deterministic
+    # circuit breaker is open, even with an otherwise valid session scope.
+    with engine.begin() as connection:
+        connection.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(first.tenant_id)},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO portfolio_circuit_breakers "
+                "(id, tenant_id, portfolio_id, mandate_id, kind, status, "
+                "observed_value, threshold_value, evidence_digest, triggered_at) "
+                "VALUES (:id, :tenant, :portfolio, :mandate, 'maximum_drawdown', "
+                "'open', 0.30, 0.20, :digest, clock_timestamp())"
+            ),
+            {
+                "id": str(uuid4()),
+                "tenant": str(first.tenant_id),
+                "portfolio": str(portfolio.id),
+                "mandate": str(replacement.id),
+                "digest": "c" * 64,
+            },
+        )
+    with pytest.raises(DBAPIError), engine.begin() as connection:
+        connection.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(first.tenant_id)},
+        )
+        connection.execute(
+            text(
+                "SELECT set_config('app.portfolio_session_id', :session_id, true)"
+            ),
+            {"session_id": str(first.session_id)},
+        )
+        connection.execute(
+            text(
+                "SELECT * FROM tradingagents_private.portfolio_reserve_cash_v1("
+                ":portfolio, 1, :purpose, :key_hash, 60)"
+            ),
+            {
+                "portfolio": str(portfolio.id),
+                "purpose": "d" * 64,
+                "key_hash": "e" * 64,
+            },
+        )
     engine.dispose()
