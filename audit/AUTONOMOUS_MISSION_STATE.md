@@ -3,11 +3,11 @@
 - **mission_id:** `tradingagents-dz23-a5-2026-09-08`
 - **objective:** concluir o TradingAgents DZ23 como plataforma web multiusuário pronta para usuários leigos, com carteira administrada, perfis de risco, execução CCXT segura e implantação verificada em `https://trading.dz23.online/`.
 - **state:** `EXECUTING`
-- **iteration:** 10
+- **iteration:** 14
 - **started_at:** 2026-09-08 America/Sao_Paulo
 - **last_heartbeat:** 2026-09-09
 - **last_progress_at:** 2026-09-09
-- **current_task:** executar M5.0: contratos, dataset congelado, calendário, security master e fronteira PIT do motor de backtest.
+- **current_task:** executar M5.2b: ordens, custos, fills e ledger determinísticos sobre a autoridade next-open aprovada.
 
 ## Acceptance criteria
 
@@ -76,6 +76,10 @@
 - [x] Migration 0019 validada em PostgreSQL com RLS forçado, histórico append-only e trigger diferido de balanço.
 - [x] M4 final congelado no commit `6eeae2b84752fe23e0e6b3e0bd6335bbdc19c71e` e aprovado por três revisões independentes.
 - [x] PostgreSQL limpo 0001→0025, upgrades incrementais, 8 integrações, 45 testes adversariais independentes e suíte integral 1308/2/71 reproduzidos.
+- [x] M5.0 congelou contratos PIT, security master, calendário e datasets imutáveis, com limitações quantitativas fail-closed.
+- [x] M5.1 derivou evidência de candlesticks determinística sem importar código dos robôs externos e foi aprovada por três revisões independentes.
+- [x] M5.2a separou raw next-open econômico da proveniência completa e fechou a autoridade por rederivação dos bytes congelados.
+- [x] M5.2a final `d35eae7` aprovado por três revisões; Windows 1455/24/71 e Linux 111/111 verdes.
 
 ## Pending tasks
 
@@ -184,6 +188,9 @@
 - Auditoria adversarial independente da candidata M4: PostgreSQL 16 descartável,
   migração limpa, **8 integrações** e **45 testes focais** verdes; três
   pareceres independentes aprovaram sem novo achado.
+- M5.2a final: full Windows **1455 passed, 24 skipped, 71 subtests**;
+  contracts/repository Linux **111 passed**; três pareceres independentes
+  aprovaram os ataques de forge, dispatch, shadow, binding e PIT.
 
 ## Commits
 
@@ -204,9 +211,9 @@
 
 ## Next action
 
-1. implementar M5.0 sem consultar vendor durante replay: contratos imutáveis,
-   dataset congelado, calendário e security master PIT;
-2. submeter M5.0 a gate independente antes do ledger/fill M5.2;
+1. implementar M5.2b como reducer puro e atômico de target, ordem, custo, fill
+   e ledger; repetir o forge M5.2a end to end;
+2. implementar M5.2c para corporate actions e FX PIT, sem fallback implícito;
 3. manter credenciais reais fora de chat, Git, fixtures e evidências;
 4. manter a integração IQ Option em marco separado: MCP oficial sob gate de capital; `iq-core` somente experimental/read-only, nunca rota LIVE;
 5. configurar Google e Apple no Supabase quando os Client IDs/secrets externos forem fornecidos, sem bloquear os demais marcos.

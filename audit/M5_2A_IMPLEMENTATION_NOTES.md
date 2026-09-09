@@ -106,3 +106,12 @@ from the package API, explicitly documented as non-authoritative, and both its
 old public name and private name are protected by the structural scan. M5.2b
 must additionally exercise its actual reducer end to end with the same
 self-consistent forgery before its accounting gate can pass.
+
+Final exact-commit verification after the private-helper correction:
+
+- Full Windows suite: `1455 passed, 24 skipped, 71 subtests passed`.
+- Final JUnit: `audit/m5-2a-final-junit.xml`
+- JUnit bytes: `212946`
+- JUnit SHA-256:
+  `ec89445946150624dae8c31500ca5a4bfb520ad17583fe713822c055e7563353`
+- Three independent review tracks: approved.
