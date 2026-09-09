@@ -3,11 +3,11 @@
 - **mission_id:** `tradingagents-dz23-a5-2026-09-08`
 - **objective:** concluir o TradingAgents DZ23 como plataforma web multiusuário pronta para usuários leigos, com carteira administrada, perfis de risco, execução CCXT segura e implantação verificada em `https://trading.dz23.online/`.
 - **state:** `EXECUTING`
-- **iteration:** 14
+- **iteration:** 15
 - **started_at:** 2026-09-08 America/Sao_Paulo
 - **last_heartbeat:** 2026-09-09
 - **last_progress_at:** 2026-09-09
-- **current_task:** executar M5.2b: ordens, custos, fills e ledger determinísticos sobre a autoridade next-open aprovada.
+- **current_task:** executar M5.2b2: integrar a autoridade imutável de ordens e raw next-open ao ledger puro aprovado.
 
 ## Acceptance criteria
 
@@ -80,6 +80,10 @@
 - [x] M5.1 derivou evidência de candlesticks determinística sem importar código dos robôs externos e foi aprovada por três revisões independentes.
 - [x] M5.2a separou raw next-open econômico da proveniência completa e fechou a autoridade por rederivação dos bytes congelados.
 - [x] M5.2a final `d35eae7` aprovado por três revisões; Windows 1455/24/71 e Linux 111/111 verdes.
+- [x] M5.2b1 implementou ledger puro de simulação com ordens, custos, fills,
+  PnL, dupla entrada, idempotência e anchors externos obrigatórios.
+- [x] M5.2b1 final `150c097` aprovado por três revisões independentes; o
+  reducer não expõe fast path importável e o fold é linear/log-linear.
 
 ## Pending tasks
 
@@ -191,6 +195,14 @@
 - M5.2a final: full Windows **1455 passed, 24 skipped, 71 subtests**;
   contracts/repository Linux **111 passed**; três pareceres independentes
   aprovaram os ataques de forge, dispatch, shadow, binding e PIT.
+- M5.2b1 final `150c097`: focal Windows **39 passed**; backtest Windows
+  **203 passed, 5 skipped**; backtest Linux **208 passed**; suíte integral
+  Windows **1494 passed, 24 skipped, 71 subtests**; Ruff/compileall verdes.
+- Auditorias independentes M5.2b1: três aprovações no snapshot imutável;
+  PoCs de sessão parcial, overflow Decimal, resultado forjado, estado mutado,
+  limite agregado, replay máximo e helper fragmentado foram recusados.
+- Benchmark independente M5.2b1 no WSL: 500 sessões entre 0,958–1,993 s;
+  2.500 entre 5,361–7,595 s; 4.000 entre 8,521–10,833 s.
 
 ## Commits
 
@@ -200,6 +212,8 @@
 - `8574112` — `feat: add multi-tenant identity and Supabase auth`.
 - `6e19191` — `fix: harden Supabase runtime schema`.
 - `6f3fc53` — `feat: add multi-tenant encrypted provider connections`.
+- `6a87cb4` — `test(backtest): isolate normalized candle fuzz cases`.
+- `150c097` — `fix(backtest): close simulation ledger audit findings`.
 
 ## Agents delegated
 
@@ -211,8 +225,8 @@
 
 ## Next action
 
-1. implementar M5.2b como reducer puro e atômico de target, ordem, custo, fill
-   e ledger; repetir o forge M5.2a end to end;
+1. implementar M5.2b2 ligando cada batch ao registro imutável de ordens e cada
+   `raw_open` à autoridade M5.2a; repetir o forge M5.2a end to end;
 2. implementar M5.2c para corporate actions e FX PIT, sem fallback implícito;
 3. manter credenciais reais fora de chat, Git, fixtures e evidências;
 4. manter a integração IQ Option em marco separado: MCP oficial sob gate de capital; `iq-core` somente experimental/read-only, nunca rota LIVE;
