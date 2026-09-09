@@ -123,6 +123,7 @@ class SizingInput:
     current_weight: Decimal = _ZERO
     trading_cost_bps: Decimal = _ZERO
     asset_class: str = "crypto"
+    target_weight_cap: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,6 +223,89 @@ def cap_target_weights(
     }
 
 
+def cap_incremental_target_weights(
+    policy: PortfolioPolicy,
+    raw_weights: dict[str, Decimal],
+    current_weights: dict[str, Decimal],
+    correlations: dict[tuple[str, str], Decimal],
+    *,
+    asset_classes: dict[str, str],
+    correlated_threshold: Decimal = Decimal("0.80"),
+) -> dict[str, Decimal]:
+    """Return buy-only final-weight ceilings after accounting for held exposure.
+
+    Existing positions are floors because this stage does not execute sells. New
+    buy headroom is reduced so crypto, correlation, gross and cash constraints
+    remain true after the proposed buys. A pre-existing breach permits no added
+    exposure in the breached bucket.
+    """
+
+    capped = cap_target_weights(
+        policy,
+        raw_weights,
+        correlations,
+        asset_classes=asset_classes,
+        correlated_threshold=correlated_threshold,
+    )
+    if set(current_weights) != set(capped):
+        raise ValueError("current weights must cover every allocation symbol exactly")
+    for value in current_weights.values():
+        _finite_nonnegative("current_weight", value)
+    increments = {
+        symbol: max(_ZERO, capped[symbol] - current_weights[symbol]) for symbol in capped
+    }
+
+    parent = {symbol: symbol for symbol in capped}
+
+    def find(symbol: str) -> str:
+        while parent[symbol] != symbol:
+            parent[symbol] = parent[parent[symbol]]
+            symbol = parent[symbol]
+        return symbol
+
+    def union(left: str, right: str) -> None:
+        left_root, right_root = find(left), find(right)
+        if left_root != right_root:
+            parent[max(left_root, right_root)] = min(left_root, right_root)
+
+    for (left, right), correlation in correlations.items():
+        if correlation >= correlated_threshold:
+            union(left, right)
+    clusters: dict[str, list[str]] = {}
+    for symbol in sorted(capped):
+        clusters.setdefault(find(symbol), []).append(symbol)
+    for members in clusters.values():
+        current = sum((current_weights[symbol] for symbol in members), _ZERO)
+        proposed = sum((increments[symbol] for symbol in members), _ZERO)
+        headroom = max(_ZERO, policy.max_correlated_bucket_weight - current)
+        if proposed > headroom:
+            scale = headroom / proposed if proposed else _ZERO
+            for symbol in members:
+                increments[symbol] *= scale
+
+    crypto_symbols = [symbol for symbol in capped if asset_classes[symbol] == "crypto"]
+    crypto_current = sum((current_weights[symbol] for symbol in crypto_symbols), _ZERO)
+    crypto_proposed = sum((increments[symbol] for symbol in crypto_symbols), _ZERO)
+    crypto_headroom = max(_ZERO, policy.max_crypto_weight - crypto_current)
+    if crypto_proposed > crypto_headroom:
+        scale = crypto_headroom / crypto_proposed if crypto_proposed else _ZERO
+        for symbol in crypto_symbols:
+            increments[symbol] *= scale
+
+    gross_current = sum(current_weights.values(), _ZERO)
+    gross_proposed = sum(increments.values(), _ZERO)
+    gross_headroom = max(_ZERO, _ONE - policy.minimum_cash_weight - gross_current)
+    if gross_proposed > gross_headroom:
+        scale = gross_headroom / gross_proposed if gross_proposed else _ZERO
+        increments = {symbol: value * scale for symbol, value in increments.items()}
+    return {
+        symbol: (current_weights[symbol] + increments[symbol]).quantize(
+            Decimal("0.000000000001"), ROUND_DOWN
+        )
+        for symbol in capped
+    }
+
+
 def _finite_nonnegative(name: str, value: Decimal, *, positive: bool = False) -> None:
     if not isinstance(value, Decimal) or not value.is_finite():
         raise ValueError(f"{name} must be a finite Decimal")
@@ -240,6 +324,8 @@ def size_position(policy: PortfolioPolicy, data: SizingInput) -> SizingResult:
         _finite_nonnegative(name, getattr(data, name), positive=True)
     for name in ("conviction", "average_daily_notional", "current_weight", "trading_cost_bps"):
         _finite_nonnegative(name, getattr(data, name))
+    if data.target_weight_cap is not None:
+        _finite_nonnegative("target_weight_cap", data.target_weight_cap)
     if data.conviction > _ONE or data.current_weight > _ONE:
         raise ValueError("weight and conviction cannot exceed one")
     if data.asset_class not in {"crypto", "stock", "cash"}:
@@ -256,6 +342,8 @@ def size_position(policy: PortfolioPolicy, data: SizingInput) -> SizingResult:
     liquidity_weight = data.average_daily_notional * policy.max_adv_participation / data.capital
     constraints.append(("liquidity", liquidity_weight))
     constraints.append(("cash_floor", _ONE - policy.minimum_cash_weight))
+    if data.target_weight_cap is not None:
+        constraints.append(("aggregate_cap", data.target_weight_cap))
     target_weight = max(_ZERO, min(value for _, value in constraints))
     limited_by = tuple(name for name, value in constraints if value == target_weight)
     target_notional = (data.capital * target_weight).quantize(Decimal("0.00000001"), ROUND_DOWN)

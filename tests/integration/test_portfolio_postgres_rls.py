@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
 
@@ -18,7 +19,12 @@ from tradingagents.platform.identity import (
     MembershipRole,
     TokenHasher,
 )
-from tradingagents.platform.portfolio import Portfolio, PortfolioError, PortfolioService
+from tradingagents.platform.portfolio import (
+    Portfolio,
+    PortfolioError,
+    PortfolioService,
+    TrustedValuation,
+)
 
 APP_URL = os.environ.get("TRADINGAGENTS_TEST_POSTGRES_APP_URL")
 
@@ -69,6 +75,18 @@ def _ready(service: PortfolioService, principal: IdentityPrincipal, label: str):
         amount=Decimal("100"),
         idempotency_key=f"pg-funding-{label}-0001",
         reference_id=f"deposit-{label}",
+    )
+    observed = datetime.now(UTC)
+    service.capture_trusted_snapshot(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        valuation=TrustedValuation(
+            prices={},
+            source="market_data_pit",
+            observed_at=observed,
+            available_at=observed,
+            evidence_digest="7" * 64,
+        ),
     )
     return suitability, portfolio
 
@@ -316,4 +334,63 @@ def test_portfolio_rls_append_only_balancing_and_reservation_race() -> None:
             text("UPDATE portfolios SET current_mandate_id = :old WHERE id = :portfolio"),
             {"old": str(active_id), "portfolio": str(portfolio.id)},
         )
+
+    # A semantically inverted funding event is rejected even if its two postings balance.
+    with pytest.raises(DBAPIError), engine.begin() as connection:
+        connection.execute(
+            text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+            {"tenant_id": str(first.tenant_id)},
+        )
+        transaction_id = uuid4()
+        connection.execute(
+            text(
+                "INSERT INTO portfolio_ledger_transactions "
+                "(id, tenant_id, portfolio_id, idempotency_key_hash, event_type, "
+                "reference_type, reference_id, currency, amount, digest, provenance, "
+                "verification_status, unit_delta, nav_per_unit, created_by_user_id, "
+                "occurred_at) VALUES (:id, :tenant, :portfolio, :idem, 'paper_funding', "
+                "'user_declared_paper', 'semantic-bypass', 'BRL', 100, :digest, "
+                "'user_declared', 'unverified', -100, 1, :actor, clock_timestamp())"
+            ),
+            {
+                "id": str(transaction_id),
+                "tenant": str(first.tenant_id),
+                "portfolio": str(portfolio.id),
+                "idem": "6" * 64,
+                "digest": "5" * 64,
+                "actor": str(first.user_id),
+            },
+        )
+        for account, quantity in (("cash", 100), ("external", -100)):
+            connection.execute(
+                text(
+                    "INSERT INTO portfolio_ledger_postings "
+                    "(id, tenant_id, transaction_id, portfolio_id, account, asset, quantity) "
+                    "VALUES (:id, :tenant, :tx, :portfolio, :account, 'BRL', :quantity)"
+                ),
+                {
+                    "id": str(uuid4()),
+                    "tenant": str(first.tenant_id),
+                    "tx": str(transaction_id),
+                    "portfolio": str(portfolio.id),
+                    "account": account,
+                    "quantity": quantity,
+                },
+            )
+        connection.execute(
+            text("UPDATE portfolios SET unit_count = unit_count - 100 WHERE id = :portfolio"),
+            {"portfolio": str(portfolio.id)},
+        )
+
+    # Derived portfolio caches cannot be changed independently of ledger/snapshot sources.
+    for assignment in ("unit_count = unit_count + 1", "last_nav_per_unit = 42"):
+        with pytest.raises(DBAPIError), engine.begin() as connection:
+            connection.execute(
+                text("SELECT set_config('app.tenant_id', :tenant_id, true)"),
+                {"tenant_id": str(first.tenant_id)},
+            )
+            connection.execute(
+                text(f"UPDATE portfolios SET {assignment} WHERE id = :portfolio"),
+                {"portfolio": str(portfolio.id)},
+            )
     engine.dispose()

@@ -45,6 +45,7 @@ class SqlAlchemyPortfolioAdapter:
             "digest",
             "assessed_at",
             "expires_at",
+            "paused_portfolios",
         )
 
     async def create_portfolio(self, *, token, principal, name, base_currency):
@@ -72,18 +73,28 @@ class SqlAlchemyPortfolioAdapter:
         return self._mandate_public(row)
 
     async def record_funding(
-        self, *, token, principal, portfolio_id, amount, idempotency_key, reference_id
-    ) -> UUID:
+        self, *, token, principal, portfolio_id, amount, mode, idempotency_key, reference_id
+    ) -> dict[str, Any]:
         actor = await self._principal(token, principal)
         row = await self._invoke(
             self._portfolios.record_funding,
             principal=actor,
             portfolio_id=portfolio_id,
             amount=amount,
+            mode=RunMode(mode),
             idempotency_key=idempotency_key,
             reference_id=reference_id,
         )
-        return UUID(row["id"])
+        return {
+            "transaction_id": UUID(row["id"]),
+            "mode": mode,
+            "provenance": row["provenance"],
+            "verification_status": row["verification_status"],
+            "message": (
+                "Saldo informado pelo usuário e marcado como não verificado; "
+                "ele não comprova o saldo existente na corretora."
+            ),
+        }
 
     async def transition_mandate(self, *, token, principal, portfolio_id, target_status):
         actor = await self._principal(token, principal)
@@ -99,6 +110,18 @@ class SqlAlchemyPortfolioAdapter:
         actor = await self._principal(token, principal)
         rows = await self._run_sync(self._portfolios.list_portfolios, principal=actor)
         return tuple(asdict(row) for row in rows)
+
+    async def get_latest_snapshot(self, *, token, principal, portfolio_id):
+        actor = await self._principal(token, principal)
+        try:
+            row = await self._run_sync(
+                self._portfolios.latest_snapshot,
+                principal=actor,
+                portfolio_id=portfolio_id,
+            )
+        except PortfolioError as exc:
+            raise ApiIdentityError(str(exc)) from exc
+        return self._jsonable(asdict(row)) if row is not None else None
 
     @classmethod
     def _mandate_public(cls, row):

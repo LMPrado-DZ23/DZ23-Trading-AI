@@ -9,7 +9,8 @@ import threading
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
+from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
@@ -30,7 +31,14 @@ from tradingagents.platform.portfolio.models import (
     PortfolioSnapshot,
     SuitabilityRecord,
 )
-from tradingagents.platform.portfolio.policies import POLICY_VERSION, policy_for
+from tradingagents.platform.portfolio.policies import (
+    POLICY_VERSION,
+    SizingInput,
+    SizingResult,
+    cap_incremental_target_weights,
+    policy_for,
+    size_position,
+)
 
 _PROFILE_ORDER = {
     RiskProfile.PRESERVATION: 0,
@@ -46,17 +54,79 @@ class PortfolioError(RuntimeError):
     """Stable, non-sensitive portfolio error code."""
 
 
+class PortfolioRequiredAction(StrEnum):
+    COMPLETE_SUITABILITY_AND_CREATE_MANDATE = "complete_suitability_and_create_mandate"
+    RESUME_MANDATE = "resume_mandate"
+    CREATE_COMPATIBLE_MANDATE = "create_compatible_mandate"
+    CREATE_NEW_PORTFOLIO = "create_new_portfolio"
+    REVIEW_RISK_HOLD = "review_risk_hold"
+
+
 @dataclass(frozen=True, slots=True)
 class PortfolioOverview:
     id: UUID
     name: str
     base_currency: str
     status: str
-    effective_profile: str | None
+    mandate_profile: str | None
+    suitability_effective_profile: str | None
     mode: str | None
     cash: Decimal
     reserved_cash: Decimal
     available_cash: Decimal
+    current_mandate_id: UUID | None
+    mandate_status: str | None
+    pause_reason: str | None
+    required_action: PortfolioRequiredAction | None
+    circuit_breaker_open: bool
+
+
+@dataclass(frozen=True, slots=True)
+class PausedPortfolioNotice:
+    portfolio_id: UUID
+    name: str
+    mandate_id: UUID
+    profile: str
+    mode: str
+    pause_reason: str
+    required_action: PortfolioRequiredAction
+
+
+@dataclass(frozen=True, slots=True)
+class SuitabilityAssessmentResult:
+    id: UUID
+    version: int
+    requested_profile: str
+    maximum_profile: str
+    effective_profile: str
+    status: str
+    policy_version: int
+    digest: str
+    assessed_at: datetime
+    expires_at: datetime
+    paused_portfolios: tuple[PausedPortfolioNotice, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class PortfolioSnapshotOverview:
+    portfolio_id: UUID
+    sequence: int
+    cash: Decimal
+    reserved_cash: Decimal
+    market_value: Decimal
+    equity: Decimal
+    nav_per_unit: Decimal
+    realized_pnl: Decimal
+    unrealized_pnl: Decimal
+    drawdown: Decimal
+    daily_drawdown: Decimal
+    unit_count: Decimal
+    high_water_nav: Decimal
+    valuation_source: str
+    valuation_observed_at: datetime
+    valuation_available_at: datetime
+    captured_at: datetime
+    freshness: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +143,52 @@ class TrustedValuation:
     observed_at: datetime
     available_at: datetime
     evidence_digest: str
+
+
+@dataclass(frozen=True, slots=True)
+class TrustedAssetAllocation:
+    """Server-side market/risk inputs for one proposed spot allocation."""
+
+    symbol: str
+    asset_class: str
+    price: Decimal
+    conviction: Decimal
+    realized_annual_volatility: Decimal
+    average_daily_notional: Decimal
+    trading_cost_bps: Decimal = _ZERO
+
+
+@dataclass(frozen=True, slots=True)
+class TrustedAllocationRequest:
+    """Internal PIT allocation proposal; never accepted from the public API."""
+
+    raw_target_weights: Mapping[str, Decimal]
+    correlations: Mapping[tuple[str, str], Decimal]
+    assets: Mapping[str, TrustedAssetAllocation]
+    source: str
+    observed_at: datetime
+    available_at: datetime
+    evidence_digest: str
+
+
+@dataclass(frozen=True, slots=True)
+class AllocationLine:
+    symbol: str
+    asset_class: str
+    capped_weight: Decimal
+    sizing: SizingResult
+
+
+@dataclass(frozen=True, slots=True)
+class AllocationReservation:
+    portfolio_id: UUID
+    mandate_id: UUID
+    policy_digest: str
+    allocation_digest: str
+    evidence_digest: str
+    total_order_notional: Decimal
+    lines: tuple[AllocationLine, ...]
+    reservation: CashReservation
 
 
 class PortfolioService:
@@ -134,7 +250,7 @@ class PortfolioService:
         requested_profile: RiskProfile,
         answers: dict[str, Any],
         valid_for: timedelta = timedelta(days=365),
-    ) -> SuitabilityRecord:
+    ) -> SuitabilityAssessmentResult:
         with self._suitability_lock:
             return self._assess_suitability_locked(
                 principal=principal,
@@ -150,7 +266,7 @@ class PortfolioService:
         requested_profile: RiskProfile,
         answers: dict[str, Any],
         valid_for: timedelta = timedelta(days=365),
-    ) -> SuitabilityRecord:
+    ) -> SuitabilityAssessmentResult:
         self._authorize(principal, write=True)
         if requested_profile is RiskProfile.CUSTOM:
             raise PortfolioError("CUSTOM_PROFILE_REQUIRES_REVIEW")
@@ -209,6 +325,7 @@ class PortfolioService:
                 )
                 .with_for_update()
             ).all()
+            paused_notices: list[PausedPortfolioNotice] = []
             for portfolio in owner_portfolios:
                 current_mandate = self._current_mandate(
                     db, principal.tenant_id, portfolio.id
@@ -231,6 +348,7 @@ class PortfolioService:
                     profile=current_mandate.profile,
                     mode=current_mandate.mode,
                     status="paused",
+                    pause_reason="suitability_reassessment",
                     policy_version=current_mandate.policy_version,
                     policy_digest=current_mandate.policy_digest,
                     digest=self._canonical_digest(mandate_payload),
@@ -241,8 +359,36 @@ class PortfolioService:
                 db.add(paused)
                 db.flush()
                 portfolio.current_mandate_id = paused.id
-            db.expunge(row)
-            return row
+                required_action = (
+                    PortfolioRequiredAction.RESUME_MANDATE
+                    if _PROFILE_ORDER[RiskProfile(current_mandate.profile)]
+                    <= _PROFILE_ORDER[effective]
+                    else PortfolioRequiredAction.CREATE_COMPATIBLE_MANDATE
+                )
+                paused_notices.append(
+                    PausedPortfolioNotice(
+                        portfolio_id=portfolio.id,
+                        name=portfolio.name,
+                        mandate_id=paused.id,
+                        profile=paused.profile,
+                        mode=paused.mode,
+                        pause_reason=paused.pause_reason,
+                        required_action=required_action,
+                    )
+                )
+            return SuitabilityAssessmentResult(
+                id=row.id,
+                version=row.version,
+                requested_profile=row.requested_profile,
+                maximum_profile=row.maximum_profile,
+                effective_profile=row.effective_profile,
+                status=row.status,
+                policy_version=row.policy_version,
+                digest=row.digest,
+                assessed_at=row.assessed_at,
+                expires_at=row.expires_at,
+                paused_portfolios=tuple(paused_notices),
+            )
 
     @staticmethod
     def _maximum_profile(answers: dict[str, Any]) -> RiskProfile:
@@ -425,6 +571,7 @@ class PortfolioService:
                 profile=profile.value,
                 mode=mode.value,
                 status="active",
+                pause_reason=None,
                 policy_version=POLICY_VERSION,
                 policy_digest=policy.digest,
                 digest=self._canonical_digest(payload),
@@ -447,24 +594,28 @@ class PortfolioService:
         amount: Decimal,
         idempotency_key: str,
         reference_id: str,
+        mode: RunMode = RunMode.PAPER,
     ) -> LedgerTransaction:
         self._authorize(principal, write=True)
         self._decimal("amount", amount, positive=True)
         clean_reference = reference_id.strip()
         if not clean_reference or len(clean_reference) > 128:
             raise PortfolioError("FUNDING_REFERENCE_INVALID")
+        if mode not in {RunMode.SHADOW, RunMode.PAPER}:
+            raise PortfolioError("CAPITAL_MODE_NOT_ENABLED")
         return self._record_cash_transaction(
             principal=principal,
             portfolio_id=portfolio_id,
             amount=amount,
             idempotency_key=idempotency_key,
-            event_type="paper_funding",
-            reference_type="user_declared",
+            event_type=f"{mode.value}_funding",
+            reference_type=f"user_declared_{mode.value}",
             reference_id=clean_reference,
             cash_direction=1,
             provenance="user_declared",
             verification_status="unverified",
             affects_units=True,
+            required_mode=mode,
         )
 
     def transition_mandate(
@@ -511,6 +662,10 @@ class PortfolioService:
             if current is None or current.status == "closed":
                 raise PortfolioError("MANDATE_TRANSITION_INVALID")
             if current.status == target_status:
+                if target_status == "active":
+                    self._require_active_mandate(
+                        db, principal.tenant_id, portfolio_id, now
+                    )
                 db.expunge(current)
                 return current
             allowed = {
@@ -523,6 +678,16 @@ class PortfolioService:
                 raise PortfolioError("MANDATE_TRANSITION_INVALID")
             if target_status == "active":
                 assert owner_user_id is not None
+                if db.scalar(
+                    select(func.count())
+                    .select_from(CircuitBreaker)
+                    .where(
+                        CircuitBreaker.tenant_id == principal.tenant_id,
+                        CircuitBreaker.portfolio_id == portfolio_id,
+                        CircuitBreaker.status == "open",
+                    )
+                ):
+                    raise PortfolioError("CIRCUIT_BREAKER_OPEN")
                 suitability = self._latest_suitability(
                     db, principal.tenant_id, owner_user_id
                 )
@@ -537,16 +702,6 @@ class PortfolioService:
                     RiskProfile(suitability.effective_profile)
                 ]:
                     raise PortfolioError("PROFILE_EXCEEDS_SUITABILITY")
-                if db.scalar(
-                    select(func.count())
-                    .select_from(CircuitBreaker)
-                    .where(
-                        CircuitBreaker.tenant_id == principal.tenant_id,
-                        CircuitBreaker.portfolio_id == portfolio_id,
-                        CircuitBreaker.status == "open",
-                    )
-                ):
-                    raise PortfolioError("CIRCUIT_BREAKER_OPEN")
             payload = {
                 "previous_digest": current.digest,
                 "version": current.version + 1,
@@ -561,6 +716,7 @@ class PortfolioService:
                 profile=current.profile,
                 mode=current.mode,
                 status=target_status,
+                pause_reason="user_requested" if target_status == "paused" else None,
                 policy_version=current.policy_version,
                 policy_digest=current.policy_digest,
                 digest=self._canonical_digest(payload),
@@ -593,7 +749,7 @@ class PortfolioService:
         expected_unit_delta = _ZERO
         if affects_units:
             expected_unit_delta = (amount / existing.nav_per_unit).quantize(
-                Decimal("0.000000000001")
+                Decimal("0.000000000001"), ROUND_HALF_UP
             )
             if cash_direction < 0:
                 expected_unit_delta = -expected_unit_delta
@@ -623,7 +779,26 @@ class PortfolioService:
         provenance: str = "internal",
         verification_status: str = "internal",
         affects_units: bool = False,
+        required_mode: RunMode | None = None,
     ) -> LedgerTransaction:
+        if cash_direction not in {-1, 1}:
+            raise PortfolioError("CASH_DIRECTION_INVALID")
+        if provenance == "user_declared":
+            expected_event = (
+                f"{required_mode.value}_funding" if required_mode is not None else None
+            )
+            if (
+                required_mode not in {RunMode.SHADOW, RunMode.PAPER}
+                or event_type != expected_event
+                or verification_status != "unverified"
+                or cash_direction != 1
+                or not affects_units
+            ):
+                raise PortfolioError("LEDGER_EVENT_INVALID")
+        elif provenance == "internal" and (
+            verification_status != "internal" or affects_units
+        ):
+            raise PortfolioError("LEDGER_EVENT_INVALID")
         key_hash = self._key_hash(idempotency_key)
         try:
             with self._sessions() as db, db.begin():
@@ -660,11 +835,12 @@ class PortfolioService:
                     return existing
                 if portfolio.status != "active":
                     raise PortfolioError("PORTFOLIO_NOT_ACTIVE")
-                mandate = self._active_mandate(db, principal.tenant_id, portfolio_id, now)
-                if mandate is None:
-                    raise PortfolioError("ACTIVE_MANDATE_REQUIRED")
+                mandate = self._require_active_mandate(
+                    db, principal.tenant_id, portfolio_id, now
+                )
+                if required_mode is not None and mandate.mode != required_mode.value:
+                    raise PortfolioError("FUNDING_MODE_MISMATCH")
                 if provenance == "user_declared" and mandate.mode not in {
-                    RunMode.BACKTEST.value,
                     RunMode.SHADOW.value,
                     RunMode.PAPER.value,
                 }:
@@ -687,7 +863,11 @@ class PortfolioService:
                 nav_per_unit = portfolio.last_nav_per_unit
                 unit_delta = _ZERO
                 if affects_units:
-                    unit_delta = (amount / nav_per_unit).quantize(Decimal("0.000000000001"))
+                    unit_delta = (amount / nav_per_unit).quantize(
+                        Decimal("0.000000000001"), ROUND_HALF_UP
+                    )
+                    if unit_delta == 0:
+                        raise PortfolioError("AMOUNT_BELOW_UNIT_PRECISION")
                     if cash_direction < 0:
                         unit_delta = -unit_delta
                         if portfolio.unit_count + unit_delta < 0:
@@ -787,6 +967,232 @@ class PortfolioService:
                 db.expunge(existing)
                 return existing
 
+    def allocate_and_reserve(
+        self,
+        *,
+        principal: IdentityPrincipal,
+        portfolio_id: UUID,
+        proposal: TrustedAllocationRequest,
+        idempotency_key: str,
+        ttl: timedelta = timedelta(minutes=10),
+    ) -> AllocationReservation:
+        """Apply every deterministic cap and atomically reserve the resulting buy cash.
+
+        This is an internal application port. Public clients cannot provide prices,
+        correlations, weights, sizing results or quantities through the HTTP API.
+        """
+
+        self._authorize(principal, write=True)
+        key_hash = self._key_hash(idempotency_key)
+        if not timedelta(seconds=30) <= ttl <= timedelta(hours=1):
+            raise PortfolioError("RESERVATION_TTL_INVALID")
+        with self._reservation_lock, self._sessions() as db, db.begin():
+            self._set_tenant_scope(db, principal.tenant_id)
+            now = self._database_now(db)
+            self._validate_allocation(proposal, now=now)
+            portfolio = db.scalar(
+                select(Portfolio)
+                .where(
+                    Portfolio.id == portfolio_id,
+                    Portfolio.tenant_id == principal.tenant_id,
+                )
+                .with_for_update()
+            )
+            if portfolio is None or portfolio.status != "active":
+                raise PortfolioError("PORTFOLIO_NOT_ACTIVE")
+            mandate = self._require_active_mandate(
+                db, principal.tenant_id, portfolio_id, now
+            )
+            existing_reservation = db.scalar(
+                select(CashReservation).where(
+                    CashReservation.tenant_id == principal.tenant_id,
+                    CashReservation.portfolio_id == portfolio_id,
+                    CashReservation.idempotency_key_hash == key_hash,
+                )
+            )
+            if existing_reservation is not None and (
+                existing_reservation.status != "active"
+                or existing_reservation.expires_at <= now
+            ):
+                raise PortfolioError("IDEMPOTENCY_RESERVATION_FINALIZED")
+            if db.scalar(
+                select(func.count())
+                .select_from(CircuitBreaker)
+                .where(
+                    CircuitBreaker.tenant_id == principal.tenant_id,
+                    CircuitBreaker.portfolio_id == portfolio_id,
+                    CircuitBreaker.status == "open",
+                )
+            ):
+                raise PortfolioError("CIRCUIT_BREAKER_OPEN")
+            snapshot = db.scalar(
+                select(PortfolioSnapshot)
+                .where(
+                    PortfolioSnapshot.tenant_id == principal.tenant_id,
+                    PortfolioSnapshot.portfolio_id == portfolio_id,
+                )
+                .order_by(PortfolioSnapshot.sequence.desc())
+                .limit(1)
+            )
+            if snapshot is None:
+                raise PortfolioError("BASELINE_SNAPSHOT_REQUIRED")
+            if (
+                snapshot.valuation_available_at < now - timedelta(minutes=15)
+                or snapshot.captured_at < now - timedelta(minutes=15)
+            ):
+                raise PortfolioError("ALLOCATION_BASELINE_STALE")
+            capital = self._decimal("capital", snapshot.equity, positive=True)
+            cash, reserved = self._cash_balances(
+                db, principal.tenant_id, portfolio_id, now
+            )
+            available_cash = cash - reserved
+            if existing_reservation is not None:
+                available_cash += existing_reservation.amount
+            if available_cash <= 0:
+                raise PortfolioError("INSUFFICIENT_AVAILABLE_CASH")
+            policy = policy_for(RiskProfile(mandate.profile))
+            if mandate.policy_version != POLICY_VERSION or not hmac.compare_digest(
+                mandate.policy_digest, policy.digest
+            ):
+                raise PortfolioError("POLICY_VERSION_MISMATCH")
+            positions = {
+                row.symbol: row
+                for row in db.scalars(
+                    select(PortfolioPosition).where(
+                        PortfolioPosition.tenant_id == principal.tenant_id,
+                        PortfolioPosition.portfolio_id == portfolio_id,
+                        PortfolioPosition.quantity > 0,
+                    )
+                )
+            }
+            if not set(positions).issubset(proposal.assets):
+                raise PortfolioError("ALLOCATION_SYMBOL_SET_MISMATCH")
+            current_weights: dict[str, Decimal] = {}
+            for symbol, asset in proposal.assets.items():
+                existing = positions.get(symbol)
+                if existing is not None and existing.asset_class != asset.asset_class:
+                    raise PortfolioError("ALLOCATION_ASSET_CLASS_MISMATCH")
+                current_weights[symbol] = (
+                    existing.quantity * asset.price / capital
+                    if existing is not None
+                    else _ZERO
+                )
+            asset_classes = {
+                symbol: asset.asset_class for symbol, asset in proposal.assets.items()
+            }
+            try:
+                capped = cap_incremental_target_weights(
+                    policy,
+                    dict(proposal.raw_target_weights),
+                    current_weights,
+                    dict(proposal.correlations),
+                    asset_classes=asset_classes,
+                )
+            except ValueError as exc:
+                raise PortfolioError("ALLOCATION_INPUT_INVALID") from exc
+            lines: list[AllocationLine] = []
+            remaining_cash = available_cash
+            for symbol in sorted(capped):
+                asset = proposal.assets[symbol]
+                try:
+                    sizing = size_position(
+                        policy,
+                        SizingInput(
+                            capital=capital,
+                            available_cash=max(_ZERO, remaining_cash),
+                            price=asset.price,
+                            conviction=asset.conviction,
+                            realized_annual_volatility=asset.realized_annual_volatility,
+                            average_daily_notional=asset.average_daily_notional,
+                            current_weight=current_weights[symbol],
+                            trading_cost_bps=asset.trading_cost_bps,
+                            asset_class=asset.asset_class,
+                            target_weight_cap=capped[symbol],
+                        ),
+                    )
+                except ValueError as exc:
+                    raise PortfolioError("ALLOCATION_INPUT_INVALID") from exc
+                remaining_cash -= sizing.order_notional
+                lines.append(
+                    AllocationLine(
+                        symbol=symbol,
+                        asset_class=asset.asset_class,
+                        capped_weight=capped[symbol],
+                        sizing=sizing,
+                    )
+                )
+            total = sum((line.sizing.order_notional for line in lines), _ZERO)
+            if total <= 0:
+                raise PortfolioError("NO_REBALANCE_REQUIRED")
+            digest_payload = {
+                "portfolio_id": str(portfolio_id),
+                "mandate_id": str(mandate.id),
+                "policy_digest": policy.digest,
+                "evidence_digest": proposal.evidence_digest,
+                "source": proposal.source,
+                "observed_at": proposal.observed_at.isoformat(),
+                "available_at": proposal.available_at.isoformat(),
+                "lines": [
+                    {
+                        "symbol": line.symbol,
+                        "asset_class": line.asset_class,
+                        "capped_weight": str(line.capped_weight),
+                        "target_weight": str(line.sizing.target_weight),
+                        "order_notional": str(line.sizing.order_notional),
+                        "quantity": str(line.sizing.quantity),
+                        "limited_by": line.sizing.limited_by,
+                    }
+                    for line in lines
+                ],
+                "total_order_notional": str(total),
+            }
+            allocation_digest = self._canonical_digest(digest_payload)
+            if existing_reservation is not None:
+                if (
+                    existing_reservation.amount != total
+                    or not hmac.compare_digest(
+                        existing_reservation.purpose_digest, allocation_digest
+                    )
+                    or existing_reservation.mandate_id != mandate.id
+                ):
+                    raise PortfolioError("IDEMPOTENCY_PAYLOAD_MISMATCH")
+                db.expunge(existing_reservation)
+                return AllocationReservation(
+                    portfolio_id=portfolio_id,
+                    mandate_id=mandate.id,
+                    policy_digest=policy.digest,
+                    allocation_digest=allocation_digest,
+                    evidence_digest=proposal.evidence_digest,
+                    total_order_notional=total,
+                    lines=tuple(lines),
+                    reservation=existing_reservation,
+                )
+            reservation = CashReservation(
+                tenant_id=principal.tenant_id,
+                portfolio_id=portfolio_id,
+                mandate_id=mandate.id,
+                idempotency_key_hash=key_hash,
+                currency=portfolio.base_currency,
+                amount=total,
+                status="active",
+                purpose_digest=allocation_digest,
+                expires_at=now + ttl,
+            )
+            db.add(reservation)
+            portfolio.balance_version += 1
+            db.flush()
+            db.expunge(reservation)
+            return AllocationReservation(
+                portfolio_id=portfolio_id,
+                mandate_id=mandate.id,
+                policy_digest=policy.digest,
+                allocation_digest=allocation_digest,
+                evidence_digest=proposal.evidence_digest,
+                total_order_notional=total,
+                lines=tuple(lines),
+                reservation=reservation,
+            )
+
     def reserve_cash(
         self,
         *,
@@ -837,9 +1243,18 @@ class PortfolioService:
                 )
                 if portfolio is None or portfolio.status != "active":
                     raise PortfolioError("PORTFOLIO_NOT_ACTIVE")
-                mandate = self._active_mandate(db, principal.tenant_id, portfolio_id, now)
-                if mandate is None:
-                    raise PortfolioError("ACTIVE_MANDATE_REQUIRED")
+                mandate = self._require_active_mandate(
+                    db, principal.tenant_id, portfolio_id, now
+                )
+                if not db.scalar(
+                    select(func.count())
+                    .select_from(PortfolioSnapshot)
+                    .where(
+                        PortfolioSnapshot.tenant_id == principal.tenant_id,
+                        PortfolioSnapshot.portfolio_id == portfolio_id,
+                    )
+                ):
+                    raise PortfolioError("BASELINE_SNAPSHOT_REQUIRED")
                 if db.scalar(
                     select(func.count())
                     .select_from(CircuitBreaker)
@@ -920,22 +1335,130 @@ class PortfolioService:
             ).all()
             result = []
             for row in rows:
-                mandate = self._active_mandate(db, principal.tenant_id, row.id, now)
+                current = self._current_mandate(db, principal.tenant_id, row.id)
+                mandate, mandate_error = self._mandate_eligibility(
+                    db, principal.tenant_id, row.id, now
+                )
                 cash, reserved = self._cash_balances(db, principal.tenant_id, row.id, now)
+                required_action: PortfolioRequiredAction | None = None
+                breaker_open = bool(
+                    db.scalar(
+                        select(func.count())
+                        .select_from(CircuitBreaker)
+                        .where(
+                            CircuitBreaker.tenant_id == principal.tenant_id,
+                            CircuitBreaker.portfolio_id == row.id,
+                            CircuitBreaker.status == "open",
+                        )
+                    )
+                )
+                latest = self._latest_suitability(
+                    db, principal.tenant_id, row.owner_user_id
+                )
+                if breaker_open:
+                    required_action = PortfolioRequiredAction.REVIEW_RISK_HOLD
+                elif current is None:
+                    required_action = (
+                        PortfolioRequiredAction.COMPLETE_SUITABILITY_AND_CREATE_MANDATE
+                    )
+                elif current.status == "paused":
+                    resumable = (
+                        latest is not None
+                        and latest.id == current.suitability_id
+                        and latest.status == "valid"
+                        and latest.assessed_at <= now < latest.expires_at
+                        and _PROFILE_ORDER[RiskProfile(current.profile)]
+                        <= _PROFILE_ORDER[RiskProfile(latest.effective_profile)]
+                    )
+                    required_action = (
+                        PortfolioRequiredAction.RESUME_MANDATE
+                        if resumable
+                        else PortfolioRequiredAction.CREATE_COMPATIBLE_MANDATE
+                    )
+                elif current.status == "circuit_broken":
+                    required_action = PortfolioRequiredAction.REVIEW_RISK_HOLD
+                elif current.status == "closed":
+                    required_action = PortfolioRequiredAction.CREATE_NEW_PORTFOLIO
+                elif mandate_error == "SUITABILITY_REQUIRED":
+                    required_action = (
+                        PortfolioRequiredAction.COMPLETE_SUITABILITY_AND_CREATE_MANDATE
+                    )
+                elif mandate_error in {
+                    "SUITABILITY_STALE",
+                    "PROFILE_EXCEEDS_SUITABILITY",
+                }:
+                    required_action = PortfolioRequiredAction.CREATE_COMPATIBLE_MANDATE
                 result.append(
                     PortfolioOverview(
                         id=row.id,
                         name=row.name,
                         base_currency=row.base_currency,
                         status=row.status,
-                        effective_profile=mandate.profile if mandate else None,
-                        mode=mandate.mode if mandate else None,
+                        mandate_profile=current.profile if current else None,
+                        suitability_effective_profile=(
+                            latest.effective_profile if latest is not None else None
+                        ),
+                        mode=current.mode if current else None,
                         cash=cash,
                         reserved_cash=reserved,
                         available_cash=cash - reserved,
+                        current_mandate_id=current.id if current else None,
+                        mandate_status=current.status if current else None,
+                        pause_reason=current.pause_reason if current else None,
+                        required_action=required_action,
+                        circuit_breaker_open=breaker_open,
                     )
                 )
             return tuple(result)
+
+    def latest_snapshot(
+        self, *, principal: IdentityPrincipal, portfolio_id: UUID
+    ) -> PortfolioSnapshotOverview | None:
+        """Return the latest internally-produced snapshot without accepting valuation input."""
+
+        self._authorize(principal)
+        with self._sessions() as db, db.begin():
+            self._set_tenant_scope(db, principal.tenant_id)
+            if not db.scalar(
+                select(func.count()).select_from(Portfolio).where(
+                    Portfolio.id == portfolio_id,
+                    Portfolio.tenant_id == principal.tenant_id,
+                )
+            ):
+                raise PortfolioError("PORTFOLIO_NOT_FOUND")
+            row = db.scalar(
+                select(PortfolioSnapshot)
+                .where(
+                    PortfolioSnapshot.tenant_id == principal.tenant_id,
+                    PortfolioSnapshot.portfolio_id == portfolio_id,
+                )
+                .order_by(PortfolioSnapshot.sequence.desc())
+                .limit(1)
+            )
+            if row is None:
+                return None
+            now = self._database_now(db)
+            freshness = "fresh" if row.valuation_available_at >= now - timedelta(minutes=15) else "stale"
+            return PortfolioSnapshotOverview(
+                portfolio_id=row.portfolio_id,
+                sequence=row.sequence,
+                cash=row.cash,
+                reserved_cash=row.reserved_cash,
+                market_value=row.market_value,
+                equity=row.equity,
+                nav_per_unit=row.nav_per_unit,
+                realized_pnl=row.realized_pnl,
+                unrealized_pnl=row.unrealized_pnl,
+                drawdown=row.drawdown,
+                daily_drawdown=row.daily_drawdown,
+                unit_count=row.unit_count,
+                high_water_nav=row.high_water_nav,
+                valuation_source=row.valuation_source,
+                valuation_observed_at=row.valuation_observed_at,
+                valuation_available_at=row.valuation_available_at,
+                captured_at=row.captured_at,
+                freshness=freshness,
+            )
 
     def capture_trusted_snapshot(
         self,
@@ -955,8 +1478,10 @@ class PortfolioService:
             )
             if portfolio is None:
                 raise PortfolioError("PORTFOLIO_NOT_FOUND")
-            mandate = self._active_mandate(db, principal.tenant_id, portfolio_id, now)
-            if mandate is None or mandate.mode not in {
+            mandate = self._require_active_mandate(
+                db, principal.tenant_id, portfolio_id, now
+            )
+            if mandate.mode not in {
                 RunMode.SHADOW.value,
                 RunMode.PAPER.value,
             }:
@@ -1009,9 +1534,20 @@ class PortfolioService:
                 .limit(1)
             )
             sequence = (previous.sequence if previous else 0) + 1
+            opening_nav = db.scalar(
+                select(LedgerTransaction.nav_per_unit)
+                .where(
+                    LedgerTransaction.tenant_id == principal.tenant_id,
+                    LedgerTransaction.portfolio_id == portfolio_id,
+                    LedgerTransaction.unit_delta > 0,
+                )
+                .order_by(LedgerTransaction.occurred_at.asc(), LedgerTransaction.id.asc())
+                .limit(1)
+            )
+            initial_baseline_nav = opening_nav or portfolio.last_nav_per_unit
             high_water_nav = max(
                 nav_per_unit,
-                previous.high_water_nav if previous else nav_per_unit,
+                previous.high_water_nav if previous else initial_baseline_nav,
             )
             drawdown = (high_water_nav - nav_per_unit) / high_water_nav
             high_water = high_water_nav * portfolio.unit_count
@@ -1030,10 +1566,13 @@ class PortfolioService:
             if daily_baseline is None:
                 daily_baseline = previous
             daily_drawdown = _ZERO
-            if daily_baseline is not None and daily_baseline.nav_per_unit > nav_per_unit:
-                daily_drawdown = (
-                    daily_baseline.nav_per_unit - nav_per_unit
-                ) / daily_baseline.nav_per_unit
+            daily_baseline_nav = (
+                daily_baseline.nav_per_unit
+                if daily_baseline is not None
+                else initial_baseline_nav
+            )
+            if daily_baseline_nav > nav_per_unit:
+                daily_drawdown = (daily_baseline_nav - nav_per_unit) / daily_baseline_nav
             payload = {
                 "tenant_id": str(principal.tenant_id),
                 "portfolio_id": str(portfolio_id),
@@ -1141,13 +1680,110 @@ class PortfolioService:
             raise PortfolioError("VALUATION_PRICES_INVALID")
 
     @staticmethod
+    def _validate_allocation(
+        proposal: TrustedAllocationRequest, *, now: datetime
+    ) -> None:
+        if proposal.source not in {"analysis_pit", "broker_reconciliation"}:
+            raise PortfolioError("ALLOCATION_SOURCE_INVALID")
+        if (
+            proposal.observed_at.tzinfo is None
+            or proposal.observed_at.utcoffset() is None
+            or proposal.available_at.tzinfo is None
+            or proposal.available_at.utcoffset() is None
+            or proposal.observed_at > proposal.available_at
+            or proposal.available_at > now
+            or proposal.available_at < now - timedelta(minutes=15)
+        ):
+            raise PortfolioError("ALLOCATION_TIMELINE_INVALID")
+        digest = proposal.evidence_digest
+        if len(digest) != 64 or any(ch not in "0123456789abcdef" for ch in digest):
+            raise PortfolioError("ALLOCATION_DIGEST_INVALID")
+        if not all(
+            isinstance(value, Mapping)
+            for value in (
+                proposal.raw_target_weights,
+                proposal.correlations,
+                proposal.assets,
+            )
+        ):
+            raise PortfolioError("ALLOCATION_INPUT_INVALID")
+        symbols = set(proposal.raw_target_weights)
+        if not symbols or symbols != set(proposal.assets):
+            raise PortfolioError("ALLOCATION_SYMBOL_SET_MISMATCH")
+        ordered_symbols = sorted(symbols)
+        expected_pairs = {
+            (left, right)
+            for index, left in enumerate(ordered_symbols)
+            for right in ordered_symbols[index + 1 :]
+        }
+        if set(proposal.correlations) != expected_pairs:
+            raise PortfolioError("ALLOCATION_CORRELATION_SET_MISMATCH")
+        for symbol, asset in proposal.assets.items():
+            if symbol != asset.symbol or not symbol or len(symbol) > 64:
+                raise PortfolioError("ALLOCATION_SYMBOL_SET_MISMATCH")
+            if asset.asset_class not in {"crypto", "stock"}:
+                raise PortfolioError("ALLOCATION_ASSET_CLASS_MISMATCH")
+
+    @staticmethod
     def _active_mandate(
         db: Session, tenant_id: UUID, portfolio_id: UUID, at: datetime
     ) -> PortfolioMandate | None:
-        current = PortfolioService._current_mandate(db, tenant_id, portfolio_id)
-        if current is None or current.status != "active" or current.effective_at > at:
-            return None
+        current, error = PortfolioService._mandate_eligibility(
+            db, tenant_id, portfolio_id, at
+        )
+        return current if error is None else None
+
+    @staticmethod
+    def _require_active_mandate(
+        db: Session, tenant_id: UUID, portfolio_id: UUID, at: datetime
+    ) -> PortfolioMandate:
+        current, error = PortfolioService._mandate_eligibility(
+            db, tenant_id, portfolio_id, at
+        )
+        if error is not None or current is None:
+            raise PortfolioError(error or "ACTIVE_MANDATE_REQUIRED")
         return current
+
+    @staticmethod
+    def _mandate_eligibility(
+        db: Session, tenant_id: UUID, portfolio_id: UUID, at: datetime
+    ) -> tuple[PortfolioMandate | None, str | None]:
+        current = PortfolioService._current_mandate(db, tenant_id, portfolio_id)
+        if (
+            current is None
+            or current.status != "active"
+            or current.effective_at > at
+            or current.ended_at is not None
+        ):
+            return current, "ACTIVE_MANDATE_REQUIRED"
+        owner_user_id = db.scalar(
+            select(Portfolio.owner_user_id).where(
+                Portfolio.tenant_id == tenant_id,
+                Portfolio.id == portfolio_id,
+            )
+        )
+        if owner_user_id is None:
+            return current, "PORTFOLIO_NOT_FOUND"
+        suitability = PortfolioService._latest_suitability(
+            db, tenant_id, owner_user_id
+        )
+        if (
+            suitability is None
+            or suitability.status != "valid"
+            or suitability.assessed_at > at
+            or suitability.expires_at <= at
+        ):
+            return current, "SUITABILITY_REQUIRED"
+        if current.suitability_id != suitability.id:
+            return current, "SUITABILITY_STALE"
+        try:
+            if _PROFILE_ORDER[RiskProfile(current.profile)] > _PROFILE_ORDER[
+                RiskProfile(suitability.effective_profile)
+            ]:
+                return current, "PROFILE_EXCEEDS_SUITABILITY"
+        except ValueError:
+            return current, "PROFILE_EXCEEDS_SUITABILITY"
+        return current, None
 
     @staticmethod
     def _current_mandate(

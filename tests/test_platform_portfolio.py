@@ -195,6 +195,11 @@ def test_cash_reservation_cannot_exceed_available_balance(portfolio_runtime) -> 
         idempotency_key="funding-request-0002",
         reference_id="deposit-2",
     )
+    service.capture_trusted_snapshot(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        valuation=_trusted_valuation(service),
+    )
     reservation = service.reserve_cash(
         principal=principal,
         portfolio_id=portfolio.id,
@@ -261,6 +266,11 @@ def test_concurrent_reservations_never_overdraw(portfolio_runtime) -> None:
         amount=Decimal("100"),
         idempotency_key="funding-concurrency-001",
         reference_id="deposit-race",
+    )
+    service.capture_trusted_snapshot(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        valuation=_trusted_valuation(service),
     )
 
     def reserve(index: int) -> str:

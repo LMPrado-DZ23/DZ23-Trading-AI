@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -26,6 +27,8 @@ from tradingagents.platform.portfolio import (
     PortfolioMandate,
     PortfolioPosition,
     PortfolioService,
+    TrustedAllocationRequest,
+    TrustedAssetAllocation,
     TrustedValuation,
     cap_target_weights,
     policy_for,
@@ -423,3 +426,508 @@ def test_daily_breaker_uses_day_baseline_not_only_previous_step(
     assert breaker is not None
     assert breaker.kind == "daily_drawdown"
     assert breaker.observed_value >= Decimal("0.01")
+
+
+def test_expired_suitability_blocks_new_risk_even_without_state_transition(
+    audited_portfolio_runtime, monkeypatch
+) -> None:
+    service, principal, _factory = audited_portfolio_runtime
+    suitability = service.assess_suitability(
+        principal=principal,
+        requested_profile=RiskProfile.PRESERVATION,
+        answers=_answers(conservative=True),
+        valid_for=timedelta(days=1),
+    )
+    portfolio = service.create_portfolio(
+        principal=principal, name="Expiry gate", base_currency="BRL"
+    )
+    service.activate_mandate(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        suitability_id=suitability.id,
+        profile=RiskProfile.PRESERVATION,
+        mode=RunMode.PAPER,
+    )
+    service.record_funding(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("1000"),
+        idempotency_key="expiry-gate-funding-0001",
+        reference_id="expiry-gate-balance",
+    )
+    after_expiry = suitability.expires_at + timedelta(seconds=1)
+    monkeypatch.setattr(service, "_now", lambda: after_expiry)
+
+    with pytest.raises(PortfolioError, match="SUITABILITY_REQUIRED"):
+        service.reserve_cash(
+            principal=principal,
+            portfolio_id=portfolio.id,
+            amount=Decimal("1"),
+            purpose_digest="f" * 64,
+            idempotency_key="expiry-gate-reservation-0001",
+        )
+    with pytest.raises(PortfolioError, match="SUITABILITY_REQUIRED"):
+        service.capture_trusted_snapshot(
+            principal=principal,
+            portfolio_id=portfolio.id,
+            valuation=TrustedValuation(
+                prices={},
+                source="market_data_pit",
+                observed_at=after_expiry,
+                available_at=after_expiry,
+                evidence_digest="f" * 64,
+            ),
+        )
+
+
+def test_first_snapshot_preserves_pre_snapshot_loss_and_opens_breaker(
+    audited_portfolio_runtime,
+) -> None:
+    service, principal, factory = audited_portfolio_runtime
+    portfolio, _mandate = _active(audited_portfolio_runtime, RiskProfile.PRESERVATION)
+    service.record_funding(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("1000"),
+        idempotency_key="first-loss-funding-0001",
+        reference_id="first-loss-balance",
+    )
+    service._record_cash_transaction(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("100"),
+        idempotency_key="first-loss-fee-0001",
+        event_type="fee",
+        reference_type="internal",
+        reference_id="first-loss-fee",
+        cash_direction=-1,
+    )
+    snapshot = service.capture_trusted_snapshot(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        valuation=_valuation(service),
+    )
+    assert snapshot.nav_per_unit == Decimal("0.900000000000")
+    assert snapshot.high_water_nav == Decimal("1.000000000000")
+    assert snapshot.drawdown == Decimal("0.1")
+    assert snapshot.daily_drawdown == Decimal("0.1")
+    with factory() as db:
+        breaker = db.scalar(
+            select(CircuitBreaker).where(CircuitBreaker.portfolio_id == portfolio.id)
+        )
+    assert breaker is not None
+    assert breaker.kind == "daily_drawdown"
+
+
+def test_reservation_requires_trusted_risk_baseline(audited_portfolio_runtime) -> None:
+    service, principal, _factory = audited_portfolio_runtime
+    portfolio, _mandate = _active(audited_portfolio_runtime)
+    service.record_funding(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("100"),
+        idempotency_key="baseline-funding-0001",
+        reference_id="baseline-balance",
+    )
+    with pytest.raises(PortfolioError, match="BASELINE_SNAPSHOT_REQUIRED"):
+        service.reserve_cash(
+            principal=principal,
+            portfolio_id=portfolio.id,
+            amount=Decimal("1"),
+            purpose_digest="e" * 64,
+            idempotency_key="baseline-reservation-0001",
+        )
+    service.capture_trusted_snapshot(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        valuation=_valuation(service),
+    )
+    reservation = service.reserve_cash(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("1"),
+        purpose_digest="e" * 64,
+        idempotency_key="baseline-reservation-0001",
+    )
+    assert reservation.status == "active"
+
+
+def test_reassessment_reports_paused_portfolio_and_required_action(
+    audited_portfolio_runtime,
+) -> None:
+    service, principal, _factory = audited_portfolio_runtime
+    portfolio, _mandate = _active(audited_portfolio_runtime, RiskProfile.AGGRESSIVE)
+    result = service.assess_suitability(
+        principal=principal,
+        requested_profile=RiskProfile.PRESERVATION,
+        answers=_answers(conservative=True),
+    )
+    assert len(result.paused_portfolios) == 1
+    assert result.paused_portfolios[0].portfolio_id == portfolio.id
+    assert result.paused_portfolios[0].required_action == "create_compatible_mandate"
+    assert result.paused_portfolios[0].pause_reason == "suitability_reassessment"
+    overview = service.list_portfolios(principal=principal)[0]
+    assert overview.mandate_status == "paused"
+    assert overview.mandate_profile == RiskProfile.AGGRESSIVE.value
+    assert overview.suitability_effective_profile == RiskProfile.PRESERVATION.value
+    assert overview.pause_reason == "suitability_reassessment"
+    assert overview.required_action == "create_compatible_mandate"
+
+
+def test_funding_mode_is_explicit_and_backtest_user_funding_is_refused(
+    audited_portfolio_runtime,
+) -> None:
+    service, principal, _factory = audited_portfolio_runtime
+    suitability = service.assess_suitability(
+        principal=principal,
+        requested_profile=RiskProfile.MODERATE,
+        answers=_answers(),
+    )
+    portfolio = service.create_portfolio(
+        principal=principal, name="Shadow funding", base_currency="BRL"
+    )
+    service.activate_mandate(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        suitability_id=suitability.id,
+        profile=RiskProfile.MODERATE,
+        mode=RunMode.SHADOW,
+    )
+    row = service.record_funding(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("100"),
+        idempotency_key="shadow-funding-mode-0001",
+        reference_id="shadow-opening-balance",
+        mode=RunMode.SHADOW,
+    )
+    assert row.event_type == "shadow_funding"
+    with pytest.raises(PortfolioError, match="FUNDING_MODE_MISMATCH"):
+        service.record_funding(
+            principal=principal,
+            portfolio_id=portfolio.id,
+            amount=Decimal("100"),
+            idempotency_key="paper-on-shadow-mode-0001",
+            reference_id="wrong-mode",
+            mode=RunMode.PAPER,
+        )
+    with pytest.raises(PortfolioError, match="CAPITAL_MODE_NOT_ENABLED"):
+        service.record_funding(
+            principal=principal,
+            portfolio_id=portfolio.id,
+            amount=Decimal("100"),
+            idempotency_key="backtest-user-funding-0001",
+            reference_id="backtest-forbidden",
+            mode=RunMode.BACKTEST,
+        )
+
+
+def test_latest_snapshot_is_read_only_and_omits_raw_valuation_inputs(
+    audited_portfolio_runtime,
+) -> None:
+    service, principal, _factory = audited_portfolio_runtime
+    portfolio, _mandate = _active(audited_portfolio_runtime)
+    assert service.latest_snapshot(principal=principal, portfolio_id=portfolio.id) is None
+    service.record_funding(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("100"),
+        idempotency_key="snapshot-read-funding-0001",
+        reference_id="snapshot-read-balance",
+    )
+    created = service.capture_trusted_snapshot(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        valuation=_valuation(service),
+    )
+    latest = service.latest_snapshot(principal=principal, portfolio_id=portfolio.id)
+    assert latest is not None
+    assert latest.sequence == created.sequence
+    assert not hasattr(latest, "prices")
+    assert not hasattr(latest, "positions")
+    assert latest.freshness == "fresh"
+
+
+def test_internal_allocator_applies_aggregate_caps_and_reserves_atomically(
+    audited_portfolio_runtime,
+) -> None:
+    service, principal, _factory = audited_portfolio_runtime
+    portfolio, _mandate = _active(audited_portfolio_runtime)
+    service.record_funding(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("1000"),
+        idempotency_key="allocator-opening-funding-0001",
+        reference_id="allocator-opening",
+    )
+    service.capture_trusted_snapshot(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        valuation=_valuation(service),
+    )
+    observed = service._now()
+    proposal = TrustedAllocationRequest(
+        raw_target_weights={"BTC/BRL": Decimal("0.50"), "ETH/BRL": Decimal("0.50")},
+        correlations={("BTC/BRL", "ETH/BRL"): Decimal("0.95")},
+        assets={
+            symbol: TrustedAssetAllocation(
+                symbol=symbol,
+                asset_class="crypto",
+                price=price,
+                conviction=Decimal("1"),
+                realized_annual_volatility=Decimal("0.10"),
+                average_daily_notional=Decimal("1000000"),
+            )
+            for symbol, price in {
+                "BTC/BRL": Decimal("500000"),
+                "ETH/BRL": Decimal("20000"),
+            }.items()
+        },
+        source="analysis_pit",
+        observed_at=observed,
+        available_at=observed,
+        evidence_digest="c" * 64,
+    )
+    result = service.allocate_and_reserve(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        proposal=proposal,
+        idempotency_key="allocator-reservation-0001",
+    )
+    assert sum((line.capped_weight for line in result.lines), Decimal("0")) <= Decimal(
+        "0.10"
+    )
+    assert all(line.sizing.target_weight <= line.capped_weight for line in result.lines)
+    assert result.total_order_notional == Decimal("40.00000000")
+    assert result.reservation.amount == result.total_order_notional
+    assert result.reservation.purpose_digest == result.allocation_digest
+    replay = service.allocate_and_reserve(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        proposal=proposal,
+        idempotency_key="allocator-reservation-0001",
+    )
+    assert replay.reservation.id == result.reservation.id
+
+
+def test_allocator_counts_existing_exposure_before_reserving_new_crypto(
+    audited_portfolio_runtime,
+) -> None:
+    service, principal, factory = audited_portfolio_runtime
+    portfolio, _mandate = _active(audited_portfolio_runtime)
+    service.record_funding(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("1000"),
+        idempotency_key="existing-exposure-funding-0001",
+        reference_id="existing-exposure",
+    )
+    with factory() as db, db.begin():
+        db.add(
+            PortfolioPosition(
+                tenant_id=principal.tenant_id,
+                portfolio_id=portfolio.id,
+                symbol="BTC/BRL",
+                asset_class="crypto",
+                quantity=Decimal("1"),
+                average_cost=Decimal("100"),
+                realized_pnl=Decimal("0"),
+                version=1,
+            )
+        )
+    observed = service._now()
+    service.capture_trusted_snapshot(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        valuation=TrustedValuation(
+            prices={"BTC/BRL": Decimal("100")},
+            source="market_data_pit",
+            observed_at=observed,
+            available_at=observed,
+            evidence_digest="e" * 64,
+        ),
+    )
+    observed = service._now()
+    proposal = TrustedAllocationRequest(
+        raw_target_weights={"BTC/BRL": Decimal("0"), "ETH/BRL": Decimal("0.50")},
+        correlations={("BTC/BRL", "ETH/BRL"): Decimal("0")},
+        assets={
+            "BTC/BRL": TrustedAssetAllocation(
+                symbol="BTC/BRL",
+                asset_class="crypto",
+                price=Decimal("100"),
+                conviction=Decimal("0"),
+                realized_annual_volatility=Decimal("0.10"),
+                average_daily_notional=Decimal("1000000"),
+            ),
+            "ETH/BRL": TrustedAssetAllocation(
+                symbol="ETH/BRL",
+                asset_class="crypto",
+                price=Decimal("10"),
+                conviction=Decimal("1"),
+                realized_annual_volatility=Decimal("0.10"),
+                average_daily_notional=Decimal("1000000"),
+            ),
+        },
+        source="analysis_pit",
+        observed_at=observed,
+        available_at=observed,
+        evidence_digest="f" * 64,
+    )
+    with pytest.raises(PortfolioError, match="NO_REBALANCE_REQUIRED"):
+        service.allocate_and_reserve(
+            principal=principal,
+            portfolio_id=portfolio.id,
+            proposal=proposal,
+            idempotency_key="existing-exposure-reserve-0001",
+        )
+
+
+def test_allocator_rejects_stale_risk_baseline(
+    audited_portfolio_runtime,
+    monkeypatch,
+) -> None:
+    service, principal, _factory = audited_portfolio_runtime
+    portfolio, _mandate = _active(audited_portfolio_runtime)
+    service.record_funding(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("1000"),
+        idempotency_key="stale-baseline-funding-0001",
+        reference_id="stale-baseline",
+    )
+    service.capture_trusted_snapshot(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        valuation=_valuation(service),
+    )
+    future = service._now() + timedelta(hours=2)
+    monkeypatch.setattr(service, "_now", lambda: future)
+    proposal = TrustedAllocationRequest(
+        raw_target_weights={"BTC/BRL": Decimal("0.01")},
+        correlations={},
+        assets={
+            "BTC/BRL": TrustedAssetAllocation(
+                symbol="BTC/BRL",
+                asset_class="crypto",
+                price=Decimal("500000"),
+                conviction=Decimal("1"),
+                realized_annual_volatility=Decimal("0.10"),
+                average_daily_notional=Decimal("1000000"),
+            )
+        },
+        source="analysis_pit",
+        observed_at=future,
+        available_at=future,
+        evidence_digest="1" * 64,
+    )
+    with pytest.raises(PortfolioError, match="ALLOCATION_BASELINE_STALE"):
+        service.allocate_and_reserve(
+            principal=principal,
+            portfolio_id=portfolio.id,
+            proposal=proposal,
+            idempotency_key="stale-baseline-reserve-0001",
+        )
+
+
+def test_breaker_action_precedes_paused_mandate_action(audited_portfolio_runtime) -> None:
+    service, principal, factory = audited_portfolio_runtime
+    portfolio, mandate = _active(audited_portfolio_runtime, RiskProfile.AGGRESSIVE)
+    with factory() as db, db.begin():
+        db.add(
+            CircuitBreaker(
+                tenant_id=principal.tenant_id,
+                portfolio_id=portfolio.id,
+                mandate_id=mandate.id,
+                kind="maximum_drawdown",
+                status="open",
+                observed_value=Decimal("0.30"),
+                threshold_value=Decimal("0.25"),
+                evidence_digest="d" * 64,
+                triggered_at=service._now(),
+            )
+        )
+    service.assess_suitability(
+        principal=principal,
+        requested_profile=RiskProfile.PRESERVATION,
+        answers=_answers(conservative=True),
+    )
+    overview = service.list_portfolios(principal=principal)[0]
+    assert overview.mandate_status == "paused"
+    assert overview.circuit_breaker_open is True
+    assert overview.required_action == "review_risk_hold"
+    with pytest.raises(PortfolioError, match="CIRCUIT_BREAKER_OPEN"):
+        service.transition_mandate(
+            principal=principal,
+            portfolio_id=portfolio.id,
+            target_status="active",
+        )
+
+
+def test_unit_delta_rounding_matches_postgresql_numeric_round(audited_portfolio_runtime) -> None:
+    service, principal, factory = audited_portfolio_runtime
+    portfolio, _mandate = _active(audited_portfolio_runtime)
+    with factory() as db, db.begin():
+        persisted = db.get(Portfolio, portfolio.id)
+        assert persisted is not None
+        persisted.last_nav_per_unit = Decimal("2")
+    row = service.record_funding(
+        principal=principal,
+        portfolio_id=portfolio.id,
+        amount=Decimal("0.246913578025"),
+        idempotency_key="postgres-rounding-parity-0001",
+        reference_id="rounding-boundary",
+    )
+    assert row.unit_delta == Decimal("0.123456789013")
+
+
+def test_migration_preflight_rejects_transaction_without_postings() -> None:
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "migrations"
+        / "versions"
+        / "20260908_0020_portfolio_audit_hardening.py"
+    )
+    spec = importlib.util.spec_from_file_location("m4_audit_hardening", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    engine = create_engine("sqlite+pysqlite://")
+    with engine.begin() as db:
+        db.exec_driver_sql(
+            "CREATE TABLE portfolio_mandates "
+            "(mode TEXT, status TEXT, ended_at TEXT, effective_at TEXT)"
+        )
+        db.exec_driver_sql(
+            "CREATE TABLE portfolio_ledger_transactions "
+            "(id TEXT, tenant_id TEXT, portfolio_id TEXT, currency TEXT, "
+            "amount NUMERIC, event_type TEXT)"
+        )
+        db.exec_driver_sql(
+            "CREATE TABLE portfolio_ledger_postings "
+            "(id TEXT, transaction_id TEXT, tenant_id TEXT, portfolio_id TEXT, "
+            "account TEXT, asset TEXT, quantity NUMERIC)"
+        )
+        db.exec_driver_sql(
+            "INSERT INTO portfolio_ledger_transactions VALUES "
+            "('tx','tenant','portfolio','BRL',100,'funding')"
+        )
+        with pytest.raises(RuntimeError, match="M4_INVALID_LEGACY_LEDGER"):
+            module._run_preflight(db)
+    engine.dispose()
+
+
+def test_postgresql_guards_cover_table_shape_and_reservation_updates() -> None:
+    migration = (
+        Path(__file__).resolve().parents[1]
+        / "migrations"
+        / "versions"
+        / "20260908_0020_portfolio_audit_hardening.py"
+    ).read_text(encoding="utf-8")
+    derived_start = migration.index("CREATE FUNCTION portfolio_assert_derived_state")
+    branch_at = migration.index("IF TG_TABLE_NAME = 'portfolios'", derived_start)
+    generic_new_at = migration.index("NEW.portfolio_id", branch_at)
+    assert branch_at < generic_new_at
+    assert '"AFTER INSERT OR UPDATE",' in migration
+    assert "NEW.mandate_id IS DISTINCT FROM active_mandate" in migration
+    assert '["mandate_id", "tenant_id", "portfolio_id"]' in migration

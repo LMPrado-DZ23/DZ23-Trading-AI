@@ -273,6 +273,7 @@ class ComplianceService:
                     ConsentRecord.terms_document_id == document.id,
                 )
                 .order_by(ConsentRecord.recorded_at.desc(), ConsentRecord.id.desc())
+                .with_for_update()
                 .limit(1)
             )
             if latest is None and decision is ConsentDecision.WITHDRAWN:
@@ -281,6 +282,11 @@ class ComplianceService:
                 raise ComplianceConflict("consent decision is already current")
             record_id = uuid4()
             recorded_at = self._now()
+            if latest is not None:
+                recorded_at = max(
+                    recorded_at,
+                    latest.recorded_at + timedelta(microseconds=1),
+                )
             evidence = {
                 "consent_record_id": str(record_id),
                 "tenant_id": str(principal.tenant_id),

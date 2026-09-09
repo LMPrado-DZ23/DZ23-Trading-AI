@@ -10,6 +10,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
+from tradingagents.platform.portfolio.service import PortfolioRequiredAction
+
 _EMAIL = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 Password = Annotated[str, Field(min_length=12, max_length=128)]
 
@@ -284,6 +286,16 @@ class SuitabilityRequest(ApiModel):
     experience: Literal["none", "basic", "experienced"]
 
 
+class PausedPortfolioResponse(ApiModel):
+    portfolio_id: UUID
+    name: str
+    mandate_id: UUID
+    profile: str
+    mode: str
+    pause_reason: Literal["suitability_reassessment"]
+    required_action: PortfolioRequiredAction
+
+
 class SuitabilityResponse(ApiModel):
     id: UUID
     version: int
@@ -295,6 +307,7 @@ class SuitabilityResponse(ApiModel):
     digest: str
     assessed_at: datetime
     expires_at: datetime
+    paused_portfolios: list[PausedPortfolioResponse]
 
 
 class PortfolioCreateRequest(ApiModel):
@@ -314,11 +327,38 @@ class PortfolioOverviewResponse(ApiModel):
     name: str
     base_currency: str
     status: str
-    effective_profile: str | None
+    mandate_profile: str | None
+    suitability_effective_profile: str | None
     mode: str | None
     cash: Decimal
     reserved_cash: Decimal
     available_cash: Decimal
+    current_mandate_id: UUID | None
+    mandate_status: str | None
+    pause_reason: Literal["suitability_reassessment", "user_requested", "legacy_pause"] | None
+    required_action: PortfolioRequiredAction | None
+    circuit_breaker_open: bool
+
+
+class PortfolioRiskSnapshotResponse(ApiModel):
+    portfolio_id: UUID
+    sequence: int
+    cash: Decimal
+    reserved_cash: Decimal
+    market_value: Decimal
+    equity: Decimal
+    nav_per_unit: Decimal
+    realized_pnl: Decimal
+    unrealized_pnl: Decimal
+    drawdown: Decimal
+    daily_drawdown: Decimal
+    unit_count: Decimal
+    high_water_nav: Decimal
+    valuation_source: str
+    valuation_observed_at: datetime
+    valuation_available_at: datetime
+    captured_at: datetime
+    freshness: Literal["fresh", "stale"]
 
 
 class MandateRequest(ApiModel):
@@ -349,6 +389,15 @@ class MandateTransitionRequest(ApiModel):
 class PortfolioFundingRequest(ApiModel):
     amount: Decimal = Field(gt=0, max_digits=36, decimal_places=12)
     reference_id: str = Field(min_length=1, max_length=128)
+    mode: Literal["shadow", "paper"]
+
+
+class PortfolioFundingResponse(ApiModel):
+    transaction_id: UUID
+    mode: Literal["shadow", "paper"]
+    provenance: Literal["user_declared"]
+    verification_status: Literal["unverified"]
+    message: str
 
 
 class LlmProviderResponse(ApiModel):

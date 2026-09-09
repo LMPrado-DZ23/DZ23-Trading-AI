@@ -2,12 +2,12 @@
 
 - **mission_id:** `tradingagents-dz23-a5-2026-09-08`
 - **objective:** concluir o TradingAgents DZ23 como plataforma web multiusuário pronta para usuários leigos, com carteira administrada, perfis de risco, execução CCXT segura e implantação verificada em `https://trading.dz23.online/`.
-- **state:** `FIXING`
-- **iteration:** 5
+- **state:** `BLOCKED_BY_EXTERNAL_DEPENDENCY`
+- **iteration:** 6
 - **started_at:** 2026-09-08 America/Sao_Paulo
 - **last_heartbeat:** 2026-09-08
 - **last_progress_at:** 2026-09-08
-- **current_task:** concluir a candidata de correção do M4, reproduzir PostgreSQL real e devolver para auditoria independente antes do M5.
+- **current_task:** executar a migration 0019 -> 0020 e os vetores concorrentes/RLS em PostgreSQL descartável; a candidata M4 está localmente verde e aprovada nas revisões independentes estáticas.
 
 ## Acceptance criteria
 
@@ -80,11 +80,25 @@
 - [x] Consolidar inventários Architect, Security e Product/UX.
 - [x] Fechar design e plano de marcos.
 - [x] Preparar ambiente Python reprodutível e reproduzir baseline.
-- [ ] Executar marcos M5–M10 do plano (M0–M3 aprovados; M4 original reprovado e correção em verificação).
+- [ ] Executar marcos M5–M10 do plano (M0–M3 aprovados; correção M4 aguarda apenas o gate PostgreSQL real antes da promoção).
 - [ ] Três auditorias independentes e fix loop final.
 - [ ] Release, push, deploy e validação de produção.
 
 ## Blockers
+
+### BLOCKED_BY_EXTERNAL_DEPENDENCY — PostgreSQL descartável para M4
+
+- **task:** validação real da migration 0019 -> 0020 e dos invariantes RLS,
+  triggers diferidos, arredondamento e concorrência.
+- **reason:** não há PostgreSQL local escutando em `127.0.0.1:5432` e o daemon
+  Docker local não está disponível. O banco Supabase principal já contém dados
+  e não será usado como alvo destrutivo de migration/downgrade.
+- **evidence:** suíte local final `1260 passed, 12 skipped, 71 subtests`; SQL
+  offline PostgreSQL gerado e revisado estaticamente sem bloqueadores.
+- **needed:** autorização explícita para criar uma branch Supabase temporária a
+  `US$ 0,01344/h` e apagá-la após os testes, ou uma URL PostgreSQL descartável.
+- **impact:** commit e bundle candidato podem ser preparados; promoção do M4 e
+  início do M5 permanecem bloqueados.
 
 ### BLOCKED_BY_EXTERNAL_DEPENDENCY — SSH do VPS
 
@@ -96,7 +110,10 @@
 
 ## Current failure
 
-- O commit M4 `784d16e` foi reprovado: suitability/mandato efetivo, drawdown diário, confiança de valuation/sizing, caps agregados e invariantes do ledger tinham bypasses. A candidata local corrige esses achados, mas PostgreSQL/Redis não estão acessíveis neste sandbox e a promoção continua proibida até reprodução real e auditoria independente.
+- Não há falha interna aberta na candidata M4. Os bypasses do commit `784d16e`
+  foram corrigidos e as revisões independentes de produto/API, allocator e
+  migration não encontraram BLOQUEANTE/ALTO estático. A promoção continua
+  proibida até a reprodução real em PostgreSQL descartável.
 - Fontes fundamentals/news/macro/social/Polymarket continuam deliberadamente indisponíveis na plataforma; não há alegação de cobertura PIT para elas.
 - O primeiro `.venv` ficou incompleto após interrupção do instalador; foi substituído por `.venv-a5` criado com `--no-compile` e instalação concluída com exit 0.
 
@@ -149,6 +166,10 @@
 - Evidência da correção: `audit/m4-fix-local-junit-2.xml` SHA-256 `df0e60c7017a03c60226515f6342394db751d449b60c50aaf002117efb32294f`.
 - A ordenação instável de eventos LGPD foi reproduzida, corrigida por timestamp monotônico sob lock e passou **10/10** repetições focais.
 - Migration 0020: geração SQL PostgreSQL verde; execução PostgreSQL real permanece pendente porque as portas locais 55432/56379 estão fechadas neste contexto.
+- Correção M4 final após revisões: **1260 passed, 12 skipped, 71 subtests**, foco final **69 passed**, ruff/compileall/diff-check verdes e secret scan do diff sem matches.
+- Evidência final: `audit/m4-fix-local-junit-6.xml` SHA-256 `57cb44dcf311e6d6fe2766f3619d32a1637df3222fd8ffa704cdd106fca583c9`.
+- SQL PostgreSQL final: `audit/m4-fix-postgresql-offline-6.sql` SHA-256 `cfcb5e344b0927ab5a6b62122fbddf0ea72a3a7f580ac63364202cd9190b9552`.
+- Pareceres independentes: produto/API aprovado sem bloqueadores; allocator sem BLOQUEANTE/ALTO; migration/RLS aprovada estaticamente com gate PostgreSQL externo obrigatório.
 
 ## Commits
 
@@ -169,7 +190,7 @@
 
 ## Next action
 
-1. congelar a correção M4 em novo commit, reproduzir migration/testes em PostgreSQL real e concluir auditoria independente;
+1. congelar a correção M4 em novo commit e reproduzir migration/testes em PostgreSQL descartável;
 2. corrigir achados, se houver, e iniciar M5 somente após o veredito;
 3. manter credenciais reais fora de chat, Git, fixtures e evidências;
 4. manter a integração IQ Option em marco separado: MCP oficial sob gate de capital; `iq-core` somente experimental/read-only, nunca rota LIVE;

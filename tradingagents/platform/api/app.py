@@ -53,7 +53,9 @@ from tradingagents.platform.api.schemas import (
     PortfolioCreatedResponse,
     PortfolioCreateRequest,
     PortfolioFundingRequest,
+    PortfolioFundingResponse,
     PortfolioOverviewResponse,
+    PortfolioRiskSnapshotResponse,
     PrincipalResponse,
     PrivacyActionRequest,
     PrivacyResponse,
@@ -253,7 +255,21 @@ def create_platform_app(
             )
 
     @app.exception_handler(RequestValidationError)
-    async def validation_error(_request: Request, _exc: RequestValidationError) -> JSONResponse:
+    async def validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+        if request.url.path.endswith("/funding") and any(
+            tuple(error.get("loc", ())) == ("body", "mode") for error in exc.errors()
+        ):
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "detail": {
+                        "code": "FUNDING_MODE_INVALID",
+                        "message": "Informe o modo SHADOW ou PAPER; BACKTEST e LIVE não aceitam saldo informado pelo usuário.",
+                        "retryable": False,
+                        "action": "select_shadow_or_paper_mode",
+                    }
+                },
+            )
         return JSONResponse(
             status_code=422,
             content={
@@ -828,6 +844,32 @@ def create_platform_app(
             _raise_portfolio_error(exc)
         return [PortfolioOverviewResponse(**row) for row in rows]
 
+    @app.get(
+        "/v1/portfolios/{portfolio_id}/snapshot",
+        response_model=PortfolioRiskSnapshotResponse,
+    )
+    async def get_portfolio_snapshot(
+        portfolio_id: UUID,
+        request: Request,
+        context: Annotated[TenantRequestContext, Depends(require_session)],
+    ) -> PortfolioRiskSnapshotResponse:
+        require_verified(context)
+        try:
+            row = await portfolios().get_latest_snapshot(
+                token=request.cookies[SESSION_COOKIE],
+                principal=context.principal,
+                portfolio_id=portfolio_id,
+            )
+        except IdentityError as exc:
+            _raise_portfolio_error(exc)
+        if row is None:
+            raise _public_error(
+                404,
+                "SNAPSHOT_NOT_FOUND",
+                "A carteira ainda não possui uma fotografia de risco confiável.",
+            )
+        return PortfolioRiskSnapshotResponse(**row)
+
     @app.post(
         "/v1/portfolios/{portfolio_id}/mandates",
         response_model=MandateResponse,
@@ -879,7 +921,7 @@ def create_platform_app(
 
     @app.post(
         "/v1/portfolios/{portfolio_id}/funding",
-        response_model=MessageResponse,
+        response_model=PortfolioFundingResponse,
         status_code=201,
     )
     async def record_portfolio_funding(
@@ -890,26 +932,22 @@ def create_platform_app(
         idempotency_key: Annotated[
             str, Header(alias="Idempotency-Key", min_length=16, max_length=128)
         ],
-    ) -> MessageResponse:
+    ) -> PortfolioFundingResponse:
         verify_csrf(request, security.csrf_secret)
         require_verified(context)
         try:
-            transaction_id = await portfolios().record_funding(
+            receipt = await portfolios().record_funding(
                 token=request.cookies[SESSION_COOKIE],
                 principal=context.principal,
                 portfolio_id=portfolio_id,
                 amount=payload.amount,
+                mode=payload.mode,
                 idempotency_key=idempotency_key,
                 reference_id=payload.reference_id,
             )
         except IdentityError as exc:
             _raise_portfolio_error(exc)
-        return MessageResponse(
-            message=(
-                "Saldo PAPER/SHADOW informado pelo usuário e marcado como não verificado: "
-                f"{transaction_id}."
-            )
-        )
+        return PortfolioFundingResponse(**receipt)
 
     @app.post("/v1/jobs", response_model=AnalysisJobCreatedResponse, status_code=202)
     async def enqueue_analysis_job(
@@ -1181,37 +1219,75 @@ def _raise_llm_connection_error(exc: IdentityError) -> None:
     ) from None
 
 
+_PORTFOLIO_PUBLIC_ERRORS: dict[str, tuple[int, str, bool, str | None]] = {
+    "PORTFOLIO_NOT_FOUND": (404, "Carteira não encontrada.", False, "return_to_portfolios"),
+    "RESERVATION_NOT_FOUND": (404, "Reserva não encontrada.", False, "refresh_portfolio"),
+    "SNAPSHOT_NOT_FOUND": (404, "Fotografia de risco não encontrada.", True, "refresh_portfolio"),
+    "PORTFOLIO_FORBIDDEN": (403, "Você não pode alterar esta carteira.", False, None),
+    "CUSTOM_PROFILE_REQUIRES_REVIEW": (422, "O perfil personalizado exige uma política aprovada separadamente.", False, "select_standard_profile"),
+    "SUITABILITY_REQUIRED": (409, "Conclua ou renove o questionário de perfil antes de continuar.", False, "complete_suitability"),
+    "SUITABILITY_STALE": (409, "Use a avaliação de perfil mais recente para esta carteira.", False, "create_compatible_mandate"),
+    "PROFILE_EXCEEDS_SUITABILITY": (409, "Escolha um perfil igual ou mais conservador que o perfil permitido.", False, "create_compatible_mandate"),
+    "ACTIVE_MANDATE_REQUIRED": (409, "Ative ou retome um mandato válido antes de continuar.", False, "review_mandate"),
+    "BASELINE_SNAPSHOT_REQUIRED": (409, "Aguarde a primeira fotografia de risco confiável antes de reservar capital.", True, "refresh_snapshot"),
+    "MANDATE_TRANSITION_INVALID": (409, "Esta transição não é permitida no estado atual do mandato.", False, "refresh_portfolio"),
+    "PAPER_CAPITAL_LOCKED_AFTER_TRADING": (409, "O saldo inicial não pode ser alterado depois da primeira posição; crie uma nova carteira.", False, "create_new_portfolio"),
+    "FUNDING_MODE_MISMATCH": (409, "O modo informado não corresponde ao modo ativo da carteira.", False, "select_active_mode"),
+    "PORTFOLIO_NOT_ACTIVE": (409, "A carteira não está ativa.", False, "review_portfolio"),
+    "POLICY_VERSION_MISMATCH": (409, "A política de risco da carteira precisa ser atualizada.", False, "review_mandate"),
+    "CAPITAL_MODE_NOT_ENABLED": (409, "O modo da carteira não permite esta operação.", False, "select_shadow_or_paper_mode"),
+    "CIRCUIT_BREAKER_OPEN": (409, "A operação foi bloqueada pelo limite de risco da carteira. Revise a retenção de risco; a liberação ainda não está disponível neste marco.", False, "review_risk_hold"),
+    "INSUFFICIENT_AVAILABLE_CASH": (409, "Saldo disponível insuficiente.", False, "reduce_allocation"),
+    "INSUFFICIENT_PORTFOLIO_UNITS": (409, "Unidades insuficientes na carteira.", False, "reduce_withdrawal"),
+    "IDEMPOTENCY_PAYLOAD_MISMATCH": (409, "A chave de repetição já foi usada com outros dados.", False, "use_new_idempotency_key"),
+    "PORTFOLIO_ALREADY_EXISTS": (409, "Já existe uma carteira com este nome.", False, "choose_another_name"),
+    "LEDGER_WRITE_CONFLICT": (409, "O saldo mudou durante a operação. Atualize a carteira e tente novamente.", True, "refresh_and_retry"),
+    "DATABASE_TIME_UNAVAILABLE": (503, "O relógio transacional está temporariamente indisponível.", True, "retry_later"),
+    "AMOUNT_BELOW_UNIT_PRECISION": (422, "O valor é pequeno demais para a precisão contábil da carteira.", False, "increase_amount"),
+    "AMOUNT_INVALID": (422, "Informe um valor monetário positivo e válido.", False, "review_amount"),
+    "IDEMPOTENCY_KEY_INVALID": (422, "A chave Idempotency-Key é inválida.", False, "generate_new_idempotency_key"),
+    "FUNDING_REFERENCE_INVALID": (422, "A referência do saldo é inválida.", False, "review_reference"),
+    "PORTFOLIO_INPUT_INVALID": (422, "Revise os dados da carteira.", False, "review_fields"),
+    "SUITABILITY_ANSWERS_INVALID": (422, "Revise todas as respostas do questionário de perfil.", False, "review_suitability"),
+    "SUITABILITY_VALIDITY_INVALID": (422, "O prazo da avaliação de perfil é inválido.", False, "review_suitability"),
+}
+
+
 def _raise_portfolio_error(exc: IdentityError) -> None:
     code = str(exc)
-    if code in {"PORTFOLIO_NOT_FOUND", "RESERVATION_NOT_FOUND"}:
-        raise _public_error(404, code, "Carteira ou registro não encontrado.") from None
-    if code == "PORTFOLIO_FORBIDDEN":
-        raise _public_error(403, code, "Você não pode alterar esta carteira.") from None
-    if code in {"SUITABILITY_REQUIRED", "PROFILE_EXCEEDS_SUITABILITY"}:
+    public = _PORTFOLIO_PUBLIC_ERRORS.get(code)
+    if public is None:
         raise _public_error(
-            409,
-            code,
-            "Complete o questionário de perfil antes de ativar esta configuração.",
+            400,
+            "PORTFOLIO_INVALID",
+            "Não foi possível concluir a operação da carteira.",
+            retryable=False,
+            action="review_portfolio",
         ) from None
-    if code in {"CAPITAL_MODE_NOT_ENABLED", "CIRCUIT_BREAKER_OPEN"}:
-        raise _public_error(
-            409,
-            code,
-            "A operação foi bloqueada pelos controles de segurança da carteira.",
-        ) from None
-    if code == "INSUFFICIENT_AVAILABLE_CASH":
-        raise _public_error(409, code, "Saldo disponível insuficiente.") from None
-    if code in {"IDEMPOTENCY_PAYLOAD_MISMATCH", "PORTFOLIO_ALREADY_EXISTS"}:
-        raise _public_error(409, code, "A solicitação conflita com um registro existente.") from None
+    status, message, retryable, action = public
     raise _public_error(
-        400,
-        "PORTFOLIO_INVALID",
-        "Não foi possível concluir a operação da carteira.",
+        status,
+        code,
+        message,
+        retryable=retryable,
+        action=action,
     ) from None
 
 
-def _public_error(status_code: int, code: str, message: str) -> HTTPException:
+def _public_error(
+    status_code: int,
+    code: str,
+    message: str,
+    *,
+    retryable: bool | None = None,
+    action: str | None = None,
+) -> HTTPException:
+    detail: dict[str, object] = {"code": code, "message": message}
+    if retryable is not None:
+        detail["retryable"] = retryable
+    if action is not None:
+        detail["action"] = action
     return HTTPException(
         status_code=status_code,
-        detail={"code": code, "message": message},
+        detail=detail,
     )

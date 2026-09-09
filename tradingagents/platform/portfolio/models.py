@@ -130,6 +130,7 @@ class PortfolioMandate(Base):
     profile: Mapped[str] = mapped_column(String(24), nullable=False)
     mode: Mapped[str] = mapped_column(String(24), nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False)
+    pause_reason: Mapped[str | None] = mapped_column(String(40), nullable=True)
     policy_version: Mapped[int] = mapped_column(nullable=False)
     policy_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     digest: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -176,6 +177,17 @@ class PortfolioMandate(Base):
         CheckConstraint(
             "status IN ('draft','active','paused','circuit_broken','closed')",
             name="ck_mandate_status",
+        ),
+        CheckConstraint(
+            "(status = 'paused' AND pause_reason IN "
+            "('suitability_reassessment','user_requested','legacy_pause')) OR "
+            "(status <> 'paused' AND pause_reason IS NULL)",
+            name="ck_mandate_pause_reason",
+        ),
+        CheckConstraint(
+            "(status = 'closed' AND ended_at IS NOT NULL AND ended_at >= effective_at) OR "
+            "(status <> 'closed' AND ended_at IS NULL)",
+            name="ck_mandate_ended_at",
         ),
         CheckConstraint(
             "length(policy_digest) = 64 AND length(digest) = 64",
@@ -236,10 +248,17 @@ class LedgerTransaction(Base):
             name="ck_ledger_transaction_verification",
         ),
         CheckConstraint(
-            "(provenance = 'user_declared' AND verification_status = 'unverified' "
-            "AND unit_delta <> 0) OR "
-            "(provenance = 'broker_reconciled' AND verification_status = 'verified') OR "
-            "(provenance = 'internal' AND verification_status = 'internal' "
+            "(provenance = 'user_declared' AND verification_status = 'unverified' AND "
+            "((event_type IN ('funding','paper_funding','shadow_funding') AND unit_delta > 0) OR "
+            "(event_type IN ('withdrawal','paper_withdrawal','shadow_withdrawal') "
+            "AND unit_delta < 0))) OR "
+            "(provenance = 'broker_reconciled' AND verification_status = 'verified' AND "
+            "((event_type = 'broker_funding' AND unit_delta > 0) OR "
+            "(event_type = 'broker_withdrawal' AND unit_delta < 0) OR "
+            "(event_type NOT IN ('broker_funding','broker_withdrawal') AND unit_delta = 0))) OR "
+            "(provenance = 'internal' AND verification_status = 'internal' AND "
+            "event_type NOT IN ('funding','paper_funding','shadow_funding','withdrawal',"
+            "'paper_withdrawal','shadow_withdrawal','broker_funding','broker_withdrawal') "
             "AND unit_delta = 0)",
             name="ck_ledger_transaction_provenance_coherence",
         ),
@@ -311,8 +330,12 @@ class CashReservation(Base):
             ondelete="RESTRICT",
         ),
         ForeignKeyConstraint(
-            ["mandate_id", "tenant_id"],
-            ["portfolio_mandates.id", "portfolio_mandates.tenant_id"],
+            ["mandate_id", "tenant_id", "portfolio_id"],
+            [
+                "portfolio_mandates.id",
+                "portfolio_mandates.tenant_id",
+                "portfolio_mandates.portfolio_id",
+            ],
             name="fk_reservation_mandate",
             ondelete="RESTRICT",
         ),
@@ -322,6 +345,13 @@ class CashReservation(Base):
         CheckConstraint("amount > 0", name="ck_reservation_amount"),
         CheckConstraint(
             "status IN ('active','consumed','released','expired')", name="ck_reservation_status"
+        ),
+        CheckConstraint(
+            "(status = 'active' AND released_at IS NULL AND consumed_at IS NULL) OR "
+            "(status = 'released' AND released_at IS NOT NULL AND consumed_at IS NULL) OR "
+            "(status = 'consumed' AND consumed_at IS NOT NULL AND released_at IS NULL) OR "
+            "(status = 'expired' AND released_at IS NULL AND consumed_at IS NULL)",
+            name="ck_reservation_status_timestamps",
         ),
         CheckConstraint("length(purpose_digest) = 64", name="ck_reservation_digest"),
         Index("ix_reservation_active", "tenant_id", "portfolio_id", "status", "expires_at"),

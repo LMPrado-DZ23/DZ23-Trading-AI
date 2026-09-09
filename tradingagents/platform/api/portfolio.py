@@ -47,9 +47,10 @@ class PortfolioServicePort(Protocol):
         principal: IdentityPrincipal,
         portfolio_id: UUID,
         amount: Decimal,
+        mode: str,
         idempotency_key: str,
         reference_id: str,
-    ) -> UUID: ...
+    ) -> dict[str, Any]: ...
 
     async def transition_mandate(
         self,
@@ -63,3 +64,11 @@ class PortfolioServicePort(Protocol):
     async def list_portfolios(
         self, *, token: str, principal: IdentityPrincipal
     ) -> tuple[dict[str, Any], ...]: ...
+
+    async def get_latest_snapshot(
+        self,
+        *,
+        token: str,
+        principal: IdentityPrincipal,
+        portfolio_id: UUID,
+    ) -> dict[str, Any] | None: ...
