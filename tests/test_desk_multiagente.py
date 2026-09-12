@@ -299,3 +299,62 @@ class TestPosicaoExecutadaNaoDuplica:
         assert any("posição aberta" in why or "operado por" in why
                    for _, why in second.vetoed)
         assert desk.drain() == ["BTC/USDT"]
+
+
+class TestCenario05IsolamentoPorConta:
+    """Contexto, cache e memória respeitam conta e cutoff — compartilhar
+    snapshot não autoriza compartilhar dados de outra conta."""
+
+    def test_two_accounts_do_not_share_reservations(self):
+        from decimal import Decimal
+        a = RiskEngine(mandate(mandate_id="mA", account="conta-A"))
+        b = RiskEngine(mandate(mandate_id="mB", account="conta-B"))
+        p = TradeProposal(agent_id="t", strategy="s", instrument="BTC/USDT",
+                          action=Action.BUY, reason="", desired_exposure_pct=Decimal("0.2"),
+                          valid_until=utcnow() + timedelta(minutes=5))
+        ra = a.reserve(p, Decimal("100"))
+        rb = b.reserve(p, Decimal("100"))          # conta B tem capital próprio
+        assert ra.account == "conta-A" and rb.account == "conta-B"
+        assert a.reserved_total == b.reserved_total
+        a.release(ra.reservation_id)
+        assert b.reserved_total > 0                # liberar em A não toca B
+
+    def test_ledger_of_one_account_never_sees_the_other(self):
+        from decimal import Decimal
+        from tradingagents.desk.ledger import Ledger
+        la, lb = Ledger(opening_cash=Decimal("1000")), Ledger(opening_cash=Decimal("500"))
+        la.reserve(Decimal("100"), ref="a1")
+        assert lb.balance("RESERVED") == Decimal("0")
+        assert lb.equity() == Decimal("500") and la.equity() == Decimal("1000")
+
+    def test_intent_of_one_account_is_not_sendable_under_another_mandate(self):
+        from decimal import Decimal
+        ma = mandate(mandate_id="mA", account="conta-A")
+        eng = RiskEngine(ma)
+        p = TradeProposal(agent_id="t", strategy="s", instrument="BTC/USDT",
+                          action=Action.BUY, reason="", desired_exposure_pct=Decimal("0.1"),
+                          valid_until=utcnow() + timedelta(minutes=5))
+        intent = eng.intent(eng.reserve(p, Decimal("100")), Action.BUY, Mode.PAPER, "w1")
+        outra = mandate(mandate_id="mB", account="conta-B", instruments=("ETH/USDT",))
+        with pytest.raises(MandateError):          # instrumento fora do mandato B
+            intent.assert_sendable(worker_id="w1", mandate=outra)
+
+    def test_market_cache_is_keyed_by_exchange_and_instrument(self):
+        from tradingagents.desk.market import PublicMarketFeed
+        from datetime import datetime, timezone
+
+        class Ex:
+            def __init__(self): self.calls = 0
+            def fetch_ohlcv(self, s, tf="1h", limit=60):
+                self.calls += 1
+                now = datetime(2026, 9, 12, 12, tzinfo=timezone.utc)
+                return [[int((now - timedelta(hours=40 - i)).timestamp() * 1000),
+                         1, 1, 1, 100 + i, 1] for i in range(40)]
+
+        e1, e2 = Ex(), Ex()
+        f1 = PublicMarketFeed("binance", client=e1, cache_seconds=60)
+        f2 = PublicMarketFeed("bybit", client=e2, cache_seconds=60)
+        for _ in range(3):
+            f1.snapshot("BTC/USDT", "1h")
+            f2.snapshot("BTC/USDT", "1h")
+        assert e1.calls == 1 and e2.calls == 1     # caches não se misturam

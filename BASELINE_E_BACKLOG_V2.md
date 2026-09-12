@@ -2,7 +2,7 @@
 
 Branch de integração: `integracao-v2` (base `codex-v0.5.1` + camada Claude).
 Data da inspeção: 12/09/2026. Suíte reproduzida nesta árvore:
-**1101 passed / 2 skipped / 71 subtests**.
+**1113 passed / 2 skipped / 71 subtests**.
 
 ## 1. Estado real encontrado (não presumido)
 
@@ -43,7 +43,7 @@ verificada.
 | TA-014 | Jornada simulada | PARTIAL | análise ponta a ponta provada; PAPER/SHADOW com 13 testes, sem jornada integrada única |
 | TA-015 | Observabilidade/custo IA | IMPLEMENTED_NOT_VERIFIED | `observability.py` — 9 testes |
 | TA-016 | Frontend | PARTIAL | painel com Configurações, Operação e **Mesa de Agentes** (traders, risco, ordens, contabilidade, guardião, ciclos, ligar/parar mesa autônoma); faltam telas de pesquisa/backtest e administração |
-| TA-017 | Recuperação/release | NOT_STARTED | backup/restore e runbook não exercitados |
+| TA-017 | Recuperação/release | VERIFIED | `desk/backup.py` com MANIFEST SHA-256 por arquivo; restauração valida TUDO antes de gravar (pacote adulterado ⇒ nada escrito), destino ocupado exige sobrescrita explícita, config volta 0600; provado ao vivo: serviço novo subiu sobre o restaurado e enxergou a chave; `RUNBOOK.md` com procedimentos e incidentes |
 
 ## 3. Matriz MA (mesa multiagente) — meta ampliada
 
@@ -58,7 +58,7 @@ verificada.
 | MA-07 | Reconciliação/atribuição | VERIFIED | reconciliação consulta a corretora e só então decide; resultado atribuído por trader sem dupla contagem; custo de IA lançado como custo real |
 | MA-08 | Painel Mesa de Agentes | VERIFIED | aba com traders/estágios, risco, ordens, contabilidade, guardião e histórico de ciclos; botões chamam APIs reais (`/v1/desk/status|cycle|pause`), dados de fixture rotulados |
 | MA-09 | Experimentos de equipe | NOT_STARTED |
-| MA-10 | Cenários de aceite | PARTIAL | 75 testes cobrindo 01,02,03,04,06,07,08,09,10,11,12,13,14; faltam 05 (cutoff/cache por conta), 15 (backtest prospectivo), 16 (restore), 17 (separação de modos ponta a ponta), 18 (conectividade externa) |
+| MA-10 | Cenários de aceite | PARTIAL | 90 testes cobrindo 01–14 e 16; faltam 15 (avaliação prospectiva separada), 17 (separação de modos ponta a ponta com corretora real), 18 (conectividade externa comprovada — bloqueada por rede neste ambiente) |
 
 ## 4. Próxima fatia (dependência real, não preferência)
 
@@ -78,8 +78,11 @@ credencial**: `desk/brokers.py` adapta a ponte CCXT ao contrato do executor
 `TRADINGAGENTS_DESK_BROKER=ccxt` liga a corretora, e o gate de capital
 segue incontornável.
 
-**Próximas fatias**: cenário 05 (cutoff/cache por conta), TA-017
-(backup/restore), TA-002 (wheel em ambiente vazio), TA-012 (walk-forward).
+**Próximas fatias**: TA-002 (instalação limpa: wheel em ambiente vazio e
+imagem de contêiner), TA-012 (walk-forward e fora-da-amostra sobre o
+backtester preservado), MA-09 (comparar equipe completa × estratégias
+isoladas no mesmo universo/capital/custos) e cenário 17 (modos separados
+ponta a ponta, exige credencial de testnet do dono).
 
 **Achado corrigido nesta rodada (teste vivo, não unitário):** depois do fill
 a reserva é consumida e a mesa esquecia a posição — o ciclo seguinte

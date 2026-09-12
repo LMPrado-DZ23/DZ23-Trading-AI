@@ -202,7 +202,7 @@ def run_job(jid, ticker, date):
 
 
 @app.get("/healthz")
-def hz(): return {"status": "ok", "app": "tradingagents-operavel/6"}
+def hz(): return {"status": "ok", "app": "tradingagents-operavel/7"}
 
 @app.get("/")
 def index(): return FileResponse(STATIC / "index.html")
@@ -481,6 +481,32 @@ def desk_pause(_=Depends(auth)):
     return {"ok": True, "entradas": "pausadas",
             "a_encerrar": d["orchestrator"].drain(),
             "aviso": "saída solicitada não é saída concluída — o guardião acompanha"}
+
+
+@app.post("/v1/backup")
+def backup_now(_=Depends(auth)):
+    """Gera o pacote de recuperação em /data/backups. O download é do dono,
+    pelo volume — o serviço não expõe segredos por HTTP."""
+    from tradingagents.desk.backup import BackupError, create_backup
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    try:
+        out = create_backup(DATA, DATA / "backups" / f"dz23-backup-{stamp}.tar.gz")
+    except BackupError as exc:
+        raise HTTPException(422, str(exc))
+    return {"ok": True, **out,
+            "como_restaurar": "copie o arquivo do volume /data/backups e use "
+                              "restore_backup() na máquina nova (veja RUNBOOK.md)"}
+
+
+@app.get("/v1/backups")
+def list_backups(_=Depends(auth)):
+    d = DATA / "backups"
+    if not d.exists():
+        return {"backups": []}
+    return {"backups": sorted(
+        ({"arquivo": p.name, "bytes": p.stat().st_size,
+          "em": time.strftime("%Y-%m-%d %H:%M", time.localtime(p.stat().st_mtime))}
+         for p in d.glob("*.tar.gz")), key=lambda x: x["arquivo"], reverse=True)}
 
 
 @app.get("/v1/desk/feed")
