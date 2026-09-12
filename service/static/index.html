@@ -35,6 +35,7 @@ pre{background:#0a0e15;border:1px solid var(--line);border-radius:8px;padding:10
 <div class="tabs">
 <div class="tab on" data-t="cfg" onclick="tab('cfg')">⚙️ Configurações</div>
 <div class="tab" data-t="op" onclick="tab('op')">📈 Operação</div>
+<div class="tab" data-t="desk" onclick="tab('desk');deskLoad()">🧑‍💼 Mesa de Agentes</div>
 </div>
 
 <div id="pane-cfg">
@@ -118,7 +119,8 @@ pre{background:#0a0e15;border:1px solid var(--line);border-radius:8px;padding:10
 <script>
 const $=i=>document.getElementById(i);
 function tab(t){document.querySelectorAll('.tab').forEach(e=>e.classList.toggle('on',e.dataset.t===t));
-$('pane-cfg').classList.toggle('hide',t!=='cfg');$('pane-op').classList.toggle('hide',t!=='op')}
+$('pane-cfg').classList.toggle('hide',t!=='cfg');$('pane-op').classList.toggle('hide',t!=='op');
+const dk=$('pane-desk');if(dk)dk.classList.toggle('hide',t!=='desk')}
 const CFG_KEYS=['TRADINGAGENTS_LLM_PROVIDER','TRADINGAGENTS_BACKEND_URL','GROQ_API_KEY','MISTRAL_API_KEY','OPENROUTER_API_KEY','TRADINGAGENTS_DEEP_THINK_LLM','TRADINGAGENTS_QUICK_THINK_LLM','OPENAI_API_KEY','ANTHROPIC_API_KEY','DEEPSEEK_API_KEY','GOOGLE_API_KEY','FRED_API_KEY','ALPHA_VANTAGE_API_KEY','TRADINGAGENTS_EXCHANGE','TRADINGAGENTS_BROKER_MODE','EXCHANGE_API_KEY','EXCHANGE_API_SECRET','LIVE_TRADING_CONFIRM','TRADINGAGENTS_OUTPUT_LANGUAGE','TRADINGAGENTS_MAX_DEBATE_ROUNDS'];
 const PROV={groq:{h:'Chave GRÁTIS em <b>console.groq.com/keys</b> (entra com Google, copia, cola aí embaixo). Modelos automáticos.',k:'GROQ_API_KEY'},
 google:{h:'Chave GRÁTIS em <b>aistudio.google.com/apikey</b>. Cola no campo GOOGLE_API_KEY.',k:'GOOGLE_API_KEY'},
@@ -197,6 +199,28 @@ m.innerHTML=' enviando…';
 const r=await fetch('/v1/broker/order',{method:'POST',headers:H(),body:JSON.stringify({job_id:jid,side,symbol:sym,amount:amt})});
 const d=await r.json();
 m.innerHTML=r.ok?'<span class="ok">✔ ordem '+(d.mode==='live'?'REAL':'de treino')+' enviada ('+(d.order_id||d.client_order_id)+')</span>':'<span class="bad">✘ '+String(d.detail||JSON.stringify(d)).replace(/^[A-Za-z]+Error: /,'').slice(0,200)+'</span>'}
+async function deskLoad(){const o=$('deskOut');const r=await fetch('/v1/desk/status',{headers:H()});
+if(!r.ok){o.innerHTML='<div class="card bad">sem acesso — digita a senha no topo</div>';return}
+const d=await r.json();const c=d.contabilidade;
+o.innerHTML=`<div class="card"><h2>👥 Traders</h2><table style="width:100%;font-size:14px"><tr class="mut"><td>agente</td><td>estratégia</td><td>estágio</td><td>universo</td></tr>
+${d.agents.map(a=>`<tr><td>${a.id}</td><td>${a.strategy} v${a.version}</td><td>${a.stage}</td><td class="mut">${a.universe.join(', ')}</td></tr>`).join('')||'<tr><td class="mut">entradas pausadas</td></tr>'}</table></div>
+<div class="card"><h2>🛡️ Risco e carteira</h2><div>Conta <b>${d.mandate.account}</b> · modo <b>${d.mandate.mode}</b> · capital ${d.mandate.capital}</div>
+<div style="margin-top:6px">Reservado: <b>${d.risk.reservado}</b> · Disponível: <b>${d.risk.disponivel}</b> · Abertos: ${d.risk.instrumentos_abertos.join(', ')||'—'}</div>
+<div class="mut" style="margin-top:6px">Guardião acompanha: ${d.guardiao.join(', ')||'nada'}</div></div>
+<div class="card"><h2>📑 Ordens</h2>${d.orders.length?`<table style="width:100%;font-size:14px"><tr class="mut"><td>ordem</td><td>instrumento</td><td>estado</td><td>qtd</td><td>preço</td></tr>
+${d.orders.map(x=>`<tr><td>${x.id}</td><td>${x.instrumento}</td><td>${x.estado}</td><td>${x.qtd}</td><td>${x.preco}</td></tr>`).join('')}</table>`:'<span class="mut">nenhuma ordem ainda</span>'}
+${d.pendencias_reconciliacao.length?`<div class="bad" style="margin-top:6px">⚠ exigem reconciliação: ${d.pendencias_reconciliacao.join(', ')}</div>`:''}</div>
+<div class="card"><h2>💰 Contabilidade ${c.balanceado?'<span class="ok">(balanceada)</span>':'<span class="bad">(DESBALANCEADA)</span>'}</h2>
+<div>Patrimônio: <b>${c.patrimonio}</b></div>
+<div style="margin-top:6px" class="mut">${Object.entries(c.saldos).map(([k,v])=>k+': '+v).join(' · ')||'sem lançamentos'}</div>
+<div style="margin-top:6px">Resultado por trader: ${Object.entries(c.atribuicao).map(([k,v])=>k+' '+v).join(' · ')||'—'}</div></div>
+<div class="card"><h2>🔄 Ciclos</h2>${d.ciclos.length?d.ciclos.slice().reverse().map(x=>`<div style="border-top:1px solid var(--line);padding:6px 0"><b>${x.resumo}</b> <span class="mut">(${x.origem})</span>
+${x.vetos.length?`<div class="mut">vetos: ${x.vetos.join(' | ')}</div>`:''}${x.erros.length?`<div class="bad">erros: ${x.erros.join(' | ')}</div>`:''}</div>`).join(''):'<span class="mut">nenhum ciclo rodado</span>'}</div>`}
+async function deskCycle(){const m=$('deskMsg');m.innerHTML=' rodando ciclo…';
+const r=await fetch('/v1/desk/cycle',{method:'POST',headers:H()});const d=await r.json();
+m.innerHTML=r.ok?'<span class="ok">✔ '+d.resumo+'</span>':'<span class="bad">✘ falhou</span>';deskLoad()}
+async function deskPause(){const m=$('deskMsg');const r=await fetch('/v1/desk/pause',{method:'POST',headers:H()});const d=await r.json();
+m.innerHTML=r.ok?'<span class="ok">⏸ entradas pausadas; a encerrar: '+(d.a_encerrar.join(', ')||'nada')+'</span>':'<span class="bad">✘ falhou</span>';deskLoad()}
 function refreshAll(){store.k.forEach(j=>poll(j.id))}
 async function syncFromServer(){const r=await tapi('v1/jobs');
 if(r.status<300&&r.body&&r.body.jobs){const js=r.body.jobs.map(j=>({id:j.id,ticker:j.ticker,date:j.trade_date}));store.k=js;js.forEach(j=>{if(!states[j.id])poll(j.id)});render()}}

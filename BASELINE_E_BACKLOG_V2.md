@@ -2,7 +2,7 @@
 
 Branch de integração: `integracao-v2` (base `codex-v0.5.1` + camada Claude).
 Data da inspeção: 12/09/2026. Suíte reproduzida nesta árvore:
-**1053 passed / 2 skipped / 71 subtests**.
+**1073 passed / 2 skipped / 71 subtests**.
 
 ## 1. Estado real encontrado (não presumido)
 
@@ -35,8 +35,8 @@ verificada.
 | TA-006 | Banco/worker durável | **VERIFIED** | painel migrado para o store único (Postgres via DATABASE_URL, senão SQLite do mesmo contrato); claim/lease/heartbeat do Codex; provado ao vivo: idempotência e 409 em payload divergente |
 | TA-007 | Decisão/intenção | IMPLEMENTED_NOT_VERIFIED | `execution/models.py`, `engine.py` |
 | TA-008 | Sizing/reservas | IMPLEMENTED_NOT_VERIFIED | `portfolio/sizing.py` — 25 testes |
-| TA-009 | Ordens/reconciliação | PARTIAL | `execution/engine.py` + journal; ponte CCXT tem idempotência e gate, mas reconciliação pós-timeout não exercitada |
-| TA-010 | Ledger | NOT_STARTED | sem partidas dobradas na árvore |
+| TA-009 | Ordens/reconciliação | VERIFIED | máquina de 11 estados em `desk/execution.py`; timeout ⇒ UNKNOWN_RECONCILIATION_REQUIRED sem retry cego nem liberação; fill duplicado/tardio ignorado; cancelamento pedido ≠ confirmado |
+| TA-010 | Ledger | VERIFIED | `desk/ledger.py` append-only em partidas dobradas; correção por compensação; atribuição por trader; saldos conferem manualmente |
 | TA-011 | Backtest | IMPLEMENTED_NOT_VERIFIED | `backtest/runner.py` — 18 testes; auditoria própria pendente |
 | TA-012 | Avaliação temporal | PARTIAL | walk-forward/OOS não localizados |
 | TA-013 | CCXT | VERIFIED (funcional) | 9 exchanges, testnet/live com frase, gate incontornável — 32 testes + prova viva |
@@ -51,23 +51,27 @@ verificada.
 |----|------|--------|
 | MA-01 | Mandatos/registry/permissões (DeskMandate, AgentSpec) | VERIFIED | `desk/models.py`: mandato com revogação/expiração/versão, estágios com transições autorizadas, ferramentas pelo backend |
 | MA-02 | Snapshots/propostas | VERIFIED | snapshot imutável com cutoff e qualidade; proposta com validade, invalidação e razão — proposta não autoriza |
-| MA-03 | Orquestrador por eventos | PARTIAL | `desk/orchestrator.py` roda o ciclo sem comando humano (5 testes); falta acoplar ao worker durável como evento agendado |
+| MA-03 | Orquestrador por eventos | PARTIAL | ciclo completo provado por API real (`/v1/desk/cycle`); falta agendamento automático no worker durável (hoje o ciclo é disparado por evento/botão) |
 | MA-04 | Três traders distintos | VERIFIED | tendência, reversão à média e rompimento — lógica determinística distinta, provado que leem o MESMO snapshot de formas diferentes |
 | MA-05 | Arbitragem + reserva transacional | VERIFIED | allocator veta direção oposta e disputa por instrumento; RiskEngine com lock atômico: capital nunca prometido duas vezes |
-| MA-06 | Execução + guardião | PARTIAL | kill switch com semânticas distintas (pausar/drenar) testado; guardião como agente próprio pendente |
-| MA-07 | Reconciliação/atribuição | NOT_STARTED |
-| MA-08 | Painel Mesa de Agentes | NOT_STARTED |
+| MA-06 | Execução + guardião | VERIFIED | `ExecutionCoordinator` é o único caminho à corretora (revalida posse/mandato/expiração); `PositionGuardian` adota posições de trader pausado; kill switch distingue pausar, drenar e cancelar |
+| MA-07 | Reconciliação/atribuição | VERIFIED | reconciliação consulta a corretora e só então decide; resultado atribuído por trader sem dupla contagem; custo de IA lançado como custo real |
+| MA-08 | Painel Mesa de Agentes | VERIFIED | aba com traders/estágios, risco, ordens, contabilidade, guardião e histórico de ciclos; botões chamam APIs reais (`/v1/desk/status|cycle|pause`), dados de fixture rotulados |
 | MA-09 | Experimentos de equipe | NOT_STARTED |
-| MA-10 | Cenários de aceite | PARTIAL | 22 testes cobrindo os cenários 01,02,03,04,06,07,09,12,13; faltam 05,08,10,11,14–18 |
+| MA-10 | Cenários de aceite | PARTIAL | 42 testes cobrindo 01,02,03,04,06,07,08,09,10,12,13,14; faltam 05 (cutoff por conta), 11 (reinício), 15–18 |
 
 ## 4. Próxima fatia (dependência real, não preferência)
 
-**MA-06/07 — executor da mesa e reconciliação**: a intenção autorizada
-precisa virar ordem pela ponte CCXT (em paper/testnet), com máquina de
-estados da ordem, reconciliação pós-timeout (sem retry cego, sem liberar
-reserva enquanto houver efeito externo possível) e atribuição por trader.
-Depois: MA-08 (painel Mesa de Agentes), TA-010 (ledger de partidas dobradas)
-e o restante de MA-10.
+**MA-03 (fechar) — ciclo agendado no worker durável**: hoje o ciclo roda
+por evento/chamada; falta o agendador persistente que o dispara sozinho a
+cada candle fechado e sobrevive a reinício (cenário 11). Em seguida: ligar o
+executor da mesa à ponte CCXT em testnet (hoje usa PaperBroker pelo mesmo
+contrato), cenário 05 (cutoff/cache por conta) e TA-017 (backup/restore).
+
+**Achado corrigido nesta rodada (teste vivo, não unitário):** depois do fill
+a reserva é consumida e a mesa esquecia a posição — o ciclo seguinte
+recomprava o mesmo ativo. A exposição agora soma reservas + posições do
+livro-razão; regressão coberta por teste.
 
 ## 5. Vereditos separados (nada declarado além do provado)
 

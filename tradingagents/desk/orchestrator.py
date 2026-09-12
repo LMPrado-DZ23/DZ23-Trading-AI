@@ -38,13 +38,20 @@ class DeskOrchestrator:
     """Executa o mandato; distribui trabalho. NÃO amplia limites."""
 
     def __init__(self, mandate: DeskMandate, traders, *, worker_id: str,
-                 risk: RiskEngine | None = None):
+                 risk: RiskEngine | None = None, positions_provider=None):
         self.mandate = mandate
         self.traders = list(traders)
         self.worker_id = worker_id
         self.risk = risk or RiskEngine(mandate)
         self.allocator = PortfolioAllocator()
         self.owner_by_instrument: dict[str, str] = {}
+        # Posição EXECUTADA não é reserva: depois do fill a reserva é
+        # consumida, mas a exposição continua. Sem esta fonte a mesa
+        # recompraria o mesmo ativo no ciclo seguinte (achado em teste vivo).
+        self.positions_provider = positions_provider or (lambda: set())
+
+    def open_exposure(self) -> set[str]:
+        return set(self.risk.open_instruments()) | set(self.positions_provider())
 
     def run_cycle(self, snapshots, prices: dict[str, Decimal]) -> CycleReport:
         report = CycleReport()
@@ -66,7 +73,7 @@ class DeskOrchestrator:
         actionable = [p for p in proposals if p.is_actionable()]
         decision = self.allocator.arbitrate(
             actionable,
-            open_positions=self.risk.open_instruments(),
+            open_positions=self.open_exposure(),
             owner_by_instrument=self.owner_by_instrument)
         report.admitted = len(decision.admitted)
         report.vetoed = [(p.agent_id, why) for p, why in decision.vetoed]
@@ -96,7 +103,7 @@ class DeskOrchestrator:
     def drain(self) -> list[str]:
         """Pede saída controlada: devolve os instrumentos a encerrar.
         Não finge que fechou — quem fecha é o executor com reconciliação."""
-        return sorted(self.risk.open_instruments())
+        return sorted(self.open_exposure())
 
 
 __all__ = ["DeskOrchestrator", "CycleReport"]

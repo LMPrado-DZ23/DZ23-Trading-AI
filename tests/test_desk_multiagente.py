@@ -271,3 +271,31 @@ class TestCenario02CicloSemComandoHumano:
         assert after.proposals == 0 and not after.intents
         assert desk.drain() == ["BTC/USDT"]       # saída pedida ≠ saída concluída
         assert desk.risk.open_instruments() == {"BTC/USDT"}
+
+
+class TestPosicaoExecutadaNaoDuplica:
+    """Achado do teste vivo: depois do fill a reserva sai, mas a posição fica."""
+
+    def test_second_cycle_after_fill_does_not_rebuy(self):
+        from tradingagents.desk.execution import ExecutionCoordinator, PaperBroker
+        from tradingagents.desk.ledger import Ledger
+        from tradingagents.desk.orchestrator import DeskOrchestrator
+        from tradingagents.desk.risk import RiskEngine
+        m = mandate()
+        risk = RiskEngine(m)
+        ledger = Ledger(opening_cash=m.capital)
+        coord = ExecutionCoordinator(m, ledger, risk, worker_id="w1",
+                                     broker=PaperBroker(Decimal("100")))
+        desk = DeskOrchestrator(m, enable(default_desk(UNIVERSE)), worker_id="w1",
+                                risk=risk, positions_provider=ledger.open_positions)
+        prices = {"BTC/USDT": Decimal("160")}
+        first = desk.run_cycle([snap("BTC/USDT", uptrend())], prices)
+        for intent in first.intents:
+            coord.submit(intent)
+        assert risk.reserved_total == Decimal("0")      # reserva consumida pelo fill
+        assert ledger.open_positions() == {"BTC/USDT"}  # mas a posição existe
+        second = desk.run_cycle([snap("BTC/USDT", uptrend())], prices)
+        assert not second.intents
+        assert any("posição aberta" in why or "operado por" in why
+                   for _, why in second.vetoed)
+        assert desk.drain() == ["BTC/USDT"]

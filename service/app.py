@@ -313,3 +313,105 @@ async def broker_order(req: Request, _=Depends(auth)):
                 "order_id": (out.get("order") or {}).get("id")}
     except Exception as e:
         raise HTTPException(422, f"{type(e).__name__}: {e}"[:400])
+
+
+# ---------------------------------------------------------------- Mesa (MA-08)
+# Estado da mesa vive no processo do serviço; o ciclo é chamado por evento
+# (botão do painel agora, worker agendado na fatia seguinte). Modo PAPER
+# fixo: esta superfície NÃO liga capital real.
+_DESK = {"orchestrator": None, "ledger": None, "coordinator": None,
+         "guardian": None, "cycles": []}
+
+
+def _desk_boot(capital: str = "1000"):
+    from decimal import Decimal
+    from tradingagents.desk.execution import (ExecutionCoordinator, PaperBroker,
+                                              PositionGuardian)
+    from tradingagents.desk.ledger import Ledger
+    from tradingagents.desk.models import DeskMandate, Mode, AgentStage
+    from tradingagents.desk.orchestrator import DeskOrchestrator
+    from tradingagents.desk.risk import RiskEngine
+    from tradingagents.desk.traders import default_desk
+
+    universe = ("BTC/USDT", "ETH/USDT")
+    mandate = DeskMandate(mandate_id="desk-1", owner="prado", account="paper-1",
+                          mode=Mode.PAPER, instruments=universe,
+                          capital=Decimal(capital))
+    traders = default_desk(universe)
+    for t in traders:  # estágios autorizados, um a um
+        t.spec.move_to(AgentStage.VALIDATED)
+        t.spec.move_to(AgentStage.SHADOW)
+        t.spec.move_to(AgentStage.PAPER_ENABLED)
+    risk = RiskEngine(mandate)
+    ledger = Ledger(opening_cash=mandate.capital)
+    coord = ExecutionCoordinator(mandate, ledger, risk, worker_id="desk-worker-1",
+                                 broker=PaperBroker(Decimal("100")))
+    _DESK.update(orchestrator=DeskOrchestrator(mandate, traders, worker_id="desk-worker-1",
+                                               risk=risk,
+                                               positions_provider=ledger.open_positions),
+                 ledger=ledger, coordinator=coord, guardian=PositionGuardian(coord),
+                 cycles=[])
+    return _DESK
+
+
+@app.get("/v1/desk/status")
+def desk_status(_=Depends(auth)):
+    d = _DESK if _DESK["orchestrator"] else _desk_boot()
+    orch, led, coord = d["orchestrator"], d["ledger"], d["coordinator"]
+    return {
+        "mandate": {"account": orch.mandate.account, "mode": orch.mandate.mode.value,
+                    "capital": str(orch.mandate.capital),
+                    "instruments": list(orch.mandate.instruments),
+                    "revoked": orch.mandate.revoked_at is not None},
+        "agents": [{"id": t.spec.agent_id, "strategy": t.spec.strategy,
+                    "version": t.spec.version, "stage": t.spec.stage.value,
+                    "universe": list(t.universe)} for t in orch.traders],
+        "risk": {"reservado": str(orch.risk.reserved_total),
+                 "disponivel": str(orch.risk.available),
+                 "instrumentos_abertos": sorted(orch.risk.open_instruments())},
+        "orders": [{"id": r.order_id, "instrumento": r.intent.reservation.instrument,
+                    "estado": r.state.value, "qtd": str(r.filled_qty),
+                    "preco": str(r.avg_price), "nota": r.note}
+                   for r in coord.orders.values()],
+        "pendencias_reconciliacao": [r.order_id for r in coord.pending_reconciliation()],
+        "contabilidade": {"saldos": {k: str(v) for k, v in led.balances().items()},
+                          "patrimonio": str(led.equity()),
+                          "atribuicao": {k: str(v) for k, v in led.attribution().items()},
+                          "balanceado": led.is_balanced()},
+        "guardiao": d["guardian"].watchlist(),
+        "ciclos": d["cycles"][-10:],
+    }
+
+
+@app.post("/v1/desk/cycle")
+def desk_cycle(_=Depends(auth)):
+    """Roda um ciclo com dados de FIXTURE rotulados — prova a coordenação da
+    mesa sem inventar mercado. O ciclo de produção virá do worker agendado."""
+    from decimal import Decimal
+    from tradingagents.desk.models import MarketSnapshot, utcnow
+    d = _DESK if _DESK["orchestrator"] else _desk_boot()
+    alta = [Decimal(str(100 + i * 1.5)) for i in range(40)]
+    queda = [Decimal("100")] * 24 + [Decimal("70")]
+    snaps = [MarketSnapshot("BTC/USDT", "1h", utcnow(), tuple(alta), source="fixture"),
+             MarketSnapshot("ETH/USDT", "1h", utcnow(), tuple(queda), source="fixture")]
+    report = d["orchestrator"].run_cycle(
+        snaps, {"BTC/USDT": Decimal("160"), "ETH/USDT": Decimal("70")})
+    enviados = []
+    for intent in report.intents:
+        rec = d["coordinator"].submit(intent)
+        enviados.append({"ordem": rec.order_id, "estado": rec.state.value,
+                         "instrumento": rec.intent.reservation.instrument})
+    d["cycles"].append({"em": report.started_at.isoformat(), "origem": "fixture",
+                        "resumo": report.summary,
+                        "vetos": [f"{a}: {w}" for a, w in report.vetoed][:6],
+                        "erros": report.errors[:4], "ordens": enviados})
+    return {"ok": True, "resumo": report.summary, "ordens": enviados}
+
+
+@app.post("/v1/desk/pause")
+def desk_pause(_=Depends(auth)):
+    d = _DESK if _DESK["orchestrator"] else _desk_boot()
+    d["orchestrator"].pause_entries()
+    return {"ok": True, "entradas": "pausadas",
+            "a_encerrar": d["orchestrator"].drain(),
+            "aviso": "saída solicitada não é saída concluída — o guardião acompanha"}
