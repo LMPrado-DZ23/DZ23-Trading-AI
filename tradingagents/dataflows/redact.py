@@ -121,6 +121,15 @@ def _iterative_redact(obj):
                 else:
                     new[k] = None
                     stack.append((v, new, k))
+        elif isinstance(node, str):
+            # Achado do marco broker (integração v2): um VALOR string pode
+            # carregar JSON escapado com chave sensível dentro
+            # ('{\"secret\": ...}'). O scanner textual roda sobre a folha;
+            # folha inocente volta idêntica (idempotência preservada).
+            scanned = _redact_json_textual(node)
+            if scanned != node:
+                changed = True
+            parent[slot] = scanned
         elif isinstance(node, list):
             new = [None] * len(node)
             parent[slot] = new
