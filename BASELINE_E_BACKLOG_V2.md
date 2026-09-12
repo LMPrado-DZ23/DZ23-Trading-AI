@@ -2,7 +2,7 @@
 
 Branch de integração: `integracao-v2` (base `codex-v0.5.1` + camada Claude).
 Data da inspeção: 12/09/2026. Suíte reproduzida nesta árvore:
-**1123 passed / 2 skipped / 71 subtests**.
+**1139 passed / 2 skipped / 71 subtests**.
 
 ## 1. Estado real encontrado (não presumido)
 
@@ -38,7 +38,7 @@ verificada.
 | TA-009 | Ordens/reconciliação | VERIFIED | máquina de 11 estados em `desk/execution.py`; timeout ⇒ UNKNOWN_RECONCILIATION_REQUIRED sem retry cego nem liberação; fill duplicado/tardio ignorado; cancelamento pedido ≠ confirmado |
 | TA-010 | Ledger | VERIFIED | `desk/ledger.py` append-only em partidas dobradas; correção por compensação; atribuição por trader; saldos conferem manualmente |
 | TA-011 | Backtest | IMPLEMENTED_NOT_VERIFIED | `backtest/runner.py` — 18 testes; auditoria própria pendente |
-| TA-012 | Avaliação temporal | PARTIAL | walk-forward/OOS não localizados |
+| TA-012 | Avaliação temporal | VERIFIED | `desk/evaluation.py`: walk-forward com embargo entre treino e teste, janelas de teste que nunca se sobrepõem, período curto recusado em vez de forjar dobra; agregação exige a mesma estratégia e recusa dobras contaminadas |
 | TA-013 | CCXT | VERIFIED (funcional) | 9 exchanges, testnet/live com frase, gate incontornável — 32 testes + prova viva |
 | TA-014 | Jornada simulada | PARTIAL | análise ponta a ponta provada; PAPER/SHADOW com 13 testes, sem jornada integrada única |
 | TA-015 | Observabilidade/custo IA | IMPLEMENTED_NOT_VERIFIED | `observability.py` — 9 testes |
@@ -57,8 +57,8 @@ verificada.
 | MA-06 | Execução + guardião | VERIFIED | `ExecutionCoordinator` é o único caminho à corretora (revalida posse/mandato/expiração); `PositionGuardian` adota posições de trader pausado; kill switch distingue pausar, drenar e cancelar |
 | MA-07 | Reconciliação/atribuição | VERIFIED | reconciliação consulta a corretora e só então decide; resultado atribuído por trader sem dupla contagem; custo de IA lançado como custo real |
 | MA-08 | Painel Mesa de Agentes | VERIFIED | aba com traders/estágios, risco, ordens, contabilidade, guardião e histórico de ciclos; botões chamam APIs reais (`/v1/desk/status|cycle|pause`), dados de fixture rotulados |
-| MA-09 | Experimentos de equipe | NOT_STARTED |
-| MA-10 | Cenários de aceite | PARTIAL | 90 testes cobrindo 01–14 e 16; faltam 15 (avaliação prospectiva separada), 17 (separação de modos ponta a ponta com corretora real), 18 (conectividade externa comprovada — bloqueada por rede neste ambiente) |
+| MA-09 | Experimentos de equipe | VERIFIED | `Comparison` recusa comparar universos, capitais ou períodos diferentes; veredito nunca sai como 'campeão' seco — traz ressalvas (amostra pequena, custos não descontados, candidato único); custo muda o ranking; concordância entre agentes do mesmo modelo conta como UMA evidência |
+| MA-10 | Cenários de aceite | PARTIAL | 106 testes cobrindo 01–16; faltam 15 (avaliação prospectiva separada), 17 (separação de modos ponta a ponta com corretora real), 18 (conectividade externa comprovada — bloqueada por rede neste ambiente) |
 
 ## 4. Próxima fatia (dependência real, não preferência)
 
@@ -78,10 +78,13 @@ credencial**: `desk/brokers.py` adapta a ponte CCXT ao contrato do executor
 `TRADINGAGENTS_DESK_BROKER=ccxt` liga a corretora, e o gate de capital
 segue incontornável.
 
-**Próximas fatias**: TA-012 (walk-forward e fora-da-amostra sobre o
-backtester preservado), MA-09 (comparar equipe completa × estratégias
-isoladas no mesmo universo/capital/custos) e cenário 17 (modos separados
-ponta a ponta, exige credencial de testnet do dono).
+**Restam apenas itens que dependem do dono ou de auditoria externa:**
+- Cenário 17/18: modos separados ponta a ponta e conectividade real —
+  exigem credencial de testnet e um servidor com saída de rede para as
+  exchanges (bloqueada neste ambiente).
+- Revisão independente da mesa (Codex), no mesmo funil do Gate A.
+- Ligar o executor da mesa à CCXT em testnet com chaves reais (código
+  pronto e testado com dublês).
 
 **Achado corrigido nesta rodada (teste vivo, não unitário):** depois do fill
 a reserva é consumida e a mesa esquecia a posição — o ciclo seguinte
