@@ -126,18 +126,51 @@ def load_cfg() -> dict:
 def save_cfg(cfg: dict):
     CFG_PATH.write_text(json.dumps(cfg, indent=2)); os.chmod(CFG_PATH, 0o600)
 
+# Estado de saúde exposto no /healthz e no painel — o serviço prefere
+# funcionar DEGRADADO a morrer no arranque (um banco fora do ar não pode
+# derrubar a página de configuração, senão ninguém consegue nem consertar).
+HEALTH: dict = {"armazenamento": "?", "avisos": []}
+
+
 def build_store():
     """Armazenamento ÚNICO de jobs (TA-006). Postgres quando DATABASE_URL
-    existir; SQLite durável do mesmo contrato caso contrário. O painel deixou
-    de manter uma tabela paralela: fila, lease e idempotência são do store."""
-    from tradingagents.service.store import PostgresJobStore, SQLiteJobStore
+    existir; SQLite durável do mesmo contrato caso contrário. Se o Postgres
+    falhar, cai para SQLite com aviso visível em vez de derrubar o processo."""
+    from tradingagents.service.store import SQLiteJobStore
     dsn = os.environ.get("DATABASE_URL", "").strip()
-    st = PostgresJobStore(dsn) if dsn else SQLiteJobStore(DATA / "jobs.db")
-    st.initialize()
-    return st
+    if dsn:
+        try:
+            from tradingagents.service.store import PostgresJobStore
+            st = PostgresJobStore(dsn)
+            st.initialize()
+            HEALTH["armazenamento"] = "postgres"
+            return st
+        except Exception as exc:
+            HEALTH["avisos"].append(
+                "DATABASE_URL configurada mas o PostgreSQL não respondeu "
+                f"({type(exc).__name__}); usando o banco local do volume /data. "
+                "Corrija a URL ou remova a variável.")
+    try:
+        st = SQLiteJobStore(DATA / "jobs.db")
+        st.initialize()
+        HEALTH["armazenamento"] = "sqlite" if not dsn else "sqlite (fallback)"
+        return st
+    except Exception as exc:
+        HEALTH["armazenamento"] = "indisponível"
+        HEALTH["avisos"].append(
+            f"não consegui gravar em {DATA} ({type(exc).__name__}): confira o "
+            "volume /data e suas permissões. Análises ficarão indisponíveis.")
+        return None
 
 
 STORE = build_store()
+
+
+def _store_or_502():
+    if STORE is None:
+        raise HTTPException(503, HEALTH["avisos"][-1] if HEALTH["avisos"]
+                            else "armazenamento indisponível")
+    return STORE
 
 
 def _panel_view(rec) -> dict:
@@ -202,10 +235,52 @@ def run_job(jid, ticker, date):
 
 
 @app.get("/healthz")
-def hz(): return {"status": "ok", "app": "tradingagents-operavel/8"}
+def hz():
+    degradado = STORE is None or bool(HEALTH["avisos"])
+    return {"status": "degraded" if degradado else "ok",
+            "app": "tradingagents-operavel/9",
+            "armazenamento": HEALTH["armazenamento"],
+            "avisos": HEALTH["avisos"]}
 
 @app.get("/")
 def index(): return FileResponse(STATIC / "index.html")
+
+@app.get("/v1/primeiros-passos")
+def onboarding(_=Depends(auth)):
+    """Checklist do usuário final: o que já está pronto e o que falta,
+    com a ação concreta de cada item."""
+    cfg = load_cfg()
+    prov = (cfg.get("TRADINGAGENTS_LLM_PROVIDER") or "").strip().lower()
+    chave_prov = {"groq": "GROQ_API_KEY", "google": "GOOGLE_API_KEY",
+                  "mistral": "MISTRAL_API_KEY", "openrouter": "OPENROUTER_API_KEY",
+                  "openai": "OPENAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY",
+                  "deepseek": "DEEPSEEK_API_KEY"}.get(prov)
+    tem_ia = bool(prov and (prov == "ollama" or (chave_prov and cfg.get(chave_prov))))
+    itens = [
+        {"passo": "Escolher a IA e colar a chave",
+         "pronto": tem_ia,
+         "acao": "Aba ⚙️: escolha Groq (grátis) e cole a chave de console.groq.com/keys"},
+        {"passo": "Dados de mercado (opcional para ações)",
+         "pronto": bool(cfg.get("FRED_API_KEY") or cfg.get("ALPHA_VANTAGE_API_KEY")),
+         "acao": "Aba ⚙️: chaves gratuitas do FRED e Alpha Vantage enriquecem a análise"},
+        {"passo": "Fazer a primeira análise",
+         "pronto": bool(STORE and STORE.list_recent(1)),
+         "acao": "Aba 📈: ticker (ex.: BTC/USDT) + data e ▶ Analisar agora"},
+        {"passo": "Corretora de treino (para operar sem risco)",
+         "pronto": bool(cfg.get("EXCHANGE_API_KEY") and cfg.get("EXCHANGE_API_SECRET")),
+         "acao": "Crie chave grátis em testnet.binance.vision e cole na aba ⚙️"},
+        {"passo": "Ligar a mesa de agentes",
+         "pronto": bool(_DESK.get("scheduler") and _DESK["scheduler"].running),
+         "acao": "Aba 🧑‍💼: 🤖 Ligar mesa autônoma (ela roda sozinha depois disso)"},
+        {"passo": "Guardar um backup",
+         "pronto": (DATA / "backups").exists() and any((DATA / "backups").glob("*.tar.gz")),
+         "acao": "Aba 🧑‍💼: 💾 Gerar backup"},
+    ]
+    feitos = sum(1 for i in itens if i["pronto"])
+    return {"itens": itens, "concluidos": feitos, "total": len(itens),
+            "saude": {"status": "degraded" if (STORE is None or HEALTH["avisos"]) else "ok",
+                      "avisos": HEALTH["avisos"]}}
+
 
 @app.get("/v1/config")
 def get_cfg(_=Depends(auth)):
@@ -245,7 +320,7 @@ async def new_job(req: Request, _=Depends(auth)):
     idem = req.headers.get("Idempotency-Key") or uuid.uuid4().hex
     idem = (idem + "0" * 16)[:64] if len(idem) < 16 else idem[:128]
     try:
-        rec, created = STORE.enqueue({"ticker": t, "trade_date": d}, idem)
+        rec, created = _store_or_502().enqueue({"ticker": t, "trade_date": d}, idem)
     except Exception as e:  # conflito de idempotência = payload diferente
         raise HTTPException(409, f"{type(e).__name__}: {e}"[:200])
     if created:
@@ -255,12 +330,12 @@ async def new_job(req: Request, _=Depends(auth)):
 
 @app.get("/v1/jobs")
 def list_jobs(_=Depends(auth)):
-    return {"jobs": [_panel_view(r) for r in STORE.list_recent(50)]}
+    return {"jobs": [_panel_view(r) for r in _store_or_502().list_recent(50)]}
 
 
 @app.get("/v1/jobs/{jid}")
 def get_job(jid: str, _=Depends(auth)):
-    rec = STORE.get(jid)
+    rec = _store_or_502().get(jid)
     if not rec:
         raise HTTPException(404, "job não encontrado")
     return _panel_view(rec)
@@ -414,7 +489,10 @@ def _desk_boot(capital: str | None = None):
 
 @app.get("/v1/desk/status")
 def desk_status(_=Depends(auth)):
-    d = _DESK if _DESK["orchestrator"] else _desk_boot()
+    try:
+        d = _DESK if _DESK["orchestrator"] else _desk_boot()
+    except Exception as exc:
+        raise HTTPException(503, f"mesa indisponível: {type(exc).__name__}: {exc}"[:300])
     orch, led, coord = d["orchestrator"], d["ledger"], d["coordinator"]
     return {
         "mandate": {"account": orch.mandate.account, "mode": orch.mandate.mode.value,

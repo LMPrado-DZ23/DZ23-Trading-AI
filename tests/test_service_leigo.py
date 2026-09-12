@@ -178,3 +178,54 @@ class TestDiagnosticoDoFeed:
     def test_feed_button_exists_in_panel(self):
         html = open("service/static/index.html", encoding="utf-8").read()
         assert "feedTest" in html and "Testar dados de mercado" in html
+
+
+class TestArranqueResiliente:
+    """O serviço prefere DEGRADAR a morrer: um banco fora do ar não pode
+    derrubar a página de configuração (causa provável do 502 em produção)."""
+
+    def test_broken_database_url_falls_back_instead_of_crashing(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:1/nada")
+        m = _load_app(tmp_path, monkeypatch)      # importar NÃO pode explodir
+        assert m.STORE is not None
+        assert "fallback" in m.HEALTH["armazenamento"]
+        assert m.HEALTH["avisos"] and "PostgreSQL" in m.HEALTH["avisos"][0]
+
+    def test_healthz_reports_degraded_without_auth(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:1/nada")
+        m = _load_app(tmp_path, monkeypatch)
+        body = TestClient(m.app).get("/healthz").json()
+        assert body["status"] == "degraded" and body["avisos"]
+
+    def test_panel_still_serves_when_degraded(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:1/nada")
+        m = _load_app(tmp_path, monkeypatch)
+        assert TestClient(m.app).get("/").status_code == 200
+
+
+class TestOnboarding:
+    def test_checklist_starts_empty_and_advances(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = _load_app(tmp_path, monkeypatch)
+        m._FAILS.clear()
+        c = TestClient(m.app)
+        h = {"Authorization": "Bearer s3nh4"}
+        first = c.get("/v1/primeiros-passos", headers=h).json()
+        assert first["concluidos"] == 0 and first["total"] == 6
+        assert all(i["acao"] for i in first["itens"])       # toda pendência tem ação
+        c.post("/v1/config", headers=h,
+               json={"vars": {"TRADINGAGENTS_LLM_PROVIDER": "groq",
+                              "GROQ_API_KEY": "gsk-x"}})
+        assert c.get("/v1/primeiros-passos", headers=h).json()["concluidos"] == 1
+
+    def test_panel_shows_checklist_and_health_banner(self):
+        html = open("service/static/index.html", encoding="utf-8").read()
+        assert 'id="checklist"' in html and 'id="saude"' in html
+
+    def test_compose_restarts_and_has_healthcheck(self):
+        from pathlib import Path
+        compose = Path("docker-compose.yml").read_text()
+        assert "restart: unless-stopped" in compose and "healthcheck" in compose
+        assert "/data" in compose

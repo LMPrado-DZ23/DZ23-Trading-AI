@@ -39,6 +39,8 @@ pre{background:#0a0e15;border:1px solid var(--line);border-radius:8px;padding:10
 </div>
 
 <div id="pane-cfg">
+<div id="saude" class="hide"></div>
+<div id="checklist" class="card"><h2>✅ Seu progresso</h2><div class="mut">carregando…</div></div>
 <div class="card" style="border-color:#14532d"><h2>🚀 Comece aqui — 3 passos</h2>
 <div style="font-size:14px;line-height:1.8">
 <b>1.</b> Digita a senha lá em cima e clica <b>Entrar</b>.<br>
@@ -159,6 +161,12 @@ openai_compatible:{h:'Preenche o Endereço do servidor e, se ele exigir, a chave
 function provHint(){const p=$('TRADINGAGENTS_LLM_PROVIDER').value,i=PROV[p]||{};
 $('provHint').innerHTML=i.h||'';
 for(const kk of ['GROQ_API_KEY','MISTRAL_API_KEY','OPENROUTER_API_KEY','OPENAI_API_KEY','ANTHROPIC_API_KEY','DEEPSEEK_API_KEY','GOOGLE_API_KEY']){const el=$(kk);if(el)el.style.borderColor=(kk===i.k)?'var(--acc)':'var(--line)'}}
+async function checklist(){const c=$('checklist'),sd=$('saude');
+try{const r=await fetch('/v1/primeiros-passos',{headers:H()});if(!r.ok){c.innerHTML='<div class="card"><h2>✅ Seu progresso</h2><span class="mut">digite a senha acima e clique Entrar</span></div>';return}
+const d=await r.json();
+c.innerHTML='<h2>✅ Seu progresso — '+d.concluidos+' de '+d.total+'</h2>'+d.itens.map(i=>`<div style="padding:4px 0">${i.pronto?'<span class="ok">✔</span>':'<span class="mut">○</span>'} <b>${i.passo}</b>${i.pronto?'':'<div class="mut" style="margin-left:18px">'+i.acao+'</div>'}</div>`).join('');
+if(d.saude.status!=='ok'){sd.className='card';sd.innerHTML='<h2 class="bad">⚠ Atenção</h2>'+d.saude.avisos.map(a=>'<div class="mut">'+a+'</div>').join('')}else{sd.className='hide'}
+}catch(e){}}
 function H(x={}){try{sessionStorage.setItem('pw',$('pw').value)}catch(e){}return{'Authorization':'Bearer '+$('pw').value.trim(),'Content-Type':'application/json',...x}}
 try{$('pw').value=sessionStorage.getItem('pw')||''}catch(e){}
 $('pw').addEventListener('keydown',e=>{if(e.key==='Enter')loadStatus()});
@@ -252,5 +260,5 @@ m.innerHTML=r.ok?'<span class="ok">⏸ entradas pausadas; a encerrar: '+(d.a_enc
 function refreshAll(){store.k.forEach(j=>poll(j.id))}
 async function syncFromServer(){const r=await tapi('v1/jobs');
 if(r.status<300&&r.body&&r.body.jobs){const js=r.body.jobs.map(j=>({id:j.id,ticker:j.ticker,date:j.trade_date}));store.k=js;js.forEach(j=>{if(!states[j.id])poll(j.id)});render()}}
-provHint();loadStatus();render();syncFromServer();refreshAll();
+provHint();loadStatus();checklist();render();syncFromServer();refreshAll();
 </script></body></html>

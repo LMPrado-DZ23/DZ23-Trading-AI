@@ -1,36 +1,26 @@
+# Subida local ou em qualquer host com Docker. No Coolify, basta o Dockerfile,
+# a variável ACCESS_PASSWORD e o volume /data — este arquivo é o equivalente
+# manual, com reinício automático (o serviço volta sozinho se cair).
 services:
   tradingagents:
     build: .
-    env_file:
-      - .env
-    volumes:
-      - tradingagents_data:/home/appuser/.tradingagents
-    tty: true
-    stdin_open: true
-
-  ollama:
-    image: ollama/ollama:latest
-    volumes:
-      - ollama_data:/root/.ollama
-    profiles:
-      - ollama
-
-  tradingagents-ollama:
-    build: .
-    env_file:
-      - .env
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
     environment:
-      - TRADINGAGENTS_LLM_PROVIDER=ollama
-      - OLLAMA_BASE_URL=http://ollama:11434/v1
+      ACCESS_PASSWORD: "${ACCESS_PASSWORD:?defina uma senha forte de 20+ caracteres}"
+      # Opcional: PostgreSQL. Se a URL estiver errada ou o banco fora do ar,
+      # o serviço NÃO cai — degrada para o banco local e avisa no painel.
+      # DATABASE_URL: "postgresql://usuario:senha@postgres:5432/tradingagents"
+      DESK_INTERVAL_SECONDS: "300"
     volumes:
-      - tradingagents_data:/home/appuser/.tradingagents
-    depends_on:
-      - ollama
-    tty: true
-    stdin_open: true
-    profiles:
-      - ollama
+      - tradingagents-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=4).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
 volumes:
-  tradingagents_data:
-  ollama_data:
+  tradingagents-data:

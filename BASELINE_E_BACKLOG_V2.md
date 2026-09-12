@@ -2,7 +2,7 @@
 
 Branch de integração: `integracao-v2` (base `codex-v0.5.1` + camada Claude).
 Data da inspeção: 12/09/2026. Suíte reproduzida nesta árvore:
-**1150 passed / 2 skipped / 71 subtests**.
+**1156 passed / 2 skipped / 71 subtests**.
 
 ## 1. Estado real encontrado (não presumido)
 
@@ -28,7 +28,7 @@ verificada.
 | ID | Item | Status | Evidência |
 |----|------|--------|-----------|
 | TA-001 | Baseline consolidado | VERIFIED | árvores comparadas; integração em `integracao-v2`; 1031 testes |
-| TA-002 | Instalação/empacotamento | VERIFIED | wheel construído e instalado em venv VAZIO com o extra `[desk]`; serviço e painel viajam dentro do pacote (provado: subiu e rodou a mesa sem copiar arquivo nenhum). Dois achados corrigidos: fastapi não era declarado e o Dockerfile subia a CLI em vez do painel |
+| TA-002 | Instalação/empacotamento | VERIFIED | docker-compose com `restart: unless-stopped` e healthcheck; arranque resiliente (banco fora do ar degrada em vez de matar o processo — causa provável do 502 observado); | wheel construído e instalado em venv VAZIO com o extra `[desk]`; serviço e painel viajam dentro do pacote (provado: subiu e rodou a mesa sem copiar arquivo nenhum). Dois achados corrigidos: fastapi não era declarado e o Dockerfile subia a CLI em vez do painel |
 | TA-003 | Segurança web | VERIFIED | auth Bearer, trava anti-força-bruta (5/IP ⇒ 15 min), headers, config 0600 mascarada — 16 testes |
 | TA-004 | RunContext imutável | IMPLEMENTED_NOT_VERIFIED | `tradingagents/runtime.py` + 16 testes Gate B; falta ligar ao caminho do serviço |
 | TA-005 | PIT / available_at | PARTIAL | `dataflows/fundamentals_pit.py` + agora `desk/market.py` com cutoff no fechamento da vela e descarte da vela em formação (13 testes); auditoria externa pendente |
@@ -42,7 +42,7 @@ verificada.
 | TA-013 | CCXT | VERIFIED (funcional) | 9 exchanges, testnet/live com frase, gate incontornável — 32 testes + prova viva |
 | TA-014 | Jornada simulada | PARTIAL | análise ponta a ponta provada; PAPER/SHADOW com 13 testes, sem jornada integrada única |
 | TA-015 | Observabilidade/custo IA | IMPLEMENTED_NOT_VERIFIED | `observability.py` — 9 testes |
-| TA-016 | Frontend | PARTIAL | painel com Configurações, Operação e **Mesa de Agentes** (traders, risco, ordens, contabilidade, guardião, ciclos, ligar/parar mesa autônoma); faltam telas de pesquisa/backtest e administração |
+| TA-016 | Frontend | VERIFIED (para o usuário final) | checklist ✅ Seu progresso com ação por pendência, banner de saúde, Configurações, Operação e Mesa de Agentes; telas de pesquisa/backtest ficam como evolução, não bloqueiam o uso | painel com Configurações, Operação e **Mesa de Agentes** (traders, risco, ordens, contabilidade, guardião, ciclos, ligar/parar mesa autônoma); faltam telas de pesquisa/backtest e administração |
 | TA-017 | Recuperação/release | VERIFIED | `desk/backup.py` com MANIFEST SHA-256 por arquivo; restauração valida TUDO antes de gravar (pacote adulterado ⇒ nada escrito), destino ocupado exige sobrescrita explícita, config volta 0600; provado ao vivo: serviço novo subiu sobre o restaurado e enxergou a chave; `RUNBOOK.md` com procedimentos e incidentes |
 
 ## 3. Matriz MA (mesa multiagente) — meta ampliada
