@@ -158,3 +158,23 @@ class TestPainelMesaDeAgentes:
         assert len(st["orders"]) == 2
         again = c.post("/v1/desk/cycle", headers=h).json()
         assert again["ordens"] == []                 # segundo ciclo não duplica
+
+
+class TestDiagnosticoDoFeed:
+    """Quando o mercado não chega, o painel diz o motivo e a próxima ação —
+    não fica mudo (o leigo precisa saber se é firewall ou exchange fora)."""
+
+    def test_feed_route_exists_and_reports_fixture_mode(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = _load_app(tmp_path, monkeypatch)
+        m._FAILS.clear()
+        m._DESK.update(orchestrator=None, scheduler=None)
+        c = TestClient(m.app)
+        r = c.get("/v1/desk/feed", headers={"Authorization": "Bearer s3nh4"})
+        assert r.status_code == 200
+        body = r.json()
+        assert body["fonte"] == "fixture" and "Mercado real" in body["proxima_acao"]
+
+    def test_feed_button_exists_in_panel(self):
+        html = open("service/static/index.html", encoding="utf-8").read()
+        assert "feedTest" in html and "Testar dados de mercado" in html

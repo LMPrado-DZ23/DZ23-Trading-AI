@@ -51,7 +51,7 @@ class DeskScheduler:
     """Laço de vida da mesa. Não conhece navegador, chat nem sessão."""
 
     def __init__(self, orchestrator, coordinator, *, snapshot_provider,
-                 price_provider, state_path: str | Path,
+                 price_provider, state_path: str | Path, on_cycle=None,
                  interval_seconds: int = 300, max_snapshot_age_minutes: int = 15):
         self.orchestrator = orchestrator
         self.coordinator = coordinator
@@ -60,6 +60,7 @@ class DeskScheduler:
         self.state_path = Path(state_path)
         self.interval = interval_seconds
         self.max_age = timedelta(minutes=max_snapshot_age_minutes)
+        self.on_cycle = on_cycle       # o painel escuta aqui
         self.state = self._load()
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
@@ -116,9 +117,17 @@ class DeskScheduler:
                     self.state.errors += 1
                     out.setdefault("erros", []).append(f"{type(exc).__name__}: {exc}"[:160])
             out["resumo"] = report.summary
+            out["vetos"] = [f"{a}: {w}" for a, w in report.vetoed][:6]
+            out["abstencoes"] = [f"{a} · {i}: {r}" for a, i, r in report.abstentions][:6]
+            out["erros"] = report.errors[:4]
         self.state.cycles_run += 1
         self.state.last_cycle_at = utcnow().isoformat()
         self.save()
+        if self.on_cycle:
+            try:
+                self.on_cycle(out)
+            except Exception:
+                pass               # painel nunca derruba o ciclo
         return out
 
     # -- laço ----------------------------------------------------------

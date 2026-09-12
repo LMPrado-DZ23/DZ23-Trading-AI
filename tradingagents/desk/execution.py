@@ -91,18 +91,33 @@ class PaperBroker:
     """Corretora simulada — dinheiro fictício, comportamento honesto.
     Serve PAPER/SHADOW; testnet/live usam a ponte CCXT pelo mesmo contrato."""
 
-    def __init__(self, price: Decimal, fee_rate: Decimal = Decimal("0.001")):
+    def __init__(self, price: Decimal, fee_rate: Decimal = Decimal("0.001"),
+                 price_provider=None):
         self.price = price
         self.fee_rate = fee_rate
+        # Com feed real, o preenchimento simulado precisa usar o preço do
+        # mercado — senão a contabilidade do paper mente (achado em teste vivo).
+        self.price_provider = price_provider
         self.submitted: dict[str, dict] = {}
+
+    def price_for(self, instrument: str) -> Decimal:
+        if self.price_provider:
+            try:
+                found = self.price_provider().get(instrument)
+                if found:
+                    return Decimal(str(found))
+            except Exception:
+                pass
+        return self.price
 
     def submit(self, client_order_id: str, instrument: str, side: str,
                quantity: Decimal) -> dict:
         if client_order_id in self.submitted:
             return self.submitted[client_order_id]  # idempotente do lado da corretora
-        fee = (quantity * self.price * self.fee_rate).quantize(Decimal("0.00000001"))
+        price = self.price_for(instrument)
+        fee = (quantity * price * self.fee_rate).quantize(Decimal("0.00000001"))
         order = {"id": f"paper-{len(self.submitted) + 1}", "status": "filled",
-                 "filled": quantity, "average": self.price, "fee": fee}
+                 "filled": quantity, "average": price, "fee": fee}
         self.submitted[client_order_id] = order
         return order
 

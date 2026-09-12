@@ -27,11 +27,19 @@ class CycleReport:
     vetoed: list[tuple[str, str]] = field(default_factory=list)
     intents: list[OrderIntent] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    # Por que a mesa NÃO operou — para o leigo, isto é tão importante
+    # quanto a ordem enviada.
+    abstentions: list[tuple[str, str, str]] = field(default_factory=list)
 
     @property
     def summary(self) -> str:
-        return (f"{self.proposals} propostas, {self.admitted} admitidas, "
-                f"{len(self.intents)} intenções, {len(self.vetoed)} vetos")
+        if self.intents:
+            return (f"{self.proposals} propostas, {self.admitted} admitidas, "
+                    f"{len(self.intents)} ordens, {len(self.vetoed)} vetos")
+        if self.errors:
+            return f"ciclo com {len(self.errors)} erro(s) — ver detalhes"
+        return (f"{self.proposals} propostas, nenhuma operação: "
+                f"critérios não atendidos ({len(self.abstentions)} abstenções)")
 
 
 class DeskOrchestrator:
@@ -70,7 +78,12 @@ class DeskOrchestrator:
                     report.errors.append(f"{trader.spec.agent_id}: {type(exc).__name__}")
         report.proposals = len(proposals)
 
-        actionable = [p for p in proposals if p.is_actionable()]
+        actionable = []
+        for p in proposals:
+            if p.is_actionable():
+                actionable.append(p)
+            else:
+                report.abstentions.append((p.agent_id, p.instrument, p.reason))
         decision = self.allocator.arbitrate(
             actionable,
             open_positions=self.open_exposure(),

@@ -92,7 +92,15 @@ pre{background:#0a0e15;border:1px solid var(--line);border-radius:8px;padding:10
 <label>EXCHANGE_API_SECRET <span id="s_EXCHANGE_API_SECRET"></span></label><input id="EXCHANGE_API_SECRET" type="password">
 </div></div>
 <div class="mut" style="margin-top:6px">TESTNET = treino com dinheiro fictício (existe em: Binance, Bybit, OKX, Gate.io, Coinbase — chave em testnet.binance.vision). LIVE = <b style="color:var(--err)">dinheiro real</b> nas 9 corretoras, e só liga digitando a frase de autorização acima.</div>
-<button class="bs" style="margin-top:8px" onclick="brokerTest()">🔌 Testar corretora</button> <span id="brokerMsg" class="msg"></span></div>
+</div>
+<div class="card"><h2>🧑‍💼 Mesa de Agentes — configuração</h2><div class="grid2"><div>
+<label>Fonte de dados</label><select id="TRADINGAGENTS_DESK_FEED"><option value="fixture">Fixture (treino — prova a mesa, não o mercado)</option><option value="real">Mercado real (velas públicas)</option></select>
+<label>Corretora da mesa</label><select id="TRADINGAGENTS_DESK_BROKER"><option value="paper">Paper (simulada, dinheiro fictício)</option><option value="ccxt">Corretora de verdade (usa o modo acima)</option></select>
+</div><div>
+<label>Instrumentos (separados por vírgula)</label><input id="TRADINGAGENTS_DESK_INSTRUMENTS" placeholder="BTC/USDT, ETH/USDT">
+<label>Capital da mesa</label><input id="TRADINGAGENTS_DESK_CAPITAL" placeholder="1000">
+</div></div>
+<div class="mut" style="margin-top:6px">Salvar aqui reconstrói a mesa (parada controlada primeiro). Com corretora de verdade em TESTNET, as ordens da mesa vão para a rede de treino da exchange.</div><button class="bs" style="margin-top:8px" onclick="brokerTest()">🔌 Testar corretora</button> <span id="brokerMsg" class="msg"></span></div>
 
 <div class="card"><h2>🌐 Comportamento</h2><div class="grid2"><div>
 <label>Idioma dos relatórios</label>
@@ -124,6 +132,7 @@ pre{background:#0a0e15;border:1px solid var(--line);border-radius:8px;padding:10
 <button class="bs" onclick="deskSched('stop')">🛑 Parar mesa</button>
 <button class="bs" onclick="deskCycle()">▶ Rodar um ciclo agora</button>
 <button class="bs" onclick="deskPause()">⏸ Pausar entradas</button>
+<button class="bs" onclick="feedTest()">📡 Testar dados de mercado</button>
 <button class="bs" onclick="deskLoad()">↻ Atualizar</button>
 <span id="deskMsg" class="msg"></span></div></div>
 <div id="deskOut"></div>
@@ -134,7 +143,7 @@ const $=i=>document.getElementById(i);
 function tab(t){document.querySelectorAll('.tab').forEach(e=>e.classList.toggle('on',e.dataset.t===t));
 $('pane-cfg').classList.toggle('hide',t!=='cfg');$('pane-op').classList.toggle('hide',t!=='op');
 const dk=$('pane-desk');if(dk)dk.classList.toggle('hide',t!=='desk')}
-const CFG_KEYS=['TRADINGAGENTS_LLM_PROVIDER','TRADINGAGENTS_BACKEND_URL','GROQ_API_KEY','MISTRAL_API_KEY','OPENROUTER_API_KEY','TRADINGAGENTS_DEEP_THINK_LLM','TRADINGAGENTS_QUICK_THINK_LLM','OPENAI_API_KEY','ANTHROPIC_API_KEY','DEEPSEEK_API_KEY','GOOGLE_API_KEY','FRED_API_KEY','ALPHA_VANTAGE_API_KEY','TRADINGAGENTS_EXCHANGE','TRADINGAGENTS_BROKER_MODE','EXCHANGE_API_KEY','EXCHANGE_API_SECRET','LIVE_TRADING_CONFIRM','TRADINGAGENTS_OUTPUT_LANGUAGE','TRADINGAGENTS_MAX_DEBATE_ROUNDS'];
+const CFG_KEYS=['TRADINGAGENTS_LLM_PROVIDER','TRADINGAGENTS_BACKEND_URL','GROQ_API_KEY','MISTRAL_API_KEY','OPENROUTER_API_KEY','TRADINGAGENTS_DEEP_THINK_LLM','TRADINGAGENTS_QUICK_THINK_LLM','OPENAI_API_KEY','ANTHROPIC_API_KEY','DEEPSEEK_API_KEY','GOOGLE_API_KEY','FRED_API_KEY','ALPHA_VANTAGE_API_KEY','TRADINGAGENTS_EXCHANGE','TRADINGAGENTS_BROKER_MODE','EXCHANGE_API_KEY','EXCHANGE_API_SECRET','LIVE_TRADING_CONFIRM','TRADINGAGENTS_DESK_FEED','TRADINGAGENTS_DESK_BROKER','TRADINGAGENTS_DESK_INSTRUMENTS','TRADINGAGENTS_DESK_CAPITAL','TRADINGAGENTS_OUTPUT_LANGUAGE','TRADINGAGENTS_MAX_DEBATE_ROUNDS'];
 const PROV={groq:{h:'Chave GRÁTIS em <b>console.groq.com/keys</b> (entra com Google, copia, cola aí embaixo). Modelos automáticos.',k:'GROQ_API_KEY'},
 google:{h:'Chave GRÁTIS em <b>aistudio.google.com/apikey</b>. Cola no campo GOOGLE_API_KEY.',k:'GOOGLE_API_KEY'},
 mistral:{h:'Chave em <b>console.mistral.ai/api-keys</b> (plano gratuito p/ experimentar).',k:'MISTRAL_API_KEY'},
@@ -200,7 +209,7 @@ ${(st&&(b.status||'')==='completed')?`<div style="margin-top:8px;display:flex;ga
 <span id="om_${j.id}" class="msg"></span></div>`:''}
 <pre class="hide">${(JSON.stringify(b,null,2)||'').replace(/</g,'&lt;')}</pre></div>`}).join('')}
 async function brokerTest(){const m=$('brokerMsg');m.innerHTML=' salvando e validando…';
-const vars={};for(const k of ['TRADINGAGENTS_EXCHANGE','TRADINGAGENTS_BROKER_MODE','EXCHANGE_API_KEY','EXCHANGE_API_SECRET','LIVE_TRADING_CONFIRM']){const v=$(k)&&$(k).value.trim();if(v)vars[k]=v}
+const vars={};for(const k of ['TRADINGAGENTS_EXCHANGE','TRADINGAGENTS_BROKER_MODE','EXCHANGE_API_KEY','EXCHANGE_API_SECRET','LIVE_TRADING_CONFIRM','TRADINGAGENTS_DESK_FEED','TRADINGAGENTS_DESK_BROKER','TRADINGAGENTS_DESK_INSTRUMENTS','TRADINGAGENTS_DESK_CAPITAL']){const v=$(k)&&$(k).value.trim();if(v)vars[k]=v}
 if(Object.keys(vars).length){const sv=await fetch('/v1/config',{method:'POST',headers:H(),body:JSON.stringify({vars})});if(!sv.ok){m.innerHTML='<span class="bad">✘ não consegui salvar — digitou a senha lá em cima e clicou Entrar?</span>';return}loadStatus()}
 const r=await fetch('/v1/broker/status',{headers:H()});const d=await r.json();
 m.innerHTML=d.ready?'<span class="ok">✔ '+d.exchange+' pronta — modo '+(d.mode==='live'?'<b style="color:var(--err)">LIVE (DINHEIRO REAL)</b>':'TESTNET (fictício)')+', chaves '+(d.keys_set?'ok':'faltando')+'</span>':'<span class="bad">✘ '+String(d.erro||'inválida').replace(/^[A-Za-z]+Error: /,'')+'</span>'}
@@ -215,7 +224,11 @@ m.innerHTML=r.ok?'<span class="ok">✔ ordem '+(d.mode==='live'?'REAL':'de trein
 async function deskLoad(){const o=$('deskOut');const r=await fetch('/v1/desk/status',{headers:H()});
 if(!r.ok){o.innerHTML='<div class="card bad">sem acesso — digita a senha no topo</div>';return}
 const d=await r.json();const c=d.contabilidade;
-o.innerHTML=`<div class="card"><h2>👥 Traders</h2><table style="width:100%;font-size:14px"><tr class="mut"><td>agente</td><td>estratégia</td><td>estágio</td><td>universo</td></tr>
+o.innerHTML=`<div class="card"><h2>🤖 Mesa autônoma</h2>
+<div class="mut">Fonte: <b>${d.fonte.dados}</b> · corretora: <b>${d.fonte.corretora}</b> — ${d.fonte.aviso}</div>
+<div style="margin-top:4px">Estado: <b>${d.agendador.rodando?'<span class="ok">RODANDO</span>':'parada'}</b> · ciclos: ${d.agendador.ciclos} · erros: ${d.agendador.erros} · intervalo: ${d.agendador.intervalo_s}s</div>
+<div class="mut">último ciclo: ${d.agendador.ultimo_ciclo||'—'}${d.agendador.pendencias.length?' · <span class="bad">pendências de reconciliação: '+d.agendador.pendencias.join(', ')+'</span>':''}</div></div>
+<div class="card"><h2>👥 Traders</h2><table style="width:100%;font-size:14px"><tr class="mut"><td>agente</td><td>estratégia</td><td>estágio</td><td>universo</td></tr>
 ${d.agents.map(a=>`<tr><td>${a.id}</td><td>${a.strategy} v${a.version}</td><td>${a.stage}</td><td class="mut">${a.universe.join(', ')}</td></tr>`).join('')||'<tr><td class="mut">entradas pausadas</td></tr>'}</table></div>
 <div class="card"><h2>🛡️ Risco e carteira</h2><div>Conta <b>${d.mandate.account}</b> · modo <b>${d.mandate.mode}</b> · capital ${d.mandate.capital}</div>
 <div style="margin-top:6px">Reservado: <b>${d.risk.reservado}</b> · Disponível: <b>${d.risk.disponivel}</b> · Abertos: ${d.risk.instrumentos_abertos.join(', ')||'—'}</div>
@@ -228,7 +241,7 @@ ${d.pendencias_reconciliacao.length?`<div class="bad" style="margin-top:6px">⚠
 <div style="margin-top:6px" class="mut">${Object.entries(c.saldos).map(([k,v])=>k+': '+v).join(' · ')||'sem lançamentos'}</div>
 <div style="margin-top:6px">Resultado por trader: ${Object.entries(c.atribuicao).map(([k,v])=>k+' '+v).join(' · ')||'—'}</div></div>
 <div class="card"><h2>🔄 Ciclos</h2>${d.ciclos.length?d.ciclos.slice().reverse().map(x=>`<div style="border-top:1px solid var(--line);padding:6px 0"><b>${x.resumo}</b> <span class="mut">(${x.origem})</span>
-${x.vetos.length?`<div class="mut">vetos: ${x.vetos.join(' | ')}</div>`:''}${x.erros.length?`<div class="bad">erros: ${x.erros.join(' | ')}</div>`:''}</div>`).join(''):'<span class="mut">nenhum ciclo rodado</span>'}</div>`}
+${x.vetos.length?`<div class="mut">vetos: ${x.vetos.join(' | ')}</div>`:''}${(x.abstencoes&&x.abstencoes.length)?`<div class="mut">sem operar: ${x.abstencoes.join(' | ')}</div>`:''}${(x.descartados&&x.descartados.length)?`<div class="mut">dados: ${x.descartados.join(' | ')}</div>`:''}${x.erros.length?`<div class="bad">erros: ${x.erros.join(' | ')}</div>`:''}</div>`).join(''):'<span class="mut">nenhum ciclo rodado</span>'}</div>`}
 async function deskCycle(){const m=$('deskMsg');m.innerHTML=' rodando ciclo…';
 const r=await fetch('/v1/desk/cycle',{method:'POST',headers:H()});const d=await r.json();
 m.innerHTML=r.ok?'<span class="ok">✔ '+d.resumo+'</span>':'<span class="bad">✘ falhou</span>';deskLoad()}

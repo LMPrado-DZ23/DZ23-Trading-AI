@@ -2,7 +2,7 @@
 
 Branch de integração: `integracao-v2` (base `codex-v0.5.1` + camada Claude).
 Data da inspeção: 12/09/2026. Suíte reproduzida nesta árvore:
-**1084 passed / 2 skipped / 71 subtests**.
+**1101 passed / 2 skipped / 71 subtests**.
 
 ## 1. Estado real encontrado (não presumido)
 
@@ -31,7 +31,7 @@ verificada.
 | TA-002 | Instalação/empacotamento | IMPLEMENTED_NOT_VERIFIED | Dockerfile + pyproject presentes; falta validar wheel em ambiente vazio |
 | TA-003 | Segurança web | VERIFIED | auth Bearer, trava anti-força-bruta (5/IP ⇒ 15 min), headers, config 0600 mascarada — 16 testes |
 | TA-004 | RunContext imutável | IMPLEMENTED_NOT_VERIFIED | `tradingagents/runtime.py` + 16 testes Gate B; falta ligar ao caminho do serviço |
-| TA-005 | PIT / available_at | IMPLEMENTED_NOT_VERIFIED | `dataflows/fundamentals_pit.py`, cutoff nas fontes; auditoria externa pendente |
+| TA-005 | PIT / available_at | PARTIAL | `dataflows/fundamentals_pit.py` + agora `desk/market.py` com cutoff no fechamento da vela e descarte da vela em formação (13 testes); auditoria externa pendente |
 | TA-006 | Banco/worker durável | **VERIFIED** | painel migrado para o store único (Postgres via DATABASE_URL, senão SQLite do mesmo contrato); claim/lease/heartbeat do Codex; provado ao vivo: idempotência e 409 em payload divergente |
 | TA-007 | Decisão/intenção | IMPLEMENTED_NOT_VERIFIED | `execution/models.py`, `engine.py` |
 | TA-008 | Sizing/reservas | IMPLEMENTED_NOT_VERIFIED | `portfolio/sizing.py` — 25 testes |
@@ -58,17 +58,28 @@ verificada.
 | MA-07 | Reconciliação/atribuição | VERIFIED | reconciliação consulta a corretora e só então decide; resultado atribuído por trader sem dupla contagem; custo de IA lançado como custo real |
 | MA-08 | Painel Mesa de Agentes | VERIFIED | aba com traders/estágios, risco, ordens, contabilidade, guardião e histórico de ciclos; botões chamam APIs reais (`/v1/desk/status|cycle|pause`), dados de fixture rotulados |
 | MA-09 | Experimentos de equipe | NOT_STARTED |
-| MA-10 | Cenários de aceite | PARTIAL | 54 testes cobrindo 01,02,03,04,06,07,08,09,10,11,12,13,14; faltam 05 (cutoff/cache por conta), 15 (backtest prospectivo), 16 (restore), 17 (separação de modos ponta a ponta), 18 (conectividade externa) |
+| MA-10 | Cenários de aceite | PARTIAL | 75 testes cobrindo 01,02,03,04,06,07,08,09,10,11,12,13,14; faltam 05 (cutoff/cache por conta), 15 (backtest prospectivo), 16 (restore), 17 (separação de modos ponta a ponta), 18 (conectividade externa) |
 
 ## 4. Próxima fatia (dependência real, não preferência)
 
-**Feed de mercado real**: o agendador já roda sozinho, mas alimentado por
-fixture rotulada. Falta plugar o snapshot_provider nas fontes reais com
-available_at/cutoff (Gate B já existe na árvore) — é o que troca "mesa
-coordenada provada" por "mesa operando mercado".
-Em seguida: ligar o executor à ponte CCXT em testnet (hoje PaperBroker pelo
-mesmo contrato), cenário 05 (cutoff/cache por conta), TA-017
-(backup/restore) e TA-002 (wheel em ambiente vazio).
+**Feed de mercado real — IMPLEMENTADO, validação BLOQUEADA POR AMBIENTE**:
+`desk/market.py` lê velas públicas via CCXT com cutoff no fechamento da vela
+(a vela em formação é descartada), cache compartilhado, e degradação honesta
+quando a fonte falha. 13 testes com dublês provam o comportamento. A
+validação CONTRA A EXCHANGE REAL não foi possível daqui: a saída de rede
+deste ambiente bloqueia api.binance.com, api.kraken.com, okx, bitget e
+coinbase (NetworkError em todas as 5). No servidor do Prado isso deve
+funcionar — e o painel agora mostra exatamente qual é o caso
+(`/v1/desk/feed`, botão 📡 Testar dados de mercado, com a próxima ação).
+
+**Executor por corretora real — IMPLEMENTADO, validação pendente de
+credencial**: `desk/brokers.py` adapta a ponte CCXT ao contrato do executor
+(mesmo livro de ordens, sem duplicar motor). Padrão continua PAPER: só
+`TRADINGAGENTS_DESK_BROKER=ccxt` liga a corretora, e o gate de capital
+segue incontornável.
+
+**Próximas fatias**: cenário 05 (cutoff/cache por conta), TA-017
+(backup/restore), TA-002 (wheel em ambiente vazio), TA-012 (walk-forward).
 
 **Achado corrigido nesta rodada (teste vivo, não unitário):** depois do fill
 a reserva é consumida e a mesa esquecia a posição — o ciclo seguinte

@@ -26,6 +26,8 @@ ALLOWED_KEYS = [
     "FRED_API_KEY", "ALPHA_VANTAGE_API_KEY",
     "TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
     "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET", "LIVE_TRADING_CONFIRM",
+    "TRADINGAGENTS_DESK_FEED", "TRADINGAGENTS_DESK_BROKER",
+    "TRADINGAGENTS_DESK_INSTRUMENTS", "TRADINGAGENTS_DESK_CAPITAL",
 ]
 SECRETish = tuple(k for k in ALLOWED_KEYS if k.endswith(("_KEY", "_SECRET")))
 
@@ -200,7 +202,7 @@ def run_job(jid, ticker, date):
 
 
 @app.get("/healthz")
-def hz(): return {"status": "ok", "app": "tradingagents-operavel/5"}
+def hz(): return {"status": "ok", "app": "tradingagents-operavel/6"}
 
 @app.get("/")
 def index(): return FileResponse(STATIC / "index.html")
@@ -224,7 +226,14 @@ async def set_cfg(req: Request, _=Depends(auth)):
         if k in ALLOWED_KEYS and isinstance(v, str) and v.strip():
             cfg[k] = v.strip(); saved.append(k)
     if not saved: raise HTTPException(400, "nada para salvar")
-    save_cfg(cfg); return {"saved": saved}
+    save_cfg(cfg)
+    if any(k.startswith("TRADINGAGENTS_DESK") or k in
+           ("TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE") for k in saved):
+        sched = _DESK.get("scheduler")
+        if sched and sched.running:
+            sched.stop()                    # parada controlada antes de trocar
+        _DESK["orchestrator"] = None        # próxima chamada reconstrói a mesa
+    return {"saved": saved}
 
 @app.post("/v1/jobs")
 async def new_job(req: Request, _=Depends(auth)):
@@ -323,8 +332,10 @@ _DESK = {"orchestrator": None, "ledger": None, "coordinator": None,
          "guardian": None, "cycles": [], "scheduler": None}
 
 
-def _desk_boot(capital: str = "1000"):
+def _desk_boot(capital: str | None = None):
     from decimal import Decimal
+    cfg = load_cfg()
+    capital = capital or cfg.get("TRADINGAGENTS_DESK_CAPITAL") or "1000"
     from tradingagents.desk.execution import (ExecutionCoordinator, PaperBroker,
                                               PositionGuardian)
     from tradingagents.desk.ledger import Ledger
@@ -333,7 +344,8 @@ def _desk_boot(capital: str = "1000"):
     from tradingagents.desk.risk import RiskEngine
     from tradingagents.desk.traders import default_desk
 
-    universe = ("BTC/USDT", "ETH/USDT")
+    raw = (cfg.get("TRADINGAGENTS_DESK_INSTRUMENTS") or "BTC/USDT,ETH/USDT")
+    universe = tuple(i.strip().upper() for i in raw.split(",") if i.strip())
     mandate = DeskMandate(mandate_id="desk-1", owner="prado", account="paper-1",
                           mode=Mode.PAPER, instruments=universe,
                           capital=Decimal(capital))
@@ -344,24 +356,55 @@ def _desk_boot(capital: str = "1000"):
         t.spec.move_to(AgentStage.PAPER_ENABLED)
     risk = RiskEngine(mandate)
     ledger = Ledger(opening_cash=mandate.capital)
+    from tradingagents.desk.brokers import build_desk_broker
+    _price_holder = {}
+    broker, broker_mode = build_desk_broker(
+        cfg, final_state={}, journal_path=str(DATA / "desk-broker.jsonl"),
+        paper_price=Decimal("100"))
+    if hasattr(broker, "price_provider"):
+        broker.price_provider = lambda: _price_holder.get("fn", lambda: {})()
     coord = ExecutionCoordinator(mandate, ledger, risk, worker_id="desk-worker-1",
-                                 broker=PaperBroker(Decimal("100")))
+                                 broker=broker)
+    _DESK["broker_mode"] = broker_mode
     orch = DeskOrchestrator(mandate, traders, worker_id="desk-worker-1", risk=risk,
                             positions_provider=ledger.open_positions)
     from tradingagents.desk.models import MarketSnapshot, utcnow as _now
     from tradingagents.desk.scheduler import DeskScheduler
 
-    def _snaps():
-        """Fixture ROTULADA enquanto o feed de mercado real não é ligado."""
-        alta = tuple(Decimal(str(100 + i * 1.5)) for i in range(40))
-        queda = tuple([Decimal("100")] * 24 + [Decimal("70")])
-        return [MarketSnapshot("BTC/USDT", "1h", _now(), alta, source="fixture"),
-                MarketSnapshot("ETH/USDT", "1h", _now(), queda, source="fixture")]
+    feed_kind = (cfg.get("TRADINGAGENTS_DESK_FEED") or "fixture").strip().lower()
+    if feed_kind == "real":
+        # Mercado de verdade: velas públicas, cutoff = fechamento da vela.
+        from tradingagents.desk.market import MarketFeedProviders, PublicMarketFeed
+        feed = PublicMarketFeed(cfg.get("TRADINGAGENTS_EXCHANGE") or "binance")
+        prov = MarketFeedProviders(feed, universe, timeframe="1h", limit=60)
+        snaps_fn, prices_fn = prov.snapshots, prov.prices
+    else:
+        def snaps_fn():
+            """Fixture ROTULADA — prova a coordenação, não o mercado de hoje."""
+            alta = tuple(Decimal(str(100 + i * 1.5)) for i in range(40))
+            queda = tuple([Decimal("100")] * 24 + [Decimal("70")])
+            shapes = {0: alta, 1: queda}
+            return [MarketSnapshot(inst, "1h", _now(),
+                                   shapes.get(n, alta), source="fixture")
+                    for n, inst in enumerate(universe)]
+
+        def prices_fn():
+            return {inst: Decimal("160") if n == 0 else Decimal("70")
+                    for n, inst in enumerate(universe)}
+
+    _price_holder["fn"] = prices_fn          # paper preenche ao preço do feed
+    _DESK["feed_kind"] = feed_kind
+    def _record(out):
+        _DESK["cycles"].append({
+            "em": _now().isoformat(), "origem": _DESK.get("feed_kind", "fixture"),
+            "resumo": out.get("resumo", ""), "vetos": out.get("vetos", []),
+            "abstencoes": out.get("abstencoes", []), "erros": out.get("erros", []),
+            "descartados": out.get("descartados", []), "ordens": out.get("ordens", [])})
+        del _DESK["cycles"][:-30]
 
     sched = DeskScheduler(
-        orch, coord, snapshot_provider=_snaps,
-        price_provider=lambda: {"BTC/USDT": Decimal("160"), "ETH/USDT": Decimal("70")},
-        state_path=DATA / "desk-state.json",
+        orch, coord, snapshot_provider=snaps_fn, price_provider=prices_fn,
+        state_path=DATA / "desk-state.json", on_cycle=_record,
         interval_seconds=int(os.environ.get("DESK_INTERVAL_SECONDS", "300")))
     _DESK.update(orchestrator=orch, ledger=ledger, coordinator=coord,
                  guardian=PositionGuardian(coord), cycles=[], scheduler=sched)
@@ -394,6 +437,11 @@ def desk_status(_=Depends(auth)):
                           "balanceado": led.is_balanced()},
         "guardiao": d["guardian"].watchlist(),
         "agendador": d["scheduler"].status(),
+        "fonte": {"dados": d.get("feed_kind", "fixture"),
+                  "corretora": d.get("broker_mode", "paper"),
+                  "aviso": ("dados de FIXTURE — provam a mesa, não o mercado"
+                            if d.get("feed_kind") != "real" else
+                            "mercado real (leitura pública, cutoff na vela fechada)")},
         "ciclos": d["cycles"][-10:],
     }
 
@@ -416,9 +464,12 @@ def desk_cycle(_=Depends(auth)):
         rec = d["coordinator"].submit(intent)
         enviados.append({"ordem": rec.order_id, "estado": rec.state.value,
                          "instrumento": rec.intent.reservation.instrument})
-    d["cycles"].append({"em": report.started_at.isoformat(), "origem": "fixture",
+    d["cycles"].append({"em": report.started_at.isoformat(),
+                        "origem": d.get("feed_kind", "fixture"),
                         "resumo": report.summary,
-                        "vetos": [f"{a}: {w}" for a, w in report.vetoed][:6],
+                        "vetos": [f"{x}: {w}" for x, w in report.vetoed][:6],
+                        "abstencoes": [f"{ag} · {i}: {r}"
+                                       for ag, i, r in report.abstentions][:6],
                         "erros": report.errors[:4], "ordens": enviados})
     return {"ok": True, "resumo": report.summary, "ordens": enviados}
 
@@ -430,6 +481,34 @@ def desk_pause(_=Depends(auth)):
     return {"ok": True, "entradas": "pausadas",
             "a_encerrar": d["orchestrator"].drain(),
             "aviso": "saída solicitada não é saída concluída — o guardião acompanha"}
+
+
+@app.get("/v1/desk/feed")
+def desk_feed(_=Depends(auth)):
+    """Diagnóstico honesto do feed: quantas velas, até quando, e a próxima
+    ação concreta quando algo está errado."""
+    d = _DESK if _DESK["orchestrator"] else _desk_boot()
+    cfg = load_cfg()
+    kind = d.get("feed_kind", "fixture")
+    if kind != "real":
+        return {"fonte": "fixture", "estado": "TREINO",
+                "proxima_acao": "Em ⚙️ Configurações, Fonte de dados = Mercado real"}
+    from tradingagents.desk.market import MarketFeedProviders, PublicMarketFeed
+    feed = PublicMarketFeed(cfg.get("TRADINGAGENTS_EXCHANGE") or "binance")
+    universe = tuple(d["orchestrator"].mandate.instruments)
+    out = []
+    for snap in MarketFeedProviders(feed, universe).snapshots():
+        ok = snap.quality == "ok"
+        out.append({"instrumento": snap.instrument, "velas": len(snap.closes),
+                    "ate": snap.cutoff.isoformat() if snap.closes else None,
+                    "qualidade": snap.quality, "fonte": snap.source,
+                    "pronto": ok,
+                    "proxima_acao": "" if ok else (
+                        "servidor sem acesso à exchange (firewall/saída bloqueada) "
+                        "ou exchange fora do ar — teste outra exchange em ⚙️")})
+    return {"fonte": "real", "exchange": cfg.get("TRADINGAGENTS_EXCHANGE") or "binance",
+            "instrumentos": out,
+            "estado": "PRONTO" if all(i["pronto"] for i in out) else "SEM DADOS"}
 
 
 @app.post("/v1/desk/scheduler/{action}")
