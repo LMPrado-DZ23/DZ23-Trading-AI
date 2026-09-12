@@ -207,6 +207,27 @@ class ExecutionCoordinator:
             self.risk.release(rec.intent.reservation.reservation_id)
         return rec
 
+    def close_position(self, *, instrument: str, quantity: Decimal,
+                       price: Decimal, cost_basis: Decimal, agent_id: str,
+                       fee: Decimal = Decimal("0"), client_order_id: str = ""
+                       ) -> dict:
+        """Encerra posição: vende na corretora e REALIZA o resultado no livro.
+        Sem isto a mesa acumula compras e nunca mostra lucro ou prejuízo."""
+        coid = client_order_id or f"exit-{instrument}-{len(self.orders) + 1}"
+        try:
+            result = self.broker.submit(coid, instrument, "sell", quantity)
+        except BrokerTimeout:
+            return {"estado": "incerto", "motivo": "timeout na saída — reconciliar",
+                    "client_order_id": coid}
+        exec_price = Decimal(str(result.get("average") or price))
+        exec_fee = Decimal(str(result.get("fee") or fee))
+        tx = self.ledger.fill_sell(instrument, quantity, exec_price, exec_fee,
+                                   cost_basis=cost_basis, agent_id=agent_id,
+                                   ref=coid)
+        return {"estado": "encerrada", "client_order_id": coid,
+                "preco": str(exec_price), "tx": tx.tx_id,
+                "resultado": str(self.ledger.attribution().get(agent_id, Decimal("0")))}
+
     def request_cancel(self, order_id: str) -> OrderRecord:
         rec = self.orders[order_id]
         if rec.state in TERMINAL:

@@ -199,6 +199,19 @@ class TestCenario14Contabilidade:
         with pytest.raises(LedgerError, match="duas linhas"):
             led._post("ruim", [Entry("CASH:USDT", Decimal("0"))])
 
+    def test_fee_is_counted_once_and_book_stays_balanced(self):
+        """Regressão: a corretagem da venda entrava no caixa E em FEES."""
+        led = Ledger(opening_cash=Decimal("1000"))
+        led.reserve(Decimal("100"), ref="r1")
+        led.fill_buy(INSTR, Decimal("1"), Decimal("100"), Decimal("0"),
+                     reserved=Decimal("100"), ref="r1")
+        led.fill_sell(INSTR, Decimal("1"), Decimal("130"), Decimal("2"),
+                      cost_basis=Decimal("100"), agent_id="t", ref="r1")
+        assert led.is_balanced()
+        assert led.balance("FEES") == Decimal("2")
+        assert led.attribution()["t"] == Decimal("30")          # bruto
+        assert led.balance("CASH:USDT") == Decimal("1028")      # líquido no caixa
+
     def test_round_trip_pnl_attributed_to_the_trader(self):
         led = Ledger(opening_cash=Decimal("1000"))
         led.reserve(Decimal("100"), ref="r1")
@@ -206,7 +219,7 @@ class TestCenario14Contabilidade:
                      reserved=Decimal("100"), ref="r1")
         led.fill_sell(INSTR, Decimal("1"), Decimal("130"), Decimal("0"),
                       cost_basis=Decimal("100"), agent_id="trader-trend", ref="r1")
-        assert led.attribution() == {"trader-trend": Decimal("30")}
+        assert led.attribution() == {"trader-trend": Decimal("30")}  # bruto
         assert led.balance("CASH:USDT") == Decimal("1030")   # confere na mão
         assert led.is_balanced()
 

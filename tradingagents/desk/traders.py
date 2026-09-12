@@ -33,6 +33,35 @@ class BaseTrader:
                              instrument=snap.instrument, action=action, reason=reason,
                              snapshot_cutoff=snap.cutoff)
 
+    def manage(self, snap: MarketSnapshot, position) -> TradeProposal:
+        """Acompanha posição aberta: propõe SAÍDA quando a tese morre.
+        `position` traz entry_price e agent_id de quem abriu."""
+        if not snap.sufficient(self.needs):
+            return self._no(snap, "sem dados para reavaliar a posição — mantendo",
+                            action=Action.HOLD)
+        entry = position.entry_price
+        pnl_pct = (snap.last - entry) / entry if entry else Decimal("0")
+        stop, alvo = Decimal("-0.05"), Decimal("0.08")
+        if pnl_pct <= stop:
+            return self._exit(snap, f"stop: {pnl_pct:.2%} desde a entrada")
+        if pnl_pct >= alvo:
+            return self._exit(snap, f"alvo atingido: {pnl_pct:.2%}")
+        reason = self._thesis_dead(snap)
+        if reason:
+            return self._exit(snap, f"tese invalidada: {reason}")
+        return self._no(snap, f"tese de pé ({pnl_pct:+.2%}) — mantendo",
+                        action=Action.HOLD)
+
+    def _thesis_dead(self, snap: MarketSnapshot) -> str:
+        return ""
+
+    def _exit(self, snap: MarketSnapshot, reason: str) -> TradeProposal:
+        return TradeProposal(
+            agent_id=self.spec.agent_id, strategy=self.strategy,
+            instrument=snap.instrument, action=Action.REDUCE, reason=reason,
+            desired_exposure_pct=Decimal("1"), confidence=Decimal("0.9"),
+            valid_until=default_expiry(10), snapshot_cutoff=snap.cutoff)
+
     def propose(self, snap: MarketSnapshot) -> TradeProposal:
         if snap.instrument not in self.universe:
             return self._no(snap, "instrumento fora do universo deste trader")
@@ -61,6 +90,10 @@ class TrendTrader(BaseTrader):
     strategy = "trend_following"
     needs = 30
 
+    def _thesis_dead(self, snap):
+        fast, slow = _sma(snap.closes, 10), _sma(snap.closes, 30)
+        return "média curta cruzou abaixo da longa" if fast < slow else ""
+
     def _evaluate(self, snap):
         fast, slow = _sma(snap.closes, 10), _sma(snap.closes, 30)
         if fast <= slow:
@@ -74,6 +107,11 @@ class MeanReversionTrader(BaseTrader):
     """Reversão à média: compra exagero de queda contra a média."""
     strategy = "mean_reversion"
     needs = 20
+
+    def _thesis_dead(self, snap):
+        window = [float(c) for c in snap.closes[-20:]]
+        mean = Decimal(str(fmean(window)))
+        return "preço voltou à média (tese cumprida)" if snap.last >= mean else ""
 
     def _evaluate(self, snap):
         window = [float(c) for c in snap.closes[-20:]]

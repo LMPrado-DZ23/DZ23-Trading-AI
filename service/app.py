@@ -202,7 +202,7 @@ def run_job(jid, ticker, date):
 
 
 @app.get("/healthz")
-def hz(): return {"status": "ok", "app": "tradingagents-operavel/7"}
+def hz(): return {"status": "ok", "app": "tradingagents-operavel/8"}
 
 @app.get("/")
 def index(): return FileResponse(STATIC / "index.html")
@@ -389,8 +389,9 @@ def _desk_boot(capital: str | None = None):
                     for n, inst in enumerate(universe)]
 
         def prices_fn():
-            return {inst: Decimal("160") if n == 0 else Decimal("70")
-                    for n, inst in enumerate(universe)}
+            # Preço de execução vem do MESMO dado que gerou a decisão —
+            # números inventados distorceriam a contabilidade do treino.
+            return {s.instrument: s.last for s in snaps_fn() if s.closes}
 
     _price_holder["fn"] = prices_fn          # paper preenche ao preço do feed
     _DESK["feed_kind"] = feed_kind
@@ -457,21 +458,40 @@ def desk_cycle(_=Depends(auth)):
     queda = [Decimal("100")] * 24 + [Decimal("70")]
     snaps = [MarketSnapshot("BTC/USDT", "1h", utcnow(), tuple(alta), source="fixture"),
              MarketSnapshot("ETH/USDT", "1h", utcnow(), tuple(queda), source="fixture")]
-    report = d["orchestrator"].run_cycle(
-        snaps, {"BTC/USDT": Decimal("160"), "ETH/USDT": Decimal("70")})
-    enviados = []
+    prices = d["scheduler"].price_provider()
+    report = d["orchestrator"].run_cycle(snaps, prices)
+    enviados, encerrados = [], []
+    # saídas primeiro: liberam capital e realizam resultado
+    for agent_id, instrument, motivo in report.exits:
+        pos = d["orchestrator"].book.get(instrument)
+        if not pos:
+            continue
+        preco = d["orchestrator"].risk and prices.get(instrument) or pos.entry_price
+        out = d["coordinator"].close_position(
+            instrument=instrument, quantity=pos.quantity, price=preco,
+            cost_basis=pos.cost_basis, agent_id=pos.agent_id)
+        if out.get("estado") == "encerrada":
+            d["orchestrator"].close_position(instrument)
+        encerrados.append({"instrumento": instrument, "motivo": motivo, **out})
     for intent in report.intents:
         rec = d["coordinator"].submit(intent)
         enviados.append({"ordem": rec.order_id, "estado": rec.state.value,
                          "instrumento": rec.intent.reservation.instrument})
+        if rec.state.value == "filled":
+            d["orchestrator"].register_fill(
+                rec.intent.reservation.instrument, rec.filled_qty, rec.avg_price,
+                rec.intent.reservation.agent_id,
+                rec.filled_qty * rec.avg_price)
     d["cycles"].append({"em": report.started_at.isoformat(),
                         "origem": d.get("feed_kind", "fixture"),
                         "resumo": report.summary,
                         "vetos": [f"{x}: {w}" for x, w in report.vetoed][:6],
                         "abstencoes": [f"{ag} · {i}: {r}"
                                        for ag, i, r in report.abstentions][:6],
-                        "erros": report.errors[:4], "ordens": enviados})
-    return {"ok": True, "resumo": report.summary, "ordens": enviados}
+                        "erros": report.errors[:4], "ordens": enviados,
+                        "encerradas": encerrados})
+    return {"ok": True, "resumo": report.summary, "ordens": enviados,
+            "encerradas": encerrados}
 
 
 @app.post("/v1/desk/pause")
@@ -481,6 +501,41 @@ def desk_pause(_=Depends(auth)):
     return {"ok": True, "entradas": "pausadas",
             "a_encerrar": d["orchestrator"].drain(),
             "aviso": "saída solicitada não é saída concluída — o guardião acompanha"}
+
+
+@app.get("/v1/desk/avaliacao")
+def desk_evaluation(_=Depends(auth)):
+    """Avaliação da equipe a partir do que a mesa REALMENTE fez (ciclos e
+    livro-razão). Sem operações suficientes, diz isso — não inventa nota."""
+    from decimal import Decimal as D
+    d = _DESK if _DESK["orchestrator"] else _desk_boot()
+    led, coord = d["ledger"], d["coordinator"]
+    atrib = led.attribution()
+    fechadas = [r for r in coord.orders.values() if r.state.value == "filled"]
+    por_agente: dict[str, dict] = {}
+    for r in fechadas:
+        ag = r.intent.reservation.agent_id or "desconhecido"
+        e = por_agente.setdefault(ag, {"ordens": 0, "custos": D("0")})
+        e["ordens"] += 1
+        e["custos"] += r.fees
+    linhas = []
+    for ag, e in sorted(por_agente.items()):
+        linhas.append({"agente": ag, "ordens": e["ordens"],
+                       "custos": str(e["custos"]),
+                       "resultado_realizado": str(atrib.get(ag, D("0")))})
+    ressalvas = []
+    if len(fechadas) < 20:
+        ressalvas.append(f"amostra pequena: {len(fechadas)} operações (< 20)")
+    if d.get("feed_kind") != "real":
+        ressalvas.append("dados de fixture — não mede desempenho de mercado")
+    if d.get("broker_mode", "paper") == "paper":
+        ressalvas.append("execução simulada: sem fila real, slippage real nem latência")
+    if not any(D(l["resultado_realizado"]) != 0 for l in linhas):
+        ressalvas.append("nenhuma posição foi FECHADA: resultado ainda não realizado")
+    return {"por_agente": linhas,
+            "conclusivo": not ressalvas,
+            "ressalvas": ressalvas,
+            "aviso": "retrospectivo e em ambiente simulado; não é promessa de lucro"}
 
 
 @app.post("/v1/backup")

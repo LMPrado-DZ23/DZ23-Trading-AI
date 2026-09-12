@@ -14,8 +14,20 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from decimal import Decimal
 
+from dataclasses import dataclass as _dataclass
+
 from .models import Action, DeskMandate, MandateError, OrderIntent, utcnow
 from .risk import PortfolioAllocator, RiskEngine, RiskVeto
+
+
+@_dataclass
+class Position:
+    """Exposição aberta sob responsabilidade de um agente."""
+    instrument: str
+    quantity: Decimal
+    entry_price: Decimal
+    agent_id: str
+    cost_basis: Decimal
 
 
 @dataclass
@@ -26,6 +38,7 @@ class CycleReport:
     admitted: int = 0
     vetoed: list[tuple[str, str]] = field(default_factory=list)
     intents: list[OrderIntent] = field(default_factory=list)
+    exits: list[tuple[str, str, str]] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     # Por que a mesa NÃO operou — para o leigo, isto é tão importante
     # quanto a ordem enviada.
@@ -33,9 +46,10 @@ class CycleReport:
 
     @property
     def summary(self) -> str:
-        if self.intents:
+        if self.intents or self.exits:
             return (f"{self.proposals} propostas, {self.admitted} admitidas, "
-                    f"{len(self.intents)} ordens, {len(self.vetoed)} vetos")
+                    f"{len(self.intents)} entradas, {len(self.exits)} saídas, "
+                    f"{len(self.vetoed)} vetos")
         if self.errors:
             return f"ciclo com {len(self.errors)} erro(s) — ver detalhes"
         return (f"{self.proposals} propostas, nenhuma operação: "
@@ -57,6 +71,9 @@ class DeskOrchestrator:
         # consumida, mas a exposição continua. Sem esta fonte a mesa
         # recompraria o mesmo ativo no ciclo seguinte (achado em teste vivo).
         self.positions_provider = positions_provider or (lambda: set())
+        # Livro da mesa: quem abriu o quê, a que preço. É daqui que sai a
+        # gestão de saída — sem isso a mesa só compra e nunca realiza.
+        self.book: dict[str, Position] = {}
 
     def open_exposure(self) -> set[str]:
         return set(self.risk.open_instruments()) | set(self.positions_provider())
@@ -69,6 +86,22 @@ class DeskOrchestrator:
             report.errors.append(f"mandato: {exc}")
             return report  # mandato inválido ⇒ ciclo não propõe nada
 
+        # 1) ACOMPANHAR o que já está aberto (saída vem antes de entrada)
+        for snap in snapshots:
+            pos = self.book.get(snap.instrument)
+            if not pos:
+                continue
+            trader = next((t for t in self.traders
+                           if t.spec.agent_id == pos.agent_id), None)
+            if trader is None:
+                report.exits.append((pos.agent_id, snap.instrument,
+                                     "trader ausente — guardião assume"))
+                continue
+            call = trader.manage(snap, pos)
+            if call.action is Action.REDUCE:
+                report.exits.append((pos.agent_id, snap.instrument, call.reason))
+
+        # 2) Só então procurar entradas novas
         proposals = []
         for snap in snapshots:
             for trader in self.traders:
@@ -107,6 +140,17 @@ class DeskOrchestrator:
             self.owner_by_instrument[proposal.instrument] = proposal.agent_id
             report.intents.append(intent)
         return report
+
+    def register_fill(self, instrument: str, quantity, price, agent_id: str,
+                      cost_basis) -> None:
+        """Chamado quando uma compra executa: a posição entra no livro."""
+        self.book[instrument] = Position(instrument, quantity, price, agent_id,
+                                         cost_basis)
+
+    def close_position(self, instrument: str) -> Position | None:
+        """Posição encerrada sai do livro e o instrumento fica livre."""
+        self.owner_by_instrument.pop(instrument, None)
+        return self.book.pop(instrument, None)
 
     # -- kill switch com semânticas distintas (cenário 13) -------------
     def pause_entries(self) -> None:

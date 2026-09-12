@@ -110,13 +110,19 @@ class Ledger:
     def fill_sell(self, instrument: str, quantity: Decimal, price: Decimal,
                   fee: Decimal, *, cost_basis: Decimal, agent_id: str,
                   ref: str = "") -> Transaction:
-        """Venda executada: baixa a posição pelo custo e atribui o resultado."""
+        """Venda executada: baixa a posição pelo custo e atribui o resultado.
+
+        A conta PNL:<agente> carrega o resultado BRUTO (venda − custo); a
+        corretagem vive em FEES, visível e nunca embutida. Somar as duas é
+        o resultado líquido — contar a taxa nos dois lugares desbalanceia o
+        livro (erro pego por teste ao implementar as saídas).
+        """
         proceeds = (quantity * price).quantize(Decimal("0.00000001"))
-        pnl = proceeds - cost_basis - fee
+        bruto = proceeds - cost_basis
         entries = [Entry(f"CASH:{self.currency}", proceeds - fee, "caixa da venda"),
-                   Entry("FEES", fee, "corretagem"),
+                   Entry("FEES", fee, "corretagem da saída"),
                    Entry(f"POSITION:{instrument}", -cost_basis, "baixa ao custo"),
-                   Entry(f"PNL:{agent_id}", -pnl, "resultado atribuído")]
+                   Entry(f"PNL:{agent_id}", -bruto, "resultado bruto atribuído")]
         return self._post("fill_sell", entries, ref)
 
     def ai_cost(self, amount: Decimal, agent_id: str, ref: str = "") -> Transaction:
@@ -132,7 +138,7 @@ class Ledger:
 
     # -- relatórios -----------------------------------------------------
     def attribution(self) -> dict[str, Decimal]:
-        """Resultado realizado por trader, sem dupla contagem."""
+        """Resultado BRUTO realizado por trader (custos ficam em FEES)."""
         return {acc.split(":", 1)[1]: -bal for acc, bal in self.balances().items()
                 if acc.startswith("PNL:")}
 

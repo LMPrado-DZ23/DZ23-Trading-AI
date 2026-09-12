@@ -2,7 +2,7 @@
 
 Branch de integração: `integracao-v2` (base `codex-v0.5.1` + camada Claude).
 Data da inspeção: 12/09/2026. Suíte reproduzida nesta árvore:
-**1139 passed / 2 skipped / 71 subtests**.
+**1150 passed / 2 skipped / 71 subtests**.
 
 ## 1. Estado real encontrado (não presumido)
 
@@ -52,13 +52,13 @@ verificada.
 | MA-01 | Mandatos/registry/permissões (DeskMandate, AgentSpec) | VERIFIED | `desk/models.py`: mandato com revogação/expiração/versão, estágios com transições autorizadas, ferramentas pelo backend |
 | MA-02 | Snapshots/propostas | VERIFIED | snapshot imutável com cutoff e qualidade; proposta com validade, invalidação e razão — proposta não autoriza |
 | MA-03 | Orquestrador por eventos | VERIFIED | `desk/scheduler.py`: laço próprio roda ciclos sozinho (provado ao vivo: 4 ciclos sem comando), estado durável em disco com escrita atômica, recuperação reconcilia ANTES de retomar, snapshot vencido nunca vira ordem atrasada, ciclo defeituoso não mata o laço |
-| MA-04 | Três traders distintos | VERIFIED | tendência, reversão à média e rompimento — lógica determinística distinta, provado que leem o MESMO snapshot de formas diferentes |
+| MA-04 | Três traders distintos | VERIFIED | tendência, reversão à média e rompimento; cada um também GERENCIA a posição aberta (stop, alvo e invalidação própria da tese) e mantém quando falta dado, em vez de vender no escuro |
 | MA-05 | Arbitragem + reserva transacional | VERIFIED | allocator veta direção oposta e disputa por instrumento; RiskEngine com lock atômico: capital nunca prometido duas vezes |
-| MA-06 | Execução + guardião | VERIFIED | `ExecutionCoordinator` é o único caminho à corretora (revalida posse/mandato/expiração); `PositionGuardian` adota posições de trader pausado; kill switch distingue pausar, drenar e cancelar |
+| MA-06 | Execução + guardião + saídas | VERIFIED | ciclo completo entrada→acompanhamento→saída com resultado realizado no livro; posição órfã (trader sumiu) vai para o guardião; | `ExecutionCoordinator` é o único caminho à corretora (revalida posse/mandato/expiração); `PositionGuardian` adota posições de trader pausado; kill switch distingue pausar, drenar e cancelar |
 | MA-07 | Reconciliação/atribuição | VERIFIED | reconciliação consulta a corretora e só então decide; resultado atribuído por trader sem dupla contagem; custo de IA lançado como custo real |
 | MA-08 | Painel Mesa de Agentes | VERIFIED | aba com traders/estágios, risco, ordens, contabilidade, guardião e histórico de ciclos; botões chamam APIs reais (`/v1/desk/status|cycle|pause`), dados de fixture rotulados |
 | MA-09 | Experimentos de equipe | VERIFIED | `Comparison` recusa comparar universos, capitais ou períodos diferentes; veredito nunca sai como 'campeão' seco — traz ressalvas (amostra pequena, custos não descontados, candidato único); custo muda o ranking; concordância entre agentes do mesmo modelo conta como UMA evidência |
-| MA-10 | Cenários de aceite | PARTIAL | 106 testes cobrindo 01–16; faltam 15 (avaliação prospectiva separada), 17 (separação de modos ponta a ponta com corretora real), 18 (conectividade externa comprovada — bloqueada por rede neste ambiente) |
+| MA-10 | Cenários de aceite | PARTIAL | 123 testes cobrindo 01–16; faltam 15 (avaliação prospectiva separada), 17 (separação de modos ponta a ponta com corretora real), 18 (conectividade externa comprovada — bloqueada por rede neste ambiente) |
 
 ## 4. Próxima fatia (dependência real, não preferência)
 
