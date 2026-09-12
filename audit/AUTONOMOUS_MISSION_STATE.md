@@ -3,11 +3,11 @@
 - **mission_id:** `tradingagents-dz23-a5-2026-09-08`
 - **objective:** concluir o TradingAgents DZ23 como plataforma web multiusuário pronta para usuários leigos, com carteira administrada, perfis de risco, execução CCXT segura e implantação verificada em `https://trading.dz23.online/`.
 - **state:** `EXECUTING`
-- **iteration:** 16
+- **iteration:** 17
 - **started_at:** 2026-09-08 America/Sao_Paulo
 - **last_heartbeat:** 2026-09-12
 - **last_progress_at:** 2026-09-12
-- **current_task:** corrigir e revalidar M5.2b2 após revisão independente: vínculo integral spec/policy, liquidez PIT de D, custódia sem TOCTOU, janela temporal e recuperação Windows.
+- **current_task:** implementar M5.2c: corporate actions e FX PIT, ambos fail-closed e vinculados ao dataset congelado.
 
 ## Acceptance criteria
 
@@ -86,6 +86,8 @@
   PnL, dupla entrada, idempotência e anchors externos obrigatórios.
 - [x] M5.2b1 final `150c097` aprovado por três revisões independentes; o
   reducer não expõe fast path importável e o fold é linear/log-linear.
+- [x] M5.2b2 final `99548a7` liga spec, política, liquidez PIT de D, quantidade
+  executada, fill e custódia; aprovado por três reauditorias independentes.
 
 ## Pending tasks
 
@@ -205,6 +207,11 @@
   limite agregado, replay máximo e helper fragmentado foram recusados.
 - Benchmark independente M5.2b1 no WSL: 500 sessões entre 0,958–1,993 s;
   2.500 entre 5,361–7,595 s; 4.000 entre 8,521–10,833 s.
+- M5.2b2 final: foco **233 passed, 5 skipped**; vetores externos **9 passed**;
+  regressão ampla **1520 passed, 24 skipped, 4 deselected, 71 subtests**;
+  Ruff e compileall verdes. As quatro exclusões são incompatibilidades
+  preexistentes do host de subprocessos Windows e seguem obrigatórias no gate
+  Linux de release.
 
 ## Commits
 
@@ -216,6 +223,7 @@
 - `6f3fc53` — `feat: add multi-tenant encrypted provider connections`.
 - `6a87cb4` — `test(backtest): isolate normalized candle fuzz cases`.
 - `150c097` — `fix(backtest): close simulation ledger audit findings`.
+- `99548a7` — `fix(backtest): bind simulation authority economics`.
 
 ## Agents delegated
 
@@ -227,9 +235,8 @@
 
 ## Next action
 
-1. concluir a reauditoria M5.2b2 e congelar o parecer somente se os PoCs de
-   policy/spec, liquidez PIT, TOCTOU e publicação Windows ficarem verdes;
-2. implementar M5.2c para corporate actions e FX PIT, sem fallback implícito;
+1. implementar M5.2c para corporate actions e FX PIT, sem fallback implícito;
+2. submeter M5.2c a três revisões independentes antes de integrar o runner;
 3. manter credenciais reais fora de chat, Git, fixtures e evidências;
 4. manter a integração IQ Option em marco separado: MCP oficial sob gate de capital; `iq-core` somente experimental/read-only, nunca rota LIVE;
 5. configurar Google e Apple no Supabase quando os Client IDs/secrets externos forem fornecidos, sem bloquear os demais marcos.
