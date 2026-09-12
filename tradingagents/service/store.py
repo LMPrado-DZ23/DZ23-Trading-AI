@@ -47,6 +47,9 @@ class JobStore(ABC):
     @abstractmethod
     def cancel(self, job_id: str) -> JobRecord | None: ...
 
+    @abstractmethod
+    def list_recent(self, limit: int = 50) -> list[JobRecord]: ...
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -234,6 +237,14 @@ class SQLiteJobStore(JobStore):
                 )
         return self.get(job_id)
 
+    def list_recent(self, limit: int = 50) -> list[JobRecord]:
+        limit = max(1, min(int(limit), 200))
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return [self._row(r) for r in rows]
+
     @staticmethod
     def _row(row: Any) -> JobRecord:
         if row["schema_version"] != JOB_SCHEMA_VERSION:
@@ -418,6 +429,16 @@ class PostgresJobStore(JobStore):
             )
             row = cursor.fetchone()
         return self._row(row) if row else self.get(job_id)
+
+    def list_recent(self, limit: int = 50) -> list[JobRecord]:
+        limit = max(1, min(int(limit), 200))
+        with self._connect() as connection:
+            with connection.cursor() as cur:
+                cur.execute(
+                    "SELECT * FROM jobs ORDER BY created_at DESC LIMIT %s", (limit,)
+                )
+                rows = cur.fetchall()
+        return [self._row(r) for r in rows]
 
     @staticmethod
     def _row(row: dict[str, Any]) -> JobRecord:

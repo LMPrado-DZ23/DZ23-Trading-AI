@@ -4,7 +4,7 @@ operação embutidos. Uma senha (ACCESS_PASSWORD), um volume (/data), um deploy.
 Config vive em /data/config.json (chmod 600), editada PELO PAINEL, aplicada a
 cada job — sem redeploy, sem tocar em env no Coolify. Segredos nunca voltam
 inteiros ao navegador (exibição mascarada)."""
-import hmac, json, os, sqlite3, threading, time, traceback, uuid
+import hmac, json, os, threading, time, traceback, uuid
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -124,29 +124,58 @@ def load_cfg() -> dict:
 def save_cfg(cfg: dict):
     CFG_PATH.write_text(json.dumps(cfg, indent=2)); os.chmod(CFG_PATH, 0o600)
 
-def db():
-    c = sqlite3.connect(DB); c.row_factory = sqlite3.Row
-    c.execute("""CREATE TABLE IF NOT EXISTS jobs(
-        id TEXT PRIMARY KEY, idem TEXT UNIQUE, ticker TEXT, trade_date TEXT,
-        status TEXT, error TEXT, decision TEXT, result TEXT,
-        created REAL, updated REAL)"""); return c
+def build_store():
+    """Armazenamento ÚNICO de jobs (TA-006). Postgres quando DATABASE_URL
+    existir; SQLite durável do mesmo contrato caso contrário. O painel deixou
+    de manter uma tabela paralela: fila, lease e idempotência são do store."""
+    from tradingagents.service.store import PostgresJobStore, SQLiteJobStore
+    dsn = os.environ.get("DATABASE_URL", "").strip()
+    st = PostgresJobStore(dsn) if dsn else SQLiteJobStore(DATA / "jobs.db")
+    st.initialize()
+    return st
 
-def upd(jid, **kw):
-    kw["updated"] = time.time()
-    with db() as c:
-        c.execute(f"UPDATE jobs SET {','.join(k+'=?' for k in kw)} WHERE id=?",
-                  [*kw.values(), jid])
+
+STORE = build_store()
+
+
+def _panel_view(rec) -> dict:
+    """Traduz o JobRecord do store para o formato que o painel já consome."""
+    res = rec.result or {}
+    payload = rec.payload or {}
+    status_map = {"queued": "queued", "running": "running", "succeeded": "completed",
+                  "failed": "failed", "cancelled": "cancelled"}
+    err = None
+    if rec.error_message:
+        err = f"{rec.error_code or 'erro'}: {rec.error_message}"
+    return {
+        "id": rec.job_id,
+        "ticker": payload.get("ticker", ""),
+        "trade_date": payload.get("trade_date", ""),
+        "status": status_map.get(rec.status.value, rec.status.value),
+        "decision": res.get("_decision"),
+        "error": err,
+        "result": {k: v for k, v in res.items() if k != "_decision"} or None,
+        "created": rec.created_at.timestamp(),
+        "updated": rec.updated_at.timestamp(),
+    }
+
 
 _cancel = set(); _lock = threading.Lock()
 
 def run_job(jid, ticker, date):
-    with _lock:  # um job por vez: env é global do processo
-        if jid in _cancel: upd(jid, status="cancelled"); return
-        upd(jid, status="running")
+    with _lock:  # um job pesado por vez neste processo
+        rec = STORE.get(jid)
+        if not rec or rec.status.value != "queued":
+            return
+        claimed = STORE.claim(f"panel-{os.getpid()}", lease_seconds=1800)
+        if not claimed or claimed.job_id != jid:
+            return  # outro worker levou: posse é do store, não do painel
+        token = claimed.lease_token
         try:
             cfg = load_cfg()
             for k, v in cfg.items():
-                if k in ALLOWED_KEYS and v: os.environ[k] = str(v)
+                if k in ALLOWED_KEYS and v:
+                    os.environ[k] = str(v)
             from tradingagents.default_config import DEFAULT_CONFIG
             from tradingagents.graph.trading_graph import TradingAgentsGraph
             conf = dict(DEFAULT_CONFIG)
@@ -159,20 +188,19 @@ def run_job(jid, ticker, date):
             state, decision = graph.propagate(ticker, date, asset_type=asset_type)
             reports = {k: v for k, v in (state or {}).items()
                        if isinstance(v, str) and ("report" in k or "decision" in k)}
-            # guarda o mark de transporte + identidade: é o que permite EXECUTAR
-            # a decisão depois, passando pelo gate de capital honestamente.
+            reports["_decision"] = str(decision)[:4000]
             reports["_transport_mark"] = (state or {}).get("transport_security")
-            reports["_identity"] = {"company_of_interest": (state or {}).get("company_of_interest"),
-                                     "trade_date": (state or {}).get("trade_date")}
-            upd(jid, status="completed", decision=str(decision)[:4000],
-                result=json.dumps(reports, ensure_ascii=False, default=str)[:200000])
+            reports["_identity"] = {
+                "company_of_interest": (state or {}).get("company_of_interest"),
+                "trade_date": (state or {}).get("trade_date")}
+            STORE.complete(jid, token, json.loads(json.dumps(reports, default=str)))
         except Exception as e:
-            upd(jid, status="failed",
-                error=f"{type(e).__name__}: {e}"[:2000] + "\n" +
-                      traceback.format_exc()[-1500:])
+            STORE.fail(jid, token, type(e).__name__,
+                       f"{e}"[:800] + " | " + traceback.format_exc()[-600:])
+
 
 @app.get("/healthz")
-def hz(): return {"status": "ok", "app": "tradingagents-operavel/3"}
+def hz(): return {"status": "ok", "app": "tradingagents-operavel/4"}
 
 @app.get("/")
 def index(): return FileResponse(STATIC / "index.html")
@@ -201,40 +229,37 @@ async def set_cfg(req: Request, _=Depends(auth)):
 @app.post("/v1/jobs")
 async def new_job(req: Request, _=Depends(auth)):
     b = await req.json()
-    t, d = str(b.get("ticker", "")).strip().upper(), str(b.get("trade_date", "")).strip()
-    if not t or len(d) != 10: raise HTTPException(422, "ticker e trade_date (AAAA-MM-DD) obrigatórios")
+    t = str(b.get("ticker", "")).strip().upper()
+    d = str(b.get("trade_date", "")).strip()
+    if not t or len(d) != 10:
+        raise HTTPException(422, "ticker e trade_date (AAAA-MM-DD) obrigatórios")
     idem = req.headers.get("Idempotency-Key") or uuid.uuid4().hex
-    with db() as c:
-        row = c.execute("SELECT id FROM jobs WHERE idem=?", (idem,)).fetchone()
-        if row: return {"id": row["id"], "idempotent": True}
-        jid = uuid.uuid4().hex[:16]
-        c.execute("INSERT INTO jobs(id,idem,ticker,trade_date,status,created,updated)"
-                  " VALUES(?,?,?,?,?,?,?)", (jid, idem, t, d, "queued", time.time(), time.time()))
-    threading.Thread(target=run_job, args=(jid, t, d), daemon=True).start()
-    return {"id": jid}
+    idem = (idem + "0" * 16)[:64] if len(idem) < 16 else idem[:128]
+    try:
+        rec, created = STORE.enqueue({"ticker": t, "trade_date": d}, idem)
+    except Exception as e:  # conflito de idempotência = payload diferente
+        raise HTTPException(409, f"{type(e).__name__}: {e}"[:200])
+    if created:
+        threading.Thread(target=run_job, args=(rec.job_id, t, d), daemon=True).start()
+    return {"id": rec.job_id, "idempotent": not created}
+
 
 @app.get("/v1/jobs")
 def list_jobs(_=Depends(auth)):
-    with db() as c:
-        rows = c.execute("SELECT id,ticker,trade_date,status,decision,created "
-                         "FROM jobs ORDER BY created DESC LIMIT 50").fetchall()
-    return {"jobs": [dict(r) for r in rows]}
+    return {"jobs": [_panel_view(r) for r in STORE.list_recent(50)]}
 
 
 @app.get("/v1/jobs/{jid}")
 def get_job(jid: str, _=Depends(auth)):
-    with db() as c:
-        r = c.execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()
-    if not r: raise HTTPException(404, "job não encontrado")
-    o = dict(r); o["result"] = json.loads(o["result"]) if o.get("result") else None
-    return o
+    rec = STORE.get(jid)
+    if not rec:
+        raise HTTPException(404, "job não encontrado")
+    return _panel_view(rec)
+
 
 @app.post("/v1/jobs/{jid}/cancel")
 def cancel(jid: str, _=Depends(auth)):
-    _cancel.add(jid)
-    with db() as c:
-        r = c.execute("SELECT status FROM jobs WHERE id=?", (jid,)).fetchone()
-    if r and r["status"] == "queued": upd(jid, status="cancelled")
+    STORE.cancel(jid)
     return {"ok": True}
 
 
@@ -267,11 +292,10 @@ async def broker_order(req: Request, _=Depends(auth)):
         amount = float(b.get("amount", 0))
     except (TypeError, ValueError):
         amount = 0
-    with db() as c:
-        r = c.execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()
-    if not r or r["status"] != "completed":
+    rec = STORE.get(jid)
+    if not rec or rec.status.value != "succeeded":
         raise HTTPException(422, "job_id inexistente ou não concluído — executa-se a decisão de uma análise")
-    stored = json.loads(r["result"] or "{}")
+    stored = rec.result or {}
     ident = stored.get("_identity") or {}
     final_state = {**ident, "transport_security": stored.get("_transport_mark")}
     cfg = load_cfg()
