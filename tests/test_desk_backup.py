@@ -6,8 +6,7 @@ import tarfile
 
 import pytest
 
-from tradingagents.desk.backup import (BackupError, create_backup, inspect_backup,
-                                       restore_backup)
+from tradingagents.desk.backup import BackupError, create_backup, inspect_backup, restore_backup
 
 
 def populate(d):

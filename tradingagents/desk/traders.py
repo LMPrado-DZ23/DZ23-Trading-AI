@@ -9,8 +9,7 @@ from __future__ import annotations
 from decimal import Decimal
 from statistics import fmean, pstdev
 
-from .models import (Action, AgentSpec, AgentStage, MarketSnapshot,
-                     TradeProposal, default_expiry)
+from .models import Action, AgentSpec, AgentStage, MarketSnapshot, TradeProposal, default_expiry
 
 
 def _sma(values, n: int) -> Decimal:

@@ -10,11 +10,23 @@ from decimal import Decimal
 
 import pytest
 
-from tradingagents.desk.models import (Action, AgentStage, DeskMandate, MandateError,
-                                       MarketSnapshot, Mode, TradeProposal, utcnow)
+from tradingagents.desk.models import (
+    Action,
+    AgentStage,
+    DeskMandate,
+    MandateError,
+    MarketSnapshot,
+    Mode,
+    TradeProposal,
+    utcnow,
+)
 from tradingagents.desk.risk import PortfolioAllocator, RiskEngine, RiskVeto
-from tradingagents.desk.traders import (BreakoutTrader, MeanReversionTrader,
-                                        TrendTrader, default_desk)
+from tradingagents.desk.traders import (
+    BreakoutTrader,
+    MeanReversionTrader,
+    TrendTrader,
+    default_desk,
+)
 
 UNIVERSE = ("BTC/USDT", "ETH/USDT")
 
@@ -37,8 +49,9 @@ def breakout(n=30):
 
 
 def mandate(**kw):
-    base = dict(mandate_id="m1", owner="prado", account="acct-1", mode=Mode.PAPER,
-                instruments=UNIVERSE, capital=Decimal("1000"))
+    base = {"mandate_id": "m1", "owner": "prado", "account": "acct-1",
+            "mode": Mode.PAPER, "instruments": UNIVERSE,
+            "capital": Decimal("1000")}
     base.update(kw)
     return DeskMandate(**base)
 
@@ -321,6 +334,7 @@ class TestCenario05IsolamentoPorConta:
 
     def test_ledger_of_one_account_never_sees_the_other(self):
         from decimal import Decimal
+
         from tradingagents.desk.ledger import Ledger
         la, lb = Ledger(opening_cash=Decimal("1000")), Ledger(opening_cash=Decimal("500"))
         la.reserve(Decimal("100"), ref="a1")
@@ -340,8 +354,9 @@ class TestCenario05IsolamentoPorConta:
             intent.assert_sendable(worker_id="w1", mandate=outra)
 
     def test_market_cache_is_keyed_by_exchange_and_instrument(self):
-        from tradingagents.desk.market import PublicMarketFeed
         from datetime import datetime, timezone
+
+        from tradingagents.desk.market import PublicMarketFeed
 
         class Ex:
             def __init__(self): self.calls = 0

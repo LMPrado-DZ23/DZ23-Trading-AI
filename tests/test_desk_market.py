@@ -11,12 +11,10 @@ from decimal import Decimal
 
 import pytest
 
-from tradingagents.desk.brokers import (BrokerAdapterError, CCXTDeskBroker,
-                                        build_desk_broker)
-from tradingagents.desk.market import (MarketDataError, MarketFeedProviders,
-                                       PublicMarketFeed)
-from tradingagents.desk.traders import TrendTrader
+from tradingagents.desk.brokers import BrokerAdapterError, build_desk_broker
+from tradingagents.desk.market import MarketDataError, MarketFeedProviders, PublicMarketFeed
 from tradingagents.desk.models import Action, AgentStage
+from tradingagents.desk.traders import TrendTrader
 
 NOW = datetime(2026, 9, 12, 12, 0, tzinfo=timezone.utc)
 
@@ -109,7 +107,8 @@ class TestEscolhaDeCorretora:
         assert mode == "paper" and type(broker).__name__ == "PaperBroker"
 
     def test_explicit_ccxt_without_mode_fails_closed(self):
-        with pytest.raises(Exception):           # BrokerSecurityError da ponte
+        from tradingagents.brokers.ccxt_bridge import BrokerSecurityError
+        with pytest.raises(BrokerSecurityError, match="testnet"):
             build_desk_broker({"TRADINGAGENTS_DESK_BROKER": "ccxt",
                                "TRADINGAGENTS_EXCHANGE": "binance"}, final_state={})
 

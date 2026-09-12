@@ -252,6 +252,26 @@ ${d.pendencias_reconciliacao.length?`<div class="bad" style="margin-top:6px">⚠
 <div style="margin-top:6px">Resultado por trader: ${Object.entries(c.atribuicao).map(([k,v])=>k+' '+v).join(' · ')||'—'}</div></div>
 <div class="card"><h2>🔄 Ciclos</h2>${d.ciclos.length?d.ciclos.slice().reverse().map(x=>`<div style="border-top:1px solid var(--line);padding:6px 0"><b>${x.resumo}</b> <span class="mut">(${x.origem})</span>
 ${x.vetos.length?`<div class="mut">vetos: ${x.vetos.join(' | ')}</div>`:''}${(x.abstencoes&&x.abstencoes.length)?`<div class="mut">sem operar: ${x.abstencoes.join(' | ')}</div>`:''}${(x.descartados&&x.descartados.length)?`<div class="mut">dados: ${x.descartados.join(' | ')}</div>`:''}${x.erros.length?`<div class="bad">erros: ${x.erros.join(' | ')}</div>`:''}</div>`).join(''):'<span class="mut">nenhum ciclo rodado</span>'}</div>`}
+async function deskSched(a){const m=$('deskMsg');m.innerHTML=' '+(a==='start'?'ligando':'parando')+'…';
+const r=await fetch('/v1/desk/scheduler/'+a,{method:'POST',headers:H()});const d=await r.json();
+m.innerHTML=r.ok?'<span class="ok">'+(a==='start'?'🤖 mesa autônoma LIGADA — roda sozinha, pode fechar o navegador':'🛑 mesa parada; posições seguem com o guardião')+'</span>':'<span class="bad">✘ '+(d.detail||'falhou')+'</span>';deskLoad()}
+
+async function feedTest(){const m=$('deskMsg');m.innerHTML=' consultando mercado…';
+const r=await fetch('/v1/desk/feed',{headers:H()});const d=await r.json();
+if(!r.ok){m.innerHTML='<span class="bad">✘ '+(d.detail||'falhou')+'</span>';return}
+if(d.fonte!=='real'){m.innerHTML='<span class="mut">modo TREINO (fixture). '+d.proxima_acao+'</span>';return}
+m.innerHTML=d.instrumentos.map(i=>i.pronto?'<span class="ok">✔ '+i.instrumento+': '+i.velas+' velas até '+String(i.ate||'').slice(0,16)+'</span>':'<span class="bad">✘ '+i.instrumento+': '+i.qualidade+' — '+i.proxima_acao+'</span>').join('<br>')}
+
+async function doBackup(){const m=$('deskMsg');m.innerHTML=' gerando backup…';
+const r=await fetch('/v1/backup',{method:'POST',headers:H()});const d=await r.json();
+m.innerHTML=r.ok?'<span class="ok">✔ backup no volume: '+String(d.arquivo).split('/').pop()+' ('+Math.round(d.bytes/1024)+' KB — '+d.itens.join(', ')+')</span>':'<span class="bad">✘ '+(d.detail||'falhou')+'</span>'}
+
+async function avaliar(){const m=$('deskMsg');m.innerHTML=' avaliando…';
+const r=await fetch('/v1/desk/avaliacao',{headers:H()});const d=await r.json();
+if(!r.ok){m.innerHTML='<span class="bad">✘ '+(d.detail||'falhou')+'</span>';return}
+const linhas=d.por_agente.length?d.por_agente.map(l=>l.agente+': '+l.ordens+' ordens · resultado '+l.resultado_realizado+' · custos '+l.custos).join('<br>'):'nenhuma operação ainda';
+m.innerHTML='<div style="margin-top:6px">'+linhas+'</div>'+(d.ressalvas.length?'<div class="bad">⚠ '+d.ressalvas.join(' · ')+'</div>':'<div class="ok">avaliação conclusiva</div>')+'<div class="mut">'+d.aviso+'</div>'}
+
 async function deskCycle(){const m=$('deskMsg');m.innerHTML=' rodando ciclo…';
 const r=await fetch('/v1/desk/cycle',{method:'POST',headers:H()});const d=await r.json();
 m.innerHTML=r.ok?'<span class="ok">✔ '+d.resumo+'</span>':'<span class="bad">✘ falhou</span>';deskLoad()}

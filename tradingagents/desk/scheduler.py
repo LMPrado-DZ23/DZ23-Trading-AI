@@ -14,12 +14,11 @@ Invariantes codificadas:
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import threading
-import time
 from dataclasses import dataclass, field
 from datetime import timedelta
-from decimal import Decimal
 from pathlib import Path
 
 from .models import utcnow
@@ -39,7 +38,7 @@ class SchedulerState:
         return json.dumps(self.__dict__, ensure_ascii=False, indent=2)
 
     @classmethod
-    def from_json(cls, raw: str) -> "SchedulerState":
+    def from_json(cls, raw: str) -> SchedulerState:
         try:
             data = json.loads(raw)
         except ValueError:
@@ -124,10 +123,8 @@ class DeskScheduler:
         self.state.last_cycle_at = utcnow().isoformat()
         self.save()
         if self.on_cycle:
-            try:
-                self.on_cycle(out)
-            except Exception:
-                pass               # painel nunca derruba o ciclo
+            with contextlib.suppress(Exception):
+                self.on_cycle(out)   # painel nunca derruba o ciclo
         return out
 
     # -- laço ----------------------------------------------------------

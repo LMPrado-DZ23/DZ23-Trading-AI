@@ -7,9 +7,15 @@ from decimal import Decimal
 
 import pytest
 
-from tradingagents.desk.evaluation import (Comparison, EvaluationError, StrategyResult,
-                                           Window, aggregate_walk_forward,
-                                           independent_evidence, walk_forward)
+from tradingagents.desk.evaluation import (
+    Comparison,
+    EvaluationError,
+    StrategyResult,
+    Window,
+    aggregate_walk_forward,
+    independent_evidence,
+    walk_forward,
+)
 
 UNIV = ("BTC/USDT", "ETH/USDT")
 CAP = Decimal("1000")

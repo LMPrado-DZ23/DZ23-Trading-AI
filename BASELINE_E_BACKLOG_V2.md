@@ -2,7 +2,7 @@
 
 Branch de integração: `integracao-v2` (base `codex-v0.5.1` + camada Claude).
 Data da inspeção: 12/09/2026. Suíte reproduzida nesta árvore:
-**1156 passed / 2 skipped / 71 subtests**.
+**1163 passed / 2 skipped / 71 subtests**.
 
 ## 1. Estado real encontrado (não presumido)
 
@@ -102,3 +102,33 @@ livro-razão; regressão coberta por teste.
   Codex; esta integração exigirá nova rodada.
 - PRODUÇÃO/LIVE: fora do escopo desta missão; capacidades preservadas sem
   acionamento.
+
+
+## 6. Auditoria de ponta a ponta (12/09/2026)
+
+Varredura completa com correção até zerar. Resultado:
+
+- **Lint**: `ruff` na árvore inteira — 81 achados → **0**. B008 documentado
+  como falso positivo do FastAPI (`Depends()` em valor padrão).
+- **Suíte**: 1163 passed / 2 skipped / 71 subtests.
+- **Superfície HTTP**: todas as rotas `/v1/*` exigem senha (401 sem ela);
+  públicas apenas `/healthz` e `/`; `/docs` e `/openapi.json` desligados;
+  cabeçalhos de segurança presentes; trava de força-bruta disparou no 6º erro.
+- **Segredos**: nunca voltam inteiros pela API (0 ocorrências em `/v1/config`
+  e no checklist); `config.json` com permissão 600; nenhum segredo em logs
+  ou no journal da corretora.
+- **Smoke do usuário final**: os 10 passos do painel executados em sequência,
+  todos ok.
+
+Defeitos encontrados e corrigidos nesta auditoria:
+1. **Quatro botões do painel chamavam funções inexistentes** (ligar/parar
+   mesa, testar dados, backup, avaliar equipe) — inserções anteriores
+   falharam em silêncio. No navegador não faziam nada, e nenhum teste de API
+   pegava. Restaurados e travados por teste que exige que todo handler exista
+   e que toda rota chamada pelo painel esteja registrada.
+2. **JSON malformado devolvia 500** em vez de 422 — servidor confessando bug
+   que é do cliente. Validador único aplicado a todas as rotas de corpo.
+3. Asserção cega em teste (`pytest.raises(Exception)`) que passaria com
+   qualquer erro, inclusive um bug meu — agora exige a exceção específica.
+4. Imports mortos, variável de laço não usada, nome ambíguo e resíduos
+   (`DB`, `_cancel`) removidos.

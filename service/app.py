@@ -4,15 +4,22 @@ operação embutidos. Uma senha (ACCESS_PASSWORD), um volume (/data), um deploy.
 Config vive em /data/config.json (chmod 600), editada PELO PAINEL, aplicada a
 cada job — sem redeploy, sem tocar em env no Coolify. Segredos nunca voltam
 inteiros ao navegador (exibição mascarada)."""
-import hmac, json, os, threading, time, traceback, uuid
+import hmac
+import json
+import os
+import threading
+import time
+import traceback
+import uuid
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-DATA = Path(os.environ.get("DATA_DIR", "/data")); DATA.mkdir(parents=True, exist_ok=True)
-CFG_PATH = DATA / "config.json"; DB = DATA / "jobs.db"
+DATA = Path(os.environ.get("DATA_DIR", "/data"))
+DATA.mkdir(parents=True, exist_ok=True)
+CFG_PATH = DATA / "config.json"
 PASSWORD = os.environ.get("ACCESS_PASSWORD", "")
 STATIC = Path(__file__).parent / "static"
 
@@ -110,21 +117,28 @@ def resolve_llm(cfg: dict):
                 raise ValueError(f"Falta a chave {p['key_from']} — pega grátis e cola na aba ⚙️.")
             env["OPENAI_COMPATIBLE_API_KEY"] = key
     else:
-        if prov: conf["llm_provider"] = prov
-        if url: conf["backend_url"] = url
-        if deep: conf["deep_think_llm"] = deep
-        if quick: conf["quick_think_llm"] = quick
+        if prov:
+            conf["llm_provider"] = prov
+        if url:
+            conf["backend_url"] = url
+        if deep:
+            conf["deep_think_llm"] = deep
+        if quick:
+            conf["quick_think_llm"] = quick
     return conf, env
 
 
 def load_cfg() -> dict:
     if CFG_PATH.exists():
-        try: return json.loads(CFG_PATH.read_text())
-        except ValueError: return {}
+        try:
+            return json.loads(CFG_PATH.read_text())
+        except ValueError:
+            return {}
     return {}
 
 def save_cfg(cfg: dict):
-    CFG_PATH.write_text(json.dumps(cfg, indent=2)); os.chmod(CFG_PATH, 0o600)
+    CFG_PATH.write_text(json.dumps(cfg, indent=2))
+    os.chmod(CFG_PATH, 0o600)
 
 # Estado de saúde exposto no /healthz e no painel — o serviço prefere
 # funcionar DEGRADADO a morrer no arranque (um banco fora do ar não pode
@@ -166,6 +180,18 @@ def build_store():
 STORE = build_store()
 
 
+async def _json_body(req: Request) -> dict:
+    """Corpo JSON validado. Requisição malformada é ERRO DO CLIENTE (422) com
+    mensagem legível — 500 seria o servidor confessando bug que não é dele."""
+    try:
+        body = await req.json()
+    except Exception as exc:
+        raise HTTPException(422, "corpo da requisição não é JSON válido") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(422, "corpo da requisição deve ser um objeto JSON")
+    return body
+
+
 def _store_or_502():
     if STORE is None:
         raise HTTPException(503, HEALTH["avisos"][-1] if HEALTH["avisos"]
@@ -195,7 +221,7 @@ def _panel_view(rec) -> dict:
     }
 
 
-_cancel = set(); _lock = threading.Lock()
+_lock = threading.Lock()
 
 def run_job(jid, ticker, date):
     with _lock:  # um job pesado por vez neste processo
@@ -288,19 +314,25 @@ def get_cfg(_=Depends(auth)):
     out = {}
     for k in ALLOWED_KEYS:
         v = cfg.get(k, "")
-        if not v: out[k] = {"set": False}
-        elif k in SECRETish: out[k] = {"set": True, "hint": "•••" + str(v)[-4:]}
-        else: out[k] = {"set": True, "value": v}
+        if not v:
+            out[k] = {"set": False}
+        elif k in SECRETish:
+            out[k] = {"set": True, "hint": "•••" + str(v)[-4:]}
+        else:
+            out[k] = {"set": True, "value": v}
     return {"config": out}
 
 @app.post("/v1/config")
 async def set_cfg(req: Request, _=Depends(auth)):
-    body = await req.json()
-    cfg = load_cfg(); saved = []
+    body = await _json_body(req)
+    cfg = load_cfg()
+    saved = []
     for k, v in (body.get("vars") or {}).items():
         if k in ALLOWED_KEYS and isinstance(v, str) and v.strip():
-            cfg[k] = v.strip(); saved.append(k)
-    if not saved: raise HTTPException(400, "nada para salvar")
+            cfg[k] = v.strip()
+            saved.append(k)
+    if not saved:
+        raise HTTPException(400, "nada para salvar")
     save_cfg(cfg)
     if any(k.startswith("TRADINGAGENTS_DESK") or k in
            ("TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE") for k in saved):
@@ -312,7 +344,7 @@ async def set_cfg(req: Request, _=Depends(auth)):
 
 @app.post("/v1/jobs")
 async def new_job(req: Request, _=Depends(auth)):
-    b = await req.json()
+    b = await _json_body(req)
     t = str(b.get("ticker", "")).strip().upper()
     d = str(b.get("trade_date", "")).strip()
     if not t or len(d) != 10:
@@ -322,7 +354,7 @@ async def new_job(req: Request, _=Depends(auth)):
     try:
         rec, created = _store_or_502().enqueue({"ticker": t, "trade_date": d}, idem)
     except Exception as e:  # conflito de idempotência = payload diferente
-        raise HTTPException(409, f"{type(e).__name__}: {e}"[:200])
+        raise HTTPException(409, f"{type(e).__name__}: {e}"[:200]) from e
     if created:
         threading.Thread(target=run_job, args=(rec.job_id, t, d), daemon=True).start()
     return {"id": rec.job_id, "idempotent": not created}
@@ -368,7 +400,7 @@ def broker_status(_=Depends(auth)):
 async def broker_order(req: Request, _=Depends(auth)):
     """EXECUTA uma ordem (testnet ou live conforme configuração) amarrada a
     um job concluído — a decisão analisada é o que se opera."""
-    b = await req.json()
+    b = await _json_body(req)
     jid = str(b.get("job_id", "")).strip()
     symbol = str(b.get("symbol", "")).strip().upper()
     side = str(b.get("side", "")).strip().lower()
@@ -396,7 +428,7 @@ async def broker_order(req: Request, _=Depends(auth)):
                 "client_order_id": out["client_order_id"],
                 "order_id": (out.get("order") or {}).get("id")}
     except Exception as e:
-        raise HTTPException(422, f"{type(e).__name__}: {e}"[:400])
+        raise HTTPException(422, f"{type(e).__name__}: {e}"[:400]) from e
 
 
 # ---------------------------------------------------------------- Mesa (MA-08)
@@ -411,10 +443,9 @@ def _desk_boot(capital: str | None = None):
     from decimal import Decimal
     cfg = load_cfg()
     capital = capital or cfg.get("TRADINGAGENTS_DESK_CAPITAL") or "1000"
-    from tradingagents.desk.execution import (ExecutionCoordinator, PaperBroker,
-                                              PositionGuardian)
+    from tradingagents.desk.execution import ExecutionCoordinator, PositionGuardian
     from tradingagents.desk.ledger import Ledger
-    from tradingagents.desk.models import DeskMandate, Mode, AgentStage
+    from tradingagents.desk.models import AgentStage, DeskMandate, Mode
     from tradingagents.desk.orchestrator import DeskOrchestrator
     from tradingagents.desk.risk import RiskEngine
     from tradingagents.desk.traders import default_desk
@@ -492,7 +523,8 @@ def desk_status(_=Depends(auth)):
     try:
         d = _DESK if _DESK["orchestrator"] else _desk_boot()
     except Exception as exc:
-        raise HTTPException(503, f"mesa indisponível: {type(exc).__name__}: {exc}"[:300])
+        raise HTTPException(503,
+                            f"mesa indisponível: {type(exc).__name__}: {exc}"[:300]) from exc
     orch, led, coord = d["orchestrator"], d["ledger"], d["coordinator"]
     return {
         "mandate": {"account": orch.mandate.account, "mode": orch.mandate.mode.value,
@@ -530,6 +562,7 @@ def desk_cycle(_=Depends(auth)):
     """Roda um ciclo com dados de FIXTURE rotulados — prova a coordenação da
     mesa sem inventar mercado. O ciclo de produção virá do worker agendado."""
     from decimal import Decimal
+
     from tradingagents.desk.models import MarketSnapshot, utcnow
     d = _DESK if _DESK["orchestrator"] else _desk_boot()
     alta = [Decimal(str(100 + i * 1.5)) for i in range(40)]
@@ -540,7 +573,7 @@ def desk_cycle(_=Depends(auth)):
     report = d["orchestrator"].run_cycle(snaps, prices)
     enviados, encerrados = [], []
     # saídas primeiro: liberam capital e realizam resultado
-    for agent_id, instrument, motivo in report.exits:
+    for _agente, instrument, motivo in report.exits:
         pos = d["orchestrator"].book.get(instrument)
         if not pos:
             continue
@@ -608,7 +641,7 @@ def desk_evaluation(_=Depends(auth)):
         ressalvas.append("dados de fixture — não mede desempenho de mercado")
     if d.get("broker_mode", "paper") == "paper":
         ressalvas.append("execução simulada: sem fila real, slippage real nem latência")
-    if not any(D(l["resultado_realizado"]) != 0 for l in linhas):
+    if not any(D(linha["resultado_realizado"]) != 0 for linha in linhas):
         ressalvas.append("nenhuma posição foi FECHADA: resultado ainda não realizado")
     return {"por_agente": linhas,
             "conclusivo": not ressalvas,
@@ -625,7 +658,7 @@ def backup_now(_=Depends(auth)):
     try:
         out = create_backup(DATA, DATA / "backups" / f"dz23-backup-{stamp}.tar.gz")
     except BackupError as exc:
-        raise HTTPException(422, str(exc))
+        raise HTTPException(422, str(exc)) from exc
     return {"ok": True, **out,
             "como_restaurar": "copie o arquivo do volume /data/backups e use "
                               "restore_backup() na máquina nova (veja RUNBOOK.md)"}

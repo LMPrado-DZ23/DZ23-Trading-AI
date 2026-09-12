@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
-from typing import Any
 
 SCHEMA = "dz23.desk/1"
 

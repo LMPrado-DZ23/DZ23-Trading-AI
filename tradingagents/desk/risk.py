@@ -8,11 +8,19 @@ from __future__ import annotations
 
 import threading
 import uuid
-from decimal import Decimal, ROUND_DOWN
+from decimal import ROUND_DOWN, Decimal
 
-from .models import (Action, DeskMandate, MandateError, OrderIntent,
-                     PortfolioDecision, RiskReservation, TradeProposal,
-                     default_expiry, utcnow)
+from .models import (
+    Action,
+    DeskMandate,
+    MandateError,
+    OrderIntent,
+    PortfolioDecision,
+    RiskReservation,
+    TradeProposal,
+    default_expiry,
+    utcnow,
+)
 
 
 class RiskVeto(RuntimeError):

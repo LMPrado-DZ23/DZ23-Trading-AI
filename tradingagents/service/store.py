@@ -432,12 +432,11 @@ class PostgresJobStore(JobStore):
 
     def list_recent(self, limit: int = 50) -> list[JobRecord]:
         limit = max(1, min(int(limit), 200))
-        with self._connect() as connection:
-            with connection.cursor() as cur:
-                cur.execute(
-                    "SELECT * FROM jobs ORDER BY created_at DESC LIMIT %s", (limit,)
-                )
-                rows = cur.fetchall()
+        with self._connect() as connection, connection.cursor() as cur:
+            cur.execute(
+                "SELECT * FROM jobs ORDER BY created_at DESC LIMIT %s", (limit,)
+            )
+            rows = cur.fetchall()
         return [self._row(r) for r in rows]
 
     @staticmethod

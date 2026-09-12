@@ -45,6 +45,7 @@ class PublicMarketFeed:
     def client(self):
         if self._client is None:
             import ccxt
+
             from tradingagents.brokers.ccxt_bridge import EXCHANGE_ALIASES
             ccxt_id = EXCHANGE_ALIASES.get(self.exchange_id, self.exchange_id)
             if not hasattr(ccxt, ccxt_id):

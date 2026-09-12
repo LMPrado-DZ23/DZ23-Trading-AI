@@ -21,7 +21,7 @@ from decimal import Decimal
 from enum import Enum
 
 from .ledger import Ledger
-from .models import Action, DeskMandate, MandateError, Mode, OrderIntent, utcnow
+from .models import Action, DeskMandate, MandateError, Mode, OrderIntent
 
 
 class OrderState(str, Enum):

@@ -1,5 +1,7 @@
 """Auditoria de usabilidade: o serviço protege o leigo por construção."""
 import importlib
+from pathlib import Path
+
 import pytest
 
 
@@ -31,7 +33,7 @@ class TestServerSideHistory:
 
 class TestPanelHonesty:
     def test_no_stale_promises_in_panel(self):
-        html = open("service/static/index.html", encoding="utf-8").read()
+        html = Path("service/static/index.html").read_text(encoding="utf-8")
         assert "reiniciar o serviço" not in html      # botão mentiroso removido
         assert "via Coolify" not in html               # resquício da central antiga
         assert "capital real segue bloqueado" not in html  # live existe
@@ -39,7 +41,7 @@ class TestPanelHonesty:
         assert "testnet.binance.vision" in html        # onde pegar chave de treino
 
     def test_broker_test_saves_before_testing(self):
-        html = open("service/static/index.html", encoding="utf-8").read()
+        html = Path("service/static/index.html").read_text(encoding="utf-8")
         i_save = html.find("/v1/config'", html.find("async function brokerTest"))
         i_stat = html.find("/v1/broker/status", html.find("async function brokerTest"))
         assert 0 < i_save < i_stat  # salva ANTES de testar
@@ -126,7 +128,7 @@ class TestPainelMesaDeAgentes:
     APIs reais (regressão do replace silencioso que não aplicou)."""
 
     def test_desk_tab_and_buttons_exist(self):
-        html = open("service/static/index.html", encoding="utf-8").read()
+        html = Path("service/static/index.html").read_text(encoding="utf-8")
         for needle in ['id="pane-desk"', 'data-t="desk"', "deskSched('start')",
                        "deskCycle()", "deskPause()", 'id="deskOut"']:
             assert needle in html, f"faltou no painel: {needle}"
@@ -176,7 +178,7 @@ class TestDiagnosticoDoFeed:
         assert body["fonte"] == "fixture" and "Mercado real" in body["proxima_acao"]
 
     def test_feed_button_exists_in_panel(self):
-        html = open("service/static/index.html", encoding="utf-8").read()
+        html = Path("service/static/index.html").read_text(encoding="utf-8")
         assert "feedTest" in html and "Testar dados de mercado" in html
 
 
@@ -221,11 +223,72 @@ class TestOnboarding:
         assert c.get("/v1/primeiros-passos", headers=h).json()["concluidos"] == 1
 
     def test_panel_shows_checklist_and_health_banner(self):
-        html = open("service/static/index.html", encoding="utf-8").read()
+        html = Path("service/static/index.html").read_text(encoding="utf-8")
         assert 'id="checklist"' in html and 'id="saude"' in html
 
     def test_compose_restarts_and_has_healthcheck(self):
-        from pathlib import Path
         compose = Path("docker-compose.yml").read_text()
         assert "restart: unless-stopped" in compose and "healthcheck" in compose
         assert "/data" in compose
+
+
+class TestEntradasInvalidas:
+    """Auditoria: nenhuma entrada malformada pode virar 500 (isso é o servidor
+    confessando um bug que é do cliente)."""
+
+    def _client(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = _load_app(tmp_path, monkeypatch)
+        m._FAILS.clear()
+        return TestClient(m.app), {"Authorization": "Bearer s3nh4"}
+
+    def test_broken_json_is_422_not_500(self, tmp_path, monkeypatch):
+        c, h = self._client(tmp_path, monkeypatch)
+        for rota in ("/v1/config", "/v1/jobs", "/v1/broker/order"):
+            r = c.post(rota, headers={**h, "Content-Type": "application/json"},
+                       content="isto não é json")
+            assert r.status_code == 422, f"{rota} devolveu {r.status_code}"
+
+    def test_non_object_body_is_422(self, tmp_path, monkeypatch):
+        c, h = self._client(tmp_path, monkeypatch)
+        r = c.post("/v1/jobs", headers=h, json=["lista", "não", "objeto"])
+        assert r.status_code == 422
+
+    def test_missing_fields_are_422(self, tmp_path, monkeypatch):
+        c, h = self._client(tmp_path, monkeypatch)
+        assert c.post("/v1/jobs", headers=h, json={}).status_code == 422
+        assert c.post("/v1/jobs", headers=h,
+                      json={"ticker": "X", "trade_date": "2026"}).status_code == 422
+
+    def test_unknown_config_key_is_rejected(self, tmp_path, monkeypatch):
+        c, h = self._client(tmp_path, monkeypatch)
+        r = c.post("/v1/config", headers=h, json={"vars": {"NAO_EXISTE": "x"}})
+        assert r.status_code == 400
+
+    def test_invalid_scheduler_action_is_422(self, tmp_path, monkeypatch):
+        c, h = self._client(tmp_path, monkeypatch)
+        assert c.post("/v1/desk/scheduler/explodir", headers=h).status_code == 422
+
+
+class TestPainelSemBotaoQuebrado:
+    """Auditoria: botão que chama função inexistente não faz nada no
+    navegador e passa despercebido em teste de API. Quatro botões estavam
+    assim (ligar mesa, testar dados, backup, avaliar)."""
+
+    def test_every_handler_exists(self):
+        import re
+        html = Path("service/static/index.html").read_text(encoding="utf-8")
+        chamadas = set(re.findall(r'on(?:click|change)="(\w+)\(', html))
+        definidas = set(re.findall(r'(?:async )?function (\w+)\(', html))
+        assert chamadas, "nenhum handler encontrado — painel vazio?"
+        assert not (chamadas - definidas), f"botões quebrados: {sorted(chamadas - definidas)}"
+
+    def test_every_fetched_route_is_registered(self, tmp_path, monkeypatch):
+        import re
+        html = Path("service/static/index.html").read_text(encoding="utf-8")
+        m = _load_app(tmp_path, monkeypatch)
+        registradas = {r.path for r in m.app.routes}
+        for rota in set(re.findall(r"fetch\('(/[\w/-]+)", html)):
+            base = rota.rstrip("/")
+            assert any(base == p or p.startswith(base.rsplit("/", 1)[0])
+                       for p in registradas), f"painel chama rota inexistente: {rota}"

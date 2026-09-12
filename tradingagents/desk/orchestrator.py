@@ -11,10 +11,8 @@ Limites codificados:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, dataclass as _dataclass, field
 from decimal import Decimal
-
-from dataclasses import dataclass as _dataclass
 
 from .models import Action, DeskMandate, MandateError, OrderIntent, utcnow
 from .risk import PortfolioAllocator, RiskEngine, RiskVeto

@@ -1,11 +1,12 @@
 """Marco broker CCXT: fail-closed, gate incontornável, idempotência, redação."""
-import json
 import pytest
 
 from tradingagents.brokers.ccxt_bridge import (
-    BrokerSecurityError, CCXTBridge, EXCHANGE_ALIASES,
+    EXCHANGE_ALIASES,
+    BrokerSecurityError,
+    CCXTBridge,
 )
-from tradingagents.gates import InsecureTransportError, MARK_KEY, MARK_SCHEMA
+from tradingagents.gates import MARK_KEY, MARK_SCHEMA, InsecureTransportError
 
 
 def _env(**kw):

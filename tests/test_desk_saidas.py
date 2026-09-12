@@ -4,12 +4,9 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-import pytest
-
 from tradingagents.desk.execution import ExecutionCoordinator, PaperBroker
 from tradingagents.desk.ledger import Ledger
-from tradingagents.desk.models import (Action, AgentStage, DeskMandate, MarketSnapshot,
-                                       Mode, utcnow)
+from tradingagents.desk.models import Action, AgentStage, DeskMandate, MarketSnapshot, Mode, utcnow
 from tradingagents.desk.orchestrator import DeskOrchestrator, Position
 from tradingagents.desk.risk import RiskEngine
 from tradingagents.desk.traders import MeanReversionTrader, TrendTrader, default_desk

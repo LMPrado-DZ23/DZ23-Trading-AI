@@ -7,20 +7,27 @@ from decimal import Decimal
 
 import pytest
 
-from tradingagents.desk.execution import (BrokerTimeout, ExecutionCoordinator,
-                                          ExecutionRefused, IdempotencyConflict,
-                                          OrderState, PaperBroker, PositionGuardian,
-                                          fingerprint)
+from tradingagents.desk.execution import (
+    BrokerTimeout,
+    ExecutionCoordinator,
+    ExecutionRefused,
+    IdempotencyConflict,
+    OrderState,
+    PaperBroker,
+    PositionGuardian,
+    fingerprint,
+)
 from tradingagents.desk.ledger import Ledger, LedgerError
-from tradingagents.desk.models import (Action, DeskMandate, Mode, TradeProposal, utcnow)
+from tradingagents.desk.models import Action, DeskMandate, Mode, TradeProposal, utcnow
 from tradingagents.desk.risk import RiskEngine
 
 INSTR = "BTC/USDT"
 
 
 def mandate(**kw):
-    base = dict(mandate_id="m1", owner="prado", account="acct-1", mode=Mode.PAPER,
-                instruments=(INSTR, "ETH/USDT"), capital=Decimal("1000"))
+    base = {"mandate_id": "m1", "owner": "prado", "account": "acct-1",
+            "mode": Mode.PAPER, "instruments": (INSTR, "ETH/USDT"),
+            "capital": Decimal("1000")}
     base.update(kw)
     return DeskMandate(**base)
 

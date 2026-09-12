@@ -5,11 +5,14 @@ from __future__ import annotations
 from datetime import timedelta
 from decimal import Decimal
 
-from tradingagents.desk.execution import (BrokerTimeout, ExecutionCoordinator,
-                                          OrderState, PaperBroker)
+from tradingagents.desk.execution import (
+    BrokerTimeout,
+    ExecutionCoordinator,
+    OrderState,
+    PaperBroker,
+)
 from tradingagents.desk.ledger import Ledger
-from tradingagents.desk.models import (AgentStage, DeskMandate, MarketSnapshot, Mode,
-                                       utcnow)
+from tradingagents.desk.models import AgentStage, DeskMandate, MarketSnapshot, Mode, utcnow
 from tradingagents.desk.orchestrator import DeskOrchestrator
 from tradingagents.desk.risk import RiskEngine
 from tradingagents.desk.scheduler import DeskScheduler, SchedulerState

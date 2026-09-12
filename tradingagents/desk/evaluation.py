@@ -41,7 +41,7 @@ class Window:
     def embargo_days(self) -> int:
         return (self.test_start - self.train_end).days
 
-    def overlaps_test(self, other: "Window") -> bool:
+    def overlaps_test(self, other: Window) -> bool:
         return not (self.test_end <= other.test_start or other.test_end <= self.test_start)
 
 
