@@ -3,7 +3,9 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import os
 import stat
+import tempfile
 import threading
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -27,7 +29,10 @@ from tradingagents.platform.backtest.contracts import (
     canonical_json_bytes,
 )
 from tradingagents.platform.backtest.errors import DatasetIntegrityError
-from tradingagents.platform.backtest.repository import FrozenDatasetRepository
+from tradingagents.platform.backtest.repository import (
+    FrozenDatasetRepository,
+    resolve_execution_price_authority,
+)
 from tradingagents.platform.backtest.simulation_authority import (
     REQUEST_FILENAME,
     SIGNATURE_FILENAME,
@@ -79,7 +84,7 @@ def _instrument() -> InstrumentSpec:
     )
 
 
-def _bar(session_date: date, *, raw_open: str) -> DailyBar:
+def _bar(session_date: date, *, raw_open: str, volume: str = "1000000") -> DailyBar:
     window = BacktestCalendar(MarketCalendar.NEW_YORK).session_window(session_date)
     return DailyBar(
         instrument_id=INSTRUMENT_ID,
@@ -93,15 +98,25 @@ def _bar(session_date: date, *, raw_open: str) -> DailyBar:
         high=str(Decimal(raw_open) + 10),
         low=str(Decimal(raw_open) - 10),
         close=str(Decimal(raw_open) + 5),
-        volume="1000000",
+        volume=volume,
         source_digest=hashlib.sha256(session_date.isoformat().encode()).hexdigest(),
     )
 
 
-def _dataset(root: Path, *, next_open: str = "100"):
+def _dataset(
+    root: Path,
+    *,
+    next_open: str = "100",
+    decision_volume: str = "1000000",
+    execution_volume: str = "1000000",
+):
     repository = FrozenDatasetRepository(root)
-    decision_bar = _bar(date(2024, 1, 2), raw_open="90")
-    execution_bar = _bar(date(2024, 1, 3), raw_open=next_open)
+    decision_bar = _bar(
+        date(2024, 1, 2), raw_open="90", volume=decision_volume
+    )
+    execution_bar = _bar(
+        date(2024, 1, 3), raw_open=next_open, volume=execution_volume
+    )
     manifest = repository.ingest(
         dataset_id=DATASET_ID,
         tenant_id=TENANT_ID,
@@ -143,7 +158,8 @@ def _policy() -> SimulationLedgerPolicy:
     )
 
 
-def _spec(manifest) -> BacktestSpec:
+def _spec(manifest, policy: SimulationLedgerPolicy | None = None) -> BacktestSpec:
+    resolved = policy or _policy()
     return BacktestSpec(
         backtest_id=BACKTEST_ID,
         tenant_id=TENANT_ID,
@@ -168,6 +184,9 @@ def _spec(manifest) -> BacktestSpec:
         end_session=date(2024, 1, 3),
         base_currency="USD",
         initial_cash="10000",
+        commission_bps=resolved.commission_bps,
+        slippage_bps=resolved.slippage_bps,
+        simulation_policy_digest=resolved.digest,
     )
 
 
@@ -176,7 +195,7 @@ def _checkpoint(
     policy: SimulationLedgerPolicy | None = None,
 ) -> SimulationLedgerCheckpoint:
     resolved = policy or _policy()
-    spec_digest = canonical_digest(_spec(manifest))
+    spec_digest = canonical_digest(_spec(manifest, resolved))
     return SimulationLedgerCheckpoint(
         checkpoint_id=CHECKPOINT_ID,
         tenant_id=TENANT_ID,
@@ -628,12 +647,10 @@ def test_all_price_bindings_validate_before_the_ledger_is_called(
     dataset, manifest, view = _dataset(tmp_path / "dataset")
     spec = _spec(manifest)
     authority = FrozenSimulationAuthorityRepository(tmp_path / "authority", signing_key=SIGNING_KEY)
-    first = _request(manifest, view).orders[0].model_copy(update={"order_id": uuid4()})
-    second = _request(manifest, view).orders[0].model_copy(
-        update={"order_id": uuid4(), "eligible_view_digest": "f" * 64}
+    invalid = _request(manifest, view).orders[0].model_copy(
+        update={"eligible_view_digest": "f" * 64}
     )
-    orders = tuple(sorted((first, second), key=lambda order: str(order.order_id)))
-    request_reference = authority.publish_request(_request(manifest, view, orders=orders))
+    request_reference = authority.publish_request(_request(manifest, view, orders=(invalid,)))
     checkpoint_reference = authority.publish_checkpoint(_checkpoint(manifest))
     called = False
 
@@ -658,6 +675,122 @@ def test_all_price_bindings_validate_before_the_ledger_is_called(
             expected_backtest_spec_digest=canonical_digest(spec),
         )
     assert called is False
+
+
+def test_request_rejects_duplicate_instrument_orders(tmp_path: Path) -> None:
+    _, manifest, view = _dataset(tmp_path / "dataset")
+    first = _request(manifest, view).orders[0]
+    second = first.model_copy(update={"order_id": uuid4()})
+    orders = tuple(sorted((first, second), key=lambda order: str(order.order_id)))
+    with pytest.raises(ValueError, match="one net order per instrument"):
+        _request(manifest, view, orders=orders)
+
+
+def test_spec_economics_and_complete_policy_digest_are_enforced(tmp_path: Path) -> None:
+    dataset, manifest, view = _dataset(tmp_path / "dataset")
+    mismatched_policy = _policy().model_copy(update={"initial_cash": Decimal("20000.00")})
+    mismatched_policy = SimulationLedgerPolicy.model_validate(
+        mismatched_policy.model_dump(mode="python")
+    )
+    spec = _spec(manifest).model_copy(
+        update={"simulation_policy_digest": mismatched_policy.digest}
+    )
+    spec = BacktestSpec.model_validate(spec.model_dump(mode="python"))
+    spec_digest = canonical_digest(spec)
+    request = _request(manifest, view).model_copy(
+        update={
+            "backtest_spec_digest": spec_digest,
+            "policy_digest": mismatched_policy.digest,
+        }
+    )
+    request = AuthorizedSimulationRequest.model_validate(request.model_dump(mode="python"))
+    checkpoint = _checkpoint(manifest, mismatched_policy).model_copy(
+        update={"backtest_spec_digest": spec_digest}
+    )
+    checkpoint = SimulationLedgerCheckpoint.model_validate(
+        checkpoint.model_dump(mode="python")
+    )
+    authority = FrozenSimulationAuthorityRepository(
+        tmp_path / "authority", signing_key=SIGNING_KEY
+    )
+    request_reference = authority.publish_request(request)
+    checkpoint_reference = authority.publish_checkpoint(checkpoint)
+    with pytest.raises(SimulationAuthorityError, match="economics"):
+        execute_authorized_simulation_batch(
+            authority,
+            dataset,
+            request_reference,
+            checkpoint_reference,
+            spec,
+            expected_tenant_id=TENANT_ID,
+            expected_backtest_id=BACKTEST_ID,
+            expected_backtest_spec_digest=spec_digest,
+        )
+
+
+def test_pit_decision_volume_caps_fill_without_using_next_day_volume(tmp_path: Path) -> None:
+    dataset, manifest, view = _dataset(
+        tmp_path / "dataset",
+        decision_volume="500",
+        execution_volume="999999999",
+    )
+    spec = _spec(manifest)
+    authority = FrozenSimulationAuthorityRepository(
+        tmp_path / "authority", signing_key=SIGNING_KEY
+    )
+    oversized = _request(manifest, view).orders[0].model_copy(
+        update={"requested_quantity": Decimal("200")}
+    )
+    request = _request(manifest, view, orders=(oversized,))
+    request_reference = authority.publish_request(request)
+    checkpoint_reference = authority.publish_checkpoint(_checkpoint(manifest))
+    result = execute_authorized_simulation_batch(
+        authority,
+        dataset,
+        request_reference,
+        checkpoint_reference,
+        spec,
+        expected_tenant_id=TENANT_ID,
+        expected_backtest_id=BACKTEST_ID,
+        expected_backtest_spec_digest=canonical_digest(spec),
+    )
+    fill = result.ledger_result.appended_events[0].fill
+    assert fill is not None
+    assert fill.executed_quantity == Decimal("50")
+    assert result.execution_evidence[0].decision_volume == Decimal("500")
+    assert result.execution_evidence[0].liquidity_cap == Decimal("50")
+    assert result.execution_evidence[0].authorized_quantity == Decimal("200")
+
+
+def test_fill_and_decision_must_remain_inside_backtest_window(tmp_path: Path) -> None:
+    dataset, manifest, view = _dataset(tmp_path / "dataset")
+    spec = _spec(manifest).model_copy(update={"end_session": date(2024, 1, 2)})
+    spec = BacktestSpec.model_validate(spec.model_dump(mode="python"))
+    spec_digest = canonical_digest(spec)
+    request = _request(manifest, view).model_copy(
+        update={"backtest_spec_digest": spec_digest}
+    )
+    request = AuthorizedSimulationRequest.model_validate(request.model_dump(mode="python"))
+    checkpoint = _checkpoint(manifest).model_copy(
+        update={"backtest_spec_digest": spec_digest}
+    )
+    checkpoint = SimulationLedgerCheckpoint.model_validate(
+        checkpoint.model_dump(mode="python")
+    )
+    authority = FrozenSimulationAuthorityRepository(
+        tmp_path / "authority", signing_key=SIGNING_KEY
+    )
+    with pytest.raises(SimulationAuthorityError, match="fill falls outside"):
+        execute_authorized_simulation_batch(
+            authority,
+            dataset,
+            authority.publish_request(request),
+            authority.publish_checkpoint(checkpoint),
+            spec,
+            expected_tenant_id=TENANT_ID,
+            expected_backtest_id=BACKTEST_ID,
+            expected_backtest_spec_digest=spec_digest,
+        )
 
 
 def test_oversized_signature_and_non_regular_record_fail_closed(tmp_path: Path) -> None:
@@ -702,3 +835,116 @@ def test_request_authority_digest_is_canonical_and_price_free(tmp_path: Path) ->
     serialized = canonical_json_bytes(request.model_dump(mode="python"))
     assert b"raw_open" not in serialized
     assert b"fill_price" not in serialized
+
+
+def test_result_uses_authenticated_reference_copies_when_inputs_mutate_mid_call(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dataset, authority, request_reference, checkpoint_reference, spec = _authorities(
+        tmp_path
+    )
+    original = resolve_execution_price_authority
+
+    def mutate_then_resolve(*args, **kwargs):
+        object.__setattr__(request_reference, "tenant_id", uuid4())
+        object.__setattr__(checkpoint_reference, "backtest_id", uuid4())
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(
+        "tradingagents.platform.backtest.simulation_authority.resolve_execution_price_authority",
+        mutate_then_resolve,
+    )
+    result = execute_authorized_simulation_batch(
+        authority,
+        dataset,
+        request_reference,
+        checkpoint_reference,
+        spec,
+        expected_tenant_id=TENANT_ID,
+        expected_backtest_id=BACKTEST_ID,
+        expected_backtest_spec_digest=canonical_digest(spec),
+    )
+    assert result.reference.tenant_id == TENANT_ID
+    assert result.prior_checkpoint.backtest_id == BACKTEST_ID
+
+
+def test_result_contract_rejects_cross_bound_reference_even_with_recomputed_digest(
+    tmp_path: Path,
+) -> None:
+    *_, result = _execute(tmp_path)
+    payload = result.model_dump(mode="python", exclude={"result_digest"})
+    payload["reference"]["tenant_id"] = uuid4()
+    with pytest.raises(ValueError, match="custody bindings diverge"):
+        AuthorizedSimulationBatchResult.model_validate(
+            payload | {"result_digest": canonical_digest(payload)}
+        )
+
+
+def test_result_contract_binds_execution_evidence_to_the_ledger_fill(
+    tmp_path: Path,
+) -> None:
+    *_, result = _execute(tmp_path)
+    payload = result.model_dump(mode="python", exclude={"result_digest"})
+    payload["execution_evidence"][0]["submitted_quantity"] = "1"
+    with pytest.raises(ValueError, match="does not match its ledger fill"):
+        AuthorizedSimulationBatchResult.model_validate(
+            payload | {"result_digest": canonical_digest(payload)}
+        )
+
+    payload = result.model_dump(mode="python", exclude={"result_digest"})
+    payload["execution_evidence"][0]["fill_digest"] = "f" * 64
+    with pytest.raises(ValueError, match="does not match its ledger fill"):
+        AuthorizedSimulationBatchResult.model_validate(
+            payload | {"result_digest": canonical_digest(payload)}
+        )
+
+
+@pytest.mark.skipif(os.name == "posix", reason="Windows fallback recovery path")
+def test_windows_failed_publication_removes_claim_and_allows_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, manifest, view = _dataset(tmp_path / "dataset")
+    authority = FrozenSimulationAuthorityRepository(
+        tmp_path / "authority", signing_key=SIGNING_KEY
+    )
+    request = _request(manifest, view)
+    original_rename = os.rename
+
+    def fail_rename(*_args, **_kwargs):
+        raise OSError("injected rename failure")
+
+    monkeypatch.setattr(os, "rename", fail_rename)
+    with pytest.raises(OSError, match="injected rename failure"):
+        authority.publish_request(request)
+    assert not (authority.root / f".orders-{BATCH_ID}.claim").exists()
+    assert not tuple(authority.root.glob(f".orders-{BATCH_ID}.*"))
+
+    monkeypatch.setattr(os, "rename", original_rename)
+    assert authority.publish_request(request).batch_id == BATCH_ID
+
+
+@pytest.mark.skipif(os.name == "posix", reason="Windows fallback recovery path")
+def test_windows_staging_creation_failure_removes_claim_and_allows_retry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, manifest, view = _dataset(tmp_path / "dataset")
+    authority = FrozenSimulationAuthorityRepository(
+        tmp_path / "authority", signing_key=SIGNING_KEY
+    )
+    request = _request(manifest, view)
+    original_mkdtemp = tempfile.mkdtemp
+
+    def fail_mkdtemp(*_args, **_kwargs):
+        raise OSError("injected staging creation failure")
+
+    monkeypatch.setattr(tempfile, "mkdtemp", fail_mkdtemp)
+    with pytest.raises(OSError, match="injected staging creation failure"):
+        authority.publish_request(request)
+    assert not (authority.root / f".orders-{BATCH_ID}.claim").exists()
+    assert not tuple(authority.root.glob(f".orders-{BATCH_ID}.*"))
+
+    monkeypatch.setattr(tempfile, "mkdtemp", original_mkdtemp)
+    assert authority.publish_request(request).batch_id == BATCH_ID

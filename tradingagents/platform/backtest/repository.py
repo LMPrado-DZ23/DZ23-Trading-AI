@@ -173,6 +173,12 @@ class _FrozenMarketDataset:
         """Expose only the first frozen raw open strictly after a decision."""
 
         cutoff = view.decision_at
+        decision_bars = tuple(
+            bar for bar in view.bars if bar.session_date == view.decision_session_date
+        )
+        if len(decision_bars) != 1:
+            raise DatasetIntegrityError("eligible view has no unique decision-session bar")
+        decision_bar = decision_bars[0]
         future = tuple(bar for bar in self.bars if bar.session_open_at > cutoff)
         if not future:
             raise DatasetIntegrityError(
@@ -184,14 +190,18 @@ class _FrozenMarketDataset:
             dataset_id=self.manifest.dataset_id,
             manifest_digest=self.manifest.digest,
             instrument_id=bar.instrument_id,
+            quote_currency=view.instrument.quote_currency,
             decision_session_date=view.decision_session_date,
             decision_at=view.decision_at,
             eligible_view_digest=view.eligible_view_sha256,
             session_date=bar.session_date,
             execution_at=bar.session_open_at,
             raw_open=bar.open,
+            decision_volume=decision_bar.volume,
             parent_bar_digest=bar.digest,
             source_digest=bar.source_digest,
+            decision_bar_digest=decision_bar.digest,
+            decision_bar_source_digest=decision_bar.source_digest,
         )
 
 
@@ -789,34 +799,39 @@ class FrozenDatasetRepository:
                 code=BacktestDataCode.DATASET_BINDING_MISMATCH,
             )
         price_payload = {
-            "projection_version": "execution-price/1",
+            "projection_version": "execution-price/2",
             "instrument_id": execution.instrument_id,
+            "quote_currency": execution.quote_currency,
             "decision_session_date": execution.decision_session_date,
             "decision_at": execution.decision_at,
             "session_date": execution.session_date,
             "execution_at": execution.execution_at,
             "raw_open": execution.raw_open,
+            "decision_volume": execution.decision_volume,
             "price_basis": "raw",
+            "liquidity_basis": "decision-session-raw-volume",
         }
         price = ExecutionPriceProjection(
             **price_payload,
             projection_digest=hashlib.sha256(_canonical_json_bytes(price_payload)).hexdigest(),
         )
         provenance_payload = {
-            "provenance_version": "execution-price-provenance/1",
+            "provenance_version": "execution-price-provenance/2",
             "dataset_id": execution.dataset_id,
             "manifest_digest": execution.manifest_digest,
             "eligible_view_digest": execution.eligible_view_digest,
             "projection_digest": price.projection_digest,
             "parent_bar_digest": execution.parent_bar_digest,
             "source_digest": execution.source_digest,
+            "decision_bar_digest": execution.decision_bar_digest,
+            "decision_bar_source_digest": execution.decision_bar_source_digest,
         }
         provenance = ExecutionPriceProvenance(
             **provenance_payload,
             provenance_digest=hashlib.sha256(_canonical_json_bytes(provenance_payload)).hexdigest(),
         )
         bundle_payload = {
-            "bundle_version": "execution-price-bundle/1",
+            "bundle_version": "execution-price-bundle/2",
             "price_digest": price.projection_digest,
             "provenance_digest": provenance.provenance_digest,
         }

@@ -149,6 +149,7 @@ def _spec(**overrides):
         "end_session": date(2025, 12, 31),
         "base_currency": "BRL",
         "initial_cash": Decimal("10000.00"),
+        "simulation_policy_digest": "a" * 64,
     }
     data.update(overrides)
     return BacktestSpec(**data)
@@ -477,18 +478,23 @@ def test_execution_open_is_a_minimal_raw_projection():
         dataset_id=uuid4(),
         manifest_digest="c" * 64,
         instrument_id=uuid4(),
+        quote_currency="USD",
         decision_session_date=date(2026, 9, 8),
         decision_at=NOW - timedelta(minutes=1),
         eligible_view_digest="d" * 64,
         session_date=date(2026, 9, 9),
         execution_at=NOW,
         raw_open=Decimal("30.25"),
+        decision_volume=Decimal("1000000"),
         parent_bar_digest="b" * 64,
         source_digest=DIGEST,
+        decision_bar_digest="e" * 64,
+        decision_bar_source_digest="f" * 64,
     )
 
     assert set(execution.model_dump()) == {
         "instrument_id",
+        "quote_currency",
         "dataset_id",
         "manifest_digest",
         "decision_session_date",
@@ -497,8 +503,11 @@ def test_execution_open_is_a_minimal_raw_projection():
         "session_date",
         "execution_at",
         "raw_open",
+        "decision_volume",
         "parent_bar_digest",
         "source_digest",
+        "decision_bar_digest",
+        "decision_bar_source_digest",
     }
 
 
@@ -514,16 +523,20 @@ def test_execution_open_is_a_minimal_raw_projection():
 def test_execution_open_rejects_equal_or_predecision_fill(overrides):
     data = {
         "dataset_id": uuid4(),
-        "manifest_digest": "c" * 64,
-        "instrument_id": uuid4(),
+            "manifest_digest": "c" * 64,
+            "instrument_id": uuid4(),
+            "quote_currency": "USD",
         "decision_session_date": date(2026, 9, 8),
         "decision_at": NOW - timedelta(minutes=1),
         "eligible_view_digest": "d" * 64,
         "session_date": date(2026, 9, 9),
         "execution_at": NOW,
-        "raw_open": Decimal("30.25"),
-        "parent_bar_digest": "b" * 64,
-        "source_digest": DIGEST,
+            "raw_open": Decimal("30.25"),
+            "decision_volume": Decimal("1000000"),
+            "parent_bar_digest": "b" * 64,
+            "source_digest": DIGEST,
+            "decision_bar_digest": "e" * 64,
+            "decision_bar_source_digest": "f" * 64,
     }
     data.update(overrides)
     with pytest.raises(ValidationError, match="strictly after|follow"):

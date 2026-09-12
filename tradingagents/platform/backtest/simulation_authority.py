@@ -18,12 +18,11 @@ import hmac
 import json
 import os
 import secrets
-import shutil
 import stat
 import tempfile
 from contextlib import suppress
 from datetime import UTC, date, datetime
-from decimal import Decimal
+from decimal import ROUND_FLOOR, Context, Decimal, localcontext
 from pathlib import Path
 from typing import Annotated, Any, Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -55,6 +54,7 @@ REQUEST_FILENAME = "request.json"
 SIGNATURE_FILENAME = "request.hmac"
 MAX_AUTHORITY_BYTES = 16 * 1024 * 1024
 _SIGNATURE_DOMAIN = b"tradingagents/simulation-order-authority/1\x00"
+_DECIMAL_CONTEXT = Context(prec=76)
 
 
 class SimulationAuthorityError(ValueError):
@@ -101,6 +101,11 @@ def _positive_decimal(value: Decimal) -> Decimal:
     return value
 
 
+def _floor_to_step(value: Decimal, step: Decimal) -> Decimal:
+    with localcontext(_DECIMAL_CONTEXT):
+        return (value / step).to_integral_value(rounding=ROUND_FLOOR) * step
+
+
 class AuthorizedSimulationOrder(SimulationAuthorityContract):
     """Price-free order instruction frozen before the next execution session."""
 
@@ -138,7 +143,7 @@ class AuthorizedSimulationRequest(SimulationAuthorityContract):
     batch_id: UUID
     session_id: UUID
     created_at: datetime
-    orders: tuple[AuthorizedSimulationOrder, ...] = Field(min_length=1, max_length=9_999)
+    orders: tuple[AuthorizedSimulationOrder, ...] = Field(min_length=1, max_length=1_000)
 
     _created_at_is_utc = field_validator("created_at")(_utc)
 
@@ -151,6 +156,14 @@ class AuthorizedSimulationRequest(SimulationAuthorityContract):
             raise ValueError("an authorized request cannot repeat an order ID")
         if order_ids != tuple(sorted(order_ids, key=str)):
             raise ValueError("authorized orders must be sorted by order ID")
+        instrument_ids = tuple(order.instrument_id for order in self.orders)
+        if len(set(instrument_ids)) != len(instrument_ids):
+            raise ValueError("an authorized request must contain one net order per instrument")
+        decision_keys = {
+            (order.decision_at, order.decision_session_date) for order in self.orders
+        }
+        if len(decision_keys) != 1:
+            raise ValueError("an authorized request must contain one decision session")
         return self
 
     @property
@@ -218,19 +231,56 @@ class SimulationCheckpointReference(SimulationAuthorityContract):
 
 
 class AuthorizedOrderExecutionEvidence(SimulationAuthorityContract):
-    evidence_version: Literal["authorized-order-execution-evidence/1"] = (
-        "authorized-order-execution-evidence/1"
+    evidence_version: Literal["authorized-order-execution-evidence/2"] = (
+        "authorized-order-execution-evidence/2"
     )
     order_id: UUID
+    fill_digest: Digest
     authority_digest: Digest
     execution_price_bundle_digest: Digest
     execution_price_projection_digest: Digest
     execution_price_provenance_digest: Digest
+    authorized_quantity: Decimal
+    decision_volume: Decimal
+    max_volume_participation: Decimal
+    liquidity_cap: Decimal
+    submitted_quantity: Decimal
+    liquidity_basis: Literal["decision-session-raw-volume"] = (
+        "decision-session-raw-volume"
+    )
+
+    _decimal_inputs_are_exact = field_validator(
+        "authorized_quantity",
+        "decision_volume",
+        "max_volume_participation",
+        "liquidity_cap",
+        "submitted_quantity",
+        mode="before",
+    )(_exact_decimal)
+
+    @model_validator(mode="after")
+    def validate_liquidity_evidence(self):
+        _positive_decimal(self.authorized_quantity)
+        if not self.decision_volume.is_finite() or self.decision_volume < 0:
+            raise ValueError("decision volume must be finite and non-negative")
+        if (
+            not self.max_volume_participation.is_finite()
+            or self.max_volume_participation <= 0
+            or self.max_volume_participation > 1
+        ):
+            raise ValueError("volume participation must be finite and in (0, 1]")
+        _positive_decimal(self.liquidity_cap)
+        _positive_decimal(self.submitted_quantity)
+        if self.submitted_quantity > self.authorized_quantity:
+            raise ValueError("submitted quantity exceeds the authorized quantity")
+        if self.submitted_quantity > self.liquidity_cap:
+            raise ValueError("submitted quantity exceeds the PIT liquidity cap")
+        return self
 
 
 class AuthorizedSimulationBatchResult(SimulationAuthorityContract):
-    result_version: Literal["authorized-simulation-batch-result/1"] = (
-        "authorized-simulation-batch-result/1"
+    result_version: Literal["authorized-simulation-batch-result/2"] = (
+        "authorized-simulation-batch-result/2"
     )
     reference: SimulationRequestReference
     prior_checkpoint: SimulationCheckpointReference
@@ -260,24 +310,49 @@ class AuthorizedSimulationBatchResult(SimulationAuthorityContract):
         evidence_ids = tuple(item.order_id for item in self.execution_evidence)
         if len(set(evidence_ids)) != len(evidence_ids):
             raise ValueError("execution evidence cannot repeat an order ID")
-        fill_ids = tuple(
-            sorted(
-                (
-                    event.order_id
-                    for event in self.ledger_result.state.events
-                    if event.batch_request_digest == self.ledger_result.request_digest
-                    and event.order_id is not None
-                ),
-                key=str,
-            )
-        )
+        fills_by_order = {}
+        for event in self.ledger_result.state.events:
+            if event.batch_request_digest != self.ledger_result.request_digest:
+                continue
+            if event.order_id is None or event.fill is None:
+                raise ValueError("ledger fill event is incomplete")
+            if event.order_id in fills_by_order:
+                raise ValueError("ledger result repeats an order fill")
+            fills_by_order[event.order_id] = event.fill
+        fill_ids = tuple(sorted(fills_by_order, key=str))
         if evidence_ids != fill_ids:
             raise ValueError("execution evidence must match every ledger fill")
+        for item in self.execution_evidence:
+            fill = fills_by_order[item.order_id]
+            if (
+                item.submitted_quantity != fill.requested_quantity
+                or item.submitted_quantity != fill.executed_quantity
+                or not hmac.compare_digest(item.fill_digest, fill.digest)
+            ):
+                raise ValueError("execution evidence does not match its ledger fill")
         if any(
             item.authority_digest != self.reference.authority_digest
             for item in self.execution_evidence
         ):
             raise ValueError("execution evidence references another order authority")
+        if (
+            self.reference.tenant_id != self.prior_checkpoint.tenant_id
+            or self.reference.backtest_id != self.prior_checkpoint.backtest_id
+            or self.reference.backtest_spec_digest
+            != self.prior_checkpoint.backtest_spec_digest
+            or self.reference.ledger_id != self.prior_checkpoint.ledger_id
+            or self.ledger_result.state.ledger_id != self.reference.ledger_id
+        ):
+            raise ValueError("authorized simulation result custody bindings diverge")
+        matching_receipts = tuple(
+            receipt
+            for receipt in self.ledger_result.state.processed_batches
+            if hmac.compare_digest(
+                receipt.request_digest, self.ledger_result.request_digest
+            )
+        )
+        if len(matching_receipts) != 1 or matching_receipts[0].batch_id != self.reference.batch_id:
+            raise ValueError("authorized simulation result references another batch")
         if self.ledger_result.replay_status == "replayed":
             if self.next_checkpoint is not None:
                 raise ValueError("a replay must not create another ledger checkpoint")
@@ -287,6 +362,14 @@ class AuthorizedSimulationBatchResult(SimulationAuthorityContract):
             raise ValueError("next checkpoint does not contain the resulting ledger state")
         elif self.next_checkpoint.previous_checkpoint_digest != self.prior_checkpoint.checkpoint_digest:
             raise ValueError("next checkpoint does not extend the prior checkpoint")
+        elif (
+            self.next_checkpoint.tenant_id != self.reference.tenant_id
+            or self.next_checkpoint.backtest_id != self.reference.backtest_id
+            or self.next_checkpoint.backtest_spec_digest
+            != self.reference.backtest_spec_digest
+            or self.next_checkpoint.ledger_id != self.reference.ledger_id
+        ):
+            raise ValueError("next checkpoint custody bindings diverge")
         expected = canonical_digest(
             self.model_dump(mode="python", exclude={"result_digest"})
         )
@@ -566,17 +649,32 @@ class FrozenSimulationAuthorityRepository:
                 "simulation request identifier has already been claimed"
             ) from exc
         os.close(claim_fd)
-        temporary = Path(tempfile.mkdtemp(prefix=f".{leaf}.", dir=self.root))
+        temporary: Path | None = None
         try:
+            temporary = Path(tempfile.mkdtemp(prefix=f".{leaf}.", dir=self.root))
             if destination.exists():
                 raise SimulationRequestAlreadyExistsError("immutable request already exists")
             self._write_file(temporary / REQUEST_FILENAME, content)
             self._write_file(temporary / SIGNATURE_FILENAME, signature)
             os.rename(temporary, destination)
         except Exception:
-            if temporary.exists() and temporary.parent == self.root:
-                shutil.rmtree(temporary)
-            claim.unlink(missing_ok=True)
+            if (
+                temporary is not None
+                and temporary.parent == self.root
+                and temporary.exists()
+            ):
+                for name in (REQUEST_FILENAME, SIGNATURE_FILENAME):
+                    child = temporary / name
+                    with suppress(FileNotFoundError, OSError):
+                        child.chmod(stat.S_IWRITE | stat.S_IREAD)
+                    with suppress(FileNotFoundError, OSError):
+                        child.unlink()
+                with suppress(FileNotFoundError, OSError):
+                    temporary.rmdir()
+            with suppress(FileNotFoundError, OSError):
+                claim.chmod(stat.S_IWRITE | stat.S_IREAD)
+            with suppress(FileNotFoundError, OSError):
+                claim.unlink()
             raise
 
     def _publish_at(
@@ -832,6 +930,14 @@ def execute_authorized_simulation_batch(
         expected_backtest_id=expected_backtest_id,
         expected_backtest_spec_digest=expected_backtest_spec_digest,
     )
+    trusted_checkpoint_reference = SimulationCheckpointReference(
+        tenant_id=checkpoint.tenant_id,
+        backtest_id=checkpoint.backtest_id,
+        backtest_spec_digest=checkpoint.backtest_spec_digest,
+        ledger_id=checkpoint.ledger_id,
+        checkpoint_id=checkpoint.checkpoint_id,
+        checkpoint_digest=checkpoint.checkpoint_digest,
+    )
     request = FrozenSimulationAuthorityRepository.load_request(
         authority_repository,
         reference,
@@ -841,6 +947,14 @@ def execute_authorized_simulation_batch(
         expected_ledger_id=checkpoint.ledger_id,
         expected_policy_digest=checkpoint.policy.digest,
     )
+    trusted_request_reference = SimulationRequestReference(
+        tenant_id=request.tenant_id,
+        backtest_id=request.backtest_id,
+        backtest_spec_digest=request.backtest_spec_digest,
+        ledger_id=request.ledger_id,
+        batch_id=request.batch_id,
+        authority_digest=request.authority_digest,
+    )
     if request.ledger_id != checkpoint.policy.ledger_id:
         raise SimulationAuthorityError("authorized request references another ledger policy")
     if not hmac.compare_digest(
@@ -848,14 +962,45 @@ def execute_authorized_simulation_batch(
         checkpoint.backtest_spec_digest,
     ):
         raise SimulationAuthorityError("authorized request references another backtest spec")
+    if (
+        not hmac.compare_digest(
+            checkpoint.policy.digest,
+            checked_spec.simulation_policy_digest,
+        )
+        or not hmac.compare_digest(
+            request.policy_digest,
+            checked_spec.simulation_policy_digest,
+        )
+    ):
+        raise SimulationAuthorityError("ledger policy does not match the frozen backtest spec")
+    if (
+        checkpoint.policy.base_currency != checked_spec.base_currency
+        or checkpoint.policy.initial_cash != checked_spec.initial_cash
+        or checkpoint.policy.commission_bps != checked_spec.commission_bps
+        or checkpoint.policy.slippage_bps != checked_spec.slippage_bps
+    ):
+        raise SimulationAuthorityError("ledger economics do not match the frozen backtest spec")
+    policy_rule_ids = tuple(
+        rule.instrument_id for rule in checkpoint.policy.instrument_rules
+    )
+    if policy_rule_ids != tuple(sorted(checked_spec.instrument_ids, key=str)):
+        raise SimulationAuthorityError("ledger instrument rules do not match the backtest spec")
     if request.created_at < checkpoint.created_at:
         raise SimulationAuthorityError("authorized request predates its ledger checkpoint")
+    if len(request.orders) > len(checked_spec.instrument_ids):
+        raise SimulationAuthorityError("authorized request exceeds the backtest instrument set")
     references = {
         item.instrument_id: item
         for item in checked_spec.dataset_references
         if item.role is DatasetRole.TRADEABLE
     }
     for authorized in request.orders:
+        if not (
+            checked_spec.start_session
+            <= authorized.decision_session_date
+            <= checked_spec.end_session
+        ):
+            raise SimulationAuthorityError("authorized decision falls outside the backtest window")
         dataset_reference = references.get(authorized.instrument_id)
         if (
             dataset_reference is None
@@ -870,8 +1015,11 @@ def execute_authorized_simulation_batch(
             )
 
     orders: list[SimulationOrder] = []
-    evidence: list[AuthorizedOrderExecutionEvidence] = []
+    evidence_payloads: list[dict[str, Any]] = []
     execution_at: datetime | None = None
+    policy_rules = {
+        rule.instrument_id: rule for rule in checkpoint.policy.instrument_rules
+    }
     for authorized in request.orders:
         resolved = resolve_execution_price_authority(
             dataset_repository,
@@ -883,6 +1031,35 @@ def execute_authorized_simulation_batch(
             decision_session_date=authorized.decision_session_date,
             expected_eligible_view_digest=authorized.eligible_view_digest,
         )
+        if not (
+            checked_spec.start_session
+            <= resolved.price.session_date
+            <= checked_spec.end_session
+        ):
+            raise SimulationAuthorityError("authorized fill falls outside the backtest window")
+        rule = policy_rules.get(authorized.instrument_id)
+        if rule is None or rule.currency != resolved.price.quote_currency:
+            raise SimulationAuthorityError(
+                "ledger instrument rule does not match the frozen dataset currency"
+            )
+        with localcontext(_DECIMAL_CONTEXT):
+            available_quantity = (
+                resolved.price.decision_volume
+                * checked_spec.max_volume_participation
+            )
+        liquidity_cap = _floor_to_step(available_quantity, rule.lot_size)
+        if liquidity_cap <= 0:
+            raise SimulationAuthorityError(
+                "authorized order has no executable PIT liquidity"
+            )
+        submitted_quantity = _floor_to_step(
+            min(authorized.requested_quantity, liquidity_cap),
+            rule.lot_size,
+        )
+        if submitted_quantity <= 0:
+            raise SimulationAuthorityError(
+                "authorized order quantity is below one executable lot"
+            )
         if execution_at is None:
             execution_at = resolved.price.execution_at
         elif execution_at != resolved.price.execution_at:
@@ -892,19 +1069,24 @@ def execute_authorized_simulation_batch(
                 order_id=authorized.order_id,
                 instrument_id=authorized.instrument_id,
                 side=authorized.side,
-                requested_quantity=authorized.requested_quantity,
+                requested_quantity=submitted_quantity,
                 raw_open=resolved.price.raw_open,
                 execution_at=resolved.price.execution_at,
             )
         )
-        evidence.append(
-            AuthorizedOrderExecutionEvidence(
-                order_id=authorized.order_id,
-                authority_digest=request.authority_digest,
-                execution_price_bundle_digest=resolved.bundle_digest,
-                execution_price_projection_digest=resolved.price.projection_digest,
-                execution_price_provenance_digest=resolved.provenance.provenance_digest,
-            )
+        evidence_payloads.append(
+            {
+                "order_id": authorized.order_id,
+                "authority_digest": request.authority_digest,
+                "execution_price_bundle_digest": resolved.bundle_digest,
+                "execution_price_projection_digest": resolved.price.projection_digest,
+                "execution_price_provenance_digest": resolved.provenance.provenance_digest,
+                "authorized_quantity": authorized.requested_quantity,
+                "decision_volume": resolved.price.decision_volume,
+                "max_volume_participation": checked_spec.max_volume_participation,
+                "liquidity_cap": liquidity_cap,
+                "submitted_quantity": submitted_quantity,
+            }
         )
     if execution_at is None:
         raise SimulationAuthorityError("authorized request contains no executable orders")
@@ -920,6 +1102,22 @@ def execute_authorized_simulation_batch(
         batch,
         expected_last_event_hash=checkpoint.state.last_event_hash,
         expected_request_digest=batch.request_digest,
+    )
+    fills_by_order = {
+        event.order_id: event.fill
+        for event in ledger_result.state.events
+        if event.batch_request_digest == ledger_result.request_digest
+        and event.order_id is not None
+        and event.fill is not None
+    }
+    if len(fills_by_order) != len(evidence_payloads):
+        raise SimulationAuthorityError("ledger result did not return every authorized fill")
+    evidence = tuple(
+        AuthorizedOrderExecutionEvidence(
+            **payload,
+            fill_digest=fills_by_order[payload["order_id"]].digest,
+        )
+        for payload in evidence_payloads
     )
     next_checkpoint = None
     if ledger_result.replay_status == "applied":
@@ -942,17 +1140,17 @@ def execute_authorized_simulation_batch(
         }
         next_checkpoint = SimulationLedgerCheckpoint(**next_checkpoint_payload)
     result_payload = {
-        "result_version": "authorized-simulation-batch-result/1",
-        "reference": reference,
-        "prior_checkpoint": checkpoint_reference,
+        "result_version": "authorized-simulation-batch-result/2",
+        "reference": trusted_request_reference,
+        "prior_checkpoint": trusted_checkpoint_reference,
         "execution_evidence": tuple(evidence),
         "ledger_result": ledger_result,
         "next_checkpoint": next_checkpoint,
     }
     digest_payload = {
-        "result_version": "authorized-simulation-batch-result/1",
-        "reference": reference.model_dump(mode="python"),
-        "prior_checkpoint": checkpoint_reference.model_dump(mode="python"),
+        "result_version": "authorized-simulation-batch-result/2",
+        "reference": trusted_request_reference.model_dump(mode="python"),
+        "prior_checkpoint": trusted_checkpoint_reference.model_dump(mode="python"),
         "execution_evidence": tuple(
             item.model_dump(mode="python") for item in evidence
         ),

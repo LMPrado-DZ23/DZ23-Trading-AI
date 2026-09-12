@@ -1,6 +1,6 @@
 # M5.2b2 simulation authority implementation
 
-Status: candidate, pending independent review
+Status: approved after correction and three independent re-reviews
 
 ## Scope
 
@@ -28,6 +28,18 @@ broker, PAPER, LIVE, network or LLM path.
 - The resolver loads a candidate from frozen bytes and calls the non-virtual
   `verify_execution_price_authority()` boundary internally. No production
   consumer may call the lower-level price APIs directly.
+- The spec binds the complete ledger-policy digest and explicitly matches
+  overlapping economic fields. Instrument currencies are checked against the
+  frozen dataset.
+- Liquidity is capped from decision-session D raw volume only; D+1 full-day
+  volume is neither exposed nor consumed. One net order per instrument prevents
+  repeated full-dataset amplification.
+- Returned custody references are reconstructed from authenticated records;
+  caller objects are never returned after validation.
+- Execution evidence v2 is created only after the ledger reducer returns and
+  binds the submitted quantity to the fill's requested quantity, executed
+  quantity and canonical fill digest. Recomputing the outer unkeyed result
+  digest cannot hide a mismatched fill.
 
 ## Replay and concurrency boundary
 
@@ -54,8 +66,18 @@ backtest execution are enabled.
 - namespace collision and concurrent no-replace publication;
 - POSIX symlink/reparse/non-regular/TOCTOU and maximum-size records;
 - structural scan for direct price/reducer consumers and capital imports.
+- policy/spec mismatch for cash, currency, costs, tax and instrument rules;
+- D-volume cap versus a deliberately contradictory D+1 volume;
+- mutation of caller references during price resolution;
+- Windows failure between staging writes and final rename, followed by retry.
+- Windows staging-directory creation failure after claiming an identifier,
+  proving cleanup and immediate retry.
+- execution-evidence quantity or fill-digest mutation with a recomputed outer
+  result digest.
 
 ## Explicit non-claims
 
 This candidate does not approve corporate actions, FX conversion, a complete
 BacktestRunner, metrics, persistence, API/UI, brokers, PAPER or LIVE execution.
+The serialized result is not a standalone custody attestation: M5.5 must bind
+it to the expected tenant/run under an authenticated PostgreSQL transition.

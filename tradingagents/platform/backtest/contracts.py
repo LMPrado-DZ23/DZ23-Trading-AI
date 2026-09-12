@@ -359,22 +359,33 @@ class ExecutionOpen(BacktestContract):
     dataset_id: UUID
     manifest_digest: Digest
     instrument_id: UUID
+    quote_currency: Currency
     decision_session_date: date
     decision_at: datetime
     eligible_view_digest: Digest
     session_date: date
     execution_at: datetime
     raw_open: Decimal
+    decision_volume: Decimal
     parent_bar_digest: Digest
     source_digest: Digest
+    decision_bar_digest: Digest
+    decision_bar_source_digest: Digest
 
     _timestamps_are_utc = field_validator("decision_at", "execution_at")(_utc)
-    _raw_open_is_exact = field_validator("raw_open", mode="before")(_reject_binary_float)
+    _economic_inputs_are_exact = field_validator(
+        "raw_open", "decision_volume", mode="before"
+    )(_reject_binary_float)
 
     @field_validator("raw_open")
     @classmethod
     def validate_raw_open(cls, value: Decimal) -> Decimal:
         return _positive(value)
+
+    @field_validator("decision_volume")
+    @classmethod
+    def validate_decision_volume(cls, value: Decimal) -> Decimal:
+        return _non_negative(value)
 
     @model_validator(mode="after")
     def validate_execution_follows_decision(self):
@@ -386,7 +397,7 @@ class ExecutionOpen(BacktestContract):
 
 
 class ExecutionPriceProjection(BacktestContract):
-    """Economic next-open input, isolated from the rest of the D+1 bar."""
+    """PIT fill inputs: D+1 raw open and only D-known liquidity."""
 
     model_config = ConfigDict(
         frozen=True,
@@ -395,23 +406,35 @@ class ExecutionPriceProjection(BacktestContract):
         revalidate_instances="always",
     )
 
-    projection_version: Literal["execution-price/1"] = "execution-price/1"
+    projection_version: Literal["execution-price/2"] = "execution-price/2"
     instrument_id: UUID
+    quote_currency: Currency
     decision_session_date: date
     decision_at: datetime
     session_date: date
     execution_at: datetime
     raw_open: Decimal
+    decision_volume: Decimal
     price_basis: Literal["raw"] = "raw"
+    liquidity_basis: Literal["decision-session-raw-volume"] = (
+        "decision-session-raw-volume"
+    )
     projection_digest: Digest
 
     _timestamps_are_utc = field_validator("decision_at", "execution_at")(_utc)
-    _raw_open_is_exact = field_validator("raw_open", mode="before")(_reject_binary_float)
+    _economic_inputs_are_exact = field_validator(
+        "raw_open", "decision_volume", mode="before"
+    )(_reject_binary_float)
 
     @field_validator("raw_open")
     @classmethod
     def validate_raw_open(cls, value: Decimal) -> Decimal:
         return _positive(value)
+
+    @field_validator("decision_volume")
+    @classmethod
+    def validate_decision_volume(cls, value: Decimal) -> Decimal:
+        return _non_negative(value)
 
     @model_validator(mode="after")
     def validate_projection(self):
@@ -435,13 +458,15 @@ class ExecutionPriceProvenance(BacktestContract):
         revalidate_instances="always",
     )
 
-    provenance_version: Literal["execution-price-provenance/1"] = "execution-price-provenance/1"
+    provenance_version: Literal["execution-price-provenance/2"] = "execution-price-provenance/2"
     dataset_id: UUID
     manifest_digest: Digest
     eligible_view_digest: Digest
     projection_digest: Digest
     parent_bar_digest: Digest
     source_digest: Digest
+    decision_bar_digest: Digest
+    decision_bar_source_digest: Digest
     provenance_digest: Digest
 
     @model_validator(mode="after")
@@ -470,7 +495,7 @@ class ExecutionPriceBundle(BacktestContract):
             raise ValueError("execution-price provenance references another projection")
         expected = canonical_digest(
             {
-                "bundle_version": "execution-price-bundle/1",
+                "bundle_version": "execution-price-bundle/2",
                 "price_digest": self.price.projection_digest,
                 "provenance_digest": self.provenance.provenance_digest,
             }
@@ -661,7 +686,7 @@ class MarketDatasetManifest(BacktestContract):
 class BacktestSpec(BacktestContract):
     backtest_id: UUID
     tenant_id: UUID
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     created_at: datetime
     dataset_references: tuple[DatasetReference, ...] = Field(min_length=1, max_length=1_001)
     instrument_ids: tuple[UUID, ...] = Field(min_length=1, max_length=1_000)
@@ -670,6 +695,7 @@ class BacktestSpec(BacktestContract):
     end_session: date
     base_currency: Currency
     initial_cash: Decimal
+    simulation_policy_digest: Digest
     commission_bps: Decimal = Decimal("0")
     slippage_bps: Decimal = Decimal("0")
     max_volume_participation: Decimal = Decimal("0.10")

@@ -109,12 +109,24 @@ não habilita LIVE e não substitui a decisão humana de promoção.
 
 ## M6 — Propostas, aprovação e execução CCXT
 
+- [ ] equipes multiagente paralelas por carteira/estratégia (macro, fundamental,
+  técnico, fluxo/on-chain, sentimento, portfolio manager, risco, execução e
+  auditor), sem autoridade LLM sobre quantidade, limites ou aprovação;
+- [ ] agregador determinístico transforma recomendações conflitantes em uma
+  única TargetAllocation por carteira, com proveniência de cada voto;
+- [ ] múltiplas carteiras, contas e corretoras por tenant, com saldos, reservas,
+  ledger e reconciliação isolados por `portfolio_id`, `connection_id` e venue;
+- [ ] Risk Governor agregado impede equipes concorrentes de reutilizar saldo ou
+  ultrapassar exposição, correlação, drawdown e orçamento globais;
 - [ ] gerar TargetAllocation e RebalanceProposal explicáveis;
 - [ ] aprovação MFA vinculada a digest e expiração;
 - [ ] ExecutionIntent imutável, reserva e outbox transacionais;
 - [ ] limit order por padrão e política explícita para market;
 - [ ] validação de mercado, precisão, lote, cost, saldo, taxa e slippage;
 - [ ] adapter idempotente por exchange;
+- [ ] roteamento determinístico multi-venue por capacidade, saúde, saldo, custo
+  e liquidez; cada ordem-filho tem intent/idempotência/reserva próprios e nunca
+  degrada silenciosamente para outra corretora ou modo;
 - [ ] máquina `CREATED/APPROVED/SUBMITTING/UNKNOWN/ACCEPTED/OPEN/PARTIAL/FILLED/CANCELLED/REJECTED`;
 - [ ] reconciliação por client ID/order ID/trades;
 - [ ] kill switches global, tenant e carteira;
@@ -127,6 +139,8 @@ não habilita LIVE e não substitui a decisão humana de promoção.
 - [ ] React/TypeScript/Vite com design system e i18n pt-BR;
 - [ ] onboarding guiado completo;
 - [ ] dashboard de patrimônio, risco, caixa e ações pendentes;
+- [ ] visão consolidada e separada de várias carteiras/corretoras, equipes de
+  agentes, votos, conflitos, limites consumidos e saúde de reconciliação;
 - [ ] carteira, risco, propostas, ordens, análises, backtests e conexões;
 - [ ] explicações monetárias e cenários adversos por perfil;
 - [ ] pausa em um clique e liquidação separada;
@@ -145,6 +159,12 @@ não habilita LIVE e não substitui a decisão humana de promoção.
 - [ ] alertas de UNKNOWN, divergência, circuit breaker, falha de backup e indisponibilidade;
 - [ ] painel administrativo com suporte auditado e sem impersonation silenciosa;
 - [ ] status, incidentes, retenção e exportação;
+- [ ] OmniRoute opcional como gateway interno de LLM, com TLS, autenticação de
+  serviço, allowlist, orçamento por tenant, pin de versão e zero credenciais de
+  corretora no gateway;
+- [ ] Buzz opcional como workspace de colaboração/evidência, fora do caminho de
+  ordens e sem autoridade para aprovar capital; integração somente por eventos
+  redigidos, outbox e feature flag;
 - [ ] runbooks de incidente, chave comprometida e reconciliação.
 
 **Gate:** falhas injetadas geram alertas acionáveis; zero segredos em logs/traces.

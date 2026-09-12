@@ -162,6 +162,19 @@ ledger. File-backed authorities are limited to offline single-coordinator
 replay. Concurrent/public execution requires the PostgreSQL head, lease and
 fencing transition specified for M5.5.
 
+`BacktestSpec` schema v2 adds `simulation_policy_digest`, which binds the entire ledger policy,
+including ledger identity, tax, money quantum, lot/tick rules and costs. The
+overlapping base currency, initial cash, commission and slippage fields must
+also match explicitly. V1 liquidity uses only the raw volume of decision
+session D, which is already inside the authenticated eligible view; D+1 volume
+is forbidden. The executable quantity is the smaller of the authorized order
+and `floor_to_lot(D volume * max_volume_participation)`. Zero executable
+liquidity fails closed until a durable pending-order model exists. Both the
+decision session and its D+1 fill must be inside the declared backtest window.
+Execution evidence v2 is emitted only after the fill is accounted and binds
+the canonical fill digest; submitted, requested and executed quantities must
+agree when the result contract is revalidated.
+
 ## M5.3 — graph and rating adapter
 
 One parent backtest run creates child analysis jobs per session and symbol.

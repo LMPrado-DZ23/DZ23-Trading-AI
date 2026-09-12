@@ -3,17 +3,19 @@
 - **mission_id:** `tradingagents-dz23-a5-2026-09-08`
 - **objective:** concluir o TradingAgents DZ23 como plataforma web multiusuário pronta para usuários leigos, com carteira administrada, perfis de risco, execução CCXT segura e implantação verificada em `https://trading.dz23.online/`.
 - **state:** `EXECUTING`
-- **iteration:** 15
+- **iteration:** 16
 - **started_at:** 2026-09-08 America/Sao_Paulo
-- **last_heartbeat:** 2026-09-09
-- **last_progress_at:** 2026-09-09
-- **current_task:** executar M5.2b2: integrar a autoridade imutável de ordens e raw next-open ao ledger puro aprovado.
+- **last_heartbeat:** 2026-09-12
+- **last_progress_at:** 2026-09-12
+- **current_task:** corrigir e revalidar M5.2b2 após revisão independente: vínculo integral spec/policy, liquidez PIT de D, custódia sem TOCTOU, janela temporal e recuperação Windows.
 
 ## Acceptance criteria
 
 1. Plataforma web multiusuário com autenticação, recuperação de conta, RBAC, isolamento por tenant e LGPD.
 2. Onboarding leigo completo: suitability, capital, perfil, corretora, diagnóstico, mandato e ativação.
 3. Perfis Preservação, Conservador, Moderado, Arrojado, Agressivo e Personalizado sob limites da plataforma.
+3a. Várias equipes multiagente, carteiras, contas e corretoras por tenant, com
+    Risk Governor agregado, reservas sem dupla utilização e reconciliação por venue.
 4. Sizing, alocação, rebalanceamento, ledger, PnL e circuit breakers determinísticos; LLM sem autoridade sobre quantidade ou execução.
 5. Integração CCXT permitida por catálogo explícito, com intents imutáveis, idempotência, reservas e reconciliação.
 6. Backtest PIT, SHADOW e PAPER mensuráveis antes de LIVE; LIVE somente por autorização vinculada e sem saques.
@@ -225,8 +227,8 @@
 
 ## Next action
 
-1. implementar M5.2b2 ligando cada batch ao registro imutável de ordens e cada
-   `raw_open` à autoridade M5.2a; repetir o forge M5.2a end to end;
+1. concluir a reauditoria M5.2b2 e congelar o parecer somente se os PoCs de
+   policy/spec, liquidez PIT, TOCTOU e publicação Windows ficarem verdes;
 2. implementar M5.2c para corporate actions e FX PIT, sem fallback implícito;
 3. manter credenciais reais fora de chat, Git, fixtures e evidências;
 4. manter a integração IQ Option em marco separado: MCP oficial sob gate de capital; `iq-core` somente experimental/read-only, nunca rota LIVE;

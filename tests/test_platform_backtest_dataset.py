@@ -1118,7 +1118,7 @@ def test_repository_rejects_self_consistent_forged_execution_price(tmp_path: Pat
         provenance_digest=canonical_digest(forged_provenance_payload),
     )
     forged_bundle_payload = {
-        "bundle_version": "execution-price-bundle/1",
+        "bundle_version": "execution-price-bundle/2",
         "price_digest": forged_price.projection_digest,
         "provenance_digest": forged_provenance.provenance_digest,
     }
