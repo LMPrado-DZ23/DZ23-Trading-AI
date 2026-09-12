@@ -1,0 +1,4 @@
+[console_scripts]
+tradingagents = cli.main:app
+tradingagents-api = tradingagents.service.entrypoints:api_main
+tradingagents-worker = tradingagents.service.entrypoints:worker_main

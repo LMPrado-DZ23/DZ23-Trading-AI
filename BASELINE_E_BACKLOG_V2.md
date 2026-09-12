@@ -2,7 +2,7 @@
 
 Branch de integração: `integracao-v2` (base `codex-v0.5.1` + camada Claude).
 Data da inspeção: 12/09/2026. Suíte reproduzida nesta árvore:
-**1113 passed / 2 skipped / 71 subtests**.
+**1123 passed / 2 skipped / 71 subtests**.
 
 ## 1. Estado real encontrado (não presumido)
 
@@ -28,7 +28,7 @@ verificada.
 | ID | Item | Status | Evidência |
 |----|------|--------|-----------|
 | TA-001 | Baseline consolidado | VERIFIED | árvores comparadas; integração em `integracao-v2`; 1031 testes |
-| TA-002 | Instalação/empacotamento | IMPLEMENTED_NOT_VERIFIED | Dockerfile + pyproject presentes; falta validar wheel em ambiente vazio |
+| TA-002 | Instalação/empacotamento | VERIFIED | wheel construído e instalado em venv VAZIO com o extra `[desk]`; serviço e painel viajam dentro do pacote (provado: subiu e rodou a mesa sem copiar arquivo nenhum). Dois achados corrigidos: fastapi não era declarado e o Dockerfile subia a CLI em vez do painel |
 | TA-003 | Segurança web | VERIFIED | auth Bearer, trava anti-força-bruta (5/IP ⇒ 15 min), headers, config 0600 mascarada — 16 testes |
 | TA-004 | RunContext imutável | IMPLEMENTED_NOT_VERIFIED | `tradingagents/runtime.py` + 16 testes Gate B; falta ligar ao caminho do serviço |
 | TA-005 | PIT / available_at | PARTIAL | `dataflows/fundamentals_pit.py` + agora `desk/market.py` com cutoff no fechamento da vela e descarte da vela em formação (13 testes); auditoria externa pendente |
@@ -78,8 +78,7 @@ credencial**: `desk/brokers.py` adapta a ponte CCXT ao contrato do executor
 `TRADINGAGENTS_DESK_BROKER=ccxt` liga a corretora, e o gate de capital
 segue incontornável.
 
-**Próximas fatias**: TA-002 (instalação limpa: wheel em ambiente vazio e
-imagem de contêiner), TA-012 (walk-forward e fora-da-amostra sobre o
+**Próximas fatias**: TA-012 (walk-forward e fora-da-amostra sobre o
 backtester preservado), MA-09 (comparar equipe completa × estratégias
 isoladas no mesmo universo/capital/custos) e cenário 17 (modos separados
 ponta a ponta, exige credencial de testnet do dono).

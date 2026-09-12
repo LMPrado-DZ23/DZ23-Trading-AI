@@ -1,0 +1,83 @@
+Metadata-Version: 2.4
+Name: tradingagents
+Version: 0.5.1
+Summary: TradingAgents: Multi-Agents LLM Financial Trading Framework
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: langchain-core>=0.3.81
+Requires-Dist: backtrader>=1.9.78.123
+Requires-Dist: langchain-anthropic>=0.3.15
+Requires-Dist: langchain-experimental>=0.3.4
+Requires-Dist: langchain-google-genai>=4.0.0
+Requires-Dist: langchain-openai>=0.3.23
+Requires-Dist: langgraph>=0.4.8
+Requires-Dist: langgraph-checkpoint-sqlite>=2.0.0
+Requires-Dist: pandas>=2.3.0
+Requires-Dist: parsel>=1.10.0
+Requires-Dist: python-dotenv>=1.0.0
+Requires-Dist: pytz>=2025.2
+Requires-Dist: questionary>=2.1.0
+Requires-Dist: redis>=6.2.0
+Requires-Dist: requests>=2.32.4
+Requires-Dist: rich>=14.0.0
+Requires-Dist: typer>=0.21.0
+Requires-Dist: setuptools>=80.9.0
+Requires-Dist: stockstats>=0.6.5
+Requires-Dist: tqdm>=4.67.1
+Requires-Dist: typing-extensions>=4.14.0
+Requires-Dist: yfinance>=1.4.1
+Provides-Extra: dev
+Requires-Dist: fastapi>=0.115.0; extra == "dev"
+Requires-Dist: httpx>=0.27.0; extra == "dev"
+Requires-Dist: ccxt>=4.5.0; extra == "dev"
+Requires-Dist: ruff>=0.15; extra == "dev"
+Requires-Dist: pytest>=8.0; extra == "dev"
+Requires-Dist: pytest-subtests>=0.13; extra == "dev"
+Provides-Extra: bedrock
+Requires-Dist: langchain-aws>=1.5.0; extra == "bedrock"
+Provides-Extra: api
+Requires-Dist: fastapi>=0.115.0; extra == "api"
+Requires-Dist: uvicorn>=0.34.0; extra == "api"
+Requires-Dist: psycopg[binary]>=3.2.0; extra == "api"
+Provides-Extra: desk
+Requires-Dist: fastapi>=0.115.0; extra == "desk"
+Requires-Dist: uvicorn>=0.34.0; extra == "desk"
+Requires-Dist: psycopg[binary]>=3.2.0; extra == "desk"
+Requires-Dist: ccxt>=4.5.0; extra == "desk"
+Dynamic: license-file
+
+# TradingAgents DZ23 — análise de trading com IA, operável pelo navegador
+
+Sistema completo: múltiplos agentes de IA analisam um ativo (ações ou
+cripto), debatem, e entregam uma decisão — que você pode executar em
+**9 corretoras** (Binance, Bybit, OKX, Coinbase, Kraken, Gate.io, KuCoin,
+Mercado Bitcoin, Bitget), em **modo treino** (dinheiro fictício) ou **real**.
+
+**Feito para leigos:** tudo — configuração e operação — acontece numa página,
+com guia de 3 passos, provedores de IA **gratuitos** (Groq, Gemini, Mistral,
+OpenRouter, Ollama local) e modelos escolhidos automaticamente.
+
+## Subir o seu (5 minutos)
+1. Coolify/Docker → aponte para este repositório (build: `Dockerfile`)
+2. Uma variável: `ACCESS_PASSWORD` (senha FORTE — 20+ caracteres) e um
+   volume em `/data`
+3. Abra o domínio → siga o guia "🚀 Comece aqui" na tela
+
+Detalhes em [`DEPLOY.md`](DEPLOY.md).
+
+## Segurança (herdada de auditoria adversarial independente)
+- Núcleo aprovado em 12 rodadas de auditoria de segurança (redação de
+  segredos fail-closed, política de transporte, gate de capital
+  incontornável) — 894 testes automatizados rodam a cada push (CI).
+- Chaves ficam **no seu servidor** (`/data`, permissão 0600), sempre
+  mascaradas na tela; **modo real só liga com frase de autorização
+  explícita** digitada pelo dono.
+- Trava anti-força-bruta no acesso (5 erros ⇒ 15 min).
+
+## Créditos
+Fork endurecido de [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents)
+(Apache-2.0 — ver `LICENSE`). Pesquisa original: TradingAgents:
+Multi-Agents LLM Financial Trading Framework.
+
+> ⚠️ Uso por sua conta e risco. Nada aqui é recomendação de investimento.
