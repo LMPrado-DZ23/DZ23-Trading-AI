@@ -119,3 +119,42 @@ class TestBruteForceLock:
         h = c.get("/healthz").headers
         assert h["X-Content-Type-Options"] == "nosniff"
         assert h["X-Frame-Options"] == "DENY"
+
+
+class TestPainelMesaDeAgentes:
+    """MA-08: a aba existe de verdade no HTML servido, com botões ligados a
+    APIs reais (regressão do replace silencioso que não aplicou)."""
+
+    def test_desk_tab_and_buttons_exist(self):
+        html = open("service/static/index.html", encoding="utf-8").read()
+        for needle in ['id="pane-desk"', 'data-t="desk"', "deskSched('start')",
+                       "deskCycle()", "deskPause()", 'id="deskOut"']:
+            assert needle in html, f"faltou no painel: {needle}"
+
+    def test_desk_routes_are_registered(self, tmp_path, monkeypatch):
+        m = _load_app(tmp_path, monkeypatch)
+        paths = {r.path for r in m.app.routes}
+        assert {"/v1/desk/status", "/v1/desk/cycle", "/v1/desk/pause",
+                "/v1/desk/scheduler/{action}"} <= paths
+
+    def test_desk_status_requires_auth(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = _load_app(tmp_path, monkeypatch)
+        m._FAILS.clear()
+        c = TestClient(m.app)
+        assert c.get("/v1/desk/status").status_code == 401
+
+    def test_desk_cycle_runs_and_books_stay_balanced(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = _load_app(tmp_path, monkeypatch)
+        m._FAILS.clear()
+        m._DESK.update(orchestrator=None, scheduler=None)
+        c = TestClient(m.app)
+        h = {"Authorization": "Bearer s3nh4"}
+        assert c.post("/v1/desk/cycle", headers=h).status_code == 200
+        st = c.get("/v1/desk/status", headers=h).json()
+        assert st["contabilidade"]["balanceado"] is True
+        assert st["mandate"]["mode"] == "paper"      # esta superfície não liga LIVE
+        assert len(st["orders"]) == 2
+        again = c.post("/v1/desk/cycle", headers=h).json()
+        assert again["ordens"] == []                 # segundo ciclo não duplica

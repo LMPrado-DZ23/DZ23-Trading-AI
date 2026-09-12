@@ -200,7 +200,7 @@ def run_job(jid, ticker, date):
 
 
 @app.get("/healthz")
-def hz(): return {"status": "ok", "app": "tradingagents-operavel/4"}
+def hz(): return {"status": "ok", "app": "tradingagents-operavel/5"}
 
 @app.get("/")
 def index(): return FileResponse(STATIC / "index.html")
@@ -320,7 +320,7 @@ async def broker_order(req: Request, _=Depends(auth)):
 # (botão do painel agora, worker agendado na fatia seguinte). Modo PAPER
 # fixo: esta superfície NÃO liga capital real.
 _DESK = {"orchestrator": None, "ledger": None, "coordinator": None,
-         "guardian": None, "cycles": []}
+         "guardian": None, "cycles": [], "scheduler": None}
 
 
 def _desk_boot(capital: str = "1000"):
@@ -346,11 +346,25 @@ def _desk_boot(capital: str = "1000"):
     ledger = Ledger(opening_cash=mandate.capital)
     coord = ExecutionCoordinator(mandate, ledger, risk, worker_id="desk-worker-1",
                                  broker=PaperBroker(Decimal("100")))
-    _DESK.update(orchestrator=DeskOrchestrator(mandate, traders, worker_id="desk-worker-1",
-                                               risk=risk,
-                                               positions_provider=ledger.open_positions),
-                 ledger=ledger, coordinator=coord, guardian=PositionGuardian(coord),
-                 cycles=[])
+    orch = DeskOrchestrator(mandate, traders, worker_id="desk-worker-1", risk=risk,
+                            positions_provider=ledger.open_positions)
+    from tradingagents.desk.models import MarketSnapshot, utcnow as _now
+    from tradingagents.desk.scheduler import DeskScheduler
+
+    def _snaps():
+        """Fixture ROTULADA enquanto o feed de mercado real não é ligado."""
+        alta = tuple(Decimal(str(100 + i * 1.5)) for i in range(40))
+        queda = tuple([Decimal("100")] * 24 + [Decimal("70")])
+        return [MarketSnapshot("BTC/USDT", "1h", _now(), alta, source="fixture"),
+                MarketSnapshot("ETH/USDT", "1h", _now(), queda, source="fixture")]
+
+    sched = DeskScheduler(
+        orch, coord, snapshot_provider=_snaps,
+        price_provider=lambda: {"BTC/USDT": Decimal("160"), "ETH/USDT": Decimal("70")},
+        state_path=DATA / "desk-state.json",
+        interval_seconds=int(os.environ.get("DESK_INTERVAL_SECONDS", "300")))
+    _DESK.update(orchestrator=orch, ledger=ledger, coordinator=coord,
+                 guardian=PositionGuardian(coord), cycles=[], scheduler=sched)
     return _DESK
 
 
@@ -379,6 +393,7 @@ def desk_status(_=Depends(auth)):
                           "atribuicao": {k: str(v) for k, v in led.attribution().items()},
                           "balanceado": led.is_balanced()},
         "guardiao": d["guardian"].watchlist(),
+        "agendador": d["scheduler"].status(),
         "ciclos": d["cycles"][-10:],
     }
 
@@ -415,3 +430,21 @@ def desk_pause(_=Depends(auth)):
     return {"ok": True, "entradas": "pausadas",
             "a_encerrar": d["orchestrator"].drain(),
             "aviso": "saída solicitada não é saída concluída — o guardião acompanha"}
+
+
+@app.post("/v1/desk/scheduler/{action}")
+def desk_scheduler(action: str, _=Depends(auth)):
+    """Liga/desliga o laço autônomo da mesa. Ligado, o ciclo roda sozinho —
+    fechar o navegador não interrompe nada."""
+    d = _DESK if _DESK["orchestrator"] else _desk_boot()
+    sched = d["scheduler"]
+    if action == "start":
+        recovered = sched.recover()      # reconcilia ANTES de retomar
+        started = sched.start()
+        return {"ok": True, "iniciado": started, "recuperacao": recovered,
+                "status": sched.status()}
+    if action == "stop":
+        sched.stop()
+        return {"ok": True, "parada": "controlada — posições seguem sob o guardião",
+                "a_encerrar": d["orchestrator"].drain(), "status": sched.status()}
+    raise HTTPException(422, "ação deve ser start ou stop")

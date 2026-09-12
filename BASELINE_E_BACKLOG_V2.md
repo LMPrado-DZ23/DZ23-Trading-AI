@@ -2,7 +2,7 @@
 
 Branch de integração: `integracao-v2` (base `codex-v0.5.1` + camada Claude).
 Data da inspeção: 12/09/2026. Suíte reproduzida nesta árvore:
-**1073 passed / 2 skipped / 71 subtests**.
+**1084 passed / 2 skipped / 71 subtests**.
 
 ## 1. Estado real encontrado (não presumido)
 
@@ -42,7 +42,7 @@ verificada.
 | TA-013 | CCXT | VERIFIED (funcional) | 9 exchanges, testnet/live com frase, gate incontornável — 32 testes + prova viva |
 | TA-014 | Jornada simulada | PARTIAL | análise ponta a ponta provada; PAPER/SHADOW com 13 testes, sem jornada integrada única |
 | TA-015 | Observabilidade/custo IA | IMPLEMENTED_NOT_VERIFIED | `observability.py` — 9 testes |
-| TA-016 | Frontend | PARTIAL | painel operável (config+operação+ordem); falta Mesa de Agentes, risco/carteiras, admin |
+| TA-016 | Frontend | PARTIAL | painel com Configurações, Operação e **Mesa de Agentes** (traders, risco, ordens, contabilidade, guardião, ciclos, ligar/parar mesa autônoma); faltam telas de pesquisa/backtest e administração |
 | TA-017 | Recuperação/release | NOT_STARTED | backup/restore e runbook não exercitados |
 
 ## 3. Matriz MA (mesa multiagente) — meta ampliada
@@ -51,22 +51,24 @@ verificada.
 |----|------|--------|
 | MA-01 | Mandatos/registry/permissões (DeskMandate, AgentSpec) | VERIFIED | `desk/models.py`: mandato com revogação/expiração/versão, estágios com transições autorizadas, ferramentas pelo backend |
 | MA-02 | Snapshots/propostas | VERIFIED | snapshot imutável com cutoff e qualidade; proposta com validade, invalidação e razão — proposta não autoriza |
-| MA-03 | Orquestrador por eventos | PARTIAL | ciclo completo provado por API real (`/v1/desk/cycle`); falta agendamento automático no worker durável (hoje o ciclo é disparado por evento/botão) |
+| MA-03 | Orquestrador por eventos | VERIFIED | `desk/scheduler.py`: laço próprio roda ciclos sozinho (provado ao vivo: 4 ciclos sem comando), estado durável em disco com escrita atômica, recuperação reconcilia ANTES de retomar, snapshot vencido nunca vira ordem atrasada, ciclo defeituoso não mata o laço |
 | MA-04 | Três traders distintos | VERIFIED | tendência, reversão à média e rompimento — lógica determinística distinta, provado que leem o MESMO snapshot de formas diferentes |
 | MA-05 | Arbitragem + reserva transacional | VERIFIED | allocator veta direção oposta e disputa por instrumento; RiskEngine com lock atômico: capital nunca prometido duas vezes |
 | MA-06 | Execução + guardião | VERIFIED | `ExecutionCoordinator` é o único caminho à corretora (revalida posse/mandato/expiração); `PositionGuardian` adota posições de trader pausado; kill switch distingue pausar, drenar e cancelar |
 | MA-07 | Reconciliação/atribuição | VERIFIED | reconciliação consulta a corretora e só então decide; resultado atribuído por trader sem dupla contagem; custo de IA lançado como custo real |
 | MA-08 | Painel Mesa de Agentes | VERIFIED | aba com traders/estágios, risco, ordens, contabilidade, guardião e histórico de ciclos; botões chamam APIs reais (`/v1/desk/status|cycle|pause`), dados de fixture rotulados |
 | MA-09 | Experimentos de equipe | NOT_STARTED |
-| MA-10 | Cenários de aceite | PARTIAL | 42 testes cobrindo 01,02,03,04,06,07,08,09,10,12,13,14; faltam 05 (cutoff por conta), 11 (reinício), 15–18 |
+| MA-10 | Cenários de aceite | PARTIAL | 54 testes cobrindo 01,02,03,04,06,07,08,09,10,11,12,13,14; faltam 05 (cutoff/cache por conta), 15 (backtest prospectivo), 16 (restore), 17 (separação de modos ponta a ponta), 18 (conectividade externa) |
 
 ## 4. Próxima fatia (dependência real, não preferência)
 
-**MA-03 (fechar) — ciclo agendado no worker durável**: hoje o ciclo roda
-por evento/chamada; falta o agendador persistente que o dispara sozinho a
-cada candle fechado e sobrevive a reinício (cenário 11). Em seguida: ligar o
-executor da mesa à ponte CCXT em testnet (hoje usa PaperBroker pelo mesmo
-contrato), cenário 05 (cutoff/cache por conta) e TA-017 (backup/restore).
+**Feed de mercado real**: o agendador já roda sozinho, mas alimentado por
+fixture rotulada. Falta plugar o snapshot_provider nas fontes reais com
+available_at/cutoff (Gate B já existe na árvore) — é o que troca "mesa
+coordenada provada" por "mesa operando mercado".
+Em seguida: ligar o executor à ponte CCXT em testnet (hoje PaperBroker pelo
+mesmo contrato), cenário 05 (cutoff/cache por conta), TA-017
+(backup/restore) e TA-002 (wheel em ambiente vazio).
 
 **Achado corrigido nesta rodada (teste vivo, não unitário):** depois do fill
 a reserva é consumida e a mesa esquecia a posição — o ciclo seguinte

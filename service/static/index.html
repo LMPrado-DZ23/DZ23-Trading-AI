@@ -116,6 +116,19 @@ pre{background:#0a0e15;border:1px solid var(--line);border-radius:8px;padding:10
 <div class="card"><h2>📋 Análises <button class="bs" style="float:right" onclick="refreshAll()">↻</button></h2><div id="jobs"><div class="mut">Nenhuma ainda.</div></div></div>
 </div>
 
+<div id="pane-desk" class="hide">
+<div class="card"><h2>🧑‍💼 Mesa de Agentes <span class="mut">— modo PAPER (dinheiro fictício)</span></h2>
+<div class="mut">Vários traders analisam, disputam capital e operam em ciclo. Ligada, a mesa roda <b>sozinha</b> — pode fechar o navegador. Os dados deste ciclo são <b>fixture rotulada</b>: provam a coordenação da mesa, não o mercado de hoje.</div>
+<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+<button class="bp" onclick="deskSched('start')">🤖 Ligar mesa autônoma</button>
+<button class="bs" onclick="deskSched('stop')">🛑 Parar mesa</button>
+<button class="bs" onclick="deskCycle()">▶ Rodar um ciclo agora</button>
+<button class="bs" onclick="deskPause()">⏸ Pausar entradas</button>
+<button class="bs" onclick="deskLoad()">↻ Atualizar</button>
+<span id="deskMsg" class="msg"></span></div></div>
+<div id="deskOut"></div>
+</div>
+
 <script>
 const $=i=>document.getElementById(i);
 function tab(t){document.querySelectorAll('.tab').forEach(e=>e.classList.toggle('on',e.dataset.t===t));
