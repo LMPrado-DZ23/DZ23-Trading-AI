@@ -21,16 +21,21 @@ from tradingagents.platform.backtest.repository import (
     FrozenEconomicsDatasetHandle,
 )
 from tradingagents.platform.backtest.simulation_economics import (
+    AuthorizedCorporateCashConversion,
     AuthorizedEconomicEventView,
     AuthorizedFxConversion,
+    CorporateActionApplication,
+    CorporateCashLedgerBasis,
     EconomicPhase,
     SimulationEconomicsError,
     SimulationEconomicsPolicy,
     _convert_quote_to_functional,
+    _derive_corporate_cash_source_amount,
 )
 from tradingagents.platform.backtest.simulation_ledger import SimulationLedgerPolicy
 
 _AUTHORITY_TOKEN = object()
+_CORPORATE_CASH_BASIS_TOKEN = object()
 _HEX_DIGITS = frozenset("0123456789abcdef")
 
 
@@ -40,6 +45,32 @@ def _require_digest(value: object, label: str) -> str:
     ):
         raise SimulationEconomicsError(f"{label} must be one lowercase SHA-256 digest")
     return value
+
+
+class _VerifiedCorporateCashLedgerBasis:
+    """Opaque, instance-bound proof that the trusted ledger supplied a basis."""
+
+    __slots__ = ("_authority", "_basis", "_sealed")
+
+    def __init__(self, *, token: object, authority: object, basis: CorporateCashLedgerBasis):
+        if token is not _CORPORATE_CASH_BASIS_TOKEN:
+            raise SimulationEconomicsError("verified ledger basis cannot be constructed directly")
+        object.__setattr__(self, "_authority", authority)
+        object.__setattr__(self, "_basis", basis)
+        object.__setattr__(self, "_sealed", True)
+
+    @property
+    def authority(self) -> object:
+        return self._authority
+
+    @property
+    def basis(self) -> CorporateCashLedgerBasis:
+        return self._basis
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if getattr(self, "_sealed", False):
+            raise AttributeError("verified corporate-cash basis is immutable")
+        object.__setattr__(self, name, value)
 
 
 class FrozenSimulationEconomicsAuthority:
@@ -349,6 +380,208 @@ class FrozenSimulationEconomicsAuthority:
         ):
             raise SimulationEconomicsError(
                 "FX candidate does not match frozen economic authority"
+            )
+        return authoritative
+
+    def _bind_corporate_cash_ledger_basis(
+        self,
+        basis: CorporateCashLedgerBasis,
+        *,
+        expected_basis_digest: str,
+        expected_checkpoint_digest: str,
+        expected_prior_session_receipt_digest: str,
+    ) -> _VerifiedCorporateCashLedgerBasis:
+        """Bind a basis rederived by the integrated ledger authority.
+
+        This private method is not a user-facing authorization boundary.  Its
+        three expected digests must come from the authenticated checkpoint and
+        session coordinator, never from request payloads.
+        """
+
+        if type(basis) is not CorporateCashLedgerBasis:
+            raise SimulationEconomicsError("corporate cash basis uses another contract type")
+        expected_basis_digest = _require_digest(expected_basis_digest, "expected_basis_digest")
+        expected_checkpoint_digest = _require_digest(
+            expected_checkpoint_digest, "expected_checkpoint_digest"
+        )
+        expected_prior_session_receipt_digest = _require_digest(
+            expected_prior_session_receipt_digest,
+            "expected_prior_session_receipt_digest",
+        )
+        try:
+            checked = CorporateCashLedgerBasis.model_validate(
+                basis.model_dump(mode="python")
+            )
+        except (ValidationError, ValueError, ArithmeticError) as exc:
+            raise SimulationEconomicsError("corporate cash basis is invalid") from exc
+        if (
+            not hmac.compare_digest(checked.basis_digest, expected_basis_digest)
+            or not hmac.compare_digest(
+                checked.checkpoint_digest, expected_checkpoint_digest
+            )
+            or not hmac.compare_digest(
+                checked.prior_session_receipt_digest,
+                expected_prior_session_receipt_digest,
+            )
+            or checked.tenant_id != self._spec.tenant_id
+            or checked.backtest_id != self._spec.backtest_id
+            or checked.ledger_id != self._ledger_policy.ledger_id
+            or checked.backtest_spec_digest != self._spec_digest
+            or checked.ledger_policy_digest != self._ledger_policy.digest
+            or checked.economics_policy_digest != self._economics_policy.digest
+            or checked.instrument_id != self.instrument_id
+            or checked.phase is not EconomicPhase.POST_CLOSE
+        ):
+            raise SimulationEconomicsError(
+                "corporate cash basis differs from frozen authority or checkpoint"
+            )
+        return _VerifiedCorporateCashLedgerBasis(
+            token=_CORPORATE_CASH_BASIS_TOKEN,
+            authority=self,
+            basis=checked,
+        )
+
+    def _convert_corporate_cash_from_ledger_basis(
+        self,
+        verified_basis: _VerifiedCorporateCashLedgerBasis,
+    ) -> AuthorizedCorporateCashConversion:
+        """Convert one payable action using only a verified ledger basis."""
+
+        if (
+            type(verified_basis) is not _VerifiedCorporateCashLedgerBasis
+            or verified_basis.authority is not self
+        ):
+            raise SimulationEconomicsError("corporate cash basis is not owned by this authority")
+        try:
+            basis = CorporateCashLedgerBasis.model_validate(
+                verified_basis.basis.model_dump(mode="python")
+            )
+        except (ValidationError, ValueError, ArithmeticError) as exc:
+            raise SimulationEconomicsError("verified corporate cash basis was corrupted") from exc
+        authoritative_event = self.resolve_event(basis.session_date, EconomicPhase.POST_CLOSE)
+        matches = tuple(
+            action
+            for action in authoritative_event.view.actions
+            if action.action_id == basis.action_id
+            and action.application is basis.application
+        )
+        if len(matches) != 1:
+            raise SimulationEconomicsError(
+                "payable corporate action is absent or ambiguous"
+            )
+        action = matches[0]
+        if basis.application is CorporateActionApplication.DIVIDEND_PAYMENT:
+            unit_cash_amount = action.cash_amount
+            quantity_basis = "entitled_quantity"
+        else:
+            unit_cash_amount = action.cash_consideration
+            quantity_basis = "position_quantity"
+        if unit_cash_amount is None or action.currency is None:
+            raise SimulationEconomicsError(
+                "payable corporate action has no authoritative cash terms"
+            )
+        try:
+            source_amount = _derive_corporate_cash_source_amount(
+                unit_cash_amount, basis.quantity
+            )
+            projection = self._repository.load_fx_rate(
+                self.dataset_id,
+                expected_tenant_id=self._spec.tenant_id,
+                expected_instrument_id=self.instrument_id,
+                expected_manifest_digest=self._handle.manifest_digest,
+                functional_currency=self._economics_policy.functional_currency,
+                source_currency=action.currency,
+                event_at=authoritative_event.view.as_of,
+                max_staleness_seconds=self._economics_policy.fx_max_staleness_seconds,
+                _economics_handle=self._handle,
+            )
+            conversion = _convert_quote_to_functional(
+                source_amount,
+                projection,
+                money_quantum=self._economics_policy.money_quantum,
+            )
+        except DatasetIntegrityError as exc:
+            raise SimulationEconomicsError(
+                "frozen corporate-cash FX evidence is invalid or unavailable"
+            ) from exc
+        except SimulationEconomicsError:
+            raise
+        except (ValidationError, ValueError, ArithmeticError) as exc:
+            raise SimulationEconomicsError(
+                "authorized corporate cash could not be calculated"
+            ) from exc
+        payload = {
+            "authority_version": "authorized-corporate-cash-conversion/1",
+            "tenant_id": self._spec.tenant_id,
+            "backtest_id": self._spec.backtest_id,
+            "ledger_id": self._ledger_policy.ledger_id,
+            "backtest_spec_digest": self._spec_digest,
+            "ledger_policy_digest": self._ledger_policy.digest,
+            "economics_policy_digest": self._economics_policy.digest,
+            "dataset_id": self.dataset_id,
+            "manifest_digest": self._handle.manifest_digest,
+            "instrument_id": self.instrument_id,
+            "quantitative_claims_status": self._handle.quantitative_claims_status,
+            "limitations": self._handle.limitations,
+            "purpose": "corporate_action_cash",
+            "ledger_basis_digest": basis.basis_digest,
+            "checkpoint_id": basis.checkpoint_id,
+            "checkpoint_digest": basis.checkpoint_digest,
+            "checkpoint_generation": basis.checkpoint_generation,
+            "prior_session_receipt_digest": basis.prior_session_receipt_digest,
+            "quantity_source_digest": basis.quantity_source_digest,
+            "ledger_receipt_id": basis.ledger_receipt_id,
+            "event_authority_digest": authoritative_event.authority_digest,
+            "event_view_digest": authoritative_event.view.view_digest,
+            "action_id": action.action_id,
+            "action_revision": action.revision,
+            "application": action.application,
+            "action_digest": action.action_digest,
+            "action_projection_digest": action.projection_digest,
+            "quantity_basis": quantity_basis,
+            "expected_quantity": basis.quantity,
+            "unit_cash_amount": unit_cash_amount,
+            "source_currency": action.currency,
+            "session_date": authoritative_event.view.session_date,
+            "phase": authoritative_event.view.phase,
+            "event_at": authoritative_event.view.as_of,
+            "projection": projection.model_dump(mode="python"),
+            "conversion": conversion.model_dump(mode="python"),
+        }
+        try:
+            return AuthorizedCorporateCashConversion(
+                **payload, authority_digest=canonical_digest(payload)
+            )
+        except (ValidationError, ValueError, ArithmeticError) as exc:
+            raise SimulationEconomicsError(
+                "authorized corporate cash could not be represented"
+            ) from exc
+
+    def _verify_corporate_cash_conversion(
+        self,
+        candidate: AuthorizedCorporateCashConversion,
+        verified_basis: _VerifiedCorporateCashLedgerBasis,
+    ) -> AuthorizedCorporateCashConversion:
+        """Recheck a cash result against frozen evidence and one opaque basis."""
+
+        if type(candidate) is not AuthorizedCorporateCashConversion:
+            raise SimulationEconomicsError(
+                "corporate cash candidate uses another contract type"
+            )
+        try:
+            checked = AuthorizedCorporateCashConversion.model_validate(
+                candidate.model_dump(mode="python")
+            )
+        except ValidationError as exc:
+            raise SimulationEconomicsError(
+                "corporate cash candidate is structurally invalid"
+            ) from exc
+        authoritative = self._convert_corporate_cash_from_ledger_basis(verified_basis)
+        if not hmac.compare_digest(
+            canonical_json_bytes(checked), canonical_json_bytes(authoritative)
+        ):
+            raise SimulationEconomicsError(
+                "corporate cash candidate does not match frozen economic authority"
             )
         return authoritative
 

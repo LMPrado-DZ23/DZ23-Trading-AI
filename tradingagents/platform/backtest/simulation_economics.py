@@ -506,6 +506,179 @@ class AuthorizedFxConversion(EconomicsContract):
         return self
 
 
+class CorporateCashLedgerBasis(EconomicsContract):
+    """Serializable ledger fact used to request one corporate-cash conversion.
+
+    This record is not authority by itself.  The integrated ledger authority
+    must rederive it from an authenticated checkpoint before the frozen
+    economics authority will accept it.
+    """
+
+    basis_version: Literal["corporate-cash-ledger-basis/1"] = (
+        "corporate-cash-ledger-basis/1"
+    )
+    tenant_id: UUID
+    backtest_id: UUID
+    ledger_id: UUID
+    backtest_spec_digest: Digest
+    ledger_policy_digest: Digest
+    economics_policy_digest: Digest
+    checkpoint_id: UUID
+    checkpoint_digest: Digest
+    checkpoint_generation: int = Field(strict=True, ge=1)
+    prior_session_receipt_digest: Digest
+    instrument_id: UUID
+    action_id: UUID
+    application: Literal[
+        CorporateActionApplication.DIVIDEND_PAYMENT,
+        CorporateActionApplication.DELISTING_SETTLEMENT,
+    ]
+    session_date: date
+    phase: Literal[EconomicPhase.POST_CLOSE] = EconomicPhase.POST_CLOSE
+    quantity_basis: Literal["entitled_quantity", "position_quantity"]
+    quantity: Decimal
+    quantity_source_digest: Digest
+    ledger_receipt_id: Digest
+    basis_digest: Digest
+
+    _quantity_is_exact = field_validator("quantity", mode="before")(_exact_decimal)
+
+    @model_validator(mode="after")
+    def validate_basis(self):
+        _bounded_decimal(self.quantity)
+        expected_basis = (
+            "entitled_quantity"
+            if self.application is CorporateActionApplication.DIVIDEND_PAYMENT
+            else "position_quantity"
+        )
+        if self.quantity <= 0 or self.quantity_basis != expected_basis:
+            raise ValueError("corporate-cash ledger basis is invalid")
+        expected = canonical_digest(
+            self.model_dump(mode="python", exclude={"basis_digest"})
+        )
+        if not hmac.compare_digest(self.basis_digest, expected):
+            raise ValueError("corporate-cash ledger basis digest is invalid")
+        return self
+
+
+class AuthorizedCorporateCashConversion(EconomicsContract):
+    """One cash corporate action converted from frozen action and FX evidence."""
+
+    authority_version: Literal["authorized-corporate-cash-conversion/1"] = (
+        "authorized-corporate-cash-conversion/1"
+    )
+    tenant_id: UUID
+    backtest_id: UUID
+    ledger_id: UUID
+    backtest_spec_digest: Digest
+    ledger_policy_digest: Digest
+    economics_policy_digest: Digest
+    dataset_id: UUID
+    manifest_digest: Digest
+    instrument_id: UUID
+    quantitative_claims_status: Literal["ineligible_unverified_coverage"] = (
+        "ineligible_unverified_coverage"
+    )
+    limitations: tuple[DatasetLimitation, ...] = Field(min_length=1, max_length=64)
+    purpose: Literal["corporate_action_cash"] = "corporate_action_cash"
+    ledger_basis_digest: Digest
+    checkpoint_id: UUID
+    checkpoint_digest: Digest
+    checkpoint_generation: int = Field(strict=True, ge=1)
+    prior_session_receipt_digest: Digest
+    quantity_source_digest: Digest
+    ledger_receipt_id: Digest
+    event_authority_digest: Digest
+    event_view_digest: Digest
+    action_id: UUID
+    action_revision: int = Field(ge=1)
+    application: Literal[
+        CorporateActionApplication.DIVIDEND_PAYMENT,
+        CorporateActionApplication.DELISTING_SETTLEMENT,
+    ]
+    action_digest: Digest
+    action_projection_digest: Digest
+    quantity_basis: Literal["entitled_quantity", "position_quantity"]
+    expected_quantity: Decimal
+    unit_cash_amount: Decimal
+    source_currency: Currency
+    session_date: date
+    phase: Literal[EconomicPhase.POST_CLOSE] = EconomicPhase.POST_CLOSE
+    event_at: datetime
+    projection: FxRateProjection
+    conversion: FxConversion
+    authority_digest: Digest
+
+    _event_at_is_utc = field_validator("event_at")(_utc)
+    _decimal_inputs_are_exact = field_validator(
+        "expected_quantity", "unit_cash_amount", mode="before"
+    )(_exact_decimal)
+
+    @model_validator(mode="after")
+    def validate_authority(self):
+        if type(self.projection) is not FxRateProjection or type(
+            self.conversion
+        ) is not FxConversion:
+            raise ValueError("authorized corporate cash contains foreign contract types")
+        for value in (self.expected_quantity, self.unit_cash_amount):
+            _bounded_decimal(value)
+        if self.expected_quantity <= 0 or self.unit_cash_amount <= 0:
+            raise ValueError("corporate cash quantity and unit amount are invalid")
+        expected_basis = (
+            "entitled_quantity"
+            if self.application is CorporateActionApplication.DIVIDEND_PAYMENT
+            else "position_quantity"
+        )
+        with localcontext(_DECIMAL_CONTEXT):
+            expected_source_amount = self.expected_quantity * self.unit_cash_amount
+        _bounded_decimal(expected_source_amount)
+        if (
+            self.quantity_basis != expected_basis
+            or self.projection.dataset_id != self.dataset_id
+            or self.projection.manifest_digest != self.manifest_digest
+            or self.projection.instrument_id != self.instrument_id
+            or self.projection.event_at != self.event_at
+            or self.projection.source_currency != self.source_currency
+            or self.conversion.source_currency != self.source_currency
+            or self.projection.functional_currency
+            != self.conversion.functional_currency
+            or self.conversion.source_amount != expected_source_amount
+            or not hmac.compare_digest(
+                self.conversion.fx_projection_digest,
+                self.projection.projection_digest,
+            )
+        ):
+            raise ValueError("authorized corporate cash contains foreign evidence")
+        expected = canonical_digest(
+            self.model_dump(mode="python", exclude={"authority_digest"})
+        )
+        if not hmac.compare_digest(self.authority_digest, expected):
+            raise ValueError("authorized corporate-cash digest is invalid")
+        return self
+
+
+def _derive_corporate_cash_source_amount(
+    unit_cash_amount: Decimal,
+    expected_quantity: Decimal,
+) -> Decimal:
+    """Multiply frozen cash terms by an externally anchored quantity exactly."""
+
+    if type(unit_cash_amount) is not Decimal or type(expected_quantity) is not Decimal:
+        raise SimulationEconomicsError(
+            "corporate cash terms require exact Decimal values"
+        )
+    try:
+        unit_cash_amount = _bounded_decimal(unit_cash_amount)
+        expected_quantity = _bounded_decimal(expected_quantity)
+        if unit_cash_amount <= 0 or expected_quantity < 0:
+            raise ValueError("corporate cash terms are outside the supported range")
+        with localcontext(_DECIMAL_CONTEXT):
+            source_amount = unit_cash_amount * expected_quantity
+        return _bounded_decimal(source_amount)
+    except (ValueError, ArithmeticError) as exc:
+        raise SimulationEconomicsError("corporate cash terms are invalid") from exc
+
+
 def _convert_quote_to_functional(
     amount: Decimal,
     projection: FxRateProjection,
@@ -549,8 +722,10 @@ def _convert_quote_to_functional(
 
 
 __all__ = [
+    "AuthorizedCorporateCashConversion",
     "CorporateActionApplication",
     "CorporateActionProjection",
+    "CorporateCashLedgerBasis",
     "AuthorizedEconomicEventView",
     "AuthorizedFxConversion",
     "EconomicEventView",
