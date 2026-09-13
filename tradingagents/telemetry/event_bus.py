@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from threading import Lock
 
+from .audit_log import AuditLog
 from .events import AuditEvent
 
 
@@ -17,18 +18,28 @@ class EventEnvelope:
 class EventBus:
     """Barramento local para desenvolvimento; persistência deve usar AuditLog."""
 
-    def __init__(self):
+    def __init__(self, audit_log: AuditLog | None = None):
         self._lock = Lock()
         self._sequence = 0
         self._events: list[EventEnvelope] = []
         self._seen: set[str] = set()
         self._subscribers: dict[str, list[Callable[[EventEnvelope], None]]] = defaultdict(list)
+        self.audit_log = audit_log
+        if audit_log:
+            for event in audit_log.read():
+                self._sequence += 1
+                envelope = EventEnvelope(self._sequence, event)
+                self._events.append(envelope)
+                self._seen.add(event.event_id)
 
     def publish(self, event: AuditEvent) -> EventEnvelope:
         with self._lock:
             if event.event_id in self._seen:
                 return next(item for item in self._events if item.event.event_id == event.event_id)
             self._sequence += 1
+            event = replace(event, sequence=self._sequence)
+            if self.audit_log:
+                event = self.audit_log.append(event)
             envelope = EventEnvelope(self._sequence, event)
             self._events.append(envelope)
             self._seen.add(event.event_id)

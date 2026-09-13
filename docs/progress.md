@@ -89,3 +89,24 @@ A suíte completa foi executada depois das mudanças:
 Os skips são um teste Bedrock sem `langchain_aws` instalado e um teste DeepSeek que exige credencial live. O smoke test da API, compilação e testes focados também passaram.
 
 O lote está pronto para commit/publicação, mas o produto ainda não deve ser chamado de pronto para dinheiro real. Permanecem pendentes persistência distribuída do Event Bus, reconciliação externa completa, fees/funding/margem/fills parciais do Paper, observabilidade de produção, deployment 24/7 e validação Demo com terminal MT5 real isolado.
+
+## Ciclo 5 — persistência de eventos e Shadow Trading
+
+### Implementado
+
+O Event Bus agora aceita um `AuditLog` persistente, recupera eventos no boot, preserva sequência de replay e evita duplicação após reinício. O serviço passou a usar esse barramento persistente para os eventos da agência.
+
+O ShadowAdapter agora possui persistência atômica, recuperação após reinício, endpoint protegido para registrar intenções e endpoint de resumo. O smoke test verifica explicitamente `orders_sent = 0`.
+
+### Testes executados
+
+```text
+ruff seletivo: passou
+compileall: passou
+16 testes focados: passaram
+smoke_agency_api.py: passou
+```
+
+### Riscos restantes
+
+O Event Bus persistente atual é baseado em arquivo local e não oferece coordenação distribuída para múltiplos processos. A reconciliação externa completa e os read models de produção ainda faltam. O serviço ainda precisa de métricas, alertas, backup/restore, deployment persistente e endurecimento do endpoint legado CCXT.

@@ -28,7 +28,7 @@ from tradingagents.domain import (
     Side,
     TradeDecision,
 )
-from tradingagents.execution import ExecutionRouter, KillSwitch, PaperAdapter
+from tradingagents.execution import ExecutionRouter, KillSwitch, PaperAdapter, ShadowAdapter
 from tradingagents.risk import RiskEngine
 from tradingagents.telemetry import AuditLog, EventBus
 
@@ -36,10 +36,13 @@ DATA = Path(os.environ.get("DATA_DIR", "/data")); DATA.mkdir(parents=True, exist
 CFG_PATH = DATA / "config.json"; DB = DATA / "jobs.db"
 PASSWORD = os.environ.get("ACCESS_PASSWORD", "")
 STATIC = Path(__file__).parent / "static"
-AGENCY = AgencyRuntime(audit_log=AuditLog(DATA / "agency-events.jsonl"))
+AGENCY_AUDIT = AuditLog(DATA / "agency-events.jsonl")
+AGENCY_EVENT_BUS = EventBus(AGENCY_AUDIT)
+AGENCY = AgencyRuntime(audit_log=AGENCY_AUDIT, event_bus=AGENCY_EVENT_BUS)
 AUDIT_LOG = AuditLog(DATA / "execution-events.jsonl")
 EVENT_BUS = EventBus()
 PAPER_ADAPTER = PaperAdapter(state_path=DATA / "paper-state.json")
+SHADOW_ADAPTER = ShadowAdapter(state_path=DATA / "shadow-state.json")
 KILL_SWITCH = KillSwitch()
 EXECUTION_ROUTER = ExecutionRouter(risk_engine=RiskEngine(), audit_log=AUDIT_LOG, event_bus=EVENT_BUS, kill_switch=KILL_SWITCH)
 for _agent_id, _desk, _role in (
@@ -430,6 +433,24 @@ async def paper_execution(req: Request, _=Depends(auth)):
         raise HTTPException(423, str(exc)) from exc
     except (KeyError, TypeError, ValueError) as exc:
         raise HTTPException(422, f"paper execution inválida: {exc}") from exc
+
+
+@app.get("/v1/execution/shadow")
+def shadow_summary(_=Depends(auth)):
+    return SHADOW_ADAPTER.summary()
+
+
+@app.post("/v1/execution/shadow")
+async def shadow_execution(req: Request, _=Depends(auth)):
+    body = await req.json()
+    try:
+        now = datetime.now(timezone.utc)
+        request = OrderRequest(str(body["client_order_id"]), str(body.get("decision_id", "shadow-decision")), str(body.get("run_id", "shadow-run")), str(body.get("strategy_id", "shadow-strategy")), "shadow-account", str(body["instrument_id"]), "shadow", Side(str(body["side"]).upper()), str(body.get("order_type", "MARKET")), Decimal(str(body["quantity"])), Decimal(str(body.get("price", body["last"]))), Decimal(str(body.get("stop_loss", "0.0001"))), Decimal(str(body.get("take_profit", "0.0002"))))
+        snapshot = MarketSnapshot(str(body.get("snapshot_id", uuid.uuid4().hex)), request.instrument_id, "shadow", Decimal(str(body["bid"])), Decimal(str(body["ask"])), Decimal(str(body["last"])), Decimal(str(body.get("volume", "0"))), Decimal(str(body.get("spread", "0"))), now, now, "shadow-api", int(body.get("sequence", 0)))
+        trade = SHADOW_ADAPTER.record(request, snapshot)
+        return {"shadow_id": trade.shadow_id, "client_order_id": trade.client_order_id, "status": trade.status, "reference_price": str(trade.reference_price), "orders_sent": 0}
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(422, f"shadow execution inválida: {exc}") from exc
 
 
 @app.get("/v1/execution/health")
