@@ -3,11 +3,11 @@
 - **mission_id:** `tradingagents-dz23-a5-2026-09-08`
 - **objective:** concluir o TradingAgents DZ23 como plataforma web multiusuário pronta para usuários leigos, com carteira administrada, perfis de risco, execução CCXT segura e implantação verificada em `https://trading.dz23.online/`.
 - **state:** `EXECUTING`
-- **iteration:** 18
+- **iteration:** 19
 - **started_at:** 2026-09-08 America/Sao_Paulo
-- **last_heartbeat:** 2026-09-12
-- **last_progress_at:** 2026-09-12
-- **current_task:** implementar M5.2c2: aplicar corporate actions e FX autorizados no ledger de simulação de forma atômica e idempotente.
+- **last_heartbeat:** 2026-09-13
+- **last_progress_at:** 2026-09-13
+- **current_task:** implementar a outer economic session authority do M5.2c2 e conectá-la à custódia autenticada/CAS sem ativar runtime antes da aprovação.
 
 ## Acceptance criteria
 
@@ -31,7 +31,7 @@
 - **active M4 repair clone:** `C:\Users\zodyp\Documents\Codex\2026-09-06\referenced-chatgpt-conversation-this-is-an\work\tradingagents-a5-m4-fix-2` from frozen `784d16e`
 - **branch:** `feat/a5-end-user-platform`
 - **base:** `4cdd1fcabfaf89411b4e44d0b8e6b2a5359a3ef7`
-- **remote:** `https://github.com/lmpradodz23-design/tradingagents-dz23.git`
+- **remote:** `https://github.com/LMPrado-DZ23/tradingagents-dz23.git`
 - **remote main verified:** `4cdd1fcabfaf89411b4e44d0b8e6b2a5359a3ef7`
 - **audit clone:** `C:\TradingAgents-Handoff\codex-auditoria\tradingagents-dz23-main-4cdd1fc` (não editar)
 - **target server:** `82.29.59.71`
@@ -92,6 +92,9 @@
   spec, policies, dataset, manifesto, instrumento, moeda e livro FX congelado;
   três revisões independentes aprovaram `f93eb62` após 266 testes relacionados;
   evidência consolidada em `audit/M5_2C1_FINAL_INDEPENDENT_REVIEW.md`.
+- [x] M5.2c2 core/primitives `2824c42` implementou ledger econômico unificado,
+  corporate cash derivado e checkpoint-head CAS; três revisões aprovaram apenas
+  o núcleo interno, com outer authority e PostgreSQL de produção ainda pendentes.
 
 ## Pending tasks
 
@@ -216,6 +219,9 @@
   Ruff e compileall verdes. As quatro exclusões são incompatibilidades
   preexistentes do host de subprocessos Windows e seguem obrigatórias no gate
   Linux de release.
+- M5.2c2 core/primitives `2824c42`: foco **61 passed**; regressão relacionada
+  **158 passed**; suíte integral Windows **1618 passed, 24 skipped, 71 subtests**;
+  três revisões independentes aprovaram somente o checkpoint interno.
 
 ## Commits
 
@@ -230,6 +236,7 @@
 - `99548a7` — `fix(backtest): bind simulation authority economics`.
 - `6ad5b2e` — `feat(backtest): authorize PIT corporate actions and FX`.
 - `f93eb62` — `fix(backtest): preserve legacy manifest default`.
+- `2824c42` — `feat(backtest): add M5.2c2 economic core primitives`.
 
 ## Agents delegated
 
@@ -241,9 +248,10 @@
 
 ## Next action
 
-1. implementar M5.2c2 para aplicação atômica e idempotente de splits,
-   dividendos, delisting e FX autorizados no ledger;
-2. submeter M5.2c2 a três revisões independentes antes de integrar o runner;
+1. implementar a outer authority do M5.2c2 como única entrada para vistas,
+   fills, quantities, conversões, checkpoint autenticado e CAS;
+2. versionar o escopo multiportfolio/multiconta antes de conectar várias
+   carteiras e corretoras ao runtime;
 3. manter credenciais reais fora de chat, Git, fixtures e evidências;
 4. manter a integração IQ Option em marco separado: MCP oficial sob gate de capital; `iq-core` somente experimental/read-only, nunca rota LIVE;
 5. configurar Google e Apple no Supabase quando os Client IDs/secrets externos forem fornecidos, sem bloquear os demais marcos.
