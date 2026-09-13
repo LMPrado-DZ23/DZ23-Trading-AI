@@ -30,7 +30,7 @@ from tradingagents.domain import (
 )
 from tradingagents.execution import ExecutionRouter, KillSwitch, PaperAdapter, ShadowAdapter
 from tradingagents.risk import RiskEngine
-from tradingagents.telemetry import AuditLog, EventBus
+from tradingagents.telemetry import AuditLog, EventBus, MetricsRegistry
 
 DATA = Path(os.environ.get("DATA_DIR", "/data")); DATA.mkdir(parents=True, exist_ok=True)
 CFG_PATH = DATA / "config.json"; DB = DATA / "jobs.db"
@@ -44,7 +44,8 @@ EVENT_BUS = EventBus(AUDIT_LOG)
 PAPER_ADAPTER = PaperAdapter(state_path=DATA / "paper-state.json")
 SHADOW_ADAPTER = ShadowAdapter(state_path=DATA / "shadow-state.json")
 KILL_SWITCH = KillSwitch()
-EXECUTION_ROUTER = ExecutionRouter(risk_engine=RiskEngine(), audit_log=AUDIT_LOG, event_bus=EVENT_BUS, kill_switch=KILL_SWITCH)
+METRICS = MetricsRegistry()
+EXECUTION_ROUTER = ExecutionRouter(risk_engine=RiskEngine(), audit_log=AUDIT_LOG, event_bus=EVENT_BUS, kill_switch=KILL_SWITCH, metrics=METRICS)
 for _agent_id, _desk, _role in (
     ("market-scanner", "research", "Market Scanner"),
     ("technical-analyst", "research", "Technical Analyst"),
@@ -219,6 +220,17 @@ def run_job(jid, ticker, date):
 
 @app.get("/healthz")
 def hz(): return {"status": "ok", "app": "tradingagents-operavel/3"}
+
+
+@app.get("/readyz")
+def readyz():
+    blocked = KILL_SWITCH.state.enabled
+    return {"status": "blocked" if blocked else "ready", "paper": PAPER_ADAPTER.healthcheck(), "event_sequence": EVENT_BUS.latest_sequence, "kill_switch": blocked}
+
+
+@app.get("/metrics")
+def metrics(_=Depends(auth)):
+    return METRICS.snapshot()
 
 @app.get("/")
 def index(): return FileResponse(STATIC / "index.html")

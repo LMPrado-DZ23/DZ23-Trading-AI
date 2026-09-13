@@ -147,3 +147,22 @@ smoke_agency_api.py: passou
 ### Riscos restantes
 
 O monitor ainda precisa ser registrado no supervisor de workers com providers reais CCXT/MT5 e acionar o KillSwitch automaticamente em divergência. Métricas, alertas e deployment persistente ainda não estão concluídos.
+
+## Ciclo 8 — métricas e readiness
+
+### Implementado
+
+Foi criado `MetricsRegistry` thread-safe, integrado ao ExecutionRouter com contadores de tentativas, rejeições de risco, replay idempotente e submissões. Foram adicionados `/readyz` e `/metrics`; o readiness informa bloqueio do KillSwitch, estado Paper e sequência do Event Bus.
+
+### Testes executados
+
+```text
+ruff seletivo: passou
+compileall: passou
+19 testes focados: passaram
+smoke_agency_api.py: passou
+```
+
+### Riscos restantes
+
+Ainda faltam métricas de workers, alertas externos, armazenamento de métricas de longa duração, backup/restore, integração do monitor com providers reais, endurecimento do endpoint CCXT legado, onboarding e deployment 24/7.

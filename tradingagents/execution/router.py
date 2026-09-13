@@ -17,7 +17,7 @@ from tradingagents.domain.contracts import (
 )
 from tradingagents.domain.enums import RiskStatus
 from tradingagents.risk import RiskEngine
-from tradingagents.telemetry import AuditEvent, AuditLog, EventBus
+from tradingagents.telemetry import AuditEvent, AuditLog, EventBus, MetricsRegistry
 
 from .kill_switch import KillSwitch
 from .protocol import BrokerAdapter
@@ -32,25 +32,30 @@ class ExecutionResult:
 class ExecutionRouter:
     """Única porta de execução: risco aprovado, auditoria e adapter."""
 
-    def __init__(self, *, risk_engine: RiskEngine, audit_log: AuditLog, event_bus: EventBus, kill_switch: KillSwitch | None = None):
+    def __init__(self, *, risk_engine: RiskEngine, audit_log: AuditLog, event_bus: EventBus, kill_switch: KillSwitch | None = None, metrics: MetricsRegistry | None = None):
         self.risk_engine = risk_engine
         self.audit_log = audit_log
         self.event_bus = event_bus
         self.kill_switch = kill_switch or KillSwitch()
+        self.metrics = metrics or MetricsRegistry()
         self._client_orders: dict[str, OrderAck] = {}
 
     def submit(self, decision: TradeDecision, portfolio: PortfolioSnapshot, snapshot: MarketSnapshot, adapter: BrokerAdapter, *, request: OrderRequest, now: datetime | None = None) -> ExecutionResult:
         current = now or datetime.now(timezone.utc)
         self.kill_switch.assert_allowed()
+        self.metrics.inc("execution.attempts")
         risk = self.risk_engine.evaluate(decision, portfolio, snapshot, now=current)
         self._publish("risk.decision.created", decision.run_id, decision.decision_id, {"status": risk.status.value, "reason_codes": risk.reason_codes, "risk_decision_id": risk.risk_decision_id})
         if risk.status is not RiskStatus.APPROVE:
+            self.metrics.inc("execution.risk_rejected")
             self._publish("order.rejected", decision.run_id, request.client_order_id, {"reason": "RISK_REJECTED", "reason_codes": risk.reason_codes})
             return ExecutionResult(risk, None)
         if request.client_order_id in self._client_orders:
+            self.metrics.inc("execution.idempotent_replay")
             return ExecutionResult(risk, self._client_orders[request.client_order_id])
         self._publish("order.submitted", decision.run_id, request.client_order_id, {"instrument_id": request.instrument_id, "side": request.side.value, "quantity": str(request.quantity), "environment": request.environment.value})
         ack = adapter.submit(request, risk_approved=True)
+        self.metrics.inc("execution.submitted")
         self._client_orders[request.client_order_id] = ack
         self._publish("order.accepted" if ack.status.value in {"ACCEPTED", "FILLED"} else "order.rejected", decision.run_id, request.client_order_id, {"order_id": ack.order_id, "status": ack.status.value, "filled_quantity": str(ack.filled_quantity), "average_price": str(ack.average_price or Decimal("0"))})
         return ExecutionResult(risk, ack)
