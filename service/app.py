@@ -317,6 +317,8 @@ def broker_status(_=Depends(auth)):
 async def broker_order(req: Request, _=Depends(auth)):
     """EXECUTA uma ordem (testnet ou live conforme configuração) amarrada a
     um job concluído — a decisão analisada é o que se opera."""
+    if os.environ.get("LEGACY_BROKER_ORDER_ENABLED", "false").lower() != "true":
+        raise HTTPException(410, "endpoint legado bloqueado: use /v1/execution/paper ou o ExecutionRouter governado")
     b = await req.json()
     jid = str(b.get("job_id", "")).strip()
     symbol = str(b.get("symbol", "")).strip().upper()

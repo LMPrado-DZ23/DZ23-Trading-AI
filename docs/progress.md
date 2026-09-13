@@ -166,3 +166,24 @@ smoke_agency_api.py: passou
 ### Riscos restantes
 
 Ainda faltam métricas de workers, alertas externos, armazenamento de métricas de longa duração, backup/restore, integração do monitor com providers reais, endurecimento do endpoint CCXT legado, onboarding e deployment 24/7.
+
+## Ciclo 9 — segurança de release e operação
+
+### Implementado
+
+O endpoint legado `/v1/broker/order` passou a responder `410` por padrão, impedindo bypass do ExecutionRouter. O comportamento só pode ser alterado explicitamente por `LEGACY_BROKER_ORDER_ENABLED`, que permanece false no ambiente de exemplo.
+
+Foi criado `scripts/backup_data.py` para backup e restore atômicos dos dados operacionais permitidos, com rejeição de caminhos inseguros. O smoke test valida o bloqueio do endpoint legado.
+
+### Testes executados
+
+```text
+ruff seletivo: passou
+compileall: passou
+21 testes focados: passaram
+smoke_agency_api.py: passou
+```
+
+### Riscos restantes
+
+Ainda faltam integração do monitor com adapters reais, worker 24/7 registrado no process manager, alertas externos, onboarding final, deployment documentado e teste MT5 Demo real isolado. O endpoint legado está bloqueado até a migração completa.

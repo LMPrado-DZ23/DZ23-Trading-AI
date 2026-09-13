@@ -39,4 +39,6 @@ assert reset.status_code == 200 and reset.json()["enabled"] is False
 shadow = client.post("/v1/execution/shadow", headers=headers, json={"client_order_id": "smoke-shadow", "instrument_id": "BTCUSDT", "side": "BUY", "quantity": "1", "price": "100", "bid": "99.9", "ask": "100.1", "last": "100"})
 assert shadow.status_code == 200 and shadow.json()["orders_sent"] == 0
 assert client.get("/v1/execution/shadow", headers=headers).json()["trades"] >= 1
+legacy = client.post("/v1/broker/order", headers=headers, json={"job_id": "smoke", "symbol": "BTC/USDT", "side": "buy", "amount": 1})
+assert legacy.status_code == 410
 print("agency API smoke passed")
