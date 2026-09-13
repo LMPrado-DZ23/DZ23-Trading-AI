@@ -4,17 +4,33 @@ operação embutidos. Uma senha (ACCESS_PASSWORD), um volume (/data), um deploy.
 Config vive em /data/config.json (chmod 600), editada PELO PAINEL, aplicada a
 cada job — sem redeploy, sem tocar em env no Coolify. Segredos nunca voltam
 inteiros ao navegador (exibição mascarada)."""
+import asyncio
 import hmac, json, os, sqlite3, threading, time, traceback, uuid
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
+from tradingagents.agency_runtime import AgencyRuntime
+from tradingagents.telemetry import AuditLog
 
 DATA = Path(os.environ.get("DATA_DIR", "/data")); DATA.mkdir(parents=True, exist_ok=True)
 CFG_PATH = DATA / "config.json"; DB = DATA / "jobs.db"
 PASSWORD = os.environ.get("ACCESS_PASSWORD", "")
 STATIC = Path(__file__).parent / "static"
+AGENCY = AgencyRuntime(audit_log=AuditLog(DATA / "agency-events.jsonl"))
+for _agent_id, _desk, _role in (
+    ("market-scanner", "research", "Market Scanner"),
+    ("technical-analyst", "research", "Technical Analyst"),
+    ("sentiment-analyst", "research", "Sentiment Analyst"),
+    ("strategy-agent", "strategy", "Strategy Researcher"),
+    ("risk-advisor", "risk", "Risk Advisor"),
+    ("portfolio-manager", "portfolio", "Portfolio Manager"),
+    ("execution-planner", "execution", "Execution Planner"),
+    ("reconciliation-agent", "monitoring", "Reconciliation"),
+):
+    AGENCY.register_agent(_agent_id, _desk, _role)
 
 ALLOWED_KEYS = [
     "TRADINGAGENTS_LLM_PROVIDER", "TRADINGAGENTS_BACKEND_URL", "TRADINGAGENTS_DEEP_THINK_LLM",
@@ -144,6 +160,8 @@ def run_job(jid, ticker, date):
         if jid in _cancel: upd(jid, status="cancelled"); return
         upd(jid, status="running")
         try:
+            AGENCY.set_agent_status("market-scanner", "ANALYZING")
+            AGENCY.set_agent_status("strategy-agent", "ANALYZING")
             cfg = load_cfg()
             for k, v in cfg.items():
                 if k in ALLOWED_KEYS and v: os.environ[k] = str(v)
@@ -166,7 +184,10 @@ def run_job(jid, ticker, date):
                                      "trade_date": (state or {}).get("trade_date")}
             upd(jid, status="completed", decision=str(decision)[:4000],
                 result=json.dumps(reports, ensure_ascii=False, default=str)[:200000])
+            AGENCY.set_agent_status("strategy-agent", "PAPER_TRADING")
+            AGENCY.set_agent_status("market-scanner", "WAITING_SETUP")
         except Exception as e:
+            AGENCY.set_agent_status("strategy-agent", "ERROR")
             upd(jid, status="failed",
                 error=f"{type(e).__name__}: {e}"[:2000] + "\n" +
                       traceback.format_exc()[-1500:])
@@ -289,3 +310,79 @@ async def broker_order(req: Request, _=Depends(auth)):
                 "order_id": (out.get("order") or {}).get("id")}
     except Exception as e:
         raise HTTPException(422, f"{type(e).__name__}: {e}"[:400])
+
+
+@app.get("/floor")
+def floor():
+    """Trading Floor visual; os dados continuam protegidos pela API autenticada."""
+    return FileResponse(STATIC / "floor.html")
+
+
+@app.get("/v1/agency/snapshot")
+def agency_snapshot(_=Depends(auth)):
+    snapshot = AGENCY.snapshot()
+    agents_by_id = AGENCY.agents
+    for desk in snapshot["desks"]:
+        desk["agents_data"] = [agents_by_id[agent_id] for agent_id in desk["agents"]]
+    return snapshot
+
+
+@app.get("/v1/agency/events")
+def agency_events(after: int = 0, _=Depends(auth)):
+    if after < 0:
+        raise HTTPException(422, "after deve ser não-negativo")
+    return {"events": [{"sequence": item.sequence, "event": item.event.as_dict()} for item in AGENCY.event_bus.replay(after)]}
+
+
+@app.get("/v1/agency/health")
+def agency_health(_=Depends(auth)):
+    return {"runtime": "READY", "event_sequence": AGENCY.event_bus.latest_sequence, "agents": len(AGENCY.agents), "meetings": len(AGENCY.meetings), "audit_log": str(DATA / "agency-events.jsonl")}
+
+
+@app.post("/v1/agency/agents/{agent_id}/status")
+async def agency_agent_status(agent_id: str, req: Request, _=Depends(auth)):
+    body = await req.json()
+    status = str(body.get("status", "")).strip().upper()
+    if not status:
+        raise HTTPException(422, "status obrigatório")
+    try:
+        event = AGENCY.set_agent_status(agent_id, status)
+    except KeyError:
+        raise HTTPException(404, "agente não encontrado") from None
+    return {"ok": True, "event_id": event.event_id}
+
+
+@app.post("/v1/agency/meetings")
+async def agency_meeting(req: Request, _=Depends(auth)):
+    body = await req.json()
+    try:
+        meeting = AGENCY.start_meeting(str(body["meeting_id"]), str(body["meeting_type"]), str(body["desk_id"]), tuple(body["participants"]), int(body["quorum"]))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(422, f"reunião inválida: {exc}") from exc
+    return {"meeting": {"meeting_id": meeting.meeting_id, "status": meeting.status, "quorum": meeting.quorum}}
+
+
+@app.post("/v1/agency/meetings/{meeting_id}/votes")
+async def agency_vote(meeting_id: str, req: Request, _=Depends(auth)):
+    body = await req.json()
+    meeting = AGENCY.meetings.get(meeting_id)
+    if not meeting:
+        raise HTTPException(404, "reunião não encontrada")
+    try:
+        meeting.record_vote(str(body["agent_id"]), str(body["action"]), float(body["confidence"]), list(body.get("evidence_ids", [])))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(422, f"voto inválido: {exc}") from exc
+    return {"meeting_id": meeting_id, "status": meeting.status, "votes": meeting.votes}
+
+
+@app.get("/v1/agency/stream")
+async def agency_stream(after: int = 0, _=Depends(auth)):
+    async def events():
+        cursor = after
+        for _ in range(120):
+            items = AGENCY.event_bus.replay(cursor)
+            for item in items:
+                cursor = item.sequence
+                yield f"id: {cursor}\nevent: {item.event.event_type}\ndata: {json.dumps(item.event.as_dict(), ensure_ascii=False)}\n\n"
+            await asyncio.sleep(1)
+    return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

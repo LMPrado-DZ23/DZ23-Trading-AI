@@ -40,3 +40,26 @@ REAL_MONEY_EXECUTION=false
 6. Implementar MT5 Demo com mocks e depois teste em conta demo isolada.
 7. Implementar adapters adicionais somente quando suas APIs e capacidades forem auditadas.
 8. Executar shadow trading e auditoria antes de discutir qualquer capacidade real.
+
+
+## Segunda etapa verificada
+
+| Componente | Estado |
+| --- | --- |
+| Event Bus local com sequence/replay/deduplicação | Implementado |
+| Audit Log persistente JSONL | Implementado |
+| Agency Runtime com desks/agentes | Implementado |
+| Reuniões com quorum e votos | Implementado |
+| Endpoint snapshot/events/health | Implementado |
+| Stream SSE autenticado | Implementado |
+| Trading Floor read-only | Implementado |
+| Backtest com custos e manifesto | Implementado |
+| Walk-forward windows | Implementado |
+| MT5 Demo com `order_check`/`order_send` | Implementado e mockado |
+| Supervisor de workers com heartbeat/backoff | Implementado |
+| Shadow Trading persistente | Preparado por contratos; execução dedicada ainda requer adapter/ambiente |
+| Live trading | Gate existente, mas não habilitado por esta entrega |
+
+## Limitação operacional explícita
+
+O código está pronto para desenvolvimento, Paper, Demo e integração controlada. Não existe garantia de lucro ou crescimento de ativos. A execução em conta real não é ativada automaticamente e não deve ser testada com credenciais reais nesta branch. Antes de uso real, ainda são necessárias validação da conta/broker, supervisão operacional, revisão de segurança, limites de capital, reconciliação em ambiente real e aprovação explícita.
