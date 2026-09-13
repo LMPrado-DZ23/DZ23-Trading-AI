@@ -208,3 +208,20 @@ smoke_agency_api.py: passou
 ### Limitações
 
 O snapshot MT5 foi validado com mock; a validação com terminal e conta Demo reais ainda depende do ambiente do usuário. O monitor Paper compara o ledger local e deve ser conectado a um provider remoto real para detectar divergência externa.
+
+## Ciclo 11 — deployment resiliente
+
+### Implementado
+
+O Docker Compose agora usa `/data` de forma consistente, publica a porta 8080, configura defaults seguros, `restart: unless-stopped` e healthcheck `/healthz`. O perfil Ollama também usa o volume persistente correto e mantém Live desativado.
+
+### Validação
+
+```text
+compileall: passou
+23 testes focados: passaram
+smoke_agency_api.py: passou
+git diff --check: passou
+```
+
+O comando `docker compose config` não pôde ser executado neste sandbox porque o binário Docker não está instalado. A configuração precisa ser validada no host de deployment antes de publicar o serviço.
