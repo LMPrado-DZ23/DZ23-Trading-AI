@@ -110,3 +110,21 @@ smoke_agency_api.py: passou
 ### Riscos restantes
 
 O Event Bus persistente atual é baseado em arquivo local e não oferece coordenação distribuída para múltiplos processos. A reconciliação externa completa e os read models de produção ainda faltam. O serviço ainda precisa de métricas, alertas, backup/restore, deployment persistente e endurecimento do endpoint legado CCXT.
+
+## Ciclo 6 — reconciliação estruturada
+
+### Implementado
+
+Foi adicionada `reconcile_state`, que compara snapshots locais e remotos de ordens, fills, posições, saldo, equity e margem. Diferenças numéricas respeitam tolerância explícita; divergências retornam relatório inseguro e identificam o campo conflitante.
+
+### Testes executados
+
+```text
+ruff: passou
+compileall: passou
+16 testes focados: passaram
+```
+
+### Riscos restantes
+
+A reconciliação precisa ser chamada periodicamente pelos workers e conectada aos snapshots reais de CCXT/MT5. O endpoint legado de broker ainda não usa o router tipado. Persistência distribuída, observabilidade, backup e deployment 24/7 continuam pendentes.
