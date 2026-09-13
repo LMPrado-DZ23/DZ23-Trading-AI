@@ -381,6 +381,29 @@ def test_manifest_validates_digests_counts_dates_and_limitations():
         _manifest(binding_digest="f" * 64)
 
 
+def test_manifest_schema_omission_preserves_legacy_v1_constructor() -> None:
+    current = _manifest()
+    legacy = current.model_dump(mode="python")
+    legacy.pop("schema_version")
+    legacy["binding_digest"] = market_dataset_binding_digest(
+        tenant_id=current.tenant_id,
+        dataset_id=current.dataset_id,
+        instrument_digest=current.instrument_digest,
+        content_bytes=current.content_bytes,
+        content_sha256=current.content_sha256,
+        schedule_digest=current.schedule_digest,
+        source_vintage=current.source_vintage,
+        calendar_engine_version=current.calendar_engine_version,
+        timezone_database_version=current.timezone_database_version,
+        settlement_policy_version=current.settlement_policy_version,
+    )
+
+    restored = MarketDatasetManifest(**legacy)
+
+    assert restored.schema_version == 1
+    assert restored.binding_digest == legacy["binding_digest"]
+
+
 def test_digest_is_decimal_canonical_and_materially_bound():
     first = _bar(open=Decimal("30.0"), close=Decimal("31.00"))
     same = _bar(

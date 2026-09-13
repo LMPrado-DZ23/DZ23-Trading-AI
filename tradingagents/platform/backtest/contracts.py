@@ -748,7 +748,7 @@ class FxObservation(BacktestContract):
 class MarketDatasetManifest(BacktestContract):
     dataset_id: UUID
     tenant_id: UUID
-    schema_version: Literal[1, 2] = 2
+    schema_version: Literal[1, 2] = 1
     created_at: datetime
     source: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9_.-]+$")
     source_vintage: str = Field(min_length=1, max_length=160)
