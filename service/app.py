@@ -32,6 +32,7 @@ from tradingagents.execution import ExecutionRouter, KillSwitch, PaperAdapter, S
 from tradingagents.reconciliation_worker import ReconciliationMonitor
 from tradingagents.risk import RiskEngine
 from tradingagents.telemetry import AuditLog, EventBus, MetricsRegistry
+from tradingagents.workers import WorkerSupervisor
 
 DATA = Path(os.environ.get("DATA_DIR", "/data")); DATA.mkdir(parents=True, exist_ok=True)
 CFG_PATH = DATA / "config.json"; DB = DATA / "jobs.db"
@@ -48,6 +49,8 @@ KILL_SWITCH = KillSwitch()
 METRICS = MetricsRegistry()
 EXECUTION_ROUTER = ExecutionRouter(risk_engine=RiskEngine(), audit_log=AUDIT_LOG, event_bus=EVENT_BUS, kill_switch=KILL_SWITCH, metrics=METRICS)
 PAPER_RECONCILIATION = ReconciliationMonitor(PAPER_ADAPTER.reconciliation_snapshot, PAPER_ADAPTER.reconciliation_snapshot)
+SUPERVISOR = WorkerSupervisor()
+SUPERVISOR.add("paper-reconciliation", PAPER_RECONCILIATION.run_once, interval_seconds=60)
 for _agent_id, _desk, _role in (
     ("market-scanner", "research", "Market Scanner"),
     ("technical-analyst", "research", "Technical Analyst"),
@@ -75,6 +78,16 @@ SECRETish = tuple(k for k in ALLOWED_KEYS if k.endswith(("_KEY", "_SECRET")))
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 bearer = HTTPBearer(auto_error=False)
+
+
+@app.on_event("startup")
+async def start_workers():
+    SUPERVISOR.start()
+
+
+@app.on_event("shutdown")
+async def stop_workers():
+    SUPERVISOR.stop()
 
 # Trava de força-bruta: com o código público, qualquer um sabe que UMA senha
 # guarda tudo — então errar custa caro. 5 erros por IP => 15 min de espera.
@@ -471,7 +484,7 @@ async def shadow_execution(req: Request, _=Depends(auth)):
 
 @app.get("/v1/execution/health")
 def execution_health(_=Depends(auth)):
-    return {"paper": PAPER_ADAPTER.healthcheck(), "kill_switch": {"enabled": KILL_SWITCH.state.enabled, "reason": KILL_SWITCH.state.reason, "changed_at": KILL_SWITCH.state.changed_at.isoformat(), "actor": KILL_SWITCH.state.actor}, "reconciliation": PAPER_RECONCILIATION.health(), "event_sequence": EVENT_BUS.latest_sequence}
+    return {"paper": PAPER_ADAPTER.healthcheck(), "kill_switch": {"enabled": KILL_SWITCH.state.enabled, "reason": KILL_SWITCH.state.reason, "changed_at": KILL_SWITCH.state.changed_at.isoformat(), "actor": KILL_SWITCH.state.actor}, "reconciliation": PAPER_RECONCILIATION.health(), "workers": SUPERVISOR.health(), "event_sequence": EVENT_BUS.latest_sequence}
 
 
 @app.post("/v1/execution/reconciliation")

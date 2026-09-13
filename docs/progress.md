@@ -225,3 +225,39 @@ git diff --check: passou
 ```
 
 O comando `docker compose config` não pôde ser executado neste sandbox porque o binário Docker não está instalado. A configuração precisa ser validada no host de deployment antes de publicar o serviço.
+
+## Ciclo 12 — lifecycle do worker de reconciliação
+
+### Implementado
+
+O serviço registra `paper-reconciliation` no `WorkerSupervisor`, inicia no startup, encerra no shutdown, executa a cada 60 segundos e expõe heartbeat/falhas no health de execução. O monitor continua fail-closed.
+
+### Testes executados
+
+```text
+ruff seletivo: passou
+compileall: passou
+25 testes focados: passaram
+smoke_agency_api.py: passou
+```
+
+## Ciclo 13 — checklist de release
+
+### Resultado verificado
+
+```text
+release_check.py: passou
+compileall: passou
+25 testes focados: passaram
+smoke_agency_api.py: passou
+git diff --check: passou
+929 testes completos passaram
+2 testes foram ignorados por dependências/credenciais externas
+71 subtestes passaram
+```
+
+### Limitações externas honestas
+
+O sandbox não possui Docker, portanto `docker compose config` precisa ser executado no host de deployment. O MT5 Demo real exige terminal MetaTrader 5 e conta Demo do usuário; os caminhos foram validados com mocks, não com uma conta externa. Alertas externos e coleta de métricas de longa duração dependem da infraestrutura escolhida pelo usuário.
+
+A aplicação está pronta para onboarding em Paper/Shadow e preparação Demo, mas não deve ser apresentada como garantia de lucro nem como autorização para dinheiro real.
