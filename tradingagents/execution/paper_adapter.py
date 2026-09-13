@@ -86,6 +86,15 @@ class PaperAdapter:
     def reconcile(self, account_id: str) -> dict:
         return {"status": "MATCHED", "account_id": account_id, "orders": len(self.orders), "positions": len(self.positions)}
 
+    def reconciliation_snapshot(self) -> dict:
+        portfolio = self.get_portfolio(self.account_id)
+        return {
+            "balance": str(portfolio.balance), "equity": str(portfolio.equity), "available_margin": str(portfolio.available_margin),
+            "orders": [{"id": ack.order_id, "client_order_id": ack.client_order_id, "status": ack.status.value, "quantity": str(ack.filled_quantity)} for ack in self.orders.values()],
+            "fills": [{"id": ack.order_id, "quantity": str(ack.filled_quantity), "price": str(ack.average_price or 0)} for ack in self.orders.values() if ack.filled_quantity > 0],
+            "positions": [{"id": position.position_id, "instrument_id": position.instrument_id, "quantity": str(position.quantity), "average_price": str(position.average_price)} for position in self.positions.values()],
+        }
+
     def mark_to_market(self, prices: dict[str, Decimal]) -> dict[str, Decimal]:
         unrealized = Decimal("0")
         gross = Decimal("0")

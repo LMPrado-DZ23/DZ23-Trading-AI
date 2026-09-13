@@ -114,6 +114,18 @@ class MT5Adapter:
         orders = self._mt5.orders_get() or ()
         return {"status": "OBSERVED", "account_id": account_id, "positions": len(positions), "orders": len(orders)}
 
+    def reconciliation_snapshot(self, account_id: str) -> dict:
+        self._require_connected()
+        portfolio = self.get_portfolio(account_id)
+        orders = self._mt5.orders_get() or ()
+        deals = self._mt5.history_deals_get() or ()
+        return {
+            "balance": str(portfolio.balance), "equity": str(portfolio.equity), "available_margin": str(portfolio.available_margin),
+            "orders": [{"id": str(getattr(item, "ticket", "unknown")), "status": str(getattr(item, "state", "UNKNOWN")), "quantity": str(getattr(item, "volume_current", getattr(item, "volume_initial", 0)))} for item in orders],
+            "fills": [{"id": str(getattr(item, "ticket", "unknown")), "quantity": str(getattr(item, "volume", 0)), "price": str(getattr(item, "price", 0))} for item in deals],
+            "positions": [{"id": position.position_id, "instrument_id": position.instrument_id, "quantity": str(position.quantity), "average_price": str(position.average_price)} for position in portfolio.positions],
+        }
+
     def _require_connected(self) -> None:
         if not self._connected or self._mt5 is None:
             raise RuntimeError("terminal MT5 desconectado")

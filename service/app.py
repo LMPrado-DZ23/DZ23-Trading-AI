@@ -29,6 +29,7 @@ from tradingagents.domain import (
     TradeDecision,
 )
 from tradingagents.execution import ExecutionRouter, KillSwitch, PaperAdapter, ShadowAdapter
+from tradingagents.reconciliation_worker import ReconciliationMonitor
 from tradingagents.risk import RiskEngine
 from tradingagents.telemetry import AuditLog, EventBus, MetricsRegistry
 
@@ -46,6 +47,7 @@ SHADOW_ADAPTER = ShadowAdapter(state_path=DATA / "shadow-state.json")
 KILL_SWITCH = KillSwitch()
 METRICS = MetricsRegistry()
 EXECUTION_ROUTER = ExecutionRouter(risk_engine=RiskEngine(), audit_log=AUDIT_LOG, event_bus=EVENT_BUS, kill_switch=KILL_SWITCH, metrics=METRICS)
+PAPER_RECONCILIATION = ReconciliationMonitor(PAPER_ADAPTER.reconciliation_snapshot, PAPER_ADAPTER.reconciliation_snapshot)
 for _agent_id, _desk, _role in (
     ("market-scanner", "research", "Market Scanner"),
     ("technical-analyst", "research", "Technical Analyst"),
@@ -469,7 +471,13 @@ async def shadow_execution(req: Request, _=Depends(auth)):
 
 @app.get("/v1/execution/health")
 def execution_health(_=Depends(auth)):
-    return {"paper": PAPER_ADAPTER.healthcheck(), "kill_switch": {"enabled": KILL_SWITCH.state.enabled, "reason": KILL_SWITCH.state.reason, "changed_at": KILL_SWITCH.state.changed_at.isoformat(), "actor": KILL_SWITCH.state.actor}, "event_sequence": EVENT_BUS.latest_sequence}
+    return {"paper": PAPER_ADAPTER.healthcheck(), "kill_switch": {"enabled": KILL_SWITCH.state.enabled, "reason": KILL_SWITCH.state.reason, "changed_at": KILL_SWITCH.state.changed_at.isoformat(), "actor": KILL_SWITCH.state.actor}, "reconciliation": PAPER_RECONCILIATION.health(), "event_sequence": EVENT_BUS.latest_sequence}
+
+
+@app.post("/v1/execution/reconciliation")
+def execution_reconciliation(_=Depends(auth)):
+    report = PAPER_RECONCILIATION.run_once()
+    return {"status": report.status, "safe": report.is_safe, "missing_local": report.missing_local, "missing_remote": report.missing_remote, "mismatches": report.mismatches}
 
 
 @app.post("/v1/execution/kill-switch")

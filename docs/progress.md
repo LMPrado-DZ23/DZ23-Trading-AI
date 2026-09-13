@@ -187,3 +187,24 @@ smoke_agency_api.py: passou
 ### Riscos restantes
 
 Ainda faltam integração do monitor com adapters reais, worker 24/7 registrado no process manager, alertas externos, onboarding final, deployment documentado e teste MT5 Demo real isolado. O endpoint legado está bloqueado até a migração completa.
+
+## Ciclo 10 — snapshots MT5/Paper e reconciliação pela API
+
+### Implementado
+
+O Paper Adapter agora produz snapshot normalizado de saldo, equity, ordens, fills e posições. O MT5 Adapter Demo produz snapshot equivalente usando account info, orders, deals e positions da biblioteca oficial. O serviço expõe `POST /v1/execution/reconciliation` e inclui o estado do monitor no health da execução.
+
+O deployment foi atualizado para refletir os defaults seguros atuais, sem afirmar que Live está disponível.
+
+### Testes executados
+
+```text
+ruff seletivo: passou
+compileall: passou
+23 testes focados: passaram
+smoke_agency_api.py: passou
+```
+
+### Limitações
+
+O snapshot MT5 foi validado com mock; a validação com terminal e conta Demo reais ainda depende do ambiente do usuário. O monitor Paper compara o ledger local e deve ser conectado a um provider remoto real para detectar divergência externa.
