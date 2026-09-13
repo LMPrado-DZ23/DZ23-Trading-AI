@@ -54,6 +54,9 @@ REQUEST_FILENAME = "request.json"
 SIGNATURE_FILENAME = "request.hmac"
 MAX_AUTHORITY_BYTES = 16 * 1024 * 1024
 _SIGNATURE_DOMAIN = b"tradingagents/simulation-order-authority/1\x00"
+_ECONOMIC_CHECKPOINT_SIGNATURE_DOMAIN = (
+    b"tradingagents/simulation-economic-checkpoint-authority/2\x00"
+)
 _DECIMAL_CONTEXT = Context(prec=76)
 
 
@@ -491,6 +494,13 @@ class FrozenSimulationAuthorityRepository:
             hashlib.sha256,
         ).hexdigest().encode("ascii") + b"\n"
 
+    def _economic_checkpoint_signature(self, content: bytes) -> bytes:
+        return hmac.new(
+            self._signing_key,
+            _ECONOMIC_CHECKPOINT_SIGNATURE_DOMAIN + content,
+            hashlib.sha256,
+        ).hexdigest().encode("ascii") + b"\n"
+
     def publish_request(
         self, request: AuthorizedSimulationRequest
     ) -> SimulationRequestReference:
@@ -615,11 +625,111 @@ class FrozenSimulationAuthorityRepository:
             raise SimulationAuthorityError("ledger checkpoint does not match trusted bindings")
         return checkpoint
 
+    def _publish_economic_checkpoint(self, checkpoint):
+        """Persist an outer-authority checkpoint in a domain-separated namespace."""
+
+        from tradingagents.platform.backtest.simulation_economic_session_authority import (
+            EconomicCheckpointReferenceV2,
+            EconomicLedgerCheckpointV2,
+        )
+
+        if type(self) is not FrozenSimulationAuthorityRepository:
+            raise SimulationAuthorityError(
+                "economic checkpoint publication requires the repository authority"
+            )
+        if type(checkpoint) is not EconomicLedgerCheckpointV2:
+            raise SimulationAuthorityError(
+                "economic checkpoint must use the exact authority contract"
+            )
+        try:
+            checked = EconomicLedgerCheckpointV2.model_validate(
+                checkpoint.model_dump(mode="python")
+            )
+        except ValueError as exc:
+            raise SimulationAuthorityError(
+                "economic checkpoint failed deep contract revalidation"
+            ) from exc
+        content = canonical_json_bytes(checked.model_dump(mode="python")) + b"\n"
+        if len(content) > MAX_AUTHORITY_BYTES:
+            raise SimulationAuthorityError("economic checkpoint exceeds its byte limit")
+        self._publish(
+            checked.checkpoint_id,
+            "economic-checkpoints-v2",
+            content,
+            self._economic_checkpoint_signature(content),
+        )
+        return EconomicCheckpointReferenceV2.from_checkpoint(checked)
+
+    def _load_economic_checkpoint(
+        self,
+        reference,
+        *,
+        expected_tenant_id: UUID,
+        expected_backtest_id: UUID,
+        expected_backtest_spec_digest: str,
+        expected_ledger_id: UUID,
+    ):
+        """Load and authenticate one economic checkpoint for the outer authority."""
+
+        from tradingagents.platform.backtest.simulation_economic_session_authority import (
+            EconomicCheckpointReferenceV2,
+            EconomicLedgerCheckpointV2,
+        )
+
+        if type(self) is not FrozenSimulationAuthorityRepository:
+            raise SimulationAuthorityError(
+                "economic checkpoint loading requires the repository authority"
+            )
+        if type(reference) is not EconomicCheckpointReferenceV2:
+            raise SimulationAuthorityError(
+                "economic checkpoint reference must use the exact authority contract"
+            )
+        try:
+            checked_ref = EconomicCheckpointReferenceV2.model_validate(
+                reference.model_dump(mode="python")
+            )
+        except ValueError as exc:
+            raise SimulationAuthorityError(
+                "economic checkpoint reference failed deep validation"
+            ) from exc
+        content, signature = self._read_files(
+            checked_ref.checkpoint_id, "economic-checkpoints-v2"
+        )
+        if not hmac.compare_digest(
+            signature, self._economic_checkpoint_signature(content)
+        ):
+            raise SimulationAuthorityError("economic checkpoint signature mismatch")
+        try:
+            checkpoint = EconomicLedgerCheckpointV2.model_validate(json.loads(content))
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+            raise SimulationAuthorityError(
+                "economic checkpoint is not valid canonical JSON"
+            ) from exc
+        if not hmac.compare_digest(
+            content,
+            canonical_json_bytes(checkpoint.model_dump(mode="python")) + b"\n",
+        ):
+            raise SimulationAuthorityError("economic checkpoint bytes are not canonical")
+        authoritative_ref = EconomicCheckpointReferenceV2.from_checkpoint(checkpoint)
+        if (
+            authoritative_ref != checked_ref
+            or checkpoint.tenant_id != expected_tenant_id
+            or checkpoint.backtest_id != expected_backtest_id
+            or checkpoint.ledger_id != expected_ledger_id
+            or not hmac.compare_digest(
+                checkpoint.backtest_spec_digest, expected_backtest_spec_digest
+            )
+        ):
+            raise SimulationAuthorityError(
+                "economic checkpoint does not match trusted bindings"
+            )
+        return checkpoint
+
     @staticmethod
     def _leaf(record_id: UUID, namespace: str) -> str:
         if type(record_id) is not UUID:
             raise SimulationAuthorityError("authority record ID must be a UUID")
-        if namespace not in {"orders", "checkpoints"}:
+        if namespace not in {"orders", "checkpoints", "economic-checkpoints-v2"}:
             raise SimulationAuthorityError("authority namespace is invalid")
         return f"{namespace}-{record_id}"
 

@@ -95,6 +95,9 @@
 - [x] M5.2c2 core/primitives `2824c42` implementou ledger econômico unificado,
   corporate cash derivado e checkpoint-head CAS; três revisões aprovaram apenas
   o núcleo interno, com outer authority e PostgreSQL de produção ainda pendentes.
+- [x] M5.2c3 implementou a outer authority econômica, fechou genesis incompleto,
+  CAS mentiroso e compatibilidade byte-a-byte trade-v1; três revisões aprovaram
+  somente offline/backtest. PostgreSQL e escopo multiconta seguem pendentes.
 
 ## Pending tasks
 
@@ -222,6 +225,11 @@
 - M5.2c2 core/primitives `2824c42`: foco **61 passed**; regressão relacionada
   **158 passed**; suíte integral Windows **1618 passed, 24 skipped, 71 subtests**;
   três revisões independentes aprovaram somente o checkpoint interno.
+- M5.2c3 outer authority: foco **17 passed**; head+outer **39 passed**;
+  regressão relacionada **139 passed**; suíte integral final **1636 passed,
+  24 skipped, 71 subtests**. Três revisões independentes corrigiram genesis
+  incompleto, CAS forjado e bytes legados; evidência em
+  `audit/M5_2C3_OUTER_AUTHORITY_REVIEW.md`.
 
 ## Commits
 
@@ -248,8 +256,8 @@
 
 ## Next action
 
-1. implementar a outer authority do M5.2c2 como única entrada para vistas,
-   fills, quantities, conversões, checkpoint autenticado e CAS;
+1. implementar PostgreSQL transacional para checkpoint, lineage, receipt e
+   head econômico na mesma unidade de trabalho;
 2. versionar o escopo multiportfolio/multiconta antes de conectar várias
    carteiras e corretoras ao runtime;
 3. manter credenciais reais fora de chat, Git, fixtures e evidências;

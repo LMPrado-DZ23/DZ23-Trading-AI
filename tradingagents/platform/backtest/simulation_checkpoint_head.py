@@ -24,7 +24,7 @@ import time
 import weakref
 from contextlib import suppress
 from pathlib import Path
-from typing import Annotated, Literal, Protocol
+from typing import Annotated, Any, Literal, Protocol
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -35,6 +35,27 @@ Digest = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 MAX_GENERATION = (1 << 63) - 1
 MAX_RECORD_BYTES = 32 * 1024
 DEFAULT_LOCK_TIMEOUT_SECONDS = 5.0
+
+
+def _custody_payload(value: BaseModel | dict[str, Any]) -> dict[str, Any]:
+    """Keep persisted trade-v1 bytes/digests compatible with the pre-stream schema."""
+
+    payload = value.model_dump(mode="python") if isinstance(value, BaseModel) else value
+
+    def normalize(item):
+        if isinstance(item, dict):
+            normalized = {key: normalize(child) for key, child in item.items()}
+            if (
+                normalized.get("scope_version") == "simulation-checkpoint-scope/1"
+                and normalized.get("stream_kind") == "trade-v1"
+            ):
+                normalized.pop("stream_kind")
+            return normalized
+        if isinstance(item, (list, tuple)):
+            return tuple(normalize(child) for child in item)
+        return item
+
+    return normalize(payload)
 
 
 class SimulationCheckpointHeadError(ValueError):
@@ -66,6 +87,7 @@ class SimulationCheckpointScope(_Contract):
     """Complete namespace for exactly one linear simulation ledger history."""
 
     scope_version: Literal["simulation-checkpoint-scope/1"] = "simulation-checkpoint-scope/1"
+    stream_kind: Literal["trade-v1", "economic-v2"] = "trade-v1"
     tenant_id: UUID
     backtest_id: UUID
     ledger_id: UUID
@@ -73,7 +95,7 @@ class SimulationCheckpointScope(_Contract):
 
     @property
     def digest(self) -> str:
-        return canonical_digest(self)
+        return canonical_digest(_custody_payload(self))
 
 
 class SimulationCheckpointExpectation(_Contract):
@@ -133,7 +155,7 @@ class AuthenticatedSimulationCheckpointReference(_Contract):
 
     @property
     def digest(self) -> str:
-        return canonical_digest(self)
+        return canonical_digest(_custody_payload(self))
 
 
 class SimulationCheckpointCandidate(_Contract):
@@ -191,7 +213,7 @@ class SimulationCheckpointHead(_Contract):
 
     @property
     def record_digest(self) -> str:
-        return canonical_digest(self)
+        return canonical_digest(_custody_payload(self))
 
     @property
     def expectation(self) -> SimulationCheckpointExpectation:
@@ -383,7 +405,7 @@ class LocalSimulationCheckpointHeadStore:
 
     @staticmethod
     def _canonical_bytes(value: BaseModel) -> bytes:
-        content = canonical_json_bytes(value) + b"\n"
+        content = canonical_json_bytes(_custody_payload(value)) + b"\n"
         if len(content) > MAX_RECORD_BYTES:
             raise SimulationCheckpointHeadCapacityError("checkpoint head record is too large")
         return content

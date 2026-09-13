@@ -526,6 +526,10 @@ def test_production_has_one_price_resolver_consumer_and_no_capital_imports() -> 
     resolver_allowed = {
         package_root / "platform" / "backtest" / "repository.py",
         package_root / "platform" / "backtest" / "simulation_authority.py",
+        package_root
+        / "platform"
+        / "backtest"
+        / "simulation_economic_session_authority.py",
         package_root / "platform" / "backtest" / "__init__.py",
     }
     reducer_allowed = {

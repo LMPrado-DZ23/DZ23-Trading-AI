@@ -68,6 +68,14 @@ from tradingagents.platform.backtest.simulation_authority import (
     SimulationRequestReference,
     execute_authorized_simulation_batch,
 )
+from tradingagents.platform.backtest.simulation_economic_session_authority import (
+    AuthorizedEconomicGenesisV2,
+    AuthorizedEconomicSessionCommitV2,
+    EconomicCheckpointReferenceV2,
+    EconomicSessionAuthorityError,
+    commit_authorized_economic_session_v2,
+    provision_authenticated_economic_genesis_v2,
+)
 from tradingagents.platform.backtest.simulation_economics import (
     AuthorizedEconomicEventView,
     AuthorizedFxConversion,
@@ -94,6 +102,8 @@ __all__ = [
     "CANDLESTICK_SCHEMA_VERSION",
     "AssetType",
     "AuthorizedOrderExecutionEvidence",
+    "AuthorizedEconomicGenesisV2",
+    "AuthorizedEconomicSessionCommitV2",
     "AuthorizedSimulationBatchResult",
     "AuthorizedSimulationOrder",
     "AuthorizedSimulationRequest",
@@ -125,6 +135,8 @@ __all__ = [
     "DecisionPolicy",
     "EligibleMarketView",
     "EconomicEventView",
+    "EconomicCheckpointReferenceV2",
+    "EconomicSessionAuthorityError",
     "EconomicPhase",
     "ExecutionOpen",
     "ExecutionPriceBundle",
@@ -159,5 +171,7 @@ __all__ = [
     "canonical_digest",
     "canonical_json_bytes",
     "execute_authorized_simulation_batch",
+    "commit_authorized_economic_session_v2",
     "market_dataset_binding_digest",
+    "provision_authenticated_economic_genesis_v2",
 ]

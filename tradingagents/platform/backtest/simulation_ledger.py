@@ -1167,6 +1167,112 @@ def _validate_request_anchor(
     return request_digest
 
 
+def _derive_execution_fill_from_balances(
+    order: SimulationOrder,
+    policy: SimulationLedgerPolicy,
+    *,
+    current_cash: Decimal,
+    position_quantity: Decimal,
+    position_cost_basis: Decimal,
+) -> ExecutionFill:
+    """Derive one fill from authority-owned balances without committing a ledger.
+
+    This private deterministic primitive authenticates none of its inputs. Only
+    the integrated economic-session authority may supply its financial facts.
+    """
+
+    if type(order) is not SimulationOrder or type(policy) is not SimulationLedgerPolicy:
+        raise SimulationLedgerError("fill derivation requires exact typed contracts")
+    current_cash = _non_negative(_bounded_decimal(current_cash))
+    position_quantity = _non_negative(_bounded_decimal(position_quantity))
+    position_cost_basis = _non_negative(_bounded_decimal(position_cost_basis))
+    if (position_quantity == 0) != (position_cost_basis == 0):
+        raise SimulationLedgerError("fill derivation position balance is inconsistent")
+    rule = next(
+        (item for item in policy.instrument_rules if item.instrument_id == order.instrument_id),
+        None,
+    )
+    if rule is None or rule.currency != policy.base_currency:
+        raise SimulationLedgerError("order instrument has no matching simulation rule")
+    quantity = _step_quantize(order.requested_quantity, rule.lot_size, rounding=ROUND_FLOOR)
+    if quantity <= 0:
+        raise SimulationLedgerError("order quantity is below one executable lot")
+    with localcontext(_DECIMAL_CONTEXT):
+        slip_rate = policy.slippage_bps / _BPS_DENOMINATOR
+        unrounded_fill = (
+            order.raw_open * (Decimal("1") + slip_rate)
+            if order.side is SimulationSide.BUY
+            else order.raw_open * (Decimal("1") - slip_rate)
+        )
+    price_rounding = ROUND_CEILING if order.side is SimulationSide.BUY else ROUND_FLOOR
+    fill_price = _step_quantize(unrounded_fill, rule.price_tick, rounding=price_rounding)
+    if fill_price <= 0:
+        raise SimulationLedgerError("adverse sell slippage produced a non-positive price")
+    with localcontext(_DECIMAL_CONTEXT):
+        raw_notional = _money(order.raw_open * quantity, policy.money_quantum)
+        fill_notional = _money(fill_price * quantity, policy.money_quantum)
+        commission_fee = _step_quantize(
+            fill_notional * policy.commission_bps / _BPS_DENOMINATOR,
+            policy.money_quantum,
+            rounding=ROUND_CEILING,
+        )
+        tax = _step_quantize(
+            fill_notional * policy.tax_bps / _BPS_DENOMINATOR,
+            policy.money_quantum,
+            rounding=ROUND_CEILING,
+        )
+    if raw_notional <= 0 or fill_notional <= 0:
+        raise SimulationLedgerError("order notional is below the money quantum")
+    slippage_amount = (
+        fill_notional - raw_notional
+        if order.side is SimulationSide.BUY
+        else raw_notional - fill_notional
+    )
+    if slippage_amount < 0:
+        raise SimulationLedgerError("quantized fill is favorable instead of adverse")
+    cost_basis_removed = Decimal("0")
+    realized_pnl = Decimal("0")
+    if order.side is SimulationSide.BUY:
+        cash_delta = -(fill_notional + commission_fee + tax)
+        if -cash_delta > current_cash:
+            raise InsufficientCashError("buy would make simulated cash negative")
+    else:
+        if quantity > position_quantity:
+            raise ShortSaleError("sell exceeds the settled simulated position")
+        cost_basis_removed = (
+            position_cost_basis
+            if quantity == position_quantity
+            else _money(
+                position_cost_basis * quantity / position_quantity,
+                policy.money_quantum,
+            )
+        )
+        cash_delta = fill_notional - commission_fee - tax
+        if cash_delta <= 0:
+            raise SimulationLedgerError("sell costs consume all simulated proceeds")
+        realized_pnl = fill_notional - cost_basis_removed
+    return ExecutionFill(
+        order_digest=order.digest,
+        order_id=order.order_id,
+        instrument_id=order.instrument_id,
+        side=order.side,
+        currency=policy.base_currency,
+        executed_at=order.execution_at,
+        requested_quantity=order.requested_quantity,
+        executed_quantity=quantity,
+        raw_open=order.raw_open,
+        fill_price=fill_price,
+        raw_notional=raw_notional,
+        fill_notional=fill_notional,
+        slippage_amount=slippage_amount,
+        commission_fee=commission_fee,
+        tax=tax,
+        cost_basis_removed=cost_basis_removed,
+        realized_pnl=realized_pnl,
+        cash_delta=cash_delta,
+    )
+
+
 def _validate_state_and_policy(
     state: SimulationLedgerState,
     policy: SimulationLedgerPolicy,

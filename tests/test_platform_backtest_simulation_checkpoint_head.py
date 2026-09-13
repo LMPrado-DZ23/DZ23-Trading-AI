@@ -11,6 +11,7 @@ from uuid import UUID
 import pytest
 from pydantic import ValidationError
 
+from tradingagents.platform.backtest.contracts import canonical_json_bytes
 from tradingagents.platform.backtest.simulation_checkpoint_head import (
     MAX_GENERATION,
     MAX_RECORD_BYTES,
@@ -18,6 +19,7 @@ from tradingagents.platform.backtest.simulation_checkpoint_head import (
     LocalSimulationCheckpointHeadStore,
     SimulationCheckpointCandidate,
     SimulationCheckpointExpectation,
+    SimulationCheckpointHead,
     SimulationCheckpointHeadCapacityError,
     SimulationCheckpointHeadConflictError,
     SimulationCheckpointHeadIntegrityError,
@@ -99,6 +101,46 @@ def test_empty_scope_and_monotonic_append_bind_every_cas_coordinate(tmp_path):
     assert second.previous_checkpoint_id == first.checkpoint_id
     assert second.previous_checkpoint_digest == first.checkpoint_digest
     assert store.read_head(scope) == second
+
+
+def test_pre_stream_trade_v1_custody_bytes_remain_readable_and_appendable(tmp_path):
+    scope = _scope()
+    candidate = _candidate(10, scope=scope)
+    head = SimulationCheckpointHead(
+        scope=scope,
+        checkpoint_id=candidate.checkpoint_id,
+        checkpoint_digest=candidate.checkpoint_digest,
+        authenticated_reference_digest=candidate.reference.digest,
+        generation=1,
+    )
+    scope_payload = scope.model_dump(mode="python")
+    scope_payload.pop("stream_kind")
+    head_payload = head.model_dump(mode="python")
+    head_payload["scope"].pop("stream_kind")
+    directory = tmp_path / scope.digest
+    records = directory / "records"
+    identities = directory / "checkpoint-identities"
+    records.mkdir(parents=True)
+    identities.mkdir()
+    scope_bytes = canonical_json_bytes(scope_payload) + b"\n"
+    head_bytes = canonical_json_bytes(head_payload) + b"\n"
+    (directory / "scope.json").write_bytes(scope_bytes)
+    (directory / "head.json").write_bytes(head_bytes)
+    _record_path(tmp_path, scope, 1).write_bytes(head_bytes)
+    (identities / f"{head.checkpoint_id}.json").write_bytes(head_bytes)
+
+    store = LocalSimulationCheckpointHeadStore(tmp_path)
+    assert store.read_head(scope) == head
+    second = store.compare_and_append(
+        scope,
+        head.expectation,
+        _candidate(11, scope=scope, previous=head.checkpoint_digest),
+    )
+
+    assert second.generation == 2
+    assert store.read_head(scope) == second
+    assert b'"stream_kind"' not in (directory / "scope.json").read_bytes()
+    assert b'"stream_kind"' not in (directory / "head.json").read_bytes()
 
 
 @pytest.mark.parametrize("coordinate", ["checkpoint_id", "checkpoint_digest", "generation"])
