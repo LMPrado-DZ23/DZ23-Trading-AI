@@ -90,7 +90,8 @@
   executada, fill e custódia; aprovado por três reauditorias independentes.
 - [x] M5.2c1 implementou autoridade PIT de corporate actions e FX, vinculada a
   spec, policies, dataset, manifesto, instrumento, moeda e livro FX congelado;
-  três revisões independentes aprovaram o snapshot após 265 testes relacionados.
+  três revisões independentes aprovaram `f93eb62` após 266 testes relacionados;
+  evidência consolidada em `audit/M5_2C1_FINAL_INDEPENDENT_REVIEW.md`.
 
 ## Pending tasks
 
@@ -227,6 +228,8 @@
 - `6a87cb4` — `test(backtest): isolate normalized candle fuzz cases`.
 - `150c097` — `fix(backtest): close simulation ledger audit findings`.
 - `99548a7` — `fix(backtest): bind simulation authority economics`.
+- `6ad5b2e` — `feat(backtest): authorize PIT corporate actions and FX`.
+- `f93eb62` — `fix(backtest): preserve legacy manifest default`.
 
 ## Agents delegated
 
