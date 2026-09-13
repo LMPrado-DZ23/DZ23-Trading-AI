@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Any
 
 from tradingagents.domain.contracts import OrderAck, OrderRequest, PortfolioSnapshot, Position
-from tradingagents.domain.enums import Environment
+from tradingagents.domain.enums import Environment, OrderStatus
 
 LIVE_CONFIRM_PHRASE = "EU AUTORIZO OPERAR COM DINHEIRO REAL"
 
@@ -74,11 +74,39 @@ class MT5Adapter:
         if request.environment is Environment.LIVE or self.mode is Environment.LIVE:
             raise PermissionError("LIVE bloqueado nesta entrega; use DEMO/PAPER/SHADOW")
         self._require_connected()
-        raise NotImplementedError("envio DEMO será implementado após contrato de request e mock de retcode")
+        tick = self._mt5.symbol_info_tick(request.instrument_id)
+        if tick is None:
+            raise RuntimeError("tick MT5 indisponível")
+        price = request.price or Decimal(str(getattr(tick, "ask", 0) if request.side.value == "BUY" else getattr(tick, "bid", 0)))
+        if price <= 0:
+            raise ValueError("preço MT5 inválido")
+        order_type = getattr(self._mt5, "ORDER_TYPE_BUY", 0) if request.side.value == "BUY" else getattr(self._mt5, "ORDER_TYPE_SELL", 1)
+        payload = {"action": getattr(self._mt5, "TRADE_ACTION_DEAL", 1), "symbol": request.instrument_id,
+                   "volume": float(request.quantity), "type": order_type, "price": float(price),
+                   "sl": float(request.stop_loss), "tp": float(request.take_profit),
+                   "deviation": 20, "magic": 230923, "comment": request.client_order_id,
+                   "type_time": getattr(self._mt5, "ORDER_TIME_GTC", 0),
+                   "type_filling": getattr(self._mt5, "ORDER_FILLING_IOC", 1)}
+        check = self._mt5.order_check(payload)
+        if check is None or int(getattr(check, "retcode", 0)) not in {0, getattr(self._mt5, "TRADE_RETCODE_DONE", 10009), getattr(self._mt5, "TRADE_RETCODE_PLACED", 10008)}:
+            raise RuntimeError(f"order_check recusou: {getattr(check, 'comment', 'sem resposta')}")
+        result = self._mt5.order_send(payload)
+        if result is None:
+            raise RuntimeError("order_send sem resposta")
+        retcode = int(getattr(result, "retcode", 0))
+        accepted = retcode in {getattr(self._mt5, "TRADE_RETCODE_DONE", 10009), getattr(self._mt5, "TRADE_RETCODE_PLACED", 10008)}
+        return OrderAck(str(getattr(result, "order", getattr(result, "deal", "unknown"))), request.client_order_id,
+                        OrderStatus.ACCEPTED if accepted else OrderStatus.REJECTED,
+                        request.quantity if accepted else Decimal("0"), Decimal("0"), price,
+                        datetime.now(timezone.utc), str(getattr(result, "comment", "")))
 
     def cancel(self, order_id: str) -> OrderAck:
         self._require_connected()
-        raise NotImplementedError("cancelamento MT5 será implementado junto da reconciliação")
+        result = self._mt5.order_send({"action": getattr(self._mt5, "TRADE_ACTION_REMOVE", 8), "order": int(order_id)})
+        if result is None:
+            raise RuntimeError("cancelamento MT5 sem resposta")
+        ok = int(getattr(result, "retcode", 0)) in {getattr(self._mt5, "TRADE_RETCODE_DONE", 10009), getattr(self._mt5, "TRADE_RETCODE_PLACED", 10008)}
+        return OrderAck(order_id, order_id, OrderStatus.CANCELLED if ok else OrderStatus.UNKNOWN, Decimal("0"), Decimal("0"), None, datetime.now(timezone.utc), str(getattr(result, "comment", "")))
 
     def reconcile(self, account_id: str) -> dict:
         self._require_connected()
