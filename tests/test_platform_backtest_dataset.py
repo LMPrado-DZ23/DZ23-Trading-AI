@@ -12,22 +12,31 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from tradingagents.platform.backtest.calendar import BacktestCalendar, schedule_digest
+from tradingagents.platform.backtest.calendar import (
+    BacktestCalendar,
+    calendar_provenance,
+    schedule_digest,
+)
 from tradingagents.platform.backtest.contracts import (
     M5_UNVERIFIED_LIMITATIONS,
     AssetType,
     AvailabilityBasis,
     CorporateAction,
     CorporateActionType,
+    CorporateActionV1,
     DailyBar,
     ExecutionPriceBundle,
     ExecutionPriceProjection,
     ExecutionPriceProvenance,
     FxObservation,
+    FxObservationV1,
     InstrumentSpec,
     MarketCalendar,
+    MarketDatasetManifest,
     _revalidate_execution_price_bundle,
     canonical_digest,
+    canonical_json_bytes,
+    market_dataset_binding_digest,
 )
 from tradingagents.platform.backtest.errors import (
     BacktestDataCode,
@@ -45,6 +54,7 @@ from tradingagents.platform.backtest.repository import (
     _strict_json_loads,
     verify_execution_price_authority,
 )
+from tradingagents.platform.backtest.simulation_economics import EconomicPhase
 
 INSTRUMENT_ID = UUID("10000000-0000-0000-0000-000000000001")
 DATASET_ID = UUID("20000000-0000-0000-0000-000000000001")
@@ -119,13 +129,14 @@ def _records() -> tuple[
             available_at=datetime(2024, 1, 2, 12, 1, tzinfo=UTC),
             ex_date=date(2024, 1, 3),
             effective_date=date(2024, 1, 3),
-            pay_date=date(2024, 1, 3),
             split_ratio="2",
+            split_ratio_convention="new_shares_per_old_share",
             source_digest="b" * 64,
         ),
     )
     fx = (
         FxObservation(
+            observation_id=UUID("50000000-0000-0000-0000-000000000001"),
             base_currency="USD",
             quote_currency="BRL",
             observed_at=datetime(2024, 1, 3, 21, tzinfo=UTC),
@@ -471,7 +482,7 @@ def test_ingest_rejects_manifest_created_before_latest_record(tmp_path: Path) ->
         )
 
 
-def test_later_corporate_action_revision_does_not_leak_into_prior_cutoff(
+def test_later_corporate_action_metadata_revision_does_not_leak_into_prior_cutoff(
     tmp_path: Path,
 ) -> None:
     repository = FrozenDatasetRepository(tmp_path)
@@ -482,7 +493,6 @@ def test_later_corporate_action_revision_does_not_leak_into_prior_cutoff(
             "revision": 2,
             "published_at": datetime(2024, 1, 4, 12, tzinfo=UTC),
             "available_at": datetime(2024, 1, 4, 12, 1, tzinfo=UTC),
-            "split_ratio": Decimal("3"),
             "source_digest": "e" * 64,
         }
     )
@@ -517,7 +527,119 @@ def test_later_corporate_action_revision_does_not_leak_into_prior_cutoff(
     assert prior.corporate_actions == (original,)
     assert later.corporate_actions == (correction,)
     assert prior.corporate_actions[0].split_ratio == Decimal("2")
-    assert later.corporate_actions[0].split_ratio == Decimal("3")
+    assert later.corporate_actions[0].split_ratio == Decimal("2")
+    assert later.corporate_actions[0].revision == 2
+
+
+def test_schema_v1_dataset_replays_byte_identically_but_is_economics_ineligible(
+    tmp_path: Path,
+) -> None:
+    repository = FrozenDatasetRepository(tmp_path)
+    instrument, bars, actions, fx = _records()
+    legacy_action = CorporateActionV1.model_validate(
+        actions[0].model_dump(
+            mode="python",
+            exclude={"split_ratio_convention", "cash_amount_basis"},
+        )
+    )
+    legacy_fx = FxObservationV1.model_validate(
+        fx[0].model_dump(
+            mode="python",
+            exclude={"observation_id", "revision", "rate_convention"},
+        )
+    )
+    records = (
+        ("instrument", instrument),
+        *(("daily_bar", bar) for bar in bars),
+        ("corporate_action", legacy_action),
+        ("fx_observation", legacy_fx),
+    )
+    content = b"".join(_record_bytes(kind, model) for kind, model in records)
+    assert b"split_ratio_convention" not in content
+    assert b"observation_id" not in content
+    engine, tzdata, settlement = calendar_provenance()
+    frozen_schedule = schedule_digest(
+        instrument,
+        bars,
+        calendar_engine_version=engine,
+        timezone_database_version=tzdata,
+        settlement_policy_version=settlement,
+    )
+    content_digest = hashlib.sha256(content).hexdigest()
+    manifest = MarketDatasetManifest(
+        dataset_id=DATASET_ID,
+        tenant_id=TENANT_ID,
+        schema_version=1,
+        created_at=CREATED_AT,
+        source="legacy.test",
+        source_vintage="schema-v1-golden",
+        instrument_digest=instrument.digest,
+        content_bytes=len(content),
+        content_sha256=content_digest,
+        row_count=len(records),
+        first_session=bars[0].session_date,
+        last_session=bars[-1].session_date,
+        schedule_digest=frozen_schedule,
+        calendar_engine_version=engine,
+        timezone_database_version=tzdata,
+        settlement_policy_version=settlement,
+        binding_digest=market_dataset_binding_digest(
+            tenant_id=TENANT_ID,
+            dataset_id=DATASET_ID,
+            instrument_digest=instrument.digest,
+            content_bytes=len(content),
+            content_sha256=content_digest,
+            schedule_digest=frozen_schedule,
+            source_vintage="schema-v1-golden",
+            calendar_engine_version=engine,
+            timezone_database_version=tzdata,
+            settlement_policy_version=settlement,
+        ),
+        limitations=M5_UNVERIFIED_LIMITATIONS,
+    )
+    manifest_bytes = canonical_json_bytes(manifest) + b"\n"
+    repository._publish(
+        DATASET_ID,
+        content,
+        manifest_bytes,
+        hashlib.sha256(manifest_bytes).hexdigest().encode("ascii") + b"\n",
+    )
+    verified = repository.verify(
+        DATASET_ID,
+        expected_tenant_id=TENANT_ID,
+        expected_manifest_digest=manifest.digest,
+    )
+    assert verified.schema_version == 1
+    eligible = repository.load_eligible(
+        DATASET_ID,
+        expected_tenant_id=TENANT_ID,
+        expected_manifest_digest=manifest.digest,
+        decision_at=bars[-1].available_at,
+        decision_session_date=bars[-1].session_date,
+    )
+    assert type(eligible.corporate_actions[0]) is CorporateActionV1
+    assert type(eligible.fx_observations[0]) is FxObservationV1
+    with pytest.raises(DatasetIntegrityError, match="schema-v1 corporate"):
+        repository.load_economic_event_view(
+            DATASET_ID,
+            expected_tenant_id=TENANT_ID,
+            expected_instrument_id=INSTRUMENT_ID,
+            expected_manifest_digest=manifest.digest,
+            session_date=bars[-1].session_date,
+            phase=EconomicPhase.PRE_OPEN,
+            as_of=bars[-1].session_open_at,
+        )
+    with pytest.raises(DatasetIntegrityError, match="schema-v1 FX"):
+        repository.load_fx_rate(
+            DATASET_ID,
+            expected_tenant_id=TENANT_ID,
+            expected_instrument_id=INSTRUMENT_ID,
+            expected_manifest_digest=manifest.digest,
+            functional_currency="BRL",
+            source_currency="USD",
+            event_at=bars[-1].session_open_at,
+            max_staleness_seconds=60,
+        )
 
 
 @pytest.mark.parametrize(
@@ -781,7 +903,7 @@ def test_ingest_rejects_backdated_gapped_or_identity_rewriting_revision(
     update.update(revision_update)
     correction = actions[0].model_copy(update=update)
 
-    with pytest.raises(DatasetIntegrityError, match="revisions|rewrite"):
+    with pytest.raises(DatasetIntegrityError, match="revalidation|revisions|rewrite"):
         repository.ingest(
             dataset_id=DATASET_ID,
             tenant_id=TENANT_ID,

@@ -3,11 +3,11 @@
 - **mission_id:** `tradingagents-dz23-a5-2026-09-08`
 - **objective:** concluir o TradingAgents DZ23 como plataforma web multiusuário pronta para usuários leigos, com carteira administrada, perfis de risco, execução CCXT segura e implantação verificada em `https://trading.dz23.online/`.
 - **state:** `EXECUTING`
-- **iteration:** 17
+- **iteration:** 18
 - **started_at:** 2026-09-08 America/Sao_Paulo
 - **last_heartbeat:** 2026-09-12
 - **last_progress_at:** 2026-09-12
-- **current_task:** implementar M5.2c: corporate actions e FX PIT, ambos fail-closed e vinculados ao dataset congelado.
+- **current_task:** implementar M5.2c2: aplicar corporate actions e FX autorizados no ledger de simulação de forma atômica e idempotente.
 
 ## Acceptance criteria
 
@@ -88,6 +88,9 @@
   reducer não expõe fast path importável e o fold é linear/log-linear.
 - [x] M5.2b2 final `99548a7` liga spec, política, liquidez PIT de D, quantidade
   executada, fill e custódia; aprovado por três reauditorias independentes.
+- [x] M5.2c1 implementou autoridade PIT de corporate actions e FX, vinculada a
+  spec, policies, dataset, manifesto, instrumento, moeda e livro FX congelado;
+  três revisões independentes aprovaram o snapshot após 265 testes relacionados.
 
 ## Pending tasks
 
@@ -235,8 +238,9 @@
 
 ## Next action
 
-1. implementar M5.2c para corporate actions e FX PIT, sem fallback implícito;
-2. submeter M5.2c a três revisões independentes antes de integrar o runner;
+1. implementar M5.2c2 para aplicação atômica e idempotente de splits,
+   dividendos, delisting e FX autorizados no ledger;
+2. submeter M5.2c2 a três revisões independentes antes de integrar o runner;
 3. manter credenciais reais fora de chat, Git, fixtures e evidências;
 4. manter a integração IQ Option em marco separado: MCP oficial sob gate de capital; `iq-core` somente experimental/read-only, nunca rota LIVE;
 5. configurar Google e Apple no Supabase quando os Client IDs/secrets externos forem fornecidos, sem bloquear os demais marcos.

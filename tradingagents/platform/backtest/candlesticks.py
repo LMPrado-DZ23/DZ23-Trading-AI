@@ -363,16 +363,13 @@ def _validate_view(view: EligibleMarketView) -> None:
                 item.observed_at.isoformat(),
                 item.base_currency,
                 item.quote_currency,
-                item.available_at.isoformat(),
+                str(item.observation_id),
             ),
         )
     )
     if view.fx_observations != expected_fx_order:
         raise CandlestickEvidenceError("eligible-view FX observations are not canonical")
-    fx_keys = {
-        (item.base_currency, item.quote_currency, item.observed_at, item.available_at)
-        for item in view.fx_observations
-    }
+    fx_keys = {item.observation_id for item in view.fx_observations}
     if len(fx_keys) != len(view.fx_observations):
         raise CandlestickEvidenceError("eligible-view contains duplicate FX observations")
     data_digest = _eligible_data_sha256(

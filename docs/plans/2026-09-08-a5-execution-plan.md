@@ -105,9 +105,18 @@ não habilita LIVE e não substitui a decisão humana de promoção.
 - [ ] relatórios JSON/Markdown e comparação entre perfis;
 - [ ] critérios quantitativos de promoção SHADOW/PAPER.
 
+Submarcos concluídos: M5.0 (contratos/datasets PIT), M5.1 (candlesticks),
+M5.2a (autoridade raw next-open), M5.2b1 (ledger puro), M5.2b2 (custódia do
+fill) e M5.2c1 (autoridade PIT de corporate actions e FX). M5.2c2 aplicará
+splits, dividendos, delisting e conversões FX no ledger de forma atômica. O
+processo financeiro é uma TCB isolada: plugins ou Python fornecido por usuário
+jamais são importados ou executados nela.
+
 **Gate:** datasets/manifestos reproduzíveis, zero look-ahead conhecido e resultados líquidos de custos.
 
 ## M6 — Propostas, aprovação e execução CCXT
+
+Arquitetura normativa: `docs/adr/0003-multi-team-multi-portfolio-capital-coordination.md`.
 
 - [ ] equipes multiagente paralelas por carteira/estratégia (macro, fundamental,
   técnico, fluxo/on-chain, sentimento, portfolio manager, risco, execução e

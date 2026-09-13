@@ -168,6 +168,7 @@ def _prepare(
                 ex_date=split_day,
                 effective_date=split_day,
                 split_ratio="2",
+                split_ratio_convention="new_shares_per_old_share",
                 source_digest=hashlib.sha256(
                     f"split:{dataset_number}:{sequence}".encode()
                 ).hexdigest(),
@@ -740,6 +741,7 @@ def test_split_context_digest_streams_beyond_canonical_sequence_limit(tmp_path: 
 def test_internal_detector_rejects_noncanonical_or_duplicate_fx(tmp_path: Path) -> None:
     view = _prepare(tmp_path, _neutral_prices()).view()
     first = FxObservation(
+        observation_id=UUID("50000000-0000-0000-0000-000000000001"),
         base_currency="USD",
         quote_currency="BRL",
         observed_at=view.data_cutoff_at - timedelta(hours=2),

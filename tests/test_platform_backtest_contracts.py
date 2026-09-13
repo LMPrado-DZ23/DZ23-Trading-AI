@@ -84,6 +84,7 @@ def _manifest(**overrides):
     data = {
         "dataset_id": dataset_id,
         "tenant_id": tenant_id,
+        "schema_version": 2,
         "created_at": NOW,
         "source": "dz23-test",
         "source_vintage": source_vintage,
@@ -108,6 +109,7 @@ def _manifest(**overrides):
             calendar_engine_version=calendar_engine_version,
             timezone_database_version=timezone_database_version,
             settlement_policy_version=settlement_policy_version,
+            schema_version=2,
         ),
         "limitations": M5_UNVERIFIED_LIMITATIONS,
     }
@@ -234,6 +236,7 @@ def test_split_and_dividend_are_typed_and_point_in_time():
         action_type="split",
         ex_date=date(2026, 9, 8),
         split_ratio=Decimal("2"),
+        split_ratio_convention="new_shares_per_old_share",
     )
     dividend = CorporateAction(
         **(
@@ -244,6 +247,7 @@ def test_split_and_dividend_are_typed_and_point_in_time():
                 "ex_date": date(2026, 9, 8),
                 "pay_date": date(2026, 9, 9),
                 "cash_amount": Decimal("1.25"),
+                "cash_amount_basis": "net_cash_per_entitled_share",
                 "currency": "BRL",
             }
         )
@@ -282,8 +286,8 @@ def test_corporate_action_rejects_impossible_date_order(overrides):
         "available_at": NOW - timedelta(days=10) + timedelta(minutes=1),
         "effective_date": date(2026, 9, 8),
         "ex_date": date(2026, 9, 8),
-        "pay_date": date(2026, 9, 9),
         "split_ratio": Decimal("2"),
+        "split_ratio_convention": "new_shares_per_old_share",
         "source_digest": DIGEST,
     }
     data.update(overrides)
@@ -304,6 +308,7 @@ def test_corporate_action_supports_post_effective_revision_and_delisting():
         effective_date=date(2026, 8, 1),
         pay_date=date(2026, 8, 10),
         cash_amount=Decimal("1.05"),
+        cash_amount_basis="net_cash_per_entitled_share",
         currency="BRL",
         source_digest=DIGEST,
     )
@@ -339,6 +344,7 @@ def test_decimal_inputs_have_resource_precision_and_scale_bounds(value):
 
 def test_fx_observation_is_positive_available_and_non_identity():
     data = {
+        "observation_id": uuid4(),
         "base_currency": "USD",
         "quote_currency": "BRL",
         "observed_at": NOW - timedelta(minutes=2),

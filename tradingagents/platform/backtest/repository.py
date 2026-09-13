@@ -13,12 +13,15 @@ import secrets
 import shutil
 import stat
 import tempfile
-from collections.abc import Sequence
+from bisect import bisect_left, bisect_right
+from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, NamedTuple
 from uuid import UUID
 
 if TYPE_CHECKING:
@@ -30,6 +33,7 @@ from .calendar import BacktestCalendar, calendar_provenance, schedule_digest
 from .contracts import (
     M5_UNVERIFIED_LIMITATIONS,
     CorporateAction,
+    CorporateActionV1,
     DailyBar,
     DatasetLimitation,
     ExecutionOpen,
@@ -37,13 +41,26 @@ from .contracts import (
     ExecutionPriceProjection,
     ExecutionPriceProvenance,
     FxObservation,
+    FxObservationV1,
     InstrumentSpec,
     MarketDatasetManifest,
     _revalidate_execution_price_bundle,
+    canonical_digest,
     canonical_json_bytes,
     market_dataset_binding_digest,
 )
 from .errors import BacktestDataCode, DatasetAlreadyExistsError, DatasetIntegrityError
+from .simulation_economics import (
+    ECONOMIC_APPLICATION_PRECEDENCE,
+    ECONOMIC_APPLICATION_PRECEDENCE_DIGEST,
+    CorporateActionApplication,
+    CorporateActionProjection,
+    EconomicEventView,
+    EconomicPhase,
+    FxConversionMode,
+    FxRateProjection,
+    fx_authority_book_digest,
+)
 
 DATA_FILENAME = "market-data.jsonl"
 MANIFEST_FILENAME = "manifest.json"
@@ -53,14 +70,16 @@ MAX_DATASET_ROWS = 25_000
 MAX_JSON_RECORD_BYTES = 256 * 1024
 MAX_JSON_NESTING = 64
 
+CorporateActionRecord = CorporateActionV1 | CorporateAction
+FxObservationRecord = FxObservationV1 | FxObservation
 
-@dataclass(frozen=True, slots=True)
-class _FrozenMarketDataset:
+
+class _FrozenMarketDataset(NamedTuple):
     manifest: MarketDatasetManifest
     instrument: InstrumentSpec
     bars: tuple[DailyBar, ...]
-    corporate_actions: tuple[CorporateAction, ...]
-    fx_observations: tuple[FxObservation, ...]
+    corporate_actions: tuple[CorporateActionRecord, ...]
+    fx_observations: tuple[FxObservationRecord, ...]
 
     def eligible_at(
         self,
@@ -109,7 +128,7 @@ class _FrozenMarketDataset:
         eligible_actions = tuple(
             item for item in self.corporate_actions if item.available_at <= data_cutoff
         )
-        latest_actions: dict[UUID, CorporateAction] = {}
+        latest_actions: dict[UUID, CorporateActionRecord] = {}
         for item in eligible_actions:
             current = latest_actions.get(item.action_id)
             if current is None or item.revision > current.revision:
@@ -128,7 +147,40 @@ class _FrozenMarketDataset:
         eligible_instrument = self.instrument.model_copy(
             update={"delisting_date": visible_delisting_date}
         )
-        fx = tuple(item for item in self.fx_observations if item.available_at <= data_cutoff)
+        eligible_fx = tuple(
+            item for item in self.fx_observations if item.available_at <= data_cutoff
+        )
+        if self.manifest.schema_version == 1:
+            fx = tuple(
+                sorted(
+                    eligible_fx,
+                    key=lambda item: (
+                        item.observed_at,
+                        item.base_currency,
+                        item.quote_currency,
+                        item.available_at,
+                    ),
+                )
+            )
+        else:
+            latest_fx: dict[UUID, FxObservation] = {}
+            for item in eligible_fx:
+                if type(item) is not FxObservation:
+                    raise DatasetIntegrityError("schema-v2 dataset contains legacy FX rows")
+                current = latest_fx.get(item.observation_id)
+                if current is None or item.revision > current.revision:
+                    latest_fx[item.observation_id] = item
+            fx = tuple(
+                sorted(
+                    latest_fx.values(),
+                    key=lambda item: (
+                        item.observed_at,
+                        item.base_currency,
+                        item.quote_currency,
+                        str(item.observation_id),
+                    ),
+                )
+            )
         eligible_data_digest = _eligible_data_sha256(
             data_cutoff_at=data_cutoff,
             decision_at=decision_cutoff,
@@ -205,6 +257,185 @@ class _FrozenMarketDataset:
         )
 
 
+class _FrozenEconomicsIndex(NamedTuple):
+    """Read-only indexes derived once from one verified schema-v2 dataset."""
+
+    dataset: _FrozenMarketDataset
+    bars_by_session: Mapping[date, DailyBar]
+    session_dates: tuple[date, ...]
+    action_chains_by_phase: Mapping[
+        tuple[date, EconomicPhase], tuple[tuple[CorporateAction, ...], ...]
+    ]
+    fx_book_digest: str
+    fx_chains_by_pair: Mapping[
+        tuple[str, str], tuple[tuple[FxObservation, ...], ...]
+    ]
+    fx_times_by_pair: Mapping[tuple[str, str], tuple[datetime, ...]]
+
+
+_ECONOMICS_HANDLE_TOKEN = object()
+
+
+class FrozenEconomicsDatasetHandle:
+    """Opaque, verified economics handle; raw dataset records stay private."""
+
+    __slots__ = ("_index", "_repository", "_sealed")
+
+    def __init__(
+        self,
+        *,
+        token: object,
+        repository: FrozenDatasetRepository,
+        index: _FrozenEconomicsIndex,
+    ) -> None:
+        if (
+            token is not _ECONOMICS_HANDLE_TOKEN
+            or type(repository) is not FrozenDatasetRepository
+            or type(index) is not _FrozenEconomicsIndex
+        ):
+            raise DatasetIntegrityError("economics handle requires repository authority")
+        object.__setattr__(self, "_index", index)
+        object.__setattr__(self, "_repository", repository)
+        object.__setattr__(self, "_sealed", True)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if getattr(self, "_sealed", False):
+            raise AttributeError("frozen economics handles cannot be mutated")
+        object.__setattr__(self, name, value)
+
+    @property
+    def dataset_id(self) -> UUID:
+        return self._index.dataset.manifest.dataset_id
+
+    @property
+    def tenant_id(self) -> UUID:
+        return self._index.dataset.manifest.tenant_id
+
+    @property
+    def manifest_digest(self) -> str:
+        return self._index.dataset.manifest.digest
+
+    @property
+    def schema_version(self) -> int:
+        return self._index.dataset.manifest.schema_version
+
+    @property
+    def instrument_id(self) -> UUID:
+        return self._index.dataset.instrument.instrument_id
+
+    @property
+    def quote_currency(self) -> str:
+        return self._index.dataset.instrument.quote_currency
+
+    @property
+    def quantitative_claims_status(self) -> str:
+        if self._index.dataset.manifest.quantitative_claims_eligible:
+            raise DatasetIntegrityError("economics handle received an unknown claims status")
+        return "ineligible_unverified_coverage"
+
+    @property
+    def fx_book_digest(self) -> str:
+        return self._index.fx_book_digest
+
+    @property
+    def limitations(self) -> tuple[DatasetLimitation, ...]:
+        return self._index.dataset.manifest.limitations
+
+    def is_owned_by(self, repository: FrozenDatasetRepository) -> bool:
+        return type(repository) is FrozenDatasetRepository and self._repository is repository
+
+    def event_at(self, session_date: date, phase: EconomicPhase) -> datetime:
+        if type(session_date) is not date or type(phase) is not EconomicPhase:
+            raise DatasetIntegrityError("economic session and phase are invalid")
+        bar = self._index.bars_by_session.get(session_date)
+        if bar is None:
+            raise DatasetIntegrityError("economic session is absent or ambiguous")
+        return (
+            bar.session_open_at
+            if phase is EconomicPhase.PRE_OPEN
+            else bar.session_close_at
+        )
+
+
+def _build_economics_index(dataset: _FrozenMarketDataset) -> _FrozenEconomicsIndex:
+    if type(dataset) is not _FrozenMarketDataset or dataset.manifest.schema_version != 2:
+        raise DatasetIntegrityError("economics index requires one verified schema-v2 dataset")
+    if any(type(item) is not CorporateAction for item in dataset.corporate_actions) or any(
+        type(item) is not FxObservation for item in dataset.fx_observations
+    ):
+        raise DatasetIntegrityError("economics index rejects legacy market records")
+
+    bars_by_session = {item.session_date: item for item in dataset.bars}
+    if len(bars_by_session) != len(dataset.bars):
+        raise DatasetIntegrityError("economics index found ambiguous session bars")
+    session_dates = tuple(item.session_date for item in dataset.bars)
+
+    chains: dict[UUID, list[CorporateAction]] = {}
+    for record in dataset.corporate_actions:
+        assert type(record) is CorporateAction
+        chains.setdefault(record.action_id, []).append(record)
+    phase_chains: dict[tuple[date, EconomicPhase], list[tuple[CorporateAction, ...]]] = {}
+    for chain in chains.values():
+        ordered = tuple(sorted(chain, key=lambda item: item.revision))
+        anchor = ordered[0]
+        phase_chains.setdefault(
+            (anchor.effective_date, EconomicPhase.PRE_OPEN), []
+        ).append(ordered)
+        if anchor.pay_date is not None:
+            index = bisect_left(session_dates, anchor.pay_date)
+            if index < len(session_dates):
+                phase_chains.setdefault(
+                    (session_dates[index], EconomicPhase.POST_CLOSE), []
+                ).append(ordered)
+
+    pair_records: dict[tuple[str, str], list[FxObservation]] = {}
+    for record in dataset.fx_observations:
+        assert type(record) is FxObservation
+        pair_records.setdefault(
+            (record.base_currency, record.quote_currency), []
+        ).append(record)
+    fx_chains_by_pair: dict[
+        tuple[str, str], tuple[tuple[FxObservation, ...], ...]
+    ] = {}
+    fx_times_by_pair: dict[tuple[str, str], tuple[datetime, ...]] = {}
+    for pair, records in pair_records.items():
+        chains_by_id: dict[UUID, list[FxObservation]] = {}
+        for record in records:
+            chains_by_id.setdefault(record.observation_id, []).append(record)
+        ordered = tuple(
+            sorted(
+                (
+                    tuple(sorted(chain, key=lambda item: item.revision))
+                    for chain in chains_by_id.values()
+                ),
+                key=lambda chain: (chain[0].observed_at, str(chain[0].observation_id)),
+            )
+        )
+        fx_chains_by_pair[pair] = ordered
+        fx_times_by_pair[pair] = tuple(chain[0].observed_at for chain in ordered)
+
+    return _FrozenEconomicsIndex(
+        dataset=dataset,
+        bars_by_session=MappingProxyType(bars_by_session),
+        session_dates=session_dates,
+        action_chains_by_phase=MappingProxyType(
+            {
+                key: tuple(sorted(value, key=lambda chain: str(chain[0].action_id)))
+                for key, value in phase_chains.items()
+            }
+        ),
+        fx_book_digest=fx_authority_book_digest(
+            tuple(
+                item
+                for item in dataset.fx_observations
+                if type(item) is FxObservation
+            )
+        ),
+        fx_chains_by_pair=MappingProxyType(fx_chains_by_pair),
+        fx_times_by_pair=MappingProxyType(fx_times_by_pair),
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class EligibleMarketView:
     """Only the records whose provenance was available by one decision time."""
@@ -225,8 +456,8 @@ class EligibleMarketView:
     instrument: InstrumentSpec
     bar_ordinals: tuple[int, ...]
     bars: tuple[DailyBar, ...]
-    corporate_actions: tuple[CorporateAction, ...]
-    fx_observations: tuple[FxObservation, ...]
+    corporate_actions: tuple[CorporateActionRecord, ...]
+    fx_observations: tuple[FxObservationRecord, ...]
 
 
 def _canonical_json_bytes(value: Any) -> bytes:
@@ -249,8 +480,8 @@ def _eligible_data_sha256(
     decision_session_date: date,
     instrument: InstrumentSpec,
     bars: tuple[DailyBar, ...],
-    corporate_actions: tuple[CorporateAction, ...],
-    fx_observations: tuple[FxObservation, ...],
+    corporate_actions: tuple[CorporateActionRecord, ...],
+    fx_observations: tuple[FxObservationRecord, ...],
 ) -> str:
     """Hash the canonical eligible-view preimage without an unbounded list.
 
@@ -347,6 +578,29 @@ class FrozenDatasetRepository:
 
     def __enter__(self) -> FrozenDatasetRepository:
         return self
+
+    def open_economics_handle(
+        self,
+        dataset_id: UUID,
+        *,
+        expected_tenant_id: UUID,
+        expected_manifest_digest: str,
+    ) -> FrozenEconomicsDatasetHandle:
+        """Verify frozen bytes once and expose only an opaque indexed handle."""
+
+        if type(self) is not FrozenDatasetRepository:
+            raise DatasetIntegrityError("economics handle requires repository authority")
+        dataset = FrozenDatasetRepository._load_verified(
+            self,
+            dataset_id,
+            expected_tenant_id=expected_tenant_id,
+            expected_manifest_digest=expected_manifest_digest,
+        )
+        return FrozenEconomicsDatasetHandle(
+            token=_ECONOMICS_HANDLE_TOKEN,
+            repository=self,
+            index=_build_economics_index(dataset),
+        )
 
     def __exit__(self, *_args: object) -> None:
         self.close()
@@ -496,10 +750,7 @@ class FrozenDatasetRepository:
         action_ids = {(action.action_id, action.revision) for action in frozen_actions}
         if len(action_ids) != len(frozen_actions):
             raise DatasetIntegrityError("dataset contains duplicate corporate-action identifiers")
-        fx_keys = {
-            (item.base_currency, item.quote_currency, item.observed_at, item.available_at)
-            for item in frozen_fx
-        }
+        fx_keys = {(item.observation_id, item.revision) for item in frozen_fx}
         if len(fx_keys) != len(frozen_fx):
             raise DatasetIntegrityError("dataset contains duplicate FX observations")
 
@@ -521,6 +772,8 @@ class FrozenDatasetRepository:
                     _timestamp_sort_key(item.observed_at),
                     item.base_currency,
                     item.quote_currency,
+                    str(item.observation_id),
+                    item.revision,
                     _timestamp_sort_key(item.available_at),
                 ),
             )
@@ -558,7 +811,7 @@ class FrozenDatasetRepository:
         manifest = MarketDatasetManifest(
             dataset_id=dataset_id,
             tenant_id=tenant_id,
-            schema_version=1,
+            schema_version=2,
             created_at=created_at,
             source=source,
             source_vintage=source_vintage,
@@ -583,6 +836,7 @@ class FrozenDatasetRepository:
                 calendar_engine_version=calendar_engine_version,
                 timezone_database_version=timezone_database_version,
                 settlement_policy_version=settlement_policy_version,
+                schema_version=2,
             ),
             limitations=frozen_limitations,
         )
@@ -627,7 +881,9 @@ class FrozenDatasetRepository:
             raise DatasetIntegrityError("dataset content hash does not match the manifest")
         if len(content) != manifest.content_bytes:
             raise DatasetIntegrityError("dataset content length does not match the manifest")
-        records = self._parse_records(content, manifest.row_count)
+        records = self._parse_records(
+            content, manifest.row_count, schema_version=manifest.schema_version
+        )
         instrument, bars, actions, fx = records
         # Replay trusts the materialized, hashed schedule rather than consulting
         # today's exchange-calendar database. This keeps historical results
@@ -841,6 +1097,329 @@ class FrozenDatasetRepository:
                 provenance=provenance,
                 bundle_digest=hashlib.sha256(_canonical_json_bytes(bundle_payload)).hexdigest(),
             )
+        )
+
+    def load_economic_event_view(
+        self,
+        dataset_id: UUID,
+        *,
+        expected_tenant_id: UUID,
+        expected_instrument_id: UUID,
+        expected_manifest_digest: str,
+        session_date: date,
+        phase: EconomicPhase,
+        as_of: datetime,
+        _economics_handle: FrozenEconomicsDatasetHandle | None = None,
+    ) -> EconomicEventView:
+        """Rederive a narrow event-time action view without exposing market bars."""
+
+        if type(self) is not FrozenDatasetRepository:
+            raise DatasetIntegrityError("economic events require the repository authority")
+        expected_instrument_id = FrozenDatasetRepository._require_uuid(
+            expected_instrument_id, "expected_instrument_id"
+        )
+        session_date = FrozenDatasetRepository._require_date(session_date, "session_date")
+        as_of = FrozenDatasetRepository._require_datetime(as_of, "as_of")
+        if type(phase) is not EconomicPhase:
+            raise DatasetIntegrityError("economic phase must use the exact enum")
+        if _economics_handle is None:
+            dataset = FrozenDatasetRepository._load_verified(
+                self,
+                dataset_id,
+                expected_tenant_id=expected_tenant_id,
+                expected_manifest_digest=expected_manifest_digest,
+            )
+            economics_index = None
+        else:
+            if (
+                type(_economics_handle) is not FrozenEconomicsDatasetHandle
+                or _economics_handle._repository is not self
+            ):
+                raise DatasetIntegrityError("verified economics handle is invalid")
+            economics_index = _economics_handle._index
+            dataset = economics_index.dataset
+        if type(dataset) is not _FrozenMarketDataset:
+            raise DatasetIntegrityError("verified economic dataset handle is invalid")
+        if (
+            dataset.manifest.dataset_id != dataset_id
+            or dataset.manifest.tenant_id != expected_tenant_id
+            or not hmac.compare_digest(
+                dataset.manifest.digest, expected_manifest_digest
+            )
+        ):
+            raise DatasetIntegrityError("verified economic dataset binding is invalid")
+        if dataset.instrument.instrument_id != expected_instrument_id:
+            raise DatasetIntegrityError("economic event view references another instrument")
+        if dataset.manifest.schema_version != 2 or (
+            economics_index is None
+            and any(type(item) is not CorporateAction for item in dataset.corporate_actions)
+        ):
+            raise DatasetIntegrityError(
+                "schema-v1 corporate actions are replay-only and ineligible for economics"
+            )
+        if economics_index is None:
+            economics_index = _build_economics_index(dataset)
+        if (
+            type(economics_index) is not _FrozenEconomicsIndex
+            or economics_index.dataset is not dataset
+        ):
+            raise DatasetIntegrityError("verified economics index binding is invalid")
+        bar = economics_index.bars_by_session.get(session_date)
+        if bar is None:
+            raise DatasetIntegrityError("economic event session is absent or ambiguous")
+        expected_as_of = (
+            bar.session_open_at
+            if phase is EconomicPhase.PRE_OPEN
+            else bar.session_close_at
+        )
+        if as_of != expected_as_of:
+            raise DatasetIntegrityError("economic event time does not match the frozen session")
+
+        chains = economics_index.action_chains_by_phase.get(
+            (session_date, phase), ()
+        )
+        session_dates = economics_index.session_dates
+
+        def applications_for(action: CorporateAction) -> tuple[CorporateActionApplication, ...]:
+            if phase is EconomicPhase.PRE_OPEN:
+                if action.action_type.value == "split" and action.effective_date == session_date:
+                    return (CorporateActionApplication.SPLIT,)
+                if action.action_type.value == "cash_dividend" and action.ex_date == session_date:
+                    return (CorporateActionApplication.DIVIDEND_ENTITLEMENT,)
+                if action.action_type.value == "delisting" and action.effective_date == session_date:
+                    return (CorporateActionApplication.DELISTING,)
+                return ()
+            if action.pay_date is None:
+                return ()
+            index = bisect_left(session_dates, action.pay_date)
+            if index >= len(session_dates) or session_dates[index] != session_date:
+                return ()
+            return (
+                CorporateActionApplication.DIVIDEND_PAYMENT
+                if action.action_type.value == "cash_dividend"
+                else CorporateActionApplication.DELISTING_SETTLEMENT,
+            )
+
+        due: list[tuple[CorporateActionApplication, CorporateAction]] = []
+        for ordered in chains:
+            latest_full = ordered[-1]
+            eligible = tuple(item for item in ordered if item.available_at <= as_of)
+            selected = eligible[-1] if eligible else latest_full
+            applications = applications_for(selected)
+            if not applications:
+                continue
+            if not eligible:
+                raise DatasetIntegrityError(
+                    "corporate action was unavailable at its economic phase",
+                    code=BacktestDataCode.PIT_AVAILABILITY_UNKNOWN,
+                )
+            for application in applications:
+                due.append((application, selected))
+
+        if len(due) > 1_000:
+            raise DatasetIntegrityError("economic event view exceeds its action limit")
+
+        split_ids = {
+            action.action_id
+            for application, action in due
+            if application is CorporateActionApplication.SPLIT
+        }
+        if len(split_ids) > 1:
+            raise DatasetIntegrityError("economic event view contains ambiguous splits")
+        projections: list[CorporateActionProjection] = []
+        for application, action in due:
+            payload = {
+                "projection_version": "corporate-action-projection/1",
+                "dataset_id": dataset.manifest.dataset_id,
+                "manifest_digest": dataset.manifest.digest,
+                "instrument_id": action.instrument_id,
+                "session_date": session_date,
+                "phase": phase,
+                "application": application,
+                "application_at": as_of,
+                "action_id": action.action_id,
+                "revision": action.revision,
+                "action_type": action.action_type,
+                "action_digest": action.digest,
+                "source_digest": action.source_digest,
+                "published_at": action.published_at,
+                "available_at": action.available_at,
+                "effective_date": action.effective_date,
+                "ex_date": action.ex_date,
+                "pay_date": action.pay_date,
+                "split_ratio": action.split_ratio,
+                "split_ratio_convention": action.split_ratio_convention,
+                "cash_amount": action.cash_amount,
+                "cash_amount_basis": action.cash_amount_basis,
+                "cash_consideration": action.cash_consideration,
+                "currency": action.currency,
+            }
+            projections.append(
+                CorporateActionProjection(
+                    **payload,
+                    projection_digest=canonical_digest(payload),
+                )
+            )
+        projections.sort(
+            key=lambda item: (
+                item.application_at,
+                ECONOMIC_APPLICATION_PRECEDENCE[item.application],
+                str(item.action_id),
+            )
+        )
+        view_payload = {
+            "view_version": "economic-event-view/1",
+            "dataset_id": dataset.manifest.dataset_id,
+            "tenant_id": dataset.manifest.tenant_id,
+            "manifest_digest": dataset.manifest.digest,
+            "instrument_id": dataset.instrument.instrument_id,
+            "session_date": session_date,
+            "phase": phase,
+            "as_of": as_of,
+            "precedence_digest": ECONOMIC_APPLICATION_PRECEDENCE_DIGEST,
+            "actions": tuple(item.model_dump(mode="python") for item in projections),
+        }
+        return EconomicEventView(
+            **view_payload,
+            view_digest=canonical_digest(view_payload),
+        )
+
+    def load_fx_rate(
+        self,
+        dataset_id: UUID,
+        *,
+        expected_tenant_id: UUID,
+        expected_instrument_id: UUID,
+        expected_manifest_digest: str,
+        functional_currency: str,
+        source_currency: str,
+        event_at: datetime,
+        max_staleness_seconds: int,
+        _economics_handle: FrozenEconomicsDatasetHandle | None = None,
+    ) -> FxRateProjection:
+        """Select one direct PIT FX observation or an explicit identity rate."""
+
+        if type(self) is not FrozenDatasetRepository:
+            raise DatasetIntegrityError("FX conversion requires the repository authority")
+        expected_instrument_id = FrozenDatasetRepository._require_uuid(
+            expected_instrument_id, "expected_instrument_id"
+        )
+        event_at = FrozenDatasetRepository._require_datetime(event_at, "event_at")
+        if type(max_staleness_seconds) is not int or not 1 <= max_staleness_seconds <= 604_800:
+            raise DatasetIntegrityError("FX staleness policy is outside the supported range")
+        if _economics_handle is None:
+            dataset = FrozenDatasetRepository._load_verified(
+                self,
+                dataset_id,
+                expected_tenant_id=expected_tenant_id,
+                expected_manifest_digest=expected_manifest_digest,
+            )
+            economics_index = None
+        else:
+            if (
+                type(_economics_handle) is not FrozenEconomicsDatasetHandle
+                or _economics_handle._repository is not self
+            ):
+                raise DatasetIntegrityError("verified economics handle is invalid")
+            economics_index = _economics_handle._index
+            dataset = economics_index.dataset
+        if type(dataset) is not _FrozenMarketDataset:
+            raise DatasetIntegrityError("verified FX dataset handle is invalid")
+        if (
+            dataset.manifest.dataset_id != dataset_id
+            or dataset.manifest.tenant_id != expected_tenant_id
+            or not hmac.compare_digest(
+                dataset.manifest.digest, expected_manifest_digest
+            )
+        ):
+            raise DatasetIntegrityError("verified FX dataset binding is invalid")
+        if dataset.instrument.instrument_id != expected_instrument_id:
+            raise DatasetIntegrityError("FX projection references another instrument")
+        if dataset.manifest.schema_version != 2 or (
+            economics_index is None
+            and any(type(item) is not FxObservation for item in dataset.fx_observations)
+        ):
+            raise DatasetIntegrityError(
+                "schema-v1 FX rows are replay-only and ineligible for conversion"
+            )
+        if economics_index is None:
+            economics_index = _build_economics_index(dataset)
+        if (
+            type(economics_index) is not _FrozenEconomicsIndex
+            or economics_index.dataset is not dataset
+        ):
+            raise DatasetIntegrityError("verified economics index binding is invalid")
+        if functional_currency == source_currency:
+            payload = {
+                "projection_version": "fx-rate-projection/1",
+                "dataset_id": dataset.manifest.dataset_id,
+                "manifest_digest": dataset.manifest.digest,
+                "instrument_id": expected_instrument_id,
+                "functional_currency": functional_currency,
+                "source_currency": source_currency,
+                "event_at": event_at,
+                "max_staleness_seconds": max_staleness_seconds,
+                "mode": FxConversionMode.IDENTITY,
+                "rate": Decimal("1"),
+                "observation_id": None,
+                "observation_revision": None,
+                "observed_at": None,
+                "available_at": None,
+                "observation_digest": None,
+                "source_digest": None,
+                "rate_convention": "quote_units_per_base_unit",
+            }
+            return FxRateProjection(
+                **payload,
+                projection_digest=canonical_digest(payload),
+            )
+        pair = (functional_currency, source_currency)
+        pair_chains = economics_index.fx_chains_by_pair.get(pair, ())
+        pair_times = economics_index.fx_times_by_pair.get(pair, ())
+        cursor = bisect_right(pair_times, event_at) - 1
+        newest: tuple[FxObservation, ...] = ()
+        while cursor >= 0 and not newest:
+            observed_at = pair_times[cursor]
+            start = bisect_left(pair_times, observed_at, 0, cursor + 1)
+            eligible: list[FxObservation] = []
+            for chain in pair_chains[start : cursor + 1]:
+                available = tuple(item for item in chain if item.available_at <= event_at)
+                if available:
+                    eligible.append(available[-1])
+            newest = tuple(eligible)
+            cursor = start - 1
+        if not newest:
+            raise DatasetIntegrityError(
+                "required direct FX rate is unavailable",
+                code=BacktestDataCode.PIT_AVAILABILITY_UNKNOWN,
+            )
+        if len(newest) != 1:
+            raise DatasetIntegrityError("direct FX rate is ambiguous at the event time")
+        selected = newest[0]
+        if (event_at - selected.observed_at).total_seconds() > max_staleness_seconds:
+            raise DatasetIntegrityError("direct FX rate exceeds the staleness policy")
+        payload = {
+            "projection_version": "fx-rate-projection/1",
+            "dataset_id": dataset.manifest.dataset_id,
+            "manifest_digest": dataset.manifest.digest,
+            "instrument_id": expected_instrument_id,
+            "functional_currency": functional_currency,
+            "source_currency": source_currency,
+            "event_at": event_at,
+            "max_staleness_seconds": max_staleness_seconds,
+            "mode": FxConversionMode.DIRECT,
+            "rate": selected.rate,
+            "observation_id": selected.observation_id,
+            "observation_revision": selected.revision,
+            "observed_at": selected.observed_at,
+            "available_at": selected.available_at,
+            "observation_digest": selected.digest,
+            "source_digest": selected.source_digest,
+            "rate_convention": selected.rate_convention,
+        }
+        return FxRateProjection(
+            **payload,
+            projection_digest=canonical_digest(payload),
         )
 
     def _verify_execution_price(
@@ -1174,27 +1753,35 @@ class FrozenDatasetRepository:
     def _parse_records(
         content: bytes,
         expected_count: int,
+        *,
+        schema_version: int = 2,
     ) -> tuple[
         InstrumentSpec,
         tuple[DailyBar, ...],
-        tuple[CorporateAction, ...],
-        tuple[FxObservation, ...],
+        tuple[CorporateActionRecord, ...],
+        tuple[FxObservationRecord, ...],
     ]:
         if expected_count < 1 or expected_count > MAX_DATASET_ROWS:
             raise DatasetIntegrityError("dataset row count exceeds the operational limit")
         if not content.endswith(b"\n"):
             raise DatasetIntegrityError("dataset is not canonical JSONL")
+        if schema_version not in {1, 2}:
+            raise DatasetIntegrityError("dataset schema version is unsupported")
         classes = {
             "instrument": InstrumentSpec,
             "daily_bar": DailyBar,
-            "corporate_action": CorporateAction,
-            "fx_observation": FxObservation,
+            "corporate_action": CorporateActionV1
+            if schema_version == 1
+            else CorporateAction,
+            "fx_observation": FxObservationV1
+            if schema_version == 1
+            else FxObservation,
         }
         order = {"instrument": 0, "daily_bar": 1, "corporate_action": 2, "fx_observation": 3}
         instrument: InstrumentSpec | None = None
         bars: list[DailyBar] = []
-        actions: list[CorporateAction] = []
-        fx: list[FxObservation] = []
+        actions: list[CorporateActionRecord] = []
+        fx: list[FxObservationRecord] = []
         previous_group = -1
         count = 0
         stream = io.BytesIO(content)
@@ -1253,8 +1840,8 @@ class FrozenDatasetRepository:
     def _validate_records(
         instrument: InstrumentSpec,
         bars: tuple[DailyBar, ...],
-        actions: tuple[CorporateAction, ...],
-        fx: tuple[FxObservation, ...],
+        actions: tuple[CorporateActionRecord, ...],
+        fx: tuple[FxObservationRecord, ...],
         *,
         validate_calendar: bool,
     ) -> None:
@@ -1286,6 +1873,23 @@ class FrozenDatasetRepository:
                 raise DatasetIntegrityError("dataset has a missing exchange session")
         if any(action.instrument_id != instrument.instrument_id for action in actions):
             raise DatasetIntegrityError("corporate action belongs to a different instrument")
+        if any(
+            action.effective_date < instrument.listing_date
+            or (
+                instrument.delisting_date is not None
+                and action.effective_date > instrument.delisting_date
+            )
+            for action in actions
+        ):
+            raise DatasetIntegrityError("corporate action is outside the instrument lifetime")
+        if any(
+            action.action_type.value in {"split", "cash_dividend", "delisting"}
+            and action.effective_date not in seen
+            for action in actions
+        ):
+            raise DatasetIntegrityError(
+                "corporate-action effective date is absent from the frozen schedule"
+            )
         revisions: dict[UUID, list[CorporateAction]] = {}
         for action in actions:
             revisions.setdefault(action.action_id, []).append(action)
@@ -1302,14 +1906,25 @@ class FrozenDatasetRepository:
                     raise DatasetIntegrityError(
                         "corporate-action revisions must advance publication and availability"
                     )
-                if (
+                identity_changed = (
                     action.instrument_id != first.instrument_id
                     or action.action_type is not first.action_type
                     or action.effective_date != first.effective_date
                     or action.ex_date != first.ex_date
-                ):
+                )
+                economic_terms_changed = type(first) is CorporateAction and (
+                    type(action) is not CorporateAction
+                    or action.pay_date != first.pay_date
+                    or action.split_ratio != first.split_ratio
+                    or action.split_ratio_convention != first.split_ratio_convention
+                    or action.cash_amount != first.cash_amount
+                    or action.cash_amount_basis != first.cash_amount_basis
+                    or action.cash_consideration != first.cash_consideration
+                    or action.currency != first.currency
+                )
+                if identity_changed or economic_terms_changed:
                     raise DatasetIntegrityError(
-                        "corporate-action revisions cannot rewrite identity or effective dates"
+                        "corporate-action revisions cannot rewrite identity or economic terms"
                     )
         delistings = [
             action
@@ -1331,6 +1946,27 @@ class FrozenDatasetRepository:
             )
         if any(item.available_at < item.observed_at for item in fx):
             raise DatasetIntegrityError("FX observation is available before it was observed")
+        fx_revisions: dict[UUID, list[FxObservation]] = {}
+        for observation in fx:
+            if type(observation) is FxObservation:
+                fx_revisions.setdefault(observation.observation_id, []).append(observation)
+        for chain in fx_revisions.values():
+            ordered = sorted(chain, key=lambda item: item.revision)
+            if [item.revision for item in ordered] != list(range(1, len(ordered) + 1)):
+                raise DatasetIntegrityError("FX revisions must be contiguous from one")
+            first = ordered[0]
+            for previous_observation, observation in zip(ordered, ordered[1:], strict=False):
+                if observation.available_at <= previous_observation.available_at:
+                    raise DatasetIntegrityError("FX revisions must advance availability")
+                if (
+                    observation.base_currency != first.base_currency
+                    or observation.quote_currency != first.quote_currency
+                    or observation.observed_at != first.observed_at
+                    or observation.rate_convention != first.rate_convention
+                ):
+                    raise DatasetIntegrityError(
+                        "FX revisions cannot rewrite pair, observation time, or convention"
+                    )
 
 
 def verify_execution_price_authority(
@@ -1402,6 +2038,62 @@ def resolve_execution_price_authority(
         decision_at=decision_at,
         decision_session_date=decision_session_date,
         expected_eligible_view_digest=expected_eligible_view_digest,
+    )
+
+
+def _resolve_economic_event_projection(
+    repository: FrozenDatasetRepository,
+    dataset_id: UUID,
+    *,
+    expected_tenant_id: UUID,
+    expected_instrument_id: UUID,
+    expected_manifest_digest: str,
+    session_date: date,
+    phase: EconomicPhase,
+    as_of: datetime,
+) -> EconomicEventView:
+    """Return only corporate-action effects rederived from frozen bytes."""
+
+    if type(repository) is not FrozenDatasetRepository:
+        raise DatasetIntegrityError("economic events require the repository authority")
+    return FrozenDatasetRepository.load_economic_event_view(
+        repository,
+        dataset_id,
+        expected_tenant_id=expected_tenant_id,
+        expected_instrument_id=expected_instrument_id,
+        expected_manifest_digest=expected_manifest_digest,
+        session_date=session_date,
+        phase=phase,
+        as_of=as_of,
+    )
+
+
+def _resolve_fx_rate_projection(
+    repository: FrozenDatasetRepository,
+    dataset_id: UUID,
+    *,
+    expected_tenant_id: UUID,
+    expected_instrument_id: UUID,
+    expected_manifest_digest: str,
+    functional_currency: str,
+    source_currency: str,
+    event_at: datetime,
+    max_staleness_seconds: int,
+) -> FxRateProjection:
+    """Return one deterministic direct/identity FX rate from frozen bytes."""
+
+    if type(repository) is not FrozenDatasetRepository:
+        raise DatasetIntegrityError("FX conversion requires the repository authority")
+    return FrozenDatasetRepository.load_fx_rate(
+        repository,
+        dataset_id,
+        expected_tenant_id=expected_tenant_id,
+        expected_instrument_id=expected_instrument_id,
+        expected_manifest_digest=expected_manifest_digest,
+        functional_currency=functional_currency,
+        source_currency=source_currency,
+        event_at=event_at,
+        max_staleness_seconds=max_staleness_seconds,
     )
 
 

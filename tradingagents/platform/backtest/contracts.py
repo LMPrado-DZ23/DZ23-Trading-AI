@@ -167,11 +167,11 @@ def market_dataset_binding_digest(
     calendar_engine_version: str,
     timezone_database_version: str,
     settlement_policy_version: str,
+    schema_version: Literal[2] | None = None,
 ) -> str:
     """Bind frozen dataset bytes to their tenant, identity, and source vintage."""
 
-    return canonical_digest(
-        {
+    payload = {
             "calendar_engine_version": calendar_engine_version,
             "content_bytes": content_bytes,
             "content_sha256": content_sha256,
@@ -182,8 +182,10 @@ def market_dataset_binding_digest(
             "source_vintage": source_vintage,
             "tenant_id": tenant_id,
             "timezone_database_version": timezone_database_version,
-        }
-    )
+    }
+    if schema_version is not None:
+        payload["schema_version"] = schema_version
+    return canonical_digest(payload)
 
 
 class BacktestContract(BaseModel):
@@ -528,7 +530,9 @@ class DatasetReference(BacktestContract):
     role: DatasetRole
 
 
-class CorporateAction(BacktestContract):
+class CorporateActionV1(BacktestContract):
+    """Legacy schema-v1 action retained only for byte-identical replay."""
+
     action_id: UUID
     instrument_id: UUID
     revision: int = Field(default=1, ge=1)
@@ -583,11 +587,12 @@ class CorporateAction(BacktestContract):
                 or self.split_ratio is not None
                 or self.cash_consideration is not None
             ):
-                raise ValueError("cash dividends require an ex-date, pay date, amount, and currency")
+                raise ValueError(
+                    "cash dividends require an ex-date, pay date, amount, and currency"
+                )
         elif (
             self.ex_date is not None
             or self.split_ratio is not None
-            or self.cash_amount is not None
             or (self.cash_consideration is None) != (self.currency is None)
             or (self.cash_consideration is None) != (self.pay_date is None)
         ):
@@ -597,7 +602,9 @@ class CorporateAction(BacktestContract):
         return self
 
 
-class FxObservation(BacktestContract):
+class FxObservationV1(BacktestContract):
+    """Legacy schema-v1 FX row retained only for byte-identical replay."""
+
     base_currency: Currency
     quote_currency: Currency
     observed_at: datetime
@@ -622,10 +629,126 @@ class FxObservation(BacktestContract):
         return self
 
 
+class CorporateAction(BacktestContract):
+    action_id: UUID
+    instrument_id: UUID
+    revision: int = Field(default=1, ge=1)
+    action_type: CorporateActionType
+    announced_at: datetime | None = None
+    published_at: datetime
+    available_at: datetime
+    ex_date: date | None = None
+    effective_date: date
+    pay_date: date | None = None
+    split_ratio: Decimal | None = None
+    split_ratio_convention: Literal["new_shares_per_old_share"] | None = None
+    cash_amount: Decimal | None = None
+    cash_amount_basis: Literal["net_cash_per_entitled_share"] | None = None
+    cash_consideration: Decimal | None = None
+    currency: Currency | None = None
+    source_digest: Digest
+
+    _timestamps_are_utc = field_validator("announced_at", "published_at", "available_at")(
+        lambda value: None if value is None else _utc(value)
+    )
+    _decimal_input_is_exact = field_validator(
+        "split_ratio", "cash_amount", "cash_consideration", mode="before"
+    )(_reject_binary_float)
+
+    @field_validator("split_ratio", "cash_amount", "cash_consideration")
+    @classmethod
+    def validate_optional_positive_value(cls, value: Decimal | None) -> Decimal | None:
+        return None if value is None else _positive(value)
+
+    @model_validator(mode="after")
+    def validate_action(self):
+        if self.available_at < self.published_at:
+            raise ValueError("corporate-action availability cannot precede publication")
+        if self.announced_at is not None and self.announced_at > self.published_at:
+            raise ValueError("corporate-action announcement cannot follow publication")
+        if self.pay_date is not None and self.pay_date < self.effective_date:
+            raise ValueError("corporate-action pay date cannot precede its effective date")
+        if self.action_type is CorporateActionType.SPLIT:
+            if (
+                self.split_ratio is None
+                or self.ex_date is None
+                or self.ex_date != self.effective_date
+                or self.pay_date is not None
+                or self.split_ratio_convention != "new_shares_per_old_share"
+                or self.cash_amount is not None
+                or self.cash_amount_basis is not None
+                or self.cash_consideration is not None
+                or self.currency is not None
+            ):
+                raise ValueError(
+                    "split actions require one effective ex-date, a ratio convention, "
+                    "and only a split ratio"
+                )
+        elif self.action_type is CorporateActionType.CASH_DIVIDEND:
+            if (
+                self.cash_amount is None
+                or self.currency is None
+                or self.ex_date is None
+                or self.effective_date != self.ex_date
+                or self.pay_date is None
+                or self.split_ratio is not None
+                or self.split_ratio_convention is not None
+                or self.cash_amount_basis != "net_cash_per_entitled_share"
+                or self.cash_consideration is not None
+            ):
+                raise ValueError(
+                    "cash dividends require one effective ex-date, pay date, net amount basis, "
+                    "amount, and currency"
+                )
+        elif (
+            self.ex_date is not None
+            or self.split_ratio is not None
+            or self.split_ratio_convention is not None
+            or self.cash_amount is not None
+            or self.cash_amount_basis is not None
+            or (self.cash_consideration is None) != (self.currency is None)
+            or (self.cash_consideration is None) != (self.pay_date is None)
+        ):
+            raise ValueError(
+                "delistings allow only an optional cash consideration, currency, and pay date"
+            )
+        return self
+
+
+class FxObservation(BacktestContract):
+    observation_id: UUID
+    revision: int = Field(default=1, ge=1)
+    base_currency: Currency
+    quote_currency: Currency
+    observed_at: datetime
+    available_at: datetime
+    rate: Decimal
+    rate_convention: Literal["quote_units_per_base_unit"] = (
+        "quote_units_per_base_unit"
+    )
+    source_digest: Digest
+
+    _timestamps_are_utc = field_validator("observed_at", "available_at")(_utc)
+    _decimal_input_is_exact = field_validator("rate", mode="before")(_reject_binary_float)
+
+    @field_validator("rate")
+    @classmethod
+    def validate_rate(cls, value: Decimal) -> Decimal:
+        return _positive(value)
+
+    @model_validator(mode="after")
+    def validate_observation(self):
+        if self.base_currency == self.quote_currency:
+            raise ValueError("FX currencies must be different")
+        if self.available_at < self.observed_at:
+            raise ValueError("FX availability cannot precede observation")
+        return self
+
+
 class MarketDatasetManifest(BacktestContract):
     dataset_id: UUID
     tenant_id: UUID
-    schema_version: Literal[1] = 1
+    schema_version: Literal[1, 2] = 2
     created_at: datetime
     source: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9_.-]+$")
     source_vintage: str = Field(min_length=1, max_length=160)
@@ -671,6 +794,7 @@ class MarketDatasetManifest(BacktestContract):
             calendar_engine_version=self.calendar_engine_version,
             timezone_database_version=self.timezone_database_version,
             settlement_policy_version=self.settlement_policy_version,
+            schema_version=2 if self.schema_version == 2 else None,
         )
         if self.binding_digest != expected_binding:
             raise ValueError("dataset binding digest does not match the frozen authority fields")
@@ -772,3 +896,10 @@ class BacktestSpec(BacktestContract):
                 "dataset references must follow instrument order with benchmark last"
             )
         return self
+
+
+class BacktestSpecV3(BacktestSpec):
+    """Economics-capable spec; v2 remains immutable for prior replay."""
+
+    schema_version: Literal[3] = 3
+    economics_policy_digest: Digest
