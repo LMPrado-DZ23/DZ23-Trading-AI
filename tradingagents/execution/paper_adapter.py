@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
 from uuid import uuid4
 
 from tradingagents.domain.contracts import OrderAck, OrderRequest, PortfolioSnapshot, Position
@@ -9,12 +11,15 @@ from tradingagents.domain.enums import Environment, OrderStatus, Side
 
 
 class PaperAdapter:
-    def __init__(self, *, account_id: str = "paper-account", starting_equity: Decimal = Decimal("100000"), slippage_bps: Decimal = Decimal("0")):
+    def __init__(self, *, account_id: str = "paper-account", starting_equity: Decimal = Decimal("100000"), slippage_bps: Decimal = Decimal("0"), state_path: str | Path | None = None):
         self.account_id = account_id
         self.equity = starting_equity
         self.slippage_bps = slippage_bps
+        self.state_path = Path(state_path) if state_path else None
         self.orders: dict[str, OrderAck] = {}
         self.positions: dict[str, Position] = {}
+        if self.state_path:
+            self._load()
 
     def healthcheck(self) -> dict:
         return {"status": "READY", "environment": Environment.PAPER.value, "account_id": self.account_id}
@@ -69,6 +74,7 @@ class PaperAdapter:
                 self.positions.pop(request.instrument_id, None)
         else:
             self.positions[request.instrument_id] = Position(f"paper-pos-{uuid4().hex}", self.account_id, request.instrument_id, request.side, abs(signed_qty), fill_price)
+        self._save()
         return ack
 
     def cancel(self, order_id: str) -> OrderAck:
@@ -79,3 +85,42 @@ class PaperAdapter:
 
     def reconcile(self, account_id: str) -> dict:
         return {"status": "MATCHED", "account_id": account_id, "orders": len(self.orders), "positions": len(self.positions)}
+
+    def mark_to_market(self, prices: dict[str, Decimal]) -> dict[str, Decimal]:
+        unrealized = Decimal("0")
+        gross = Decimal("0")
+        for instrument_id, position in self.positions.items():
+            price = prices.get(instrument_id)
+            if price is None or price <= 0:
+                continue
+            direction = Decimal("1") if position.side is Side.BUY else Decimal("-1")
+            unrealized += (price - position.average_price) * position.quantity * direction
+            gross += price * position.quantity
+        equity = self.equity + unrealized
+        return {"equity": equity, "unrealized_pnl": unrealized, "gross_exposure": gross, "positions": Decimal(str(len(self.positions)))}
+
+    def _save(self) -> None:
+        if not self.state_path:
+            return
+        payload = {
+            "account_id": self.account_id,
+            "equity": str(self.equity),
+            "slippage_bps": str(self.slippage_bps),
+            "orders": {key: {**value.__dict__} if hasattr(value, "__dict__") else {"order_id": value.order_id, "client_order_id": value.client_order_id, "status": value.status.value, "accepted_quantity": str(value.accepted_quantity), "filled_quantity": str(value.filled_quantity), "average_price": str(value.average_price) if value.average_price is not None else None, "created_at": value.created_at.isoformat(), "message": value.message} for key, value in self.orders.items()},
+            "positions": {key: {"position_id": value.position_id, "account_id": value.account_id, "instrument_id": value.instrument_id, "side": value.side.value, "quantity": str(value.quantity), "average_price": str(value.average_price), "unrealized_pnl": str(value.unrealized_pnl), "realized_pnl": str(value.realized_pnl)} for key, value in self.positions.items()},
+        }
+        self.state_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self.state_path.with_suffix(self.state_path.suffix + ".tmp")
+        temporary.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+        temporary.replace(self.state_path)
+
+    def _load(self) -> None:
+        if not self.state_path or not self.state_path.exists():
+            return
+        data = json.loads(self.state_path.read_text(encoding="utf-8"))
+        if data.get("account_id") != self.account_id:
+            raise ValueError("estado Paper pertence a outra conta")
+        self.equity = Decimal(data.get("equity", str(self.equity)))
+        self.slippage_bps = Decimal(data.get("slippage_bps", str(self.slippage_bps)))
+        self.orders = {key: OrderAck(item["order_id"], item["client_order_id"], OrderStatus(item["status"]), Decimal(item["accepted_quantity"]), Decimal(item["filled_quantity"]), Decimal(item["average_price"]) if item.get("average_price") is not None else None, datetime.fromisoformat(item["created_at"]), item.get("message", "")) for key, item in data.get("orders", {}).items()}
+        self.positions = {key: Position(item["position_id"], item["account_id"], item["instrument_id"], Side(item["side"]), Decimal(item["quantity"]), Decimal(item["average_price"]), Decimal(item.get("unrealized_pnl", "0")), Decimal(item.get("realized_pnl", "0"))) for key, item in data.get("positions", {}).items()}

@@ -5,21 +5,43 @@ Config vive em /data/config.json (chmod 600), editada PELO PAINEL, aplicada a
 cada job — sem redeploy, sem tocar em env no Coolify. Segredos nunca voltam
 inteiros ao navegador (exibição mascarada)."""
 import asyncio
-import hmac, json, os, sqlite3, threading, time, traceback, uuid
+import hmac
+import json
+import os
+import sqlite3
+import threading
+import time
+import traceback
+import uuid
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from tradingagents.agency_runtime import AgencyRuntime
-from tradingagents.telemetry import AuditLog
+from tradingagents.domain import (
+    MarketSnapshot,
+    OrderRequest,
+    Side,
+    TradeDecision,
+)
+from tradingagents.execution import ExecutionRouter, KillSwitch, PaperAdapter
+from tradingagents.risk import RiskEngine
+from tradingagents.telemetry import AuditLog, EventBus
 
 DATA = Path(os.environ.get("DATA_DIR", "/data")); DATA.mkdir(parents=True, exist_ok=True)
 CFG_PATH = DATA / "config.json"; DB = DATA / "jobs.db"
 PASSWORD = os.environ.get("ACCESS_PASSWORD", "")
 STATIC = Path(__file__).parent / "static"
 AGENCY = AgencyRuntime(audit_log=AuditLog(DATA / "agency-events.jsonl"))
+AUDIT_LOG = AuditLog(DATA / "execution-events.jsonl")
+EVENT_BUS = EventBus()
+PAPER_ADAPTER = PaperAdapter(state_path=DATA / "paper-state.json")
+KILL_SWITCH = KillSwitch()
+EXECUTION_ROUTER = ExecutionRouter(risk_engine=RiskEngine(), audit_log=AUDIT_LOG, event_bus=EVENT_BUS, kill_switch=KILL_SWITCH)
 for _agent_id, _desk, _role in (
     ("market-scanner", "research", "Market Scanner"),
     ("technical-analyst", "research", "Technical Analyst"),
@@ -386,3 +408,43 @@ async def agency_stream(after: int = 0, _=Depends(auth)):
                 yield f"id: {cursor}\nevent: {item.event.event_type}\ndata: {json.dumps(item.event.as_dict(), ensure_ascii=False)}\n\n"
             await asyncio.sleep(1)
     return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.post("/v1/execution/paper")
+async def paper_execution(req: Request, _=Depends(auth)):
+    """Executa apenas Paper através de Decision -> RiskEngine -> Adapter."""
+    body = await req.json()
+    try:
+        now = datetime.now(timezone.utc)
+        decision = TradeDecision(
+            str(body["decision_id"]), str(body.get("run_id", uuid.uuid4().hex)), str(body["strategy_id"]), str(body.get("desk_id", "strategy")), str(body["instrument_id"]), "paper", PAPER_ADAPTER.account_id,
+            Side(str(body["side"]).upper()), str(body.get("order_type", "MARKET")), Decimal(str(body["entry_price"])), Decimal(str(body["stop_loss"])), Decimal(str(body["take_profit"])), Decimal(str(body["risk_amount"])), Decimal(str(body["risk_pct_equity"])), Decimal(str(body["quantity"])), str(body.get("time_in_force", "GTC")), now + timedelta(seconds=int(body.get("signal_ttl_seconds", 60))), Decimal(str(body["confidence"])), str(body.get("regime", "UNKNOWN")), tuple(body.get("evidence_ids", [])), tuple(body.get("agent_votes", [])), now,
+        )
+        observed = datetime.fromisoformat(str(body.get("observed_at", now.isoformat())))
+        snapshot = MarketSnapshot(str(body.get("snapshot_id", uuid.uuid4().hex)), decision.instrument_id, "paper", Decimal(str(body["bid"])), Decimal(str(body["ask"])), Decimal(str(body.get("last", body["entry_price"]))), Decimal(str(body.get("volume", "0"))), Decimal(str(body.get("spread", Decimal(str(body["ask"])) - Decimal(str(body["bid"]))))), observed, now, "paper-api", int(body.get("sequence", 0)))
+        portfolio = PAPER_ADAPTER.get_portfolio(PAPER_ADAPTER.account_id)
+        request_order = OrderRequest(str(body.get("client_order_id", f"paper-{decision.decision_id}")), decision.decision_id, decision.run_id, decision.strategy_id, decision.account_id, decision.instrument_id, "paper", decision.side, decision.order_type, decision.quantity, decision.entry_price_reference, decision.stop_loss, decision.take_profit)
+        result = EXECUTION_ROUTER.submit(decision, portfolio, snapshot, PAPER_ADAPTER, request=request_order)
+        return {"risk": {"status": result.risk.status.value, "reason_codes": result.risk.reason_codes, "risk_decision_id": result.risk.risk_decision_id}, "order": result.order.__dict__ if result.order and hasattr(result.order, "__dict__") else ({"order_id": result.order.order_id, "client_order_id": result.order.client_order_id, "status": result.order.status.value, "filled_quantity": str(result.order.filled_quantity), "average_price": str(result.order.average_price) if result.order.average_price is not None else None} if result.order else None)}
+    except PermissionError as exc:
+        raise HTTPException(423, str(exc)) from exc
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(422, f"paper execution inválida: {exc}") from exc
+
+
+@app.get("/v1/execution/health")
+def execution_health(_=Depends(auth)):
+    return {"paper": PAPER_ADAPTER.healthcheck(), "kill_switch": {"enabled": KILL_SWITCH.state.enabled, "reason": KILL_SWITCH.state.reason, "changed_at": KILL_SWITCH.state.changed_at.isoformat(), "actor": KILL_SWITCH.state.actor}, "event_sequence": EVENT_BUS.latest_sequence}
+
+
+@app.post("/v1/execution/kill-switch")
+async def execution_kill_switch(req: Request, _=Depends(auth)):
+    body = await req.json()
+    action = str(body.get("action", "engage")).lower()
+    if action == "engage":
+        state = KILL_SWITCH.engage(str(body.get("reason", "bloqueio administrativo")), actor=str(body.get("actor", "api")))
+    elif action == "reset":
+        state = KILL_SWITCH.reset(actor=str(body.get("actor", "api")), reconciliation_ok=bool(body.get("reconciliation_ok", False)))
+    else:
+        raise HTTPException(422, "action deve ser engage ou reset")
+    return {"enabled": state.enabled, "reason": state.reason, "changed_at": state.changed_at.isoformat(), "actor": state.actor}

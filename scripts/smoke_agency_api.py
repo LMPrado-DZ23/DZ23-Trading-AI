@@ -25,4 +25,15 @@ assert vote.status_code == 200
 status = client.post("/v1/agency/agents/strategy-agent/status", headers=headers, json={"status": "ANALYZING"})
 assert status.status_code == 200
 assert client.get("/v1/agency/events", headers=headers).json()["events"]
+paper = client.post("/v1/execution/paper", headers=headers, json={"decision_id": "smoke-decision", "strategy_id": "smoke-strategy", "instrument_id": "BTCUSDT", "side": "BUY", "entry_price": "100", "stop_loss": "98", "take_profit": "105", "risk_amount": "10", "risk_pct_equity": "0.001", "quantity": "1", "confidence": "0.8", "evidence_ids": ["smoke-evidence"], "bid": "99.9", "ask": "100.1", "last": "100"})
+assert paper.status_code == 200, paper.text
+assert paper.json()["risk"]["status"] == "APPROVE"
+assert paper.json()["order"]["status"] == "FILLED"
+assert client.get("/v1/execution/health", headers=headers).json()["kill_switch"]["enabled"] is False
+engage = client.post("/v1/execution/kill-switch", headers=headers, json={"action": "engage", "reason": "smoke"})
+assert engage.status_code == 200 and engage.json()["enabled"] is True
+blocked = client.post("/v1/execution/paper", headers=headers, json={"decision_id": "blocked", "strategy_id": "smoke-strategy", "instrument_id": "BTCUSDT", "side": "BUY", "entry_price": "100", "stop_loss": "98", "take_profit": "105", "risk_amount": "10", "risk_pct_equity": "0.001", "quantity": "1", "confidence": "0.8", "evidence_ids": ["smoke-evidence"], "bid": "99.9", "ask": "100.1", "last": "100"})
+assert blocked.status_code == 423
+reset = client.post("/v1/execution/kill-switch", headers=headers, json={"action": "reset", "actor": "smoke", "reconciliation_ok": True})
+assert reset.status_code == 200 and reset.json()["enabled"] is False
 print("agency API smoke passed")
