@@ -128,3 +128,22 @@ compileall: passou
 ### Riscos restantes
 
 A reconciliação precisa ser chamada periodicamente pelos workers e conectada aos snapshots reais de CCXT/MT5. O endpoint legado de broker ainda não usa o router tipado. Persistência distribuída, observabilidade, backup e deployment 24/7 continuam pendentes.
+
+## Ciclo 7 — monitor de reconciliação e Event Bus de execução
+
+### Implementado
+
+Foi criado `ReconciliationMonitor`, que executa snapshots local/remoto, produz relatório `MATCHED`, `DIVERGED` ou `UNKNOWN`, chama callback operacional e falha fechado quando um provider está indisponível. O Event Bus de execução passou a usar `execution-events.jsonl` persistente.
+
+### Testes executados
+
+```text
+ruff seletivo: passou
+compileall: passou
+18 testes focados: passaram
+smoke_agency_api.py: passou
+```
+
+### Riscos restantes
+
+O monitor ainda precisa ser registrado no supervisor de workers com providers reais CCXT/MT5 e acionar o KillSwitch automaticamente em divergência. Métricas, alertas e deployment persistente ainda não estão concluídos.
