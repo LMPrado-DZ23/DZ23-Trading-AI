@@ -261,3 +261,18 @@ git diff --check: passou
 O sandbox não possui Docker, portanto `docker compose config` precisa ser executado no host de deployment. O MT5 Demo real exige terminal MetaTrader 5 e conta Demo do usuário; os caminhos foram validados com mocks, não com uma conta externa. Alertas externos e coleta de métricas de longa duração dependem da infraestrutura escolhida pelo usuário.
 
 A aplicação está pronta para onboarding em Paper/Shadow e preparação Demo, mas não deve ser apresentada como garantia de lucro nem como autorização para dinheiro real.
+
+## Ciclo 14 — CI contínuo
+
+### Implementado
+
+O workflow existente do GitHub Actions foi atualizado para executar também em branches `feat/**`, além de `main`. Cada execução valida a suíte, o checklist de release e o smoke test da API com defaults sem dinheiro real.
+
+### Validação local
+
+```text
+workflow checks: passou
+release_check.py: passou
+smoke_agency_api.py: passou
+git diff --check: passou
+```
