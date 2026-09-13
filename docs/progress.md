@@ -262,11 +262,11 @@ O sandbox não possui Docker, portanto `docker compose config` precisa ser execu
 
 A aplicação está pronta para onboarding em Paper/Shadow e preparação Demo, mas não deve ser apresentada como garantia de lucro nem como autorização para dinheiro real.
 
-## Ciclo 14 — CI contínuo
+## Ciclo 14 — CI contínuo preparado
 
 ### Implementado
 
-O workflow existente do GitHub Actions foi atualizado para executar também em branches `feat/**`, além de `main`. Cada execução valida a suíte, o checklist de release e o smoke test da API com defaults sem dinheiro real.
+Foi preparada uma atualização do workflow existente do GitHub Actions para executar também em branches `feat/**`, além de `main`, e validar a suíte, o checklist de release e o smoke test da API com defaults sem dinheiro real. A publicação dessa alteração foi rejeitada pelo GitHub porque a credencial da sessão não possui permissão `workflows`; o workflow remoto permanece inalterado.
 
 ### Validação local
 
@@ -276,3 +276,7 @@ release_check.py: passou
 smoke_agency_api.py: passou
 git diff --check: passou
 ```
+
+### Bloqueio externo
+
+Para publicar a mudança do workflow, o usuário precisa usar uma credencial/token com permissão de workflows no repositório ou aplicar manualmente o diff preparado.
