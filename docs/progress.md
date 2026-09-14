@@ -441,3 +441,11 @@ Foi criado o documento de gates Classe A, distinguindo evidências locais de val
 Foram adicionados `scripts/validate_docker_runtime.sh`, que sobe, verifica, reinicia e verifica novamente os serviços, `scripts/load_test.py` para carga read-only e `ops/Caddyfile.example` para referência de proxy TLS. O runbook e a tabela de gates Classe A foram atualizados.
 
 Validação local: `bash -n`, `py_compile`, release check, lint focalizado, compileall, 27 testes focados, smoke da API e smoke multi-tenant passaram. A execução real do script Docker, carga em ambiente implantado, TLS, backup/restore, Redis/Qdrant e MT5 Demo continua dependente do host autorizado.
+
+## Ciclo 26 — frontend multi-tenant integrado
+
+O painel legado por senha única foi substituído por um dashboard responsivo com onboarding inicial, login por tenant, sessão assinada, logout, visão geral, health operacional, configuração de APIs mascaradas, análises, Trading Floor, risco, Shadow Trading e administração de usuários/roles. A Trading Floor reutiliza a sessão multi-tenant.
+
+Foram adicionados `/v1/auth/status`, `/v1/auth/me`, `/v1/auth/logout`, `GET /v1/admin/users` e listagem de membros nos backends SQLite/PostgreSQL. Configurações no ambiente Docker passam a ser herdadas por tenants e podem ser sobrescritas no painel.
+
+Validação: sintaxe JavaScript do dashboard e Trading Floor passou no Node; 23 testes focados passaram; smoke multi-tenant e smoke da API passaram.

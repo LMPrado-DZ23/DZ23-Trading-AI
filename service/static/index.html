@@ -1,190 +1,66 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TradingAgents — Central</title><style>
-:root{--bg:#0b0f17;--panel:#131a26;--p2:#0f1622;--line:#1e2a3c;--txt:#e6edf6;--mut:#8ea2bd;--acc:#4ade80;--err:#f87171;--blue:#60a5fa;--warn:#fbbf24}
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--txt);font:15px/1.5 system-ui,sans-serif;max-width:1000px;margin:0 auto;padding:20px}
-h1{font-size:20px}.sub{color:var(--mut);font-size:13px;margin-bottom:16px}
-.tabs{display:flex;gap:8px;margin-bottom:16px}
-.tab{padding:9px 16px;border-radius:8px;background:var(--p2);border:1px solid var(--line);color:var(--mut);cursor:pointer;font-weight:600;font-size:14px}
-.tab.on{background:var(--acc);color:#052e12;border-color:var(--acc)}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
-.card h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin-bottom:10px}
-label{display:block;font-size:12px;color:var(--mut);margin:8px 0 3px}
-input,select{width:100%;background:var(--p2);border:1px solid var(--line);border-radius:8px;color:var(--txt);padding:9px 11px;font-size:14px}
-input:focus{outline:none;border-color:var(--blue)}
-.set{color:var(--acc);font-size:11px;margin-left:6px}.unset{color:var(--warn);font-size:11px;margin-left:6px}
-button{cursor:pointer;border:none;border-radius:8px;padding:10px 16px;font-weight:700;font-size:14px}
-.bp{background:var(--acc);color:#052e12}.bs{background:var(--p2);color:var(--mut);border:1px solid var(--line);font-size:12px;padding:6px 10px}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:720px){.grid2{grid-template-columns:1fr}}
-.msg{margin-top:10px;font-size:13px}.ok{color:var(--acc)}.bad{color:var(--err)}
-.pill{display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:700}
-.pill.ok{background:#0d3321;color:var(--acc)}.pill.run{background:#1e2a3c;color:var(--blue)}.pill.err{background:#3a1420;color:var(--err)}.pill.wait{background:#2e2510;color:var(--warn)}
-.job{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--p2)}
-.job .top{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center}
-pre{background:#0a0e15;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:12px;max-height:380px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin-top:8px}
-.decision{margin-top:8px;padding:10px;border-radius:8px;background:#0d3321;border:1px solid #14532d}
-.mut{color:var(--mut);font-size:12px}.hide{display:none}
-</style></head><body>
-<h1>TradingAgents — Central</h1>
-<div class="sub">Configura e opera num lugar só. Digita a senha de acesso uma vez; chaves ficam no servidor, sempre mascaradas.</div>
-<div class="card"><h2>🔐 Acesso</h2>
-<input id="pw" type="password" placeholder="senha de acesso (ACCESS_PASSWORD)">
-<button class="bs" style="margin-top:8px" onclick="loadStatus()">Entrar / Testar</button>
-<span id="pwMsg" class="msg"></span></div>
-<div class="tabs">
-<div class="tab on" data-t="cfg" onclick="tab('cfg')">⚙️ Configurações</div>
-<div class="tab" data-t="op" onclick="tab('op')">📈 Operação</div>
-</div>
-
-<div id="pane-cfg">
-<div class="card" style="border-color:#14532d"><h2>🚀 Comece aqui — 3 passos</h2>
-<div style="font-size:14px;line-height:1.8">
-<b>1.</b> Digita a senha lá em cima e clica <b>Entrar</b>.<br>
-<b>2.</b> Escolhe um provedor de IA <b>GRÁTIS</b> (Groq é o mais fácil: chave em 1 minuto, sem cartão) — o painel te mostra onde pegar a chave e escolhe os modelos sozinho. Se quiser análises mais ricas, pega também as duas gratuitas de mercado:
-<span class="mut">FRED → fred.stlouisfed.org/docs/api/api_key.html · Alpha Vantage → alphavantage.co/support/#api-key · Chave de treino da corretora (dinheiro fictício) → testnet.binance.vision</span><br>
-<b>3.</b> Clica <b>💾 Salvar configurações</b> no fim da página e vai na aba <b>📈 Operação</b>.
-</div></div>
-<div class="card"><h2>🤖 Inteligência Artificial</h2>
-<div class="grid2"><div>
-<label>Provedor principal</label>
-<select id="TRADINGAGENTS_LLM_PROVIDER" onchange="provHint()">
-<option value="groq">Groq — GRÁTIS, rápido (recomendado p/ começar)</option>
-<option value="google">Google Gemini — tem chave grátis</option>
-<option value="mistral">Mistral — grátis para começar</option>
-<option value="openrouter">OpenRouter — modelos grátis</option>
-<option value="ollama">Ollama — roda no TEU computador (grátis)</option>
-<option value="openai">OpenAI (pago)</option>
-<option value="anthropic">Anthropic Claude (pago)</option>
-<option value="deepseek">DeepSeek (barato)</option>
-<option value="azure">Azure OpenAI</option>
-<option value="openai_compatible">Outro OpenAI-compatível (LM Studio…)</option></select>
-<div id="provHint" class="mut" style="margin-top:4px"></div>
-<label>Endereço do servidor de IA (só p/ OpenAI-compatível)</label><input id="TRADINGAGENTS_BACKEND_URL" placeholder="ex.: http://meu-servidor:11434/v1 (Ollama)">
-<label>Modelo análise profunda <span class="mut">(deixa vazio = escolho o certo)</span></label><input id="TRADINGAGENTS_DEEP_THINK_LLM" placeholder="automático">
-<label>Modelo análise rápida <span class="mut">(deixa vazio = escolho o certo)</span></label><input id="TRADINGAGENTS_QUICK_THINK_LLM" placeholder="automático">
-</div><div>
-<label>GROQ_API_KEY <span id="s_GROQ_API_KEY"></span></label><input id="GROQ_API_KEY" type="password" placeholder="grátis em console.groq.com/keys">
-<label>MISTRAL_API_KEY <span id="s_MISTRAL_API_KEY"></span></label><input id="MISTRAL_API_KEY" type="password" placeholder="console.mistral.ai/api-keys">
-<label>OPENROUTER_API_KEY <span id="s_OPENROUTER_API_KEY"></span></label><input id="OPENROUTER_API_KEY" type="password" placeholder="openrouter.ai/keys">
-<label>OPENAI_API_KEY <span id="s_OPENAI_API_KEY"></span></label><input id="OPENAI_API_KEY" type="password" placeholder="sk-…">
-<label>ANTHROPIC_API_KEY <span id="s_ANTHROPIC_API_KEY"></span></label><input id="ANTHROPIC_API_KEY" type="password">
-<label>DEEPSEEK_API_KEY <span id="s_DEEPSEEK_API_KEY"></span></label><input id="DEEPSEEK_API_KEY" type="password">
-<label>GOOGLE_API_KEY <span id="s_GOOGLE_API_KEY"></span></label><input id="GOOGLE_API_KEY" type="password">
-</div></div></div>
-
-<div class="card"><h2>📊 Dados de mercado</h2><div class="grid2"><div>
-<label>FRED_API_KEY (macro, gratuita) <span id="s_FRED_API_KEY"></span></label><input id="FRED_API_KEY" type="password">
-</div><div>
-<label>ALPHA_VANTAGE_API_KEY (gratuita) <span id="s_ALPHA_VANTAGE_API_KEY"></span></label><input id="ALPHA_VANTAGE_API_KEY" type="password">
-</div></div></div>
-
-<div class="card"><h2>🏦 Corretora</h2>
-<div class="grid2"><div>
-<label>Exchange</label>
-<select id="TRADINGAGENTS_EXCHANGE"><option value="binance">Binance</option><option value="bybit">Bybit</option><option value="okx">OKX</option><option value="coinbase">Coinbase</option><option value="kraken">Kraken</option><option value="gateio">Gate.io</option><option value="kucoin">KuCoin</option><option value="mercadobitcoin">Mercado Bitcoin</option><option value="bitget">Bitget</option></select>
-<label>Modo</label>
-<select id="TRADINGAGENTS_BROKER_MODE"><option value="testnet">TESTNET (fictício — padrão)</option></select>
-</div><div>
-<label>EXCHANGE_API_KEY <span id="s_EXCHANGE_API_KEY"></span></label><input id="EXCHANGE_API_KEY" type="password">
-<label>EXCHANGE_API_SECRET <span id="s_EXCHANGE_API_SECRET"></span></label><input id="EXCHANGE_API_SECRET" type="password">
-</div></div>
-<div class="mut" style="margin-top:6px">TESTNET é sandbox com dinheiro fictício. Live e envio de ordens estão desativados nesta versão; use Paper/Shadow pelo fluxo governado.</div>
-<button class="bs" style="margin-top:8px" onclick="brokerTest()">🔌 Testar corretora</button> <span id="brokerMsg" class="msg"></span></div>
-
-<div class="card"><h2>🌐 Comportamento</h2><div class="grid2"><div>
-<label>Idioma dos relatórios</label>
-<select id="TRADINGAGENTS_OUTPUT_LANGUAGE"><option value="pt-BR">Português (Brasil)</option><option value="en">Inglês</option></select>
-</div><div>
-<label>Rodadas de debate (1–3)</label><input id="TRADINGAGENTS_MAX_DEBATE_ROUNDS" placeholder="2">
-</div></div></div>
-
-<button class="bp" onclick="saveCfg()">💾 Salvar configurações</button>
-<span class="mut"> (grava no servidor na hora — nada reinicia; vale já na próxima análise)</span>
-<div id="cfgMsg" class="msg"></div>
-</div>
-
-<div id="pane-op" class="hide">
-<span id="diagOut" class="hide"></span>
-<div class="card"><h2>▶ Nova análise</h2><div class="grid2"><div>
-<label>Ticker</label><input id="ticker" placeholder="NVDA" style="text-transform:uppercase"></div>
-<div><label>Data da decisão (padrão: ontem)</label><input id="date" type="date"></div></div>
-<button class="bp" style="margin-top:12px" onclick="submitJob()">▶ Analisar agora</button>
-<div id="subMsg" class="msg"></div></div>
-<div class="card"><h2>📋 Análises <button class="bs" style="float:right" onclick="refreshAll()">↻</button></h2><div id="jobs"><div class="mut">Nenhuma ainda.</div></div></div>
-</div>
-
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DZ23 Autonomous Trading Agency</title>
+<style>
+:root{--bg:#07101b;--surface:#0d1826;--surface2:#111f30;--line:#20344a;--text:#edf5ff;--muted:#8ba0b8;--green:#4be6a2;--cyan:#44c7f4;--amber:#ffc857;--red:#ff7185;--blue:#6f8cff;--shadow:0 18px 50px #0008}*{box-sizing:border-box}html{color-scheme:dark}body{margin:0;background:radial-gradient(circle at 70% -20%,#173a57 0,transparent 38%),var(--bg);color:var(--text);font:14px/1.5 Inter,ui-sans-serif,system-ui,sans-serif}button,input,select{font:inherit}.hide{display:none!important}.muted{color:var(--muted)}.ok{color:var(--green)}.bad{color:var(--red)}.warn{color:var(--amber)}.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.auth-shell{min-height:100vh;display:grid;place-items:center;padding:24px}.auth-wrap{width:min(1080px,100%);display:grid;grid-template-columns:1.08fr .92fr;border:1px solid var(--line);border-radius:24px;overflow:hidden;background:#091523dd;box-shadow:var(--shadow)}.auth-brand{padding:56px;background:linear-gradient(145deg,#102c45,#091522);position:relative}.auth-brand:after{content:"";position:absolute;inset:0;background-image:linear-gradient(#fff06 1px,transparent 1px),linear-gradient(90deg,#fff06 1px,transparent 1px);background-size:36px 36px;mask-image:linear-gradient(to bottom,#000,transparent)}.auth-brand>*{position:relative;z-index:1}.logo{display:flex;align-items:center;gap:12px;font-weight:850;letter-spacing:.08em}.logo-mark{width:38px;height:38px;border:2px solid var(--cyan);border-radius:11px;display:grid;place-items:center;color:var(--cyan)}.auth-brand h1{font-size:clamp(32px,5vw,56px);line-height:1.02;margin:72px 0 20px;max-width:640px}.auth-brand p{max-width:580px;color:#b1c5d8;font-size:16px}.safety-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:30px}.badge{display:inline-flex;align-items:center;gap:7px;padding:6px 10px;border:1px solid var(--line);border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.05em}.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 12px currentColor}.auth-panel{padding:44px;display:flex;align-items:center}.auth-card{width:100%}.eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--cyan);font-weight:800}.auth-card h2{font-size:28px;margin:8px 0}.field{margin:14px 0}.field label{display:block;color:var(--muted);font-size:12px;margin:0 0 5px}.input,select{width:100%;background:#08131f;border:1px solid var(--line);color:var(--text);border-radius:10px;padding:11px 12px;outline:none}.input:focus,select:focus{border-color:var(--cyan);box-shadow:0 0 0 3px #44c7f414}.btn{border:0;border-radius:10px;padding:11px 16px;font-weight:800;cursor:pointer}.btn.primary{background:var(--green);color:#062418}.btn.secondary{background:var(--surface2);border:1px solid var(--line);color:var(--text)}.btn.danger{background:#421b25;border:1px solid #713041;color:#ffb5c0}.btn:disabled{opacity:.45;cursor:not-allowed}.full{width:100%}.link-btn{background:none;border:0;color:var(--cyan);cursor:pointer;padding:0}.message{min-height:22px;margin-top:10px;font-size:12px}.shell{min-height:100vh;display:grid;grid-template-columns:245px 1fr}.sidebar{background:#091522e8;border-right:1px solid var(--line);padding:22px 16px;position:sticky;top:0;height:100vh}.sidebar .logo{padding:0 8px 22px}.nav{display:grid;gap:5px}.nav button{display:flex;align-items:center;gap:11px;width:100%;border:0;background:transparent;color:var(--muted);padding:11px 12px;border-radius:9px;text-align:left;cursor:pointer}.nav button.active{background:#163047;color:var(--text)}.nav i{font-style:normal;width:22px;color:var(--cyan)}.side-footer{position:absolute;bottom:18px;left:16px;right:16px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#0b1927}.workspace{min-width:0}.topbar{height:72px;display:flex;align-items:center;justify-content:space-between;padding:0 26px;border-bottom:1px solid var(--line);background:#07101bd9;backdrop-filter:blur(14px);position:sticky;top:0;z-index:10}.topbar h1{font-size:18px;margin:0}.identity{display:flex;gap:10px;align-items:center}.identity-copy{text-align:right}.identity-copy b,.identity-copy small{display:block}.identity-copy small{color:var(--muted)}.content{padding:24px;max-width:1480px;margin:auto}.page{display:none}.page.active{display:block}.page-head{display:flex;justify-content:space-between;gap:16px;align-items:end;margin-bottom:20px}.page-head h2{font-size:26px;margin:0}.page-head p{margin:4px 0 0;color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}.span-3{grid-column:span 3}.span-4{grid-column:span 4}.span-6{grid-column:span 6}.span-8{grid-column:span 8}.span-12{grid-column:span 12}.card{background:linear-gradient(145deg,var(--surface),#0a1623);border:1px solid var(--line);border-radius:15px;padding:17px;box-shadow:0 10px 28px #0003}.card h3{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:0 0 12px}.metric strong{display:block;font-size:25px}.metric small{color:var(--muted)}.metric-line{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #fff0a}.metric-line:last-child{border:0}.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:var(--amber)}.status-dot.good{background:var(--green)}.status-dot.fail{background:var(--red)}.form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.form-grid .wide{grid-column:1/-1}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.table-wrap{overflow:auto}.table{width:100%;border-collapse:collapse}.table th,.table td{padding:11px 9px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}.table th{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}.pill{padding:4px 8px;border-radius:999px;background:#15283a;color:var(--cyan);font-size:10px;font-weight:800}.timeline{max-height:390px;overflow:auto}.event{padding:10px 0;border-bottom:1px solid var(--line)}.event b{display:block;color:var(--cyan);font-size:11px}.event small{color:var(--muted)}.floor-frame{width:100%;height:690px;border:1px solid var(--line);border-radius:15px;background:var(--surface)}.job{padding:13px;border:1px solid var(--line);border-radius:11px;margin:9px 0;background:#091522}.job-top{display:flex;justify-content:space-between;gap:12px;align-items:center}.config-status{font-size:10px;color:var(--green);margin-left:5px}.toast{position:fixed;right:22px;bottom:22px;max-width:380px;background:#101f2f;border:1px solid var(--line);border-radius:12px;padding:13px 16px;box-shadow:var(--shadow);z-index:100}.mobile-nav{display:none}@media(max-width:1050px){.span-3{grid-column:span 6}.span-4,.span-8{grid-column:span 12}.auth-wrap{grid-template-columns:1fr}.auth-brand{display:none}}@media(max-width:760px){.shell{display:block}.sidebar{display:none}.topbar{padding:0 15px}.content{padding:15px 15px 80px}.span-3,.span-6{grid-column:span 12}.form-grid{grid-template-columns:1fr}.mobile-nav{display:flex;position:fixed;bottom:0;left:0;right:0;background:#091522f2;border-top:1px solid var(--line);z-index:30;padding:7px;overflow:auto}.mobile-nav button{min-width:72px;background:transparent;border:0;color:var(--muted);font-size:10px;padding:7px}.mobile-nav button.active{color:var(--green)}.identity-copy{display:none}.floor-frame{height:620px}}@media(prefers-reduced-motion:no-preference){.card,.btn,.nav button{transition:.18s ease}.card:hover{border-color:#2d4b68}}
+</style></head>
+<body>
+<section id="authGate" class="auth-shell">
+  <div class="auth-wrap">
+    <div class="auth-brand"><div class="logo"><span class="logo-mark">DZ</span>DZ23 AGENCY</div><h1>Inteligência coordenada. Risco governado.</h1><p>Uma agência multiagente para pesquisa, comitês, Paper Trading, Shadow Trading e preparação controlada para MT5 Demo.</p><div class="safety-row"><span class="badge"><i class="dot"></i>PAPER READY</span><span class="badge"><i class="dot"></i>MULTI-TENANT</span><span class="badge" style="color:var(--red)">LIVE BLOCKED</span></div></div>
+    <div class="auth-panel"><div class="auth-card">
+      <div class="eyebrow">Comece aqui · acesso seguro</div><h2 id="authTitle">Entrar na agência</h2><p class="muted" id="authSubtitle">Use o tenant, e-mail e senha cadastrados.</p>
+      <div id="loginForm"><div class="field"><label>Tenant ID</label><input class="input" id="loginTenant" autocomplete="organization" placeholder="ten_..."></div><div class="field"><label>E-mail</label><input class="input" id="loginEmail" type="email" autocomplete="username"></div><div class="field"><label>Senha</label><input class="input" id="loginPassword" type="password" autocomplete="current-password"></div><button class="btn primary full" onclick="login()">Entrar</button></div>
+      <div id="bootstrapForm" class="hide"><div class="field"><label>Nome da organização</label><input class="input" id="bootOrg" value="DZ23 Trading Agency"></div><div class="field"><label>E-mail do administrador</label><input class="input" id="bootEmail" type="email"></div><div class="field"><label>Senha do administrador (mínimo 12 caracteres)</label><input class="input" id="bootPassword" type="password"></div><div class="field"><label>Token de bootstrap do servidor</label><input class="input" id="bootToken" type="password"></div><button class="btn primary full" onclick="bootstrap()">Criar agência e administrador</button></div>
+      <div id="authMsg" class="message"></div>
+    </div></div>
+  </div>
+</section>
+<div id="app" class="shell hide">
+  <aside class="sidebar"><div class="logo"><span class="logo-mark">DZ</span>DZ23 AGENCY</div><nav class="nav" id="sideNav"></nav><div class="side-footer"><span class="badge"><i class="dot"></i>PAPER / SHADOW</span><div class="muted" style="margin-top:8px;font-size:11px">Dinheiro real bloqueado</div></div></aside>
+  <div class="workspace"><header class="topbar"><div><div class="eyebrow" id="pageEyebrow">Command center</div><h1 id="pageTitle">Visão geral</h1></div><div class="identity"><span class="badge" id="roleBadge">ADMIN</span><div class="identity-copy"><b id="userEmail">—</b><small id="tenantId">—</small></div><button class="btn secondary" onclick="logout()">Sair</button></div></header>
+  <main class="content">
+    <section id="page-overview" class="page active"><div class="page-head"><div><h2>Command Center</h2><p>Estado consolidado da agência, execução e infraestrutura.</p></div><button class="btn secondary" onclick="refreshOverview()">Atualizar</button></div><div class="grid">
+      <div class="card span-3 metric"><h3>Aplicação</h3><strong id="appStatus">—</strong><small id="appDetail">verificando</small></div><div class="card span-3 metric"><h3>Job Ledger</h3><strong id="jobBackend">—</strong><small>persistência operacional</small></div><div class="card span-3 metric"><h3>Agentes</h3><strong id="agentCount">—</strong><small>registrados no runtime</small></div><div class="card span-3 metric"><h3>Execução</h3><strong class="ok">PAPER</strong><small>Live bloqueado</small></div>
+      <div class="card span-6"><h3>Saúde operacional</h3><div id="healthList"><div class="muted">Carregando...</div></div></div><div class="card span-6"><h3>Eventos recentes</h3><div id="overviewEvents" class="timeline"><div class="muted">Nenhum evento.</div></div></div>
+    </div></section>
+    <section id="page-config" class="page"><div class="page-head"><div><h2>Inteligência e dados</h2><p>Credenciais ficam no servidor e retornam apenas mascaradas.</p></div><button class="btn primary" onclick="saveConfig()">Salvar configurações</button></div><div class="grid"><div class="card span-6"><h3>Modelos de IA</h3><div class="form-grid"><div><label>Provedor principal</label><select id="TRADINGAGENTS_LLM_PROVIDER"><option value="openrouter">OpenRouter</option><option value="groq">Groq</option><option value="google">Google Gemini</option><option value="mistral">Mistral</option><option value="ollama">Ollama local</option></select></div><div><label>Idioma</label><select id="TRADINGAGENTS_OUTPUT_LANGUAGE"><option value="Portuguese">Português</option><option value="English">English</option></select></div><div><label>Modelo profundo</label><input class="input" id="TRADINGAGENTS_DEEP_THINK_LLM"></div><div><label>Modelo rápido</label><input class="input" id="TRADINGAGENTS_QUICK_THINK_LLM"></div><div class="wide"><label>Backend customizado</label><input class="input" id="TRADINGAGENTS_BACKEND_URL" placeholder="Opcional"></div></div></div>
+      <div class="card span-6"><h3>Chaves dos provedores</h3><div class="form-grid"><div><label>OpenRouter <span id="s_OPENROUTER_API_KEY" class="config-status"></span></label><input class="input" id="OPENROUTER_API_KEY" type="password"></div><div><label>Groq <span id="s_GROQ_API_KEY" class="config-status"></span></label><input class="input" id="GROQ_API_KEY" type="password"></div><div><label>Google Gemini <span id="s_GOOGLE_API_KEY" class="config-status"></span></label><input class="input" id="GOOGLE_API_KEY" type="password"></div><div><label>Mistral <span id="s_MISTRAL_API_KEY" class="config-status"></span></label><input class="input" id="MISTRAL_API_KEY" type="password"></div><div><label>OpenAI <span id="s_OPENAI_API_KEY" class="config-status"></span></label><input class="input" id="OPENAI_API_KEY" type="password"></div><div><label>Anthropic <span id="s_ANTHROPIC_API_KEY" class="config-status"></span></label><input class="input" id="ANTHROPIC_API_KEY" type="password"></div></div></div>
+      <div class="card span-6"><h3>Dados de mercado</h3><div class="form-grid"><div><label>FRED <span id="s_FRED_API_KEY" class="config-status"></span></label><input class="input" id="FRED_API_KEY" type="password"></div><div><label>Alpha Vantage <span id="s_ALPHA_VANTAGE_API_KEY" class="config-status"></span></label><input class="input" id="ALPHA_VANTAGE_API_KEY" type="password"></div></div><p class="muted">Fontes públicas sem chave permanecem disponíveis conforme o provider configurado.</p></div>
+      <div class="card span-6"><h3>Corretora sandbox</h3><div class="form-grid"><div><label>Exchange</label><select id="TRADINGAGENTS_EXCHANGE"><option value="binance">Binance</option><option value="bybit">Bybit</option><option value="okx">OKX</option><option value="coinbase">Coinbase</option></select></div><div><label>Modo</label><select id="TRADINGAGENTS_BROKER_MODE"><option value="testnet">TESTNET</option></select></div><div><label>API Key <span id="s_EXCHANGE_API_KEY" class="config-status"></span></label><input class="input" id="EXCHANGE_API_KEY" type="password"></div><div><label>API Secret <span id="s_EXCHANGE_API_SECRET" class="config-status"></span></label><input class="input" id="EXCHANGE_API_SECRET" type="password"></div></div><div class="actions"><button class="btn secondary" onclick="brokerTest()">Validar configuração</button></div><p class="warn">Use somente credenciais Testnet de testnet.binance.vision. Live não é aceito por esta versão.</p></div>
+    </div></section>
+    <section id="page-analysis" class="page"><div class="page-head"><div><h2>Análises</h2><p>Dispare e acompanhe pesquisas multiagente isoladas por tenant.</p></div><button class="btn secondary" onclick="loadJobs()">Atualizar</button></div><div class="grid"><div class="card span-4"><h3>Nova análise</h3><div class="field"><label>Ativo</label><input class="input" id="ticker" placeholder="NVDA ou BTC-USD"></div><div class="field"><label>Data</label><input class="input" id="tradeDate" type="date"></div><button class="btn primary full" onclick="submitJob()">Iniciar análise</button></div><div class="card span-8"><h3>Fila e resultados</h3><div id="jobs"><div class="muted">Nenhuma análise.</div></div></div></div></section>
+    <section id="page-floor" class="page"><div class="page-head"><div><h2>Trading Floor</h2><p>Read model oficial de agentes, desks, reuniões e eventos.</p></div><a class="btn secondary" href="/floor" target="_blank" style="text-decoration:none">Abrir tela cheia</a></div><iframe class="floor-frame" src="/floor" title="DZ23 Trading Floor"></iframe></section>
+    <section id="page-risk" class="page"><div class="page-head"><div><h2>Risco e execução</h2><p>Controles server-side; nenhum comando vai diretamente ao broker.</p></div><button class="btn secondary" onclick="loadRisk()">Atualizar</button></div><div class="grid"><div class="card span-6"><h3>Execution Engine</h3><div id="riskHealth" class="muted">Carregando...</div><div class="actions"><input class="input" id="killReason" placeholder="Motivo obrigatório para bloquear"><button class="btn danger" onclick="engageKillSwitch()">Acionar KillSwitch</button></div></div><div class="card span-6"><h3>Shadow Trading</h3><div id="shadowHealth" class="muted">Carregando...</div></div></div></section>
+    <section id="page-admin" class="page"><div class="page-head"><div><h2>Administração</h2><p>Usuários e papéis do tenant atual.</p></div><button class="btn secondary" onclick="loadUsers()">Atualizar</button></div><div class="grid"><div class="card span-4"><h3>Novo usuário</h3><div class="field"><label>E-mail</label><input class="input" id="newUserEmail" type="email"></div><div class="field"><label>Senha temporária</label><input class="input" id="newUserPassword" type="password"></div><div class="field"><label>Papel</label><select id="newUserRole"><option value="viewer">Viewer</option><option value="analyst">Analyst</option><option value="operator">Operator</option><option value="risk_manager">Risk Manager</option><option value="auditor">Auditor</option><option value="admin">Admin</option></select></div><button class="btn primary full" onclick="createUser()">Criar usuário</button></div><div class="card span-8"><h3>Membros</h3><div class="table-wrap"><table class="table"><thead><tr><th>E-mail</th><th>Papel</th><th>Status</th></tr></thead><tbody id="usersBody"></tbody></table></div></div></div></section>
+  </main></div><nav id="mobileNav" class="mobile-nav"></nav>
+</div><div id="toast" class="toast hide"></div>
 <script>
-const $=i=>document.getElementById(i);
-function tab(t){document.querySelectorAll('.tab').forEach(e=>e.classList.toggle('on',e.dataset.t===t));
-$('pane-cfg').classList.toggle('hide',t!=='cfg');$('pane-op').classList.toggle('hide',t!=='op')}
-const CFG_KEYS=['TRADINGAGENTS_LLM_PROVIDER','TRADINGAGENTS_BACKEND_URL','GROQ_API_KEY','MISTRAL_API_KEY','OPENROUTER_API_KEY','TRADINGAGENTS_DEEP_THINK_LLM','TRADINGAGENTS_QUICK_THINK_LLM','OPENAI_API_KEY','ANTHROPIC_API_KEY','DEEPSEEK_API_KEY','GOOGLE_API_KEY','FRED_API_KEY','ALPHA_VANTAGE_API_KEY','TRADINGAGENTS_EXCHANGE','TRADINGAGENTS_BROKER_MODE','EXCHANGE_API_KEY','EXCHANGE_API_SECRET','TRADINGAGENTS_OUTPUT_LANGUAGE','TRADINGAGENTS_MAX_DEBATE_ROUNDS'];
-const PROV={groq:{h:'Chave GRÁTIS em <b>console.groq.com/keys</b> (entra com Google, copia, cola aí embaixo). Modelos automáticos.',k:'GROQ_API_KEY'},
-google:{h:'Chave GRÁTIS em <b>aistudio.google.com/apikey</b>. Cola no campo GOOGLE_API_KEY.',k:'GOOGLE_API_KEY'},
-mistral:{h:'Chave em <b>console.mistral.ai/api-keys</b> (plano gratuito p/ experimentar).',k:'MISTRAL_API_KEY'},
-openrouter:{h:'Chave em <b>openrouter.ai/keys</b>; uso os modelos :free.',k:'OPENROUTER_API_KEY'},
-ollama:{h:'Instala de <b>ollama.com</b> no teu PC, roda "ollama pull llama3.1", e preenche o Endereço (ex.: http://ip-do-pc:11434/v1). Sem chave.',k:null},
-openai:{h:'Chave paga em platform.openai.com/api-keys.',k:'OPENAI_API_KEY'},
-anthropic:{h:'Chave em console.anthropic.com.',k:'ANTHROPIC_API_KEY'},
-deepseek:{h:'Chave em platform.deepseek.com (muito barata).',k:'DEEPSEEK_API_KEY'},
-azure:{h:'Endpoint e chave do teu recurso Azure.',k:null},
-openai_compatible:{h:'Preenche o Endereço do servidor e, se ele exigir, a chave OPENAI_COMPATIBLE (campo aparece ao salvar).',k:null}};
-function provHint(){const p=$('TRADINGAGENTS_LLM_PROVIDER').value,i=PROV[p]||{};
-$('provHint').innerHTML=i.h||'';
-for(const kk of ['GROQ_API_KEY','MISTRAL_API_KEY','OPENROUTER_API_KEY','OPENAI_API_KEY','ANTHROPIC_API_KEY','DEEPSEEK_API_KEY','GOOGLE_API_KEY']){const el=$(kk);if(el)el.style.borderColor=(kk===i.k)?'var(--acc)':'var(--line)'}}
-function H(x={}){try{sessionStorage.setItem('pw',$('pw').value)}catch(e){}return{'Authorization':'Bearer '+$('pw').value.trim(),'Content-Type':'application/json',...x}}
-try{$('pw').value=sessionStorage.getItem('pw')||''}catch(e){}
-$('pw').addEventListener('keydown',e=>{if(e.key==='Enter')loadStatus()});
-async function loadStatus(){try{const r=await fetch('/v1/config',{headers:H()});const d=await r.json();$('pwMsg').innerHTML=r.ok?'<span class="ok">✔ acesso ok</span>':'<span class="bad">✘ senha recusada</span>';
-for(const k of CFG_KEYS){const s=$('s_'+k);if(!s)continue;
-const e=d.config&&d.config[k];if(e&&e.set){s.textContent='✔ configurada'+(e.hint?' ('+e.hint+')':'');s.className='set';$(k).placeholder='(já configurada — preenche só para trocar)'}
-else{s.textContent='— não configurada';s.className='unset'}
-if(e&&e.value&&$(k)&&$(k).tagName!=='INPUT'||e&&e.value&&$(k).type!=='password'){$(k).value=e.value}}}catch(e){}}
-async function saveCfg(){const vars={};for(const k of CFG_KEYS){const v=$(k)&&$(k).value.trim();if(v)vars[k]=v}
-const m=$('cfgMsg');if(!Object.keys(vars).length){m.innerHTML='<span class="bad">Nada preenchido para salvar.</span>';return}
-m.innerHTML='gravando no servidor…';
-try{const r=await fetch('/v1/config',{method:'POST',headers:H(),body:JSON.stringify({vars})});
-const d=await r.json();if(r.ok){m.innerHTML='<span class="ok">✔ Gravadas: '+d.saved.join(', ')+'. Valem já no próximo job — sem reiniciar nada.</span>';CFG_KEYS.forEach(k=>{if($(k)&&$(k).type==='password')$(k).value=''});loadStatus()}
-else m.innerHTML='<span class="bad">Erro: '+JSON.stringify(d).slice(0,300)+'</span>'}catch(e){m.innerHTML='<span class="bad">'+e.message+'</span>'}}
-function thdr(extra={}){return H(extra)}
-$('date').value=new Date(Date.now()-864e5).toISOString().slice(0,10);
-async function tapi(p,o={}){const r=await fetch('/'+p,{...o,headers:{...thdr(),...(o.headers||{})}});let b=null;try{b=await r.json()}catch(e){}
-if(r.status===401){$('subMsg').innerHTML='<span class="bad">✘ Sem acesso — digita a senha no topo e clica Entrar.</span>'}
-return{status:r.status,body:b}}
-const store={get k(){try{return JSON.parse(localStorage.getItem('cj')||'[]')}catch(e){return[]}},set k(v){try{localStorage.setItem('cj',JSON.stringify(v))}catch(e){}}};
-const states={};
-async function submitJob(){const t=$('ticker').value.trim().toUpperCase(),d=$('date').value,m=$('subMsg');
-if(!t||!d){m.innerHTML='<span class="bad">Preenche ticker e data.</span>';return}
-m.innerHTML='enviando…';const idem=[...crypto.getRandomValues(new Uint8Array(12))].map(b=>b.toString(16).padStart(2,'0')).join('');
-const r=await tapi('v1/jobs',{method:'POST',headers:{'Idempotency-Key':idem},body:JSON.stringify({ticker:t,trade_date:d})});
-if(r.status<300&&r.body&&(r.body.id||r.body.job_id)){const id=r.body.id||r.body.job_id;const js=store.k;js.unshift({id,ticker:t,date:d});store.k=js.slice(0,50);m.innerHTML='<span class="ok">✔ Análise iniciada.</span>';render();poll(id)}
-else m.innerHTML='<span class="bad">Erro '+r.status+': '+JSON.stringify(r.body).slice(0,250)+'</span>'}
-function pf(s){s=(s||'').toLowerCase();
-if(['done','complet','succe','finish'].some(x=>s.includes(x)))return['ok','CONCLUÍDA'];
-if(['fail','error','dead'].some(x=>s.includes(x)))return['err','FALHOU'];
-if(['run','process','claim','lease','activ'].some(x=>s.includes(x)))return['run','ANALISANDO'];
-if(s.includes('cancel'))return['err','CANCELADA'];return['wait',s?s.toUpperCase():'NA FILA']}
-function fd(o,d=0){if(!o||typeof o!=='object'||d>6)return null;
-for(const k of['final_trade_decision','final_decision','decision','recommendation','rating','action','signal'])if(typeof o[k]==='string'&&o[k].length<4000)return o[k];
-for(const v of Object.values(o)){const f=fd(v,d+1);if(f)return f}return null}
-async function poll(id){const r=await tapi('v1/jobs/'+id);states[id]=r;render();
-const s=(r.body&&(r.body.status||r.body.state)||'').toLowerCase();
-if(r.status<400&&!['done','complet','succe','finish','fail','error','cancel','dead'].some(x=>s.includes(x)))setTimeout(()=>poll(id),5000)}
-async function cancelJob(id){await tapi('v1/jobs/'+id+'/cancel',{method:'POST'});poll(id)}
-function render(){const js=store.k,el=$('jobs');if(!js.length){el.innerHTML='<div class="mut">Nenhuma ainda.</div>';return}
-el.innerHTML=js.map(j=>{const st=states[j.id],b=st&&st.body||{};const[c,l]=st?pf(b.status||b.state):['wait','…'];const dec=fd(b);
-return`<div class="job"><div class="top"><div><b style="font-size:16px">${j.ticker}</b> <span class="mut">${j.date}</span><div class="mut" style="word-break:break-all">${j.id}</div></div>
-<div><span class="pill ${c}">${l}</span> <button class="bs" onclick="poll('${j.id}')">↻</button> <button class="bs" onclick="cancelJob('${j.id}')">✕</button> <button class="bs" onclick="const p=this.closest('.job').querySelector('pre');p.classList.toggle('hide')">detalhes</button></div></div>
-${dec?`<div class="decision">📊 <b>Decisão:</b> ${dec.replace(/</g,'&lt;')}</div>`:''}
-${(st&&(b.status||'')==='completed')?`<div class="mut" style="margin-top:8px">Análise concluída. Execução financeira nesta interface está desativada; use Paper/Shadow governados.</div>`:''}
-<pre class="hide">${(JSON.stringify(b,null,2)||'').replace(/</g,'&lt;')}</pre></div>`}).join('')}
-async function brokerTest(){const m=$('brokerMsg');m.innerHTML=' salvando e validando…';
-const vars={};for(const k of ['TRADINGAGENTS_EXCHANGE','TRADINGAGENTS_BROKER_MODE','EXCHANGE_API_KEY','EXCHANGE_API_SECRET']){const v=$(k)&&$(k).value.trim();if(v)vars[k]=v}
-if(Object.keys(vars).length){const sv=await fetch('/v1/config',{method:'POST',headers:H(),body:JSON.stringify({vars})});if(!sv.ok){m.innerHTML='<span class="bad">✘ não consegui salvar — digitou a senha lá em cima e clicou Entrar?</span>';return}loadStatus()}
-const r=await fetch('/v1/broker/status',{headers:H()});const d=await r.json();
- m.innerHTML=d.ready?'<span class="ok">✔ '+d.exchange+' pronta — TESTNET/sandbox, chaves '+(d.keys_set?'ok':'faltando')+'</span>':'<span class="bad">✘ '+String(d.erro||'inválida').replace(/^[A-Za-z]+Error: /,'')+'</span>'}
-function refreshAll(){store.k.forEach(j=>poll(j.id))}
-async function syncFromServer(){const r=await tapi('v1/jobs');
-if(r.status<300&&r.body&&r.body.jobs){const js=r.body.jobs.map(j=>({id:j.id,ticker:j.ticker,date:j.trade_date}));store.k=js;js.forEach(j=>{if(!states[j.id])poll(j.id)});render()}}
-provHint();loadStatus();render();syncFromServer();refreshAll();
+const $=id=>document.getElementById(id);const pages=[['overview','⌂','Visão geral'],['config','⚙','Configuração'],['analysis','◫','Análises'],['floor','◇','Trading Floor'],['risk','◆','Risco'],['admin','◎','Administração']];
+const CFG_KEYS=['TRADINGAGENTS_LLM_PROVIDER','TRADINGAGENTS_OUTPUT_LANGUAGE','TRADINGAGENTS_DEEP_THINK_LLM','TRADINGAGENTS_QUICK_THINK_LLM','TRADINGAGENTS_BACKEND_URL','OPENROUTER_API_KEY','GROQ_API_KEY','GOOGLE_API_KEY','MISTRAL_API_KEY','OPENAI_API_KEY','ANTHROPIC_API_KEY','FRED_API_KEY','ALPHA_VANTAGE_API_KEY','TRADINGAGENTS_EXCHANGE','TRADINGAGENTS_BROKER_MODE','EXCHANGE_API_KEY','EXCHANGE_API_SECRET'];
+let principal=null,jobsTimer=null;const token=()=>sessionStorage.getItem('dz23_token')||'';function headers(extra={}){return{'Authorization':'Bearer '+token(),'Content-Type':'application/json',...extra}}function toast(msg,type='ok'){const e=$('toast');e.textContent=msg;e.className='toast '+type;setTimeout(()=>e.classList.add('hide'),4200)}
+async function api(path,options={}){const r=await fetch(path,{...options,headers:{...headers(),...(options.headers||{})}});let data={};try{data=await r.json()}catch{}if(r.status===401&&token()){sessionStorage.removeItem('dz23_token');showAuth('Sua sessão expirou. Entre novamente.')}return{ok:r.ok,status:r.status,data}}
+function renderNav(){const html=pages.map(([id,icon,label])=>`<button data-page="${id}" onclick="showPage('${id}')"><i>${icon}</i>${label}</button>`).join('');$('sideNav').innerHTML=html;$('mobileNav').innerHTML=html}
+function showPage(id){document.querySelectorAll('.page').forEach(e=>e.classList.toggle('active',e.id==='page-'+id));document.querySelectorAll('[data-page]').forEach(e=>e.classList.toggle('active',e.dataset.page===id));const item=pages.find(x=>x[0]===id);$('pageTitle').textContent=item[2];if(id==='overview')refreshOverview();if(id==='config')loadConfig();if(id==='analysis')loadJobs();if(id==='risk')loadRisk();if(id==='admin')loadUsers()}
+function showAuth(message=''){$('app').classList.add('hide');$('authGate').classList.remove('hide');if(message)$('authMsg').innerHTML='<span class="bad">'+message+'</span>'}
+async function boot(){renderNav();$('tradeDate').value=new Date(Date.now()-864e5).toISOString().slice(0,10);const status=await fetch('/v1/auth/status').then(r=>r.json()).catch(()=>({multi_tenant:true}));if(status.bootstrap_required){$('loginForm').classList.add('hide');$('bootstrapForm').classList.remove('hide');$('authTitle').textContent='Criar primeira agência';$('authSubtitle').textContent='Configure o primeiro tenant e administrador.'}else{const saved=localStorage.getItem('dz23_tenant');if(saved)$('loginTenant').value=saved}if(token()){const me=await api('/v1/auth/me');if(me.ok)return enterApp(me.data)}showAuth()}
+async function bootstrap(){const body={tenant_name:$('bootOrg').value.trim(),email:$('bootEmail').value.trim(),password:$('bootPassword').value};const bootstrapToken=$('bootToken').value.trim();if(!body.tenant_name||!body.email||body.password.length<12||!bootstrapToken)return $('authMsg').innerHTML='<span class="bad">Preencha todos os campos; senha mínima de 12 caracteres.</span>';const r=await fetch('/v1/auth/bootstrap',{method:'POST',headers:{'Content-Type':'application/json','X-Tenant-Bootstrap':bootstrapToken},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)return $('authMsg').innerHTML='<span class="bad">'+(d.detail||'Falha no bootstrap')+'</span>';localStorage.setItem('dz23_tenant',d.tenant_id);$('loginTenant').value=d.tenant_id;$('loginEmail').value=body.email;$('loginPassword').value=body.password;$('bootstrapForm').classList.add('hide');$('loginForm').classList.remove('hide');await login()}
+async function login(){const body={tenant_id:$('loginTenant').value.trim(),email:$('loginEmail').value.trim(),password:$('loginPassword').value};const r=await fetch('/v1/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)return $('authMsg').innerHTML='<span class="bad">'+(d.detail||'Credenciais inválidas')+'</span>';sessionStorage.setItem('dz23_token',d.access_token);localStorage.setItem('dz23_tenant',body.tenant_id);const me=await api('/v1/auth/me');if(me.ok)enterApp(me.data)}
+function enterApp(me){principal=me;$('authGate').classList.add('hide');$('app').classList.remove('hide');$('userEmail').textContent=me.email;$('tenantId').textContent=me.tenant_id;$('roleBadge').textContent=me.role.toUpperCase();document.querySelectorAll('[data-page="admin"]').forEach(e=>e.classList.toggle('hide',me.role!=='admin'));showPage('overview')}
+async function logout(){await api('/v1/auth/logout',{method:'POST'});sessionStorage.removeItem('dz23_token');location.reload()}
+async function refreshOverview(){const [ready,agency,jobs,events]=await Promise.all([fetch('/readyz').then(r=>r.json()).catch(()=>({status:'offline'})),api('/v1/agency/health'),api('/v1/jobs/health'),api('/v1/agency/events')]);$('appStatus').textContent=ready.status.toUpperCase();$('appStatus').className=ready.status==='ready'?'ok':'warn';$('appDetail').textContent='API e execução';$('jobBackend').textContent=(jobs.data.backend||'—').toUpperCase();$('agentCount').textContent=agency.data.agents??'—';$('healthList').innerHTML=[['API',ready.status],['Job ledger',jobs.data.status],['Agência',agency.data.status||'ready'],['Live trading','blocked']].map(([k,v])=>`<div class="metric-line"><span>${k}</span><b><i class="status-dot ${['ready','ok'].includes(v)?'good':v==='blocked'?'fail':''}"></i>${String(v).toUpperCase()}</b></div>`).join('');renderEvents(events.data.events||[],'overviewEvents')}
+function renderEvents(events,target){$(target).innerHTML=events.slice(-12).reverse().map(e=>`<div class="event"><b>${e.event_type}</b><small>${e.event?.aggregate_id||'agency'} · seq ${e.sequence}</small></div>`).join('')||'<div class="muted">Nenhum evento.</div>'}
+async function loadConfig(){const r=await api('/v1/config');if(!r.ok)return toast(r.data.detail||'Falha ao carregar','bad');for(const k of CFG_KEYS){const el=$(k),s=$('s_'+k),v=r.data.config?.[k];if(!el||!v)continue;if(v.value&&el.type!=='password')el.value=v.value;if(s)s.textContent=v.set?'CONFIGURADA'+(v.hint?' '+v.hint:''):'NÃO CONFIGURADA';if(v.set&&el.type==='password')el.placeholder='Configurada — preencha apenas para trocar'}}
+async function saveConfig(){const vars={};for(const k of CFG_KEYS){const el=$(k);if(el&&el.value.trim())vars[k]=el.value.trim()}if(!Object.keys(vars).length)return toast('Nada para salvar','warn');const r=await api('/v1/config',{method:'POST',body:JSON.stringify({vars})});if(!r.ok)return toast(r.data.detail||'Falha ao salvar','bad');document.querySelectorAll('#page-config input[type=password]').forEach(e=>e.value='');toast('Configurações salvas no tenant');loadConfig()}
+async function brokerTest(){const vars={};for(const k of ['TRADINGAGENTS_EXCHANGE','TRADINGAGENTS_BROKER_MODE','EXCHANGE_API_KEY','EXCHANGE_API_SECRET']){const el=$(k);if(el&&el.value.trim())vars[k]=el.value.trim()}if(Object.keys(vars).length){const saved=await api('/v1/config',{method:'POST',body:JSON.stringify({vars})});if(!saved.ok)return toast(saved.data.detail||'Falha ao salvar sandbox','bad')}const r=await api('/v1/broker/status');toast(r.data.ready?'Sandbox configurada':'Sandbox ainda não configurada',r.data.ready?'ok':'warn')}
+async function submitJob(){const ticker=$('ticker').value.trim().toUpperCase(),trade_date=$('tradeDate').value;if(!ticker||!trade_date)return toast('Informe ativo e data','warn');const idem=crypto.randomUUID();const r=await api('/v1/jobs',{method:'POST',headers:{'Idempotency-Key':idem},body:JSON.stringify({ticker,trade_date})});if(!r.ok)return toast(r.data.detail||'Falha ao iniciar','bad');toast('Análise iniciada');loadJobs()}
+async function loadJobs(){const r=await api('/v1/jobs');if(!r.ok)return;$('jobs').innerHTML=(r.data.jobs||[]).map(j=>`<div class="job"><div class="job-top"><div><b>${j.ticker}</b><div class="muted mono">${j.id} · ${j.trade_date}</div></div><span class="pill">${j.status}</span></div>${j.decision?`<p>${escapeHtml(j.decision)}</p>`:''}<div class="actions"><button class="btn secondary" onclick="loadJob('${j.id}')">Detalhes</button>${['queued','running'].includes(j.status)?`<button class="btn danger" onclick="cancelJob('${j.id}')">Cancelar</button>`:''}</div><pre id="job-${j.id}" class="hide"></pre></div>`).join('')||'<div class="muted">Nenhuma análise.</div>'}
+async function loadJob(id){const r=await api('/v1/jobs/'+id),pre=$('job-'+id);pre.textContent=JSON.stringify(r.data,null,2);pre.classList.toggle('hide')}async function cancelJob(id){await api('/v1/jobs/'+id+'/cancel',{method:'POST'});loadJobs()}
+async function loadRisk(){const [h,s]=await Promise.all([api('/v1/execution/health'),api('/v1/execution/shadow')]);$('riskHealth').innerHTML=Object.entries(h.data).map(([k,v])=>`<div class="metric-line"><span>${k}</span><b>${typeof v==='object'?escapeHtml(JSON.stringify(v)):escapeHtml(String(v))}</b></div>`).join('');$('shadowHealth').innerHTML=`<div class="metric-line"><span>Trades hipotéticos</span><b>${s.data.trades??0}</b></div><div class="metric-line"><span>Ordens enviadas</span><b class="ok">${s.data.orders_sent??0}</b></div>`}
+async function engageKillSwitch(){const reason=$('killReason').value.trim();if(!reason)return toast('Informe o motivo do bloqueio','warn');const r=await api('/v1/execution/kill-switch',{method:'POST',body:JSON.stringify({action:'engage',reason})});toast(r.ok?'KillSwitch acionado':r.data.detail||'Falha',r.ok?'ok':'bad');loadRisk()}
+async function loadUsers(){if(principal?.role!=='admin')return;const r=await api('/v1/admin/users');if(!r.ok)return toast(r.data.detail||'Falha ao listar usuários','bad');$('usersBody').innerHTML=(r.data.users||[]).map(u=>`<tr><td>${escapeHtml(u.email)}</td><td><span class="pill">${u.role}</span></td><td>${u.status}</td></tr>`).join('')}
+async function createUser(){const body={email:$('newUserEmail').value.trim(),password:$('newUserPassword').value,role:$('newUserRole').value};if(!body.email||body.password.length<12)return toast('E-mail e senha mínima de 12 caracteres','warn');const r=await api('/v1/admin/users',{method:'POST',body:JSON.stringify(body)});if(!r.ok)return toast(r.data.detail||'Falha ao criar usuário','bad');$('newUserEmail').value='';$('newUserPassword').value='';toast('Usuário criado');loadUsers()}
+function escapeHtml(value){return String(value??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}boot();
 </script></body></html>

@@ -197,6 +197,29 @@ async def tenant_login(req: Request):
     return {"access_token": token, "token_type": "bearer", "expires_in": 3600}
 
 
+@app.get("/v1/auth/status")
+def auth_status():
+    return {
+        "multi_tenant": MULTI_TENANT_ENABLED,
+        "bootstrap_required": bool(MULTI_TENANT_ENABLED and TENANT_STORE and TENANT_STORE.tenant_count() == 0),
+        "live_trading": False,
+    }
+
+
+@app.get("/v1/auth/me")
+def auth_me(principal=Depends(auth)):
+    if isinstance(principal, Principal):
+        return {"user_id": principal.user_id, "email": principal.email, "tenant_id": principal.tenant_id, "role": principal.role, "permissions": sorted(principal.permissions)}
+    return {"user_id": "legacy", "email": "legacy", "tenant_id": "legacy", "role": "admin", "permissions": ["admin"]}
+
+
+@app.post("/v1/auth/logout")
+def tenant_logout(request: Request, c: HTTPAuthorizationCredentials = Depends(bearer), _=Depends(auth)):
+    if MULTI_TENANT_ENABLED and TENANT_STORE and c:
+        TENANT_STORE.revoke(c.credentials)
+    return {"ok": True}
+
+
 @app.post("/v1/admin/tenants")
 async def create_tenant(req: Request, _=Depends(auth)):
     if not MULTI_TENANT_ENABLED or not TENANT_STORE:
@@ -225,6 +248,13 @@ async def create_tenant_user(req: Request, _=Depends(auth)):
     except AuthError as exc:
         raise HTTPException(403, str(exc)) from None
     return {"user_id": user_id, "tenant_id": target_tenant, "role": str(body.get("role", "viewer"))}
+
+
+@app.get("/v1/admin/users")
+def list_tenant_users(request: Request, _=Depends(auth)):
+    if not MULTI_TENANT_ENABLED or not TENANT_STORE:
+        return {"users": []}
+    return {"users": TENANT_STORE.list_members(request_tenant(request))}
 
 
 @app.middleware("http")
@@ -290,11 +320,12 @@ def tenant_cfg_path(tenant_id: str = "legacy") -> Path:
 
 
 def load_cfg(tenant_id: str = "legacy") -> dict:
+    cfg = {key: os.environ[key] for key in ALLOWED_KEYS if os.environ.get(key)}
     path = tenant_cfg_path(tenant_id)
     if path.exists():
-        try: return json.loads(path.read_text())
-        except ValueError: return {}
-    return {}
+        try: cfg.update(json.loads(path.read_text()))
+        except ValueError: pass
+    return cfg
 
 def save_cfg(cfg: dict, tenant_id: str = "legacy"):
     path = tenant_cfg_path(tenant_id)

@@ -172,6 +172,13 @@ class TenantStore:
         with self._connect() as c:
             return c.execute("SELECT 1 FROM tenants WHERE id=? AND status='active'", (tenant_id,)).fetchone() is not None
 
+    def list_members(self, tenant_id: str) -> list[dict[str, str]]:
+        with self._connect() as c:
+            rows = c.execute("""SELECT u.id,u.email,u.status,m.role,m.created_at
+                FROM memberships m JOIN users u ON u.id=m.user_id
+                WHERE m.tenant_id=? ORDER BY u.email""", (tenant_id,)).fetchall()
+        return [dict(row) for row in rows]
+
     def tenant_count(self) -> int:
         with self._connect() as c:
             return int(c.execute("SELECT COUNT(*) FROM tenants WHERE status='active'").fetchone()[0])
@@ -299,3 +306,10 @@ class PostgresTenantStore(TenantStore):
     def tenant_exists(self, tenant_id: str) -> bool:
         with self._connect() as c:
             return c.execute("SELECT 1 FROM tenants WHERE id=%s AND status='active'", (tenant_id,)).fetchone() is not None
+
+    def list_members(self, tenant_id: str) -> list[dict[str, str]]:
+        with self._connect() as c:
+            rows = c.execute("""SELECT u.id,u.email,u.status,m.role,m.created_at
+                FROM memberships m JOIN users u ON u.id=m.user_id
+                WHERE m.tenant_id=%s ORDER BY u.email""", (tenant_id,)).fetchall()
+        return [dict(row) for row in rows]
