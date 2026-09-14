@@ -139,10 +139,30 @@ class ExecutionCoordinator:
         self.orders: dict[str, OrderRecord] = {}
         self.perda_do_dia = Decimal("0")
         self.dia_corrente = ""
+        self.ordens_restauradas: list = []
+        self.posicoes_restauradas: dict = {}
+        # PORTÃO DE RECONCILIAÇÃO. Enquanto ligado, nenhum risco novo sai.
+        # Estado desconhecido bloqueia: UNKNOWN => BLOCK, nunca UNKNOWN =>
+        # "deve estar tudo bem".
+        self.reconciliacao_pendente = False
+        self.motivo_bloqueio = ""
         self._by_key: dict[str, str] = {}     # idempotency_key -> order_id
 
     # -- envio ---------------------------------------------------------
+    def exigir_reconciliacao(self, motivo: str) -> None:
+        self.reconciliacao_pendente = True
+        self.motivo_bloqueio = motivo
+
+    def reconciliacao_concluida(self, resultado: str = "conferido") -> None:
+        """Só quem comparou com a corretora pode liberar."""
+        self.reconciliacao_pendente = False
+        self.motivo_bloqueio = ""
+
     def submit(self, intent: OrderIntent) -> OrderRecord:
+        if self.reconciliacao_pendente:
+            raise ExecutionRefused(
+                "reconciliação pendente: nenhuma exposição nova até conferir "
+                f"com a corretora ({self.motivo_bloqueio})")
         if intent.mode is Mode.LIVE and not self.mandate.live_authorized:
             raise ExecutionRefused(
                 "ordem em LIVE sem autorização ativa no mandato")
@@ -319,6 +339,84 @@ class ExecutionCoordinator:
             ponte = getattr(self.broker, "bridge", None)
             if ponte is not None and hasattr(ponte, "set_daily_loss"):
                 ponte.set_daily_loss(self.perda_do_dia)
+
+
+
+    # ============================== ESTADO FINANCEIRO DURÁVEL ==============
+    # A auditoria encontrou o pior estado possível: reiniciar o processo
+    # recriava orders={} e um Ledger zerado enquanto a exchange continuava
+    # com posição aberta. O sistema então se achava livre para comprar de
+    # novo. Aqui o estado vira documento persistível e restaurável.
+    def snapshot_estado(self) -> dict:
+        """Tudo o que precisa sobreviver a um reinício."""
+        return {
+            "schema": "dz23.oms/1",
+            "worker_id": self.worker_id,
+            "dia": self.dia_corrente,
+            "perda_do_dia": str(self.perda_do_dia),
+            "ordens": [self._ordem_para_doc(r) for r in self.orders.values()],
+            "posicoes": {i: {"quantidade": str(p.quantity),
+                             "custo": str(p.cost_basis),
+                             "preco_medio": str(p.entry_price),
+                             "agente": p.agent_id}
+                         for i, p in self.ledger.open_positions_detail().items()}
+            if hasattr(self.ledger, "open_positions_detail") else {},
+            "caixa": str(self.ledger.balances().get("CASH", Decimal("0"))),
+            "reservas": [{"id": r.reservation_id, "instrumento": r.instrument,
+                          "valor": str(r.amount), "agente": r.agent_id}
+                         for r in self.risk.active_reservations()]
+            if hasattr(self.risk, "active_reservations") else [],
+        }
+
+    @staticmethod
+    def _ordem_para_doc(r: OrderRecord) -> dict:
+        return {"order_id": r.order_id, "estado": r.state.value,
+                "fingerprint": r.fingerprint, "filled": str(r.filled_qty),
+                "preco_medio": str(r.avg_price), "fees": str(r.fees),
+                "fills_vistos": sorted(str(f) for f in r.seen_fills),
+                "external_id": r.external_id, "nota": r.note,
+                "instrumento": r.intent.reservation.instrument,
+                "quantidade": str(r.intent.reservation.quantity),
+                "lado": "buy" if r.intent.action is Action.BUY else "sell",
+                "client_order_id": r.intent.idempotency_key,
+                "agente": r.intent.reservation.agent_id,
+                "reserva_id": r.intent.reservation.reservation_id,
+                "procedencia": r.intent.provenance}
+
+    def restaurar_estado(self, doc: dict | None) -> dict:
+        """Reconstrói o que dá para reconstruir e DIZ o que ficou pendente.
+
+        Não tenta adivinhar: ordem que estava incerta continua incerta, e
+        quem chama é obrigado a reconciliar antes de liberar risco novo.
+        """
+        if not doc or doc.get("schema") != "dz23.oms/1":
+            return {"restaurado": False, "motivo": "sem estado anterior",
+                    "pendencias": [], "exige_reconciliacao": False}
+        self.restaurar_estado_do_dia(doc)
+        pendentes, abertas = [], []
+        for od in doc.get("ordens", []):
+            estado = od.get("estado")
+            if estado == OrderState.UNKNOWN_RECONCILIATION_REQUIRED.value:
+                pendentes.append(od)
+            elif estado in (OrderState.SUBMITTING.value,
+                            OrderState.ACKNOWLEDGED.value,
+                            OrderState.PARTIALLY_FILLED.value,
+                            OrderState.CANCEL_PENDING.value):
+                abertas.append(od)
+        self.ordens_restauradas = doc.get("ordens", [])
+        self.posicoes_restauradas = doc.get("posicoes", {})
+        exige = bool(pendentes or abertas or doc.get("posicoes"))
+        if exige:
+            self.exigir_reconciliacao(
+                f"{len(pendentes)} ordem(ns) incerta(s), {len(abertas)} aberta(s) "
+                f"e {len(doc.get('posicoes', {}))} posição(ões) restauradas do "
+                "estado anterior")
+        return {"restaurado": True,
+                "ordens": len(doc.get("ordens", [])),
+                "pendencias": [o["order_id"] for o in pendentes],
+                "abertas": [o["order_id"] for o in abertas],
+                "posicoes": list(doc.get("posicoes", {})),
+                "exige_reconciliacao": exige}
 
     def pending_reconciliation(self) -> list[OrderRecord]:
         return [r for r in self.orders.values() if r.needs_reconciliation]

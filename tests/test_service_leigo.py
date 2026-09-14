@@ -390,8 +390,16 @@ class TestDinheiroRealNoServico:
         assert c.get("/v1/desk/status", headers=h).status_code == 423
         assert c.post("/v1/live/liberar", headers=h,
                       json={"frase": "qualquer"}).status_code == 422
+        # Liberar exige DUAS condições: a frase E a reconciliação. Só a frase
+        # não basta — pode haver ordem ou posição que o sistema desconhece.
+        sem_reconciliar = c.post(
+            "/v1/live/liberar", headers=h,
+            json={"frase": "EU AUTORIZO OPERAR COM DINHEIRO REAL"})
+        assert sem_reconciliar.status_code == 409
+        assert "reconcilie" in sem_reconciliar.json()["detail"]
         ok = c.post("/v1/live/liberar", headers=h,
-                    json={"frase": "EU AUTORIZO OPERAR COM DINHEIRO REAL"})
+                    json={"frase": "EU AUTORIZO OPERAR COM DINHEIRO REAL",
+                          "reconciliado": True})
         assert ok.status_code == 200
         assert c.get("/v1/desk/status", headers=h).status_code == 200
 

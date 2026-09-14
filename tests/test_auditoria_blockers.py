@@ -330,3 +330,149 @@ class TestSegredoNaoVazaPelaApi:
         from service.app import SECRETish
         assert "TRADINGAGENTS_EXCHANGE" not in SECRETish
         assert "TRADINGAGENTS_DESK_CAPITAL" not in SECRETish
+
+
+class TestParadaDeEmergenciaSobreviveAoReinicio:
+    """ACHADO: o kill switch vivia em RAM. Um deploy, crash ou reboot o
+    desarmava sozinho enquanto o dono acreditava ter parado tudo."""
+
+    def _armazem(self, tmp_path):
+        from tradingagents.desk.storage import ArmazemDeEstado
+        return ArmazemDeEstado(None, diretorio=tmp_path / "estado")
+
+    def test_engaged_switch_survives_a_restart(self, tmp_path):
+        from tradingagents.desk.killswitch import KillSwitch
+        a = self._armazem(tmp_path)
+        KillSwitch(a, "t1").acionar("pânico do dono")
+        assert KillSwitch(a, "t1").bloqueia is True, (
+            "reiniciar o processo desarmou a parada de emergência")
+
+    def test_unreadable_state_blocks_instead_of_releasing(self, tmp_path):
+        """Fail-closed: não saber se está parado equivale a estar parado."""
+        from tradingagents.desk.killswitch import EstadoParada
+        assert EstadoParada.from_doc({"formato": "estranho"}).bloqueia is True
+        assert EstadoParada.from_doc({"schema": "dz23.killswitch/1",
+                                      "estado": "sei_la"}).bloqueia is True
+
+    def test_release_requires_phrase_and_reconciliation(self, tmp_path):
+        from tradingagents.desk.killswitch import KillSwitch, KillSwitchError
+        k = KillSwitch(self._armazem(tmp_path), "t1")
+        k.acionar("teste")
+        with pytest.raises(KillSwitchError, match="autorização"):
+            k.liberar(frase_correta=False, reconciliado=True)
+        with pytest.raises(KillSwitchError, match="reconcilie"):
+            k.liberar(frase_correta=True, reconciliado=False)
+        k.liberar(frase_correta=True, reconciliado=True)
+        assert k.bloqueia is False
+
+    def test_tenants_have_independent_switches(self, tmp_path):
+        from tradingagents.desk.killswitch import KillSwitch
+        a = self._armazem(tmp_path)
+        KillSwitch(a, "t1").acionar("parada do t1")
+        assert KillSwitch(a, "t2").bloqueia is False
+
+
+class TestEstadoFinanceiroSobreviveAoReinicio:
+    """ACHADO: reiniciar recriava orders={} e Ledger zerado enquanto a
+    exchange continuava com posição aberta — e o sistema se achava livre
+    para comprar de novo."""
+
+    def _coord(self):
+        from tradingagents.desk.execution import PaperBroker
+        m = mandato()
+        return ExecutionCoordinator(m, Ledger(opening_cash=m.capital),
+                                    RiskEngine(m), worker_id="w",
+                                    broker=PaperBroker(Decimal("100")))
+
+    def test_snapshot_carries_the_financial_truth(self):
+        coord = self._coord()
+        doc = coord.snapshot_estado()
+        for campo in ("ordens", "posicoes", "caixa", "perda_do_dia", "reservas"):
+            assert campo in doc, f"o estado não persiste {campo}"
+
+    def test_restored_state_blocks_new_risk_until_reconciled(self):
+        """UNKNOWN => BLOCK NEW RISK. Nunca UNKNOWN => 'deve estar tudo bem'."""
+        from tradingagents.desk.execution import ExecutionRefused
+        coord = self._coord()
+        info = coord.restaurar_estado({
+            "schema": "dz23.oms/1", "dia": "", "perda_do_dia": "0",
+            "ordens": [{"order_id": "ord-7",
+                        "estado": "unknown_reconciliation_required"}],
+            "posicoes": {}, "caixa": "1000", "reservas": []})
+        assert info["exige_reconciliacao"] is True
+        assert "ord-7" in info["pendencias"]
+        _, risco = self._coord(), None
+        with pytest.raises(ExecutionRefused, match="reconciliação pendente"):
+            coord.submit(object())
+
+    def test_open_position_from_previous_run_also_blocks(self):
+        coord = self._coord()
+        info = coord.restaurar_estado({
+            "schema": "dz23.oms/1", "ordens": [], "caixa": "1000",
+            "posicoes": {"BTC/USDT": {"quantidade": "0.1", "custo": "100",
+                                      "preco_medio": "1000", "agente": "t"}},
+            "reservas": []})
+        assert info["exige_reconciliacao"] is True
+        assert coord.reconciliacao_pendente is True
+
+    def test_clean_state_does_not_block(self):
+        coord = self._coord()
+        info = coord.restaurar_estado({"schema": "dz23.oms/1", "ordens": [],
+                                       "posicoes": {}, "caixa": "1000",
+                                       "reservas": []})
+        assert info["exige_reconciliacao"] is False
+        assert coord.reconciliacao_pendente is False
+
+    def test_only_reconciliation_can_release_the_gate(self):
+        coord = self._coord()
+        coord.exigir_reconciliacao("teste")
+        assert coord.reconciliacao_pendente is True
+        coord.reconciliacao_concluida()
+        assert coord.reconciliacao_pendente is False
+
+
+class TestNomesDeEstadoExistem:
+    """Regressão de um erro meu: o código citava OrderState.SUBMITTED, que não
+    existe — e só aparecia em tempo de execução, virando 503 na mesa."""
+
+    def test_every_referenced_state_exists(self):
+        import re
+        from pathlib import Path
+
+        from tradingagents.desk.execution import OrderState
+        nomes = {e.name for e in OrderState}
+        for arquivo in Path("tradingagents").rglob("*.py"):
+            citados = set(re.findall(r"OrderState\.([A-Z_]+)",
+                                     arquivo.read_text(encoding="utf-8")))
+            assert not (citados - nomes), (
+                f"{arquivo}: estados inexistentes {citados - nomes}")
+
+
+class TestCredencialDeInquilinoNaoVazaPorAmbiente:
+    """ACHADO: a mesa escrevia a credencial do inquilino em os.environ sem
+    trava. Duas mesas concorrentes podiam trocar de chave entre si."""
+
+    def test_desk_llm_call_is_not_an_unlocked_env_mutation(self):
+        import inspect
+
+        import service.app as m
+        fonte = inspect.getsource(m._desk_boot)
+        assert "with _lock:" in fonte, (
+            "a consulta de IA da mesa mutila o ambiente global sem trava")
+        assert "api_key=chave" in fonte, (
+            "o caminho preferido deve passar a credencial explicitamente")
+
+    def test_job_path_still_holds_the_lock(self):
+        import inspect
+
+        import service.app as m
+        assert "with _lock:" in inspect.getsource(m.run_job)
+
+    def test_no_env_mutation_escapes_without_restore(self):
+        """Toda escrita em os.environ no serviço precisa ter restauração."""
+        from pathlib import Path
+        fonte = Path("service/app.py").read_text(encoding="utf-8")
+        escritas = fonte.count("os.environ.update(")
+        restauracoes = fonte.count("os.environ.pop(")
+        assert restauracoes >= escritas, (
+            f"{escritas} escritas no ambiente e só {restauracoes} restaurações")

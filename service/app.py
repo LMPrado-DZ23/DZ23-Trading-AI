@@ -1157,22 +1157,45 @@ def _desk_boot(tenant_id: str) -> dict:
         from tradingagents.desk.context import AnalistaDeContexto
 
         def _consultar(prompt: str) -> str:
+            """Consulta o provedor do INQUILINO.
+
+            A versão anterior escrevia a credencial em os.environ sem trava:
+            duas mesas de inquilinos diferentes rodam em threads próprias, e
+            a janela entre escrever e restaurar permitia o inquilino A usar a
+            chave do B — ou a chave de um sobrar no processo.
+
+            O ambiente do processo deixou de ser o transporte da credencial:
+            ela vai explicitamente para o cliente. O lock só permanece para o
+            caso em que a biblioteca ainda exija variável de ambiente, e
+            nesse caminho a janela fica fechada de ponta a ponta.
+            """
             from tradingagents.default_config import DEFAULT_CONFIG
             from tradingagents.llm_clients.factory import create_llm_client
             llm_conf, llm_env = resolve_llm(cfg)
             conf = {**DEFAULT_CONFIG, **llm_conf}
-            anterior = {k: os.environ.get(k) for k in llm_env}
-            os.environ.update(llm_env)
-            try:
-                cliente = create_llm_client(conf.get("llm_provider"), conf)
-                return cliente.complete(prompt) if hasattr(cliente, "complete") \
-                    else str(cliente.invoke(prompt))
-            finally:
-                for k, antes in anterior.items():
-                    if antes is None:
-                        os.environ.pop(k, None)
-                    else:
-                        os.environ[k] = antes
+            import inspect
+            aceita_credencial = "api_key" in inspect.signature(
+                create_llm_client).parameters
+            if aceita_credencial:
+                chave = next((v for v in llm_env.values() if v), "")
+                cliente = create_llm_client(conf.get("llm_provider"), conf,
+                                            api_key=chave)
+                return (cliente.complete(prompt) if hasattr(cliente, "complete")
+                        else str(cliente.invoke(prompt)))
+            with _lock:                      # janela fechada: um por vez
+                anterior = {k: os.environ.get(k) for k in llm_env}
+                os.environ.update(llm_env)
+                try:
+                    cliente = create_llm_client(conf.get("llm_provider"), conf)
+                    return (cliente.complete(prompt)
+                            if hasattr(cliente, "complete")
+                            else str(cliente.invoke(prompt)))
+                finally:
+                    for k, antes in anterior.items():
+                        if antes is None:
+                            os.environ.pop(k, None)
+                        else:
+                            os.environ[k] = antes
 
         analista = AnalistaDeContexto(_consultar)
 
@@ -1208,12 +1231,24 @@ def _desk_boot(tenant_id: str) -> dict:
     if hasattr(broker, "price_provider"):
         broker.price_provider = prices_fn
 
+    # Estado financeiro anterior: restaurar e EXIGIR reconciliação antes de
+    # qualquer exposição nova (UNKNOWN => BLOCK).
+    recuperacao = coord.restaurar_estado(armazem.carregar(tenant_id, "oms"))
+
     desk = {"orchestrator": orch, "ledger": ledger, "coordinator": coord,
-            "memoria": memoria, "armazem": armazem,
+            "memoria": memoria, "armazem": armazem, "recuperacao": recuperacao,
             "guardian": PositionGuardian(coord), "cycles": [],
             "feed_kind": feed_kind, "broker_mode": broker_mode, "scheduler": None}
 
+    def _persistir_oms():
+        try:
+            armazem.salvar(tenant_id, "oms", coord.snapshot_estado())
+        except Exception:
+            HEALTH["avisos"].append(
+                "não foi possível persistir o estado financeiro da mesa")
+
     def _record(out):
+        _persistir_oms()
         # A cada ciclo, avalia e envia alertas — é o que acorda o dono sem
         # ele precisar abrir o painel.
         try:
@@ -1250,9 +1285,11 @@ def _desk_boot(tenant_id: str) -> dict:
 
 def _desk_of(request: Request) -> dict:
     tid = request_tenant(request)
-    if tid in _LIVE_HALTED:
+    parada = _parada(tid)
+    if parada.bloqueia:
         raise HTTPException(
-            423, "parada de emergência acionada: libere em Plano e risco "
+            423, f"parada de emergência {parada.estado.estado}: "
+                 f"{parada.estado.motivo or 'acionada'} — reconcilie e libere "
                  "antes de operar novamente")
     desk = _DESKS.get(tid)
     if desk is None:
@@ -1484,8 +1521,17 @@ def database_health(_=Depends(auth)):
 # por ordem e o teto de perda diária — mais a parada de emergência.
 from tradingagents.brokers.ccxt_bridge import LIVE_CONFIRM_PHRASE  # noqa: E402
 
-# Inquilinos com parada de emergência acionada — trava independente da mesa.
-_LIVE_HALTED: set = set()
+# Parada de emergência DURÁVEL. O conjunto em memória anterior desarmava
+# sozinho a cada reinício — o dono acreditava ter parado tudo e não tinha.
+from tradingagents.desk.killswitch import KillSwitch, KillSwitchError  # noqa: E402
+
+
+def _parada(tenant_id: str) -> KillSwitch:
+    from tradingagents.desk.storage import ArmazemDeEstado
+    d = _DESKS.get(tenant_id)
+    armazem = d.get("armazem") if d else ArmazemDeEstado(
+        os.environ.get("DATABASE_URL"), diretorio=DATA / "desks")
+    return KillSwitch(armazem, tenant_id)
 
 
 @app.get("/v1/live/status")
@@ -1530,7 +1576,8 @@ def live_emergency(request: Request, _=Depends(auth)):
     corretora está mal configurada), parar é trivialmente verdade — e ainda
     assim marcamos a parada, porque o dono clicou para parar."""
     tid = request_tenant(request)
-    _LIVE_HALTED.add(tid)
+    parada = _parada(tid)
+    parada.acionar("acionada pelo painel", por=tid)
     d = _DESKS.get(tid)
     if d is None:
         return {"ok": True, "parado": True, "a_encerrar": [],
@@ -1556,7 +1603,13 @@ async def live_resume(req: Request, _=Depends(auth)):
     if str(body.get("frase", "")).strip() != LIVE_CONFIRM_PHRASE:
         raise HTTPException(422, f"repita exatamente: {LIVE_CONFIRM_PHRASE}")
     tid = request_tenant(req)
-    _LIVE_HALTED.discard(tid)
+    parada = _parada(tid)
+    reconciliado = bool(body.get("reconciliado")) or \
+        parada.estado.estado == "aguardando_reconciliacao"
+    try:
+        parada.liberar(frase_correta=True, reconciliado=reconciliado, por=tid)
+    except KillSwitchError as exc:
+        raise HTTPException(409, str(exc)) from None
     _DESKS.pop(tid, None)          # reconstrói limpo no próximo uso
     return {"ok": True, "liberado": True,
             "aviso": "envios liberados; confira os tetos antes de retomar"}
