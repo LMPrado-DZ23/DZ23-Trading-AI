@@ -560,26 +560,19 @@ class ExecutionCoordinator:
     # -- eventos -------------------------------------------------------
     def apply_fill(self, order_id: str, *, fill_id: str, quantity: Decimal,
                    price: Decimal, fee: Decimal = Decimal("0")) -> OrderRecord:
+        """ALIAS ESTRITO de `aplicar_fill`. Não tem lógica própria.
+
+        Existiam duas implementações econômicas: esta só lançava no livro
+        quando a ordem ficava totalmente preenchida (parciais não existiam
+        economicamente), consumia a reserva inteira e assumia compra. A
+        reconciliação usava a outra. Duas verdades sobre o mesmo dinheiro é
+        exatamente o que um sistema financeiro não pode ter.
+        """
         rec = self.orders[order_id]
-        if fill_id in rec.seen_fills:
-            return rec                      # duplicata: não conta duas vezes
         if rec.state in TERMINAL:
             return rec                      # fora de ordem após terminal: ignora
-        rec.seen_fills.add(fill_id)
-        total = rec.filled_qty + quantity
-        rec.avg_price = ((rec.avg_price * rec.filled_qty + price * quantity) / total
-                         ) if total else price
-        rec.filled_qty = total
-        rec.fees += fee
-        target = rec.intent.reservation.quantity
-        rec.state = OrderState.FILLED if rec.filled_qty >= target else OrderState.PARTIALLY_FILLED
-        if rec.state is OrderState.FILLED:
-            self.ledger.fill_buy(rec.intent.reservation.instrument, rec.filled_qty,
-                                 rec.avg_price, rec.fees,
-                                 reserved=rec.intent.reservation.amount,
-                                 ref=rec.order_id,
-                                 agent_id=rec.intent.reservation.agent_id)
-            self.risk.release(rec.intent.reservation.reservation_id)
+        self.aplicar_fill(rec, side=rec.lado or "buy", quantidade=quantity,
+                          preco=price, taxa=fee, fill_id=fill_id)
         return rec
 
     def close_position(self, *, instrument: str, quantity: Decimal,
@@ -778,8 +771,13 @@ class ExecutionCoordinator:
             rec = self._ordem_de_doc(od)
             if rec is not None:
                 self.orders[rec.order_id] = rec
-                if rec.fingerprint:
-                    self._by_key[rec.fingerprint] = rec.order_id
+                if rec.client_order_id or rec.fingerprint:
+                    # A chave de idempotência é o client_order_id — a mesma
+                    # usada no fluxo normal. Restaurar por fingerprint
+                    # quebrava o retry após reinício: o mesmo pedido criaria
+                    # uma SEGUNDA ordem na corretora.
+                    if rec.client_order_id:
+                        self._by_key[rec.client_order_id] = rec.order_id
             estado = od.get("estado")
             if estado == OrderState.UNKNOWN_RECONCILIATION_REQUIRED.value:
                 pendentes.append(od)
@@ -873,7 +871,7 @@ class PositionGuardian:
         return f"guardião assumiu {instrument} (antes: {from_agent})"
 
     def watchlist(self) -> list[str]:
-        return sorted({r.intent.reservation.instrument
+        return sorted({r.instrumento
                        for r in self.coordinator.orders.values() if r.open}
                       | set(self.adopted))
 

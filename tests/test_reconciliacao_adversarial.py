@@ -455,3 +455,124 @@ class TestOrdemForaDaJanelaMantemReserva:
         assert rel["seguro"] is False
         assert risco.reserved_total == Decimal("150.00"), (
             "capital devolvido sobre ordem de destino desconhecido")
+
+
+class TestIdempotenciaSobreviveAoRestart:
+    """ACHADO: o restore reconstruía o índice de idempotência pela
+    FINGERPRINT, não pela chave usada no fluxo normal. O mesmo pedido, após
+    um reinício, criaria uma SEGUNDA ordem na corretora."""
+
+    def test_the_index_is_rebuilt_by_the_client_order_id(self):
+        m, risco, _, coord = sistema()
+        res = reserva(risco)
+        coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
+        assert coord._by_key.get("coid-1") == "ord-1", (
+            "idempotência restaurada com a chave errada: o retry não "
+            "encontraria a ordem existente")
+
+    def test_fingerprint_alone_is_not_the_retry_key(self):
+        m, risco, _, coord = sistema()
+        res = reserva(risco)
+        coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
+        # a fingerprint pode existir no índice, mas a chave de retry é o coid
+        assert "coid-1" in coord._by_key
+
+
+class TestUmaUnicaFuncaoDeFill:
+    """ACHADO: existiam duas implementações econômicas. A antiga só lançava
+    no livro ao atingir o total, ignorando parciais."""
+
+    def test_apply_fill_is_a_strict_alias(self):
+        import inspect
+
+        from tradingagents.desk.execution import ExecutionCoordinator
+        fonte = inspect.getsource(ExecutionCoordinator.apply_fill)
+        assert "self.aplicar_fill(" in fonte
+        assert "fill_buy" not in fonte and "fill_sell" not in fonte, (
+            "a função ainda tem lógica contábil própria")
+
+    def test_partial_fill_is_economically_real_immediately(self):
+        """0.3 executado JÁ mudou a realidade: o livro precisa saber."""
+        m, risco, livro, coord = sistema()
+        res = reserva(risco)
+        coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
+        coord.apply_fill("ord-1", fill_id="t-1", quantity=Decimal("0.3"),
+                         price=Decimal("100"), fee=Decimal("0"))
+        assert livro.position_quantity("BTC/USDT") == Decimal("0.3"), (
+            "parcial não apareceu no livro: a posição real ficou invisível")
+
+    def test_both_entry_points_produce_the_same_state(self):
+        """Equivalência: runtime e reconciliação, mesmos fills, mesmo fim."""
+        def rodar(usar_alias: bool):
+            m, risco, livro, coord = sistema()
+            res = reserva(risco)
+            coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
+            rec = coord.orders["ord-1"]
+            fills = [("f1", "0.3", "100"), ("f2", "0.2", "102"),
+                     ("f3", "1.0", "101")]
+            for fid, qtd, preco in fills:
+                if usar_alias:
+                    coord.apply_fill("ord-1", fill_id=fid, quantity=Decimal(qtd),
+                                     price=Decimal(preco), fee=Decimal("0"))
+                else:
+                    coord.aplicar_fill(rec, side="buy", quantidade=Decimal(qtd),
+                                       preco=Decimal(preco), taxa=Decimal("0"),
+                                       fill_id=fid)
+            return (rec.filled_qty, rec.avg_price, rec.state,
+                    livro.position_quantity("BTC/USDT"), livro.cash())
+
+        assert rodar(True) == rodar(False), (
+            "os dois caminhos divergem: há duas verdades econômicas")
+
+    def test_cumulative_quantities_are_not_double_counted(self):
+        m, risco, livro, coord = sistema()
+        res = reserva(risco)
+        coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
+        rec = coord.orders["ord-1"]
+        for fid, qtd in (("f1", "0.3"), ("f2", "0.2"), ("f3", "1.0")):
+            coord.aplicar_fill(rec, side="buy", quantidade=Decimal(qtd),
+                               preco=Decimal("100"), taxa=Decimal("0"),
+                               fill_id=fid)
+        assert rec.filled_qty == Decimal("1.5"), (
+            f"soma incorreta dos deltas: {rec.filled_qty}")
+        assert livro.position_quantity("BTC/USDT") == Decimal("1.5")
+
+
+class TestInvalidOrderNaoProvaAusencia:
+    """ACHADO: InvalidOrder cobre identificador malformado e consulta não
+    suportada. Tratar como ausência devolveria capital de ordem viva."""
+
+    def test_invalid_order_is_unknown(self):
+        from tradingagents.desk.brokers import _e_ordem_inexistente
+
+        class InvalidOrder(Exception):
+            pass
+
+        class OrderNotFound(Exception):
+            pass
+
+        assert _e_ordem_inexistente(InvalidOrder()) is False
+        assert _e_ordem_inexistente(OrderNotFound()) is True
+
+    def test_invalid_order_keeps_the_reservation(self):
+        m, risco, _, coord = sistema()
+        res = reserva(risco)
+        coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
+        coord.reconciliar(
+            lambda coid: {"resultado": "UNKNOWN", "ordem": None,
+                          "motivo": "InvalidOrder na consulta"},
+            consultar_posicoes=lambda: {})
+        assert risco.reserved_total == Decimal("150.00")
+
+
+class TestGuardiaoSobreviveAoRestart:
+    """ACHADO: o guardião lia r.intent.reservation e quebrava justamente
+    depois de um reinício, que é quando ele mais importa."""
+
+    def test_watchlist_works_with_restored_orders(self):
+        from tradingagents.desk.execution import PositionGuardian
+        m, risco, _, coord = sistema()
+        res = reserva(risco)
+        coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
+        lista = PositionGuardian(coord).watchlist()
+        assert "BTC/USDT" in lista

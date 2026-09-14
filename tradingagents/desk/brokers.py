@@ -19,7 +19,11 @@ def _e_ordem_inexistente(exc: BaseException) -> bool:
     parâmetro não provam ausência — e tratá-los como ausência devolveria
     capital de uma ordem viva.
     """
-    return type(exc).__name__ in {"OrderNotFound", "InvalidOrder"}
+    # SOMENTE a exceção que significa exatamente "esta ordem não existe".
+    # InvalidOrder cobre identificador malformado, símbolo ausente e consulta
+    # não suportada — nada disso prova ausência, e tratar como prova
+    # devolveria capital de uma ordem viva.
+    return type(exc).__name__ == "OrderNotFound"
 
 
 class BrokerConsultaIndisponivel(RuntimeError):
