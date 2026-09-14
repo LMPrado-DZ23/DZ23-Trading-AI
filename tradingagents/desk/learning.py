@@ -71,19 +71,28 @@ class Estatistica:
 class MemoriaDeDesempenho:
     """Memória por (estratégia × regime). Persistida em JSON no volume."""
 
-    def __init__(self, caminho: str | Path | None = None):
+    def __init__(self, caminho: str | Path | None = None, *,
+                 armazem=None, tenant_id: str = "legacy"):
+        # `armazem` (opcional) leva o histórico para fora do servidor: é o que
+        # permite trocar de máquina sem perder semanas de aprendizado.
         self.caminho = Path(caminho) if caminho else None
+        self.armazem = armazem
+        self.tenant_id = tenant_id
         self._desfechos: list[Desfecho] = []
         self._carregar()
 
     # -- persistência --------------------------------------------------
     def _carregar(self) -> None:
-        if not (self.caminho and self.caminho.exists()):
-            return
-        try:
-            dados = json.loads(self.caminho.read_text())
-        except ValueError:
-            return
+        dados = None
+        if self.armazem is not None:
+            dados = self.armazem.carregar(self.tenant_id, "aprendizado")
+        if dados is None:
+            if not (self.caminho and self.caminho.exists()):
+                return
+            try:
+                dados = json.loads(self.caminho.read_text())
+            except ValueError:
+                return
         for d in dados.get("desfechos", []):
             try:
                 self._desfechos.append(Desfecho(
@@ -95,14 +104,17 @@ class MemoriaDeDesempenho:
                 continue
 
     def salvar(self) -> None:
-        if not self.caminho:
-            return
         payload = {"desfechos": [
             {"estrategia": d.estrategia, "regime": d.regime,
              "instrumento": d.instrumento, "retorno": str(d.retorno),
              "fechado_em": d.fechado_em.isoformat(),
              "forca_do_sinal": d.forca_do_sinal}
             for d in self._desfechos[-2000:]]}
+        if self.armazem is not None:
+            self.armazem.salvar(self.tenant_id, "aprendizado", payload)
+            return
+        if not self.caminho:
+            return
         self.caminho.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.caminho.with_suffix(".tmp")
         tmp.write_text(json.dumps(payload, ensure_ascii=False))

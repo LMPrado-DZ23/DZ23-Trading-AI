@@ -60,3 +60,27 @@ o motivo por trader ("sem operar: ..."). Causas comuns:
   ordens da mesa só saem em paper/testnet.
 - Backtest e avaliação prospectiva são separados; resultado de fixture nunca
   é apresentado como desempenho de mercado.
+
+## Trocar de servidor sem perder nada
+
+O servidor pode ser descartável; o aprendizado dos agentes não. Duas
+proteções, use as duas:
+
+**1. Banco externo (recomendado).** Com `SUPABASE_PROJECT_REF` +
+`SUPABASE_DB_PASSWORD` (ou `DATABASE_URL`), o estado da mesa e o histórico
+de aprendizado vivem no Postgres, fora da máquina. Ao subir noutro servidor
+apontando para o mesmo banco, tudo reaparece. A aba Mesa de Agentes mostra
+onde o estado está gravado — se disser "vive no volume deste servidor", você
+ainda não tem essa proteção.
+
+**2. Exportar pelo navegador.** Mesa de Agentes → **Exportar tudo (mudar de
+servidor)** baixa um arquivo com configuração, aprendizado, estado da mesa e
+assinatura.
+
+> ⚠️ Esse arquivo contém **segredos** (chaves de IA e de corretora). Guarde
+> como guardaria uma senha; nunca o coloque no repositório nem o envie por
+> canais públicos.
+
+No servidor novo: entre no painel e envie o arquivo em
+`POST /v1/mudanca/importar` (ou use o mesmo botão quando estiver disponível
+na interface). Importar duas vezes não duplica nada.

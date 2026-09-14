@@ -252,3 +252,55 @@ class TestMesaRecarregaAoConfigurar:
         linha = next(e for e in d["estrategias"] if e["estrategia"] == "trend_following")
         assert linha["operacoes"] == AMOSTRA_MINIMA and linha["maduro"] is True
         assert "não prevê o futuro" in d["aviso"]
+
+
+class TestEstadoSobreviveAoServidor:
+    """Servidor provisório: o aprendizado é patrimônio e não pode morrer com
+    a máquina."""
+
+    def test_memory_loads_from_the_store_not_only_from_file(self, tmp_path):
+        from tradingagents.desk.storage import ArmazemDeEstado
+        armazem = ArmazemDeEstado(None, diretorio=tmp_path / "estado")
+        mem = MemoriaDeDesempenho(None, armazem=armazem, tenant_id="t1")
+        for _ in range(AMOSTRA_MINIMA):
+            mem.registrar(Desfecho("trend_following", "tendencia_alta", "BTC/USDT",
+                                   Decimal("0.02"), utcnow(), 0.8))
+        # "novo servidor": instância nova, mesmo armazém
+        revivida = MemoriaDeDesempenho(None, armazem=armazem, tenant_id="t1")
+        assert revivida.estatistica("trend_following").amostras == AMOSTRA_MINIMA
+
+    def test_tenants_do_not_share_learning(self, tmp_path):
+        from tradingagents.desk.storage import ArmazemDeEstado
+        armazem = ArmazemDeEstado(None, diretorio=tmp_path / "estado")
+        a = MemoriaDeDesempenho(None, armazem=armazem, tenant_id="a")
+        a.registrar(Desfecho("trend_following", "tendencia_alta", "BTC/USDT",
+                             Decimal("0.02"), utcnow()))
+        b = MemoriaDeDesempenho(None, armazem=armazem, tenant_id="b")
+        assert b.estatistica("trend_following").amostras == 0
+
+    def test_store_says_plainly_if_state_is_disposable(self, tmp_path):
+        from tradingagents.desk.storage import ArmazemDeEstado
+        local = ArmazemDeEstado(None, diretorio=tmp_path).estado()
+        assert local["destino"] == "arquivo"
+        assert "se perde" in local["durabilidade"]
+
+    def test_broken_database_falls_back_instead_of_breaking(self, tmp_path):
+        from tradingagents.desk.storage import ArmazemDeEstado
+        armazem = ArmazemDeEstado("postgresql://u:p@127.0.0.1:1/nada",
+                                  diretorio=tmp_path)
+        assert armazem.backend == "arquivo" and armazem.aviso
+        armazem.salvar("t1", "mesa", {"cycles_run": 3})
+        assert armazem.carregar("t1", "mesa")["cycles_run"] == 3
+
+    def test_scheduler_state_round_trips_through_the_store(self, tmp_path):
+        from tradingagents.desk.storage import ArmazemDeEstado
+        armazem = ArmazemDeEstado(None, diretorio=tmp_path / "e")
+        armazem.salvar("t1", "mesa", {"cycles_run": 9, "errors": 1,
+                                      "open_positions": ["BTC/USDT"],
+                                      "pending_reconciliation": [], "stopped": False,
+                                      "last_cycle_at": None})
+        from tradingagents.desk.scheduler import SchedulerState
+        doc = armazem.carregar("t1", "mesa")
+        estado = SchedulerState(**{k: v for k, v in doc.items()
+                                   if k in SchedulerState.__annotations__})
+        assert estado.cycles_run == 9 and estado.open_positions == ["BTC/USDT"]

@@ -1087,7 +1087,13 @@ def _desk_boot(tenant_id: str) -> dict:
                           account=f"paper-{tenant_id}", mode=Mode.PAPER,
                           instruments=universe, capital=capital)
     from tradingagents.desk.learning import MemoriaDeDesempenho
-    memoria = MemoriaDeDesempenho(DATA / "desks" / tenant_id / "aprendizado.json")
+    from tradingagents.desk.storage import ArmazemDeEstado
+    # Servidor é descartável; o aprendizado não pode ser. Com banco externo,
+    # o histórico dos agentes sobrevive à troca de máquina.
+    armazem = ArmazemDeEstado(os.environ.get("DATABASE_URL"),
+                              diretorio=DATA / "desks")
+    memoria = MemoriaDeDesempenho(DATA / "desks" / tenant_id / "aprendizado.json",
+                                  armazem=armazem, tenant_id=tenant_id)
     exchange_cfg = (cfg.get("TRADINGAGENTS_EXCHANGE") or "binance").lower()
     traders = default_desk(universe, memoria=memoria, exchange=exchange_cfg,
                            capital=capital)
@@ -1162,7 +1168,7 @@ def _desk_boot(tenant_id: str) -> dict:
         broker.price_provider = prices_fn
 
     desk = {"orchestrator": orch, "ledger": ledger, "coordinator": coord,
-            "memoria": memoria,
+            "memoria": memoria, "armazem": armazem,
             "guardian": PositionGuardian(coord), "cycles": [],
             "feed_kind": feed_kind, "broker_mode": broker_mode, "scheduler": None}
 
@@ -1196,6 +1202,7 @@ def _desk_boot(tenant_id: str) -> dict:
     desk["scheduler"] = DeskScheduler(
         orch, coord, snapshot_provider=snaps_fn, price_provider=prices_fn,
         state_path=data_dir / "state.json", on_cycle=_record,
+        armazem=armazem, tenant_id=tenant_id,
         interval_seconds=int(os.environ.get("DESK_INTERVAL_SECONDS", "300")))
     return desk
 
@@ -1250,6 +1257,7 @@ def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
                           "balanceado": led.is_balanced()},
         "guardiao": d["guardian"].watchlist(),
         "agendador": d["scheduler"].status(),
+        "durabilidade": d["armazem"].estado() if d.get("armazem") else {},
         "fonte": {"dados": d["feed_kind"], "corretora": d["broker_mode"],
                   "aviso": ("mercado real (leitura pública, cutoff na vela fechada)"
                             if d["feed_kind"] == "real" else
@@ -1667,3 +1675,75 @@ def pagina_publica(tenant_id: str):
         "o_que_nao_mostramos": ["saldo", "chaves", "ordens individuais",
                                 "dados de conta"],
     }
+
+
+# ===================================================== MUDANÇA DE SERVIDOR
+@app.get("/v1/mudanca/exportar")
+def exportar_tudo(request: Request, _=Depends(auth)):
+    """Exporta TUDO o que importa do inquilino, pelo navegador.
+
+    Servidor provisório: isto é o que você leva embora. Inclui configuração
+    (com os segredos, porque é uma restauração), aprendizado dos agentes,
+    estado da mesa e assinatura.
+    """
+    tid = request_tenant(request)
+    d = _DESKS.get(tid)
+    armazem = d.get("armazem") if d else None
+    sub = SUBS.get(tid)
+    pacote = {
+        "formato": "dz23.mudanca/1",
+        "tenant_id": tid,
+        "exportado_em": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "configuracao": load_cfg(tid),
+        "aprendizado": (armazem.carregar(tid, "aprendizado") if armazem else None),
+        "mesa": (armazem.carregar(tid, "mesa") if armazem else None),
+        "assinatura": (sub.to_row() if sub else None),
+        "aviso": ("Este arquivo contém SEGREDOS (chaves de IA e de corretora). "
+                  "Guarde como guardaria uma senha e nunca o publique."),
+    }
+    return pacote
+
+
+@app.post("/v1/mudanca/importar")
+async def importar_tudo(req: Request, _=Depends(auth)):
+    """Restaura num servidor novo. Idempotente: importar duas vezes não
+    duplica nem corrompe."""
+    pacote = await _json_body(req)
+    if pacote.get("formato") != "dz23.mudanca/1":
+        raise HTTPException(422, "formato de pacote desconhecido")
+    tid = request_tenant(req)
+    restaurado = []
+
+    cfg = pacote.get("configuracao") or {}
+    if cfg:
+        limpo = {k: v for k, v in cfg.items()
+                 if k in ALLOWED_KEYS and isinstance(v, str) and v.strip()}
+        if limpo:
+            save_cfg({**load_cfg(tid), **limpo}, tid)
+            restaurado.append(f"configuração ({len(limpo)} itens)")
+
+    _desk_reset(tid)
+    d = _desk_of(req)
+    armazem = d.get("armazem")
+    if armazem:
+        if pacote.get("aprendizado"):
+            armazem.salvar(tid, "aprendizado", pacote["aprendizado"])
+            restaurado.append(
+                f"aprendizado ({len(pacote['aprendizado'].get('desfechos', []))} "
+                "operações)")
+        if pacote.get("mesa"):
+            armazem.salvar(tid, "mesa", pacote["mesa"])
+            restaurado.append("estado da mesa")
+
+    assin = pacote.get("assinatura")
+    if assin:
+        from tradingagents.billing.woovi import Subscription
+        try:
+            SUBS.save(Subscription.from_row({**assin, "tenant_id": tid}))
+            restaurado.append("assinatura")
+        except Exception:
+            pass
+
+    _desk_reset(tid)          # recarrega já com o que foi restaurado
+    return {"ok": True, "restaurado": restaurado,
+            "proxima_acao": "Abra a Mesa de Agentes e confira o aprendizado"}

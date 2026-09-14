@@ -51,12 +51,15 @@ class DeskScheduler:
 
     def __init__(self, orchestrator, coordinator, *, snapshot_provider,
                  price_provider, state_path: str | Path, on_cycle=None,
+                 armazem=None, tenant_id: str = "legacy",
                  interval_seconds: int = 300, max_snapshot_age_minutes: int = 15):
         self.orchestrator = orchestrator
         self.coordinator = coordinator
         self.snapshot_provider = snapshot_provider
         self.price_provider = price_provider
         self.state_path = Path(state_path)
+        self.armazem = armazem
+        self.tenant_id = tenant_id
         self.interval = interval_seconds
         self.max_age = timedelta(minutes=max_snapshot_age_minutes)
         self.on_cycle = on_cycle       # o painel escuta aqui
@@ -66,6 +69,11 @@ class DeskScheduler:
 
     # -- persistência --------------------------------------------------
     def _load(self) -> SchedulerState:
+        if self.armazem is not None:
+            doc = self.armazem.carregar(self.tenant_id, "mesa")
+            if doc is not None:
+                return SchedulerState(**{k: v for k, v in doc.items()
+                                         if k in SchedulerState.__annotations__})
         if self.state_path.exists():
             return SchedulerState.from_json(self.state_path.read_text())
         return SchedulerState()
@@ -74,6 +82,9 @@ class DeskScheduler:
         self.state.open_positions = sorted(self.orchestrator.open_exposure())
         self.state.pending_reconciliation = [
             r.order_id for r in self.coordinator.pending_reconciliation()]
+        if self.armazem is not None:
+            self.armazem.salvar(self.tenant_id, "mesa", dict(self.state.__dict__))
+            return
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.state_path.with_suffix(".tmp")
         tmp.write_text(self.state.to_json())      # escrita atômica

@@ -137,3 +137,75 @@ class TestNoServico:
         texto = c.get("/publico/legacy").text
         assert "chave-secreta-xyz" not in texto and "gsk-secreta" not in texto
         assert "saldo" not in texto.lower().split("o_que_nao_mostramos")[0]
+
+
+class TestMudancaDeServidor:
+    """Servidor provisório: o dono precisa levar tudo embora pelo navegador."""
+
+    def _app(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("ACCESS_PASSWORD", "s3nh4")
+        monkeypatch.setenv("DATA_DIR", str(tmp_path))
+        import service.app as m
+        importlib.reload(m)
+        m._FAILS.clear()
+        m._DESKS.clear()
+        return m, TestClient(m.app), {"Authorization": "Bearer s3nh4"}
+
+    def test_export_carries_everything_that_matters(self, tmp_path, monkeypatch):
+        m, c, h = self._app(tmp_path, monkeypatch)
+        c.post("/v1/config", headers=h, json={"vars": {"GROQ_API_KEY": "gsk-x"}})
+        c.get("/v1/desk/status", headers=h)
+        d = c.get("/v1/mudanca/exportar", headers=h).json()
+        assert d["formato"] == "dz23.mudanca/1"
+        assert d["configuracao"]["GROQ_API_KEY"] == "gsk-x"
+        assert "SEGREDOS" in d["aviso"]          # avisa o que está levando
+
+    def test_import_restores_on_a_fresh_server(self, tmp_path, monkeypatch):
+        from decimal import Decimal as D
+
+        from tradingagents.desk.learning import Desfecho
+        from tradingagents.desk.models import utcnow as agora
+        m, c, h = self._app(tmp_path, monkeypatch)
+        c.post("/v1/config", headers=h, json={"vars": {"GROQ_API_KEY": "gsk-antigo"}})
+        c.get("/v1/desk/status", headers=h)
+        mem = m._DESKS["legacy"]["memoria"]
+        for _ in range(12):
+            mem.registrar(Desfecho("trend_following", "tendencia_alta", "BTC/USDT",
+                                   D("0.02"), agora(), 0.8))
+        pacote = c.get("/v1/mudanca/exportar", headers=h).json()
+
+        # "servidor novo": outro diretório, tudo zerado
+        novo = tmp_path / "servidor-novo"
+        monkeypatch.setenv("DATA_DIR", str(novo))
+        importlib.reload(m)
+        m._FAILS.clear()
+        m._DESKS.clear()
+        c2 = TestClient(m.app)
+        r = c2.post("/v1/mudanca/importar", headers=h, json=pacote)
+        assert r.status_code == 200
+        assert any("aprendizado" in x for x in r.json()["restaurado"])
+        cfg = c2.get("/v1/config", headers=h).json()["config"]
+        assert cfg["GROQ_API_KEY"]["set"] is True
+        aprend = c2.get("/v1/desk/aprendizado", headers=h).json()
+        linha = next(e for e in aprend["estrategias"]
+                     if e["estrategia"] == "trend_following")
+        assert linha["operacoes"] == 12          # o histórico atravessou
+
+    def test_unknown_package_is_refused(self, tmp_path, monkeypatch):
+        m, c, h = self._app(tmp_path, monkeypatch)
+        r = c.post("/v1/mudanca/importar", headers=h, json={"formato": "outro"})
+        assert r.status_code == 422
+
+    def test_importing_twice_does_not_duplicate(self, tmp_path, monkeypatch):
+        m, c, h = self._app(tmp_path, monkeypatch)
+        c.get("/v1/desk/status", headers=h)
+        pacote = c.get("/v1/mudanca/exportar", headers=h).json()
+        pacote["aprendizado"] = {"desfechos": [
+            {"estrategia": "breakout", "regime": "tendencia_alta",
+             "instrumento": "BTC/USDT", "retorno": "0.01",
+             "fechado_em": "2026-09-01T00:00:00+00:00", "forca_do_sinal": 0.5}]}
+        c.post("/v1/mudanca/importar", headers=h, json=pacote)
+        c.post("/v1/mudanca/importar", headers=h, json=pacote)
+        d = c.get("/v1/desk/aprendizado", headers=h).json()
+        linha = next(e for e in d["estrategias"] if e["estrategia"] == "breakout")
+        assert linha["operacoes"] == 1

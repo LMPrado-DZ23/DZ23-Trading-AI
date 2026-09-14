@@ -52,6 +52,7 @@
 <button class="btn secondary" onclick="aprendizado()">O que aprenderam</button>
 <button class="btn secondary" onclick="viabilidade()">Isso dá lucro?</button>
 <button class="btn secondary" onclick="verAlertas()">Alertas</button>
+<button class="btn secondary" onclick="exportarTudo()">Exportar tudo (mudar de servidor)</button>
 <button class="btn secondary" onclick="doBackup()">Gerar backup</button>
 <button class="btn secondary" onclick="liveStatus()">Dinheiro real: posso?</button>
 <button class="btn danger" onclick="paradaEmergencia()" style="background:#c0392b;color:#fff">PARADA DE EMERGÊNCIA</button>
@@ -151,5 +152,12 @@ async function verAlertas(){const r=await api('/v1/alertas');if(!r.ok)return toa
 $('deskMsg').innerHTML=(d.ativos.length?d.ativos.map(a=>`<div class="${a.severidade==='urgente'?'bad':'warn'}"><b>${escapeHtml(a.titulo)}</b><br>${escapeHtml(a.detalhe)}<br><small>➡️ ${escapeHtml(a.acao)}</small></div>`).join('')
 :'<div class="ok">Nada exige sua atenção agora.</div>')
 +(d.canal_configurado?'':'<div class="muted">Sem canal de aviso configurado — os alertas só aparecem aqui. '+escapeHtml(d.como_configurar)+'</div>')}
+async function exportarTudo(){const r=await api('/v1/mudanca/exportar');
+if(!r.ok)return toast('falhou','bad');
+const blob=new Blob([JSON.stringify(r.data,null,2)],{type:'application/json'});
+const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+a.download='dz23-mudanca-'+(r.data.tenant_id||'agencia')+'.json';a.click();
+URL.revokeObjectURL(a.href);
+toast('Arquivo baixado. Contém SEGREDOS: guarde como uma senha.','warn')}
 function escapeHtml(value){return String(value??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}boot();verSignup();
 </script></body></html>
