@@ -143,10 +143,15 @@ class TestCrashDepoisDeEnviarComRespostaAmbigua:
         # 4. e uma ordem nova é RECUSADA antes da reconciliação. A intenção
         #    é construída ANTES do restore para que a recusa venha do portão,
         #    não de um veto de reserva duplicada.
+        # Reenvio de uma ordem RESTAURADA passa pelo caminho único: a
+        # recusa tem de vir do portão, não de validação de tipo.
         from tradingagents.desk.execution import ExecutionRefused
-        restaurada = list(coord2.orders.values())[0]
+        from tradingagents.desk.intents import ExecutionIntent, Kind, Side
+        nova = ExecutionIntent(kind=Kind.ENTRY, side=Side.BUY,
+                               instrument="BTC/USDT", quantity=Decimal("1"),
+                               agent_id="trader-trend", account="a")
         with pytest.raises(ExecutionRefused, match="reconcilia"):
-            coord2.submit(restaurada)
+            coord2.submit_intent(nova)
 
         # --- reconciliação: a corretora diz que a ordem existe e preencheu ---
         def consultar(client_order_id):

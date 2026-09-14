@@ -420,8 +420,15 @@ class TestEstadoFinanceiroSobreviveAoReinicio:
             "posicoes": {}, "caixa": "1000", "reservas": []})
         assert info["exige_reconciliacao"] is True
         assert "ord-7" in info["pendencias"]
+        # intenção VÁLIDA: assim a recusa prova o PORTÃO, não uma validação
+        # de tipo — usar object() como atalho escondia qual regra atuava
+        from decimal import Decimal as _D
+
+        from tradingagents.desk.intents import ExecutionIntent as _EI, Kind, Side
+        ei = _EI(kind=Kind.ENTRY, side=Side.BUY, instrument="BTC/USDT",
+                 quantity=_D("1"), agent_id="t", account="a")
         with pytest.raises(ExecutionRefused, match="reconciliação pendente"):
-            coord.submit(object())
+            coord.submit_intent(ei)
 
     def test_open_position_from_previous_run_also_blocks(self):
         coord = self._coord()

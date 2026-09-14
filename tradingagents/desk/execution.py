@@ -21,7 +21,7 @@ from decimal import Decimal
 from enum import Enum
 
 from .ledger import Ledger
-from .models import Action, DeskMandate, MandateError, Mode, OrderIntent, utcnow
+from .models import DeskMandate, MandateError, Mode, OrderIntent, utcnow
 
 
 class OrderState(str, Enum):
@@ -541,65 +541,79 @@ class ExecutionCoordinator:
         self.motivo_bloqueio = ""
         self.posicoes_restauradas = {}
 
-    def submit(self, intent: OrderIntent) -> OrderRecord:
+    # ================================================== CAMINHO ÚNICO
+    def submit_intent(self, ei) -> OrderRecord:
+        """ÚNICO caminho de execução. Entrada e saída passam por aqui.
+
+        A ordem das etapas é a mesma para os dois lados, e é deliberada:
+        1. idempotência (um reenvio legítimo precisa ser reconhecido antes
+           de validações de estado que já mudaram);
+        2. mandato;
+        3. portão de reconciliação;
+        4. autorização específica do lado;
+        5. envio;
+        6. timeout ambíguo -> transição canônica;
+        7. fills individualizados.
+        """
+        from .intents import Kind, Side
+        coid = ei.client_order_id or f"{ei.kind.value}-{ei.instrument}-{len(self.orders) + 1}"
+        fingerprint = ei.fingerprint()
+
+        # 1. IDEMPOTÊNCIA
+        existente = self._by_key.get(coid)
+        if existente:
+            rec = self.orders[existente]
+            if rec.fingerprint and rec.fingerprint != fingerprint:
+                raise IdempotencyConflict(
+                    f"client_order_id {coid} já existe com conteúdo diferente: "
+                    "reaproveitar silenciosamente enviaria uma ordem que você "
+                    "não pediu")
+            return rec
+
+        # 2. MANDATO — igual nos dois lados
+        try:
+            self.mandate.assert_active(instrument=ei.instrument)
+        except MandateError as exc:
+            raise ExecutionRefused(f"mandato inativo: {exc}") from None
+
+        # 3. PORTÃO — UNKNOWN bloqueia risco novo, venda ou compra
         if self.reconciliacao_pendente:
             raise ExecutionRefused(
-                "reconciliação pendente: nenhuma exposição nova até conferir "
-                f"com a corretora ({self.motivo_bloqueio})")
-        if intent.mode is Mode.LIVE and not self.mandate.live_authorized:
-            raise ExecutionRefused(
-                "ordem em LIVE sem autorização ativa no mandato")
-        fp = fingerprint(intent)
-        known = self._by_key.get(intent.idempotency_key)
-        if known:
-            rec = self.orders[known]
-            if rec.fingerprint != fp:
-                raise IdempotencyConflict(
-                    "mesma chave idempotente com conteúdo diferente")
-            return rec                      # retry legítimo: devolve a MESMA ordem
-        try:
-            intent.assert_sendable(worker_id=self.worker_id, mandate=self.mandate)
-        except MandateError as exc:
-            raise ExecutionRefused(str(exc)) from exc
+                "reconciliação pendente: o estado real é desconhecido "
+                f"({self.motivo_bloqueio})")
 
-        rec = OrderRecord(order_id=f"ord-{len(self.orders) + 1}", intent=intent,
-                          state=OrderState.APPROVED, fingerprint=fp)
-        self.orders[rec.order_id] = rec
-        self._by_key[intent.idempotency_key] = rec.order_id
+        # 4. AUTORIZAÇÃO POR LADO — o que muda entre comprar e vender está
+        #    declarado aqui, não espalhado por dois caminhos.
+        if ei.side is Side.SELL:
+            self._autorizar_saida(ei)
 
-        rec.state = OrderState.SUBMITTING
-        self.ledger.reserve(intent.reservation.amount, ref=rec.order_id)
-        side = "buy" if intent.action is Action.BUY else "sell"
+        rec = self._novo_registro(ei, coid, fingerprint)
+
+        # 5. ENVIO
         try:
-            result = self.broker.submit(intent.idempotency_key,
-                                        intent.reservation.instrument, side,
-                                        intent.reservation.quantity,
-                                        **({"final_state": intent.provenance}
-                                           if intent.provenance else {}))
+            resultado = self.broker.submit(
+                coid, ei.instrument, ei.side.value, ei.quantity,
+                **({"final_state": ei.provenance} if ei.provenance else {}))
         except BrokerTimeout:
-            # Ambíguo: pode ter chegado. Nada de retry cego, nada de liberar,
-            # e NOVO RISCO fica bloqueado até reconciliar.
+            # 6. AMBÍGUO — mesma transição canônica para os dois lados
             self.marcar_incerta(
-                rec, f"ordem {intent.idempotency_key} em estado ambíguo: "
-                     "pode ter sido recebida pela corretora")
-            rec.note = "timeout no envio — exige reconciliação"
+                rec, f"{ei.descricao()} em estado ambíguo: pode ter sido "
+                     "recebida pela corretora")
             return rec
         except Exception as exc:
             rec.state = OrderState.REJECTED
             rec.note = f"{type(exc).__name__}: {exc}"[:200]
-            self.ledger.release(intent.reservation.amount, ref=rec.order_id)
-            self.risk.release(intent.reservation.reservation_id)
+            if ei.kind is Kind.ENTRY:
+                self._liberar_reserva_de(rec)
+            self.oms_version += 1
             return rec
-        rec.external_id = result.get("id")
+
+        rec.external_id = resultado.get("id") or ""
         rec.state = OrderState.ACKNOWLEDGED
         self.oms_version += 1
-        # ACK NÃO É EXECUÇÃO. A resposta do envio confirma o ciclo de vida da
-        # ordem; os efeitos econômicos vêm dos TRADES. Antes, o id da ORDEM
-        # era usado como identificador de execução e `filled` cumulativo
-        # entrava como delta: dois fills da mesma ordem seriam contados como
-        # um, e um segundo relatório cumulativo somaria em cima do anterior.
-        for fill in self._fills_da_resposta(result):
-            self.aplicar_fill(rec, side=rec.lado or "buy", **fill)
+        # 7. FILLS individualizados: ACK não é execução
+        for fill in self._fills_da_resposta(resultado):
+            self.aplicar_fill(rec, side=ei.side.value, **fill)
         return rec
 
     @staticmethod
@@ -608,7 +622,7 @@ class ExecutionCoordinator:
 
         Sem trades individualizados não se inventa um fill sintético a partir
         do acumulado: a ordem fica como ACK e os efeitos econômicos virão da
-        consulta de execuções (fetch_order_fills) ou do evento da corretora.
+        consulta de execuções.
         """
         trades = result.get("trades") or result.get("fills") or []
         saida = []
@@ -616,16 +630,108 @@ class ExecutionCoordinator:
             fid = t.get("id") or t.get("fill_id") or t.get("tradeId")
             if not fid:
                 continue        # execução sem identidade não é contabilizável
+            taxa = t.get("fee")
             saida.append({"fill_id": str(fid),
                           "quantidade": Decimal(str(t.get("amount")
                                                     or t.get("quantity") or 0)),
                           "preco": Decimal(str(t.get("price") or 0)),
-                          "taxa": Decimal(str((t.get("fee") or {}).get("cost")
-                                              if isinstance(t.get("fee"), dict)
-                                              else t.get("fee") or 0))})
+                          "taxa": Decimal(str(taxa.get("cost") if isinstance(taxa, dict)
+                                              else taxa or 0))})
         return [f for f in saida if f["quantidade"] > 0]
 
-    # -- eventos -------------------------------------------------------
+    def _autorizar_saida(self, ei) -> None:
+        """Regras que só valem para VENDA. Declaradas, não implícitas."""
+        proprio = self.ledger.lot_quantity(ei.instrument, ei.agent_id)
+        privilegiado = ei.agent_id in self.PODEM_FECHAR_DE_TERCEIROS
+        disponivel = (self.ledger.position_quantity(ei.instrument)
+                      if privilegiado else proprio)
+        if disponivel <= 0:
+            agregada = self.ledger.position_quantity(ei.instrument)
+            if agregada > 0 and not privilegiado:
+                raise ExecutionRefused(
+                    f"{ei.agent_id} não tem lote aberto em {ei.instrument} "
+                    f"(a posição de {agregada} pertence a outro agente)")
+            raise ExecutionRefused(
+                f"nenhuma posição conhecida em {ei.instrument}: saída "
+                "automática recusada. Posição aberta fora do sistema precisa "
+                "ser adotada por reconciliação antes de ser encerrada")
+        if ei.quantity > disponivel:
+            raise ExecutionRefused(
+                f"saída de {ei.quantity} maior que o lote disponível "
+                f"({disponivel}) em {ei.instrument} para {ei.agent_id}")
+
+    @staticmethod
+    def _montar_registro(*, order_id: str, state, instrument: str, side: str,
+                         quantity: Decimal, client_order_id: str,
+                         fingerprint: str = "", agent_id: str = "",
+                         reservation_id: str = "", provenance=None,
+                         cost_basis_ref: Decimal = Decimal("0"),
+                         filled_qty: Decimal = Decimal("0"),
+                         avg_price: Decimal = Decimal("0"),
+                         fees: Decimal = Decimal("0"), external_id: str = "",
+                         note: str = "", seen_fills=None,
+                         execution_intent=None) -> OrderRecord:
+        """ÚNICO construtor de OrderRecord — usado pelo envio e pelo restore.
+
+        Dois construtores independentes é como campos passam a existir num
+        caminho e faltar no outro; foi assim que ordens restauradas ficaram
+        sem `client_order_id` e quebraram idempotência.
+        """
+        rec = OrderRecord.__new__(OrderRecord)
+        rec.order_id = order_id
+        rec.intent = None
+        rec.state = state
+        rec.filled_qty = filled_qty
+        rec.avg_price = avg_price
+        rec.fees = fees
+        rec.external_id = external_id
+        rec.fingerprint = fingerprint
+        rec.note = note
+        rec.seen_fills = set(seen_fills or ())
+        rec.instrument = instrument
+        rec.side = side
+        rec.quantity = quantity
+        rec.provenance = provenance
+        rec._client_order_id = client_order_id
+        rec.agent_id = agent_id
+        rec.reservation_id = reservation_id
+        rec.cost_basis_ref = cost_basis_ref
+        rec.execution_intent = execution_intent
+        return rec
+
+    def _novo_registro(self, ei, coid: str, fingerprint: str) -> OrderRecord:
+        rec = self._montar_registro(
+            order_id=f"ord-{len(self.orders) + 1}", state=OrderState.SUBMITTING,
+            instrument=ei.instrument, side=ei.side.value, quantity=ei.quantity,
+            client_order_id=coid, fingerprint=fingerprint,
+            agent_id=ei.agent_id, reservation_id=ei.reservation_id,
+            provenance=ei.provenance, cost_basis_ref=ei.cost_basis_ref,
+            execution_intent=ei)
+        self.orders[rec.order_id] = rec
+        self._by_key[coid] = rec.order_id
+        self.oms_version += 1
+        return rec
+
+    def submit(self, intent: OrderIntent) -> OrderRecord:
+        """ADAPTADOR de entrada. Valida o contrato do mandato/worker e
+        delega ao caminho único. Sem lógica de execução própria."""
+        from .intents import from_order_intent
+        if not hasattr(intent, "assert_sendable"):
+            raise ExecutionRefused(
+                f"objeto {type(intent).__name__} não é uma OrderIntent "
+                "autorizada pelo risco")
+        intent.assert_sendable(worker_id=self.worker_id, mandate=self.mandate)
+        if intent.mode is Mode.LIVE and not self.mandate.live_authorized:
+            raise ExecutionRefused(
+                "ordem em LIVE sem autorização ativa no mandato")
+        ei = from_order_intent(intent)
+        rec = self.submit_intent(ei)
+        # A intenção original fica acessível enquanto o processo vive; o
+        # estado durável não depende dela.
+        if rec.intent is None:
+            rec.intent = intent
+        return rec
+
     def apply_fill(self, order_id: str, *, fill_id: str, quantity: Decimal,
                    price: Decimal, fee: Decimal = Decimal("0")) -> OrderRecord:
         """ALIAS ESTRITO de `aplicar_fill`. Não tem lógica própria.
@@ -647,138 +753,42 @@ class ExecutionCoordinator:
                        price: Decimal, cost_basis: Decimal, agent_id: str,
                        fee: Decimal = Decimal("0"), client_order_id: str = "",
                        provenance: dict | None = None) -> dict:
-        """Encerra posição PELO OMS — saída é ordem financeira como entrada.
+        """ADAPTADOR de saída. Constrói a intenção e delega ao caminho único.
 
-        Antes isto chamava broker.submit direto: sem OrderRecord, sem estado
-        durável, sem idempotência, e o timeout devolvia um dicionário solto
-        que morria com o processo. Era a segunda porta de dinheiro do
-        sistema, e a auditoria cobrou quatro vezes.
+        `price` e `fee` são referências do chamador: o preço de execução vem
+        da CORRETORA, não daqui.
         """
-        coid = client_order_id or f"exit-{instrument}-{len(self.orders) + 1}"
-        fingerprint = (f"exit|{instrument}|{quantity}|{cost_basis}|{agent_id}|"
-                       f"{self.mandate.account}")
-        # IDEMPOTÊNCIA PRIMEIRO: um reenvio da MESMA saída precisa ser
-        # reconhecido antes de qualquer validação de estado. Depois da
-        # primeira venda a posição já é zero, e validar antes faria o retry
-        # legítimo ser recusado — empurrando o operador a criar outra ordem.
-        existente = self._by_key.get(coid)
-        if existente:
-            rec = self.orders[existente]
-            if rec.fingerprint and rec.fingerprint != fingerprint:
-                raise IdempotencyConflict(
-                    f"client_order_id {coid} já existe com conteúdo diferente: "
-                    "reaproveitar silenciosamente enviaria uma ordem que você "
-                    "não pediu")
-            return {"estado": rec.state.value, "client_order_id": coid,
-                    "order_id": rec.order_id, "reaproveitada": True}
-
-        if quantity <= 0:
-            raise ExecutionRefused("quantidade de saída precisa ser positiva")
-
-        # PORTÃO: com reconciliação pendente não se sabe qual é a posição
-        # real. Vender no escuro pode virar posição VENDIDA sem querer.
-        if self.reconciliacao_pendente:
-            raise ExecutionRefused(
-                "reconciliação pendente: a posição real é desconhecida, então "
-                "nenhuma saída automática é enviada. Reconcilie primeiro "
-                f"({self.motivo_bloqueio})")
-
-        # MANDATO: a saída não pode ter menos verificação que a entrada.
-        # Instrumento fora do mandato, mandato revogado ou vencido param aqui,
-        # antes de qualquer contato com a corretora.
+        from .intents import IntentInvalid, exit_intent
         try:
-            # assert_active já cobre revogação, validade e instrumento fora
-            # do mandato — usar o contrato existente em vez de reimplementar.
-            self.mandate.assert_active(instrument=instrument)
-        except MandateError as exc:
-            raise ExecutionRefused(f"mandato inativo: {exc}") from None
-        # A autorização LIVE não é verificada aqui de novo: assert_active()
-        # acima já recusa mandato em LIVE sem autorização ativa. Duplicar a
-        # checagem daria falsa sensação de cobertura — o teste de mutação
-        # mostrou que a linha extra não decidia nada.
+            ei = exit_intent(instrument=instrument, quantity=quantity,
+                             agent_id=agent_id, account=self.mandate.account,
+                             cost_basis=cost_basis,
+                             client_order_id=client_order_id,
+                             provenance=provenance,
+                             mandate_version=getattr(self.mandate, "version", 1))
+        except IntentInvalid as exc:
+            raise ExecutionRefused(str(exc)) from None
 
-        # TAMANHO: só se vende o que se tem. Posição desconhecida ou zero
-        # NÃO autoriza venda: em spot isso viraria venda a descoberto —
-        # exposição na direção oposta, sem ninguém autorizar. E cost_basis é
-        # informação contábil, não prova de que existe ativo na corretora.
-        # O que autoriza a saída é o LOTE DO PRÓPRIO AGENTE, não a posição
-        # agregada: com dois agentes no mesmo instrumento, usar o agregado
-        # deixava um fechar o lote do outro.
-        proprio = self.ledger.lot_quantity(instrument, agent_id)
-        privilegiado = agent_id in self.PODEM_FECHAR_DE_TERCEIROS
-        conhecida = (self.ledger.position_quantity(instrument) if privilegiado
-                     else proprio)
-        # Posição zero e venda maior que a posição são recusas distintas com
-        # mensagens distintas — a segunda também cobriria o caso zero, mas a
-        # primeira explica ao operador o que realmente aconteceu.
-        if conhecida <= 0:
-            agregada = self.ledger.position_quantity(instrument)
-            if agregada > 0 and not privilegiado:
-                raise ExecutionRefused(
-                    f"{agent_id} não tem lote aberto em {instrument} (a "
-                    f"posição de {agregada} pertence a outro agente)")
-            raise ExecutionRefused(
-                f"nenhuma posição conhecida em {instrument}: saída automática "
-                "recusada. Posição aberta fora do sistema precisa ser adotada "
-                "por reconciliação antes de ser encerrada")
-        if quantity > conhecida:
-            raise ExecutionRefused(
-                f"saída de {quantity} maior que o lote disponível "
-                f"({conhecida}) em {instrument} para {agent_id}")
+        antes = len(self.orders)
+        rec = self.submit_intent(ei)
+        reaproveitada = len(self.orders) == antes
 
-
-
-        rec = OrderRecord.__new__(OrderRecord)
-        rec.order_id = f"ord-{len(self.orders) + 1}"
-        rec.intent = None
-        rec.state = OrderState.SUBMITTING
-        rec.filled_qty = Decimal("0")
-        rec.avg_price = Decimal("0")
-        rec.fees = Decimal("0")
-        rec.external_id = ""
-        rec.fingerprint = fingerprint
-        rec.note = ""
-        rec.seen_fills = set()
-        rec.instrument = instrument
-        rec.side = "sell"
-        rec.quantity = quantity
-        rec.provenance = provenance
-        rec._client_order_id = coid
-        rec.agent_id = agent_id
-        rec.reservation_id = ""
-        rec.cost_basis_ref = cost_basis
-        self.orders[rec.order_id] = rec
-        self._by_key[coid] = rec.order_id
-        self.oms_version += 1
-
-        try:
-            result = self.broker.submit(coid, instrument, "sell", quantity,
-                                        **({"final_state": provenance}
-                                           if provenance else {}))
-        except BrokerTimeout:
-            # AMBÍGUO: a corretora pode ter recebido. Nada de reenvio cego, e
-            # o registro fica DURÁVEL para a reconciliação encontrar.
-            self.marcar_incerta(
-                rec, f"saída {coid} em estado incerto: pode ter executado")
-            return {"estado": "incerto", "client_order_id": coid,
+        if rec.state is OrderState.UNKNOWN_RECONCILIATION_REQUIRED:
+            return {"estado": "incerto", "client_order_id": rec.client_order_id,
                     "order_id": rec.order_id,
                     "motivo": "timeout na saída — reconciliar"}
-        except Exception as exc:
-            rec.state = OrderState.REJECTED
-            rec.note = f"{type(exc).__name__}: {exc}"[:200]
-            self.oms_version += 1
-            return {"estado": "rejeitada", "client_order_id": coid,
+        if rec.state is OrderState.REJECTED:
+            return {"estado": "rejeitada", "client_order_id": rec.client_order_id,
                     "order_id": rec.order_id, "motivo": rec.note}
-
-        rec.external_id = result.get("id") or ""
-        rec.state = OrderState.ACKNOWLEDGED
-        for fill in self._fills_da_resposta(result):
-            self.aplicar_fill(rec, side="sell", **fill)
-        realizado = self.ledger.attribution().get(agent_id, Decimal("0"))
-        return {"estado": rec.state.value, "client_order_id": coid,
-                "order_id": rec.order_id, "preco": str(rec.avg_price),
-                "quantidade": str(rec.filled_qty),
-                "resultado": str(realizado)}
+        saida = {"estado": rec.state.value,
+                 "client_order_id": rec.client_order_id,
+                 "order_id": rec.order_id, "preco": str(rec.avg_price),
+                 "quantidade": str(rec.filled_qty),
+                 "resultado": str(self.ledger.attribution().get(
+                     agent_id, Decimal("0")))}
+        if reaproveitada:
+            saida["reaproveitada"] = True
+        return saida
 
     def request_cancel(self, order_id: str) -> OrderRecord:
         rec = self.orders[order_id]
@@ -1034,27 +1044,22 @@ class ExecutionCoordinator:
             estado = OrderState(od["estado"])
         except (KeyError, ValueError):
             return None
-        rec = OrderRecord.__new__(OrderRecord)
-        rec.order_id = od.get("order_id", "")
-        rec.intent = None
-        rec.state = estado
-        rec.filled_qty = Decimal(str(od.get("filled") or 0))
-        rec.avg_price = Decimal(str(od.get("preco_medio") or 0))
-        rec.fees = Decimal(str(od.get("fees") or 0))
-        rec.external_id = od.get("external_id", "")
-        rec.fingerprint = od.get("fingerprint", "")
-        rec.note = od.get("nota", "")
-        rec._client_order_id = od.get("client_order_id", "")
-        rec.agent_id = od.get("agente", "")
-        rec.reservation_id = od.get("reserva_id", "")
-        rec.seen_fills = set(od.get("fills_vistos") or [])
-        rec.instrument = od.get("instrumento", "")
-        rec.side = od.get("lado", "")
-        rec.quantity = Decimal(str(od.get("quantidade") or 0))
-        rec.provenance = od.get("procedencia")
         ref = od.get("custo_referencia")
-        rec.cost_basis_ref = Decimal(str(ref)) if ref else Decimal("0")
-        return rec
+        return self._montar_registro(
+            order_id=od.get("order_id", ""), state=estado,
+            instrument=od.get("instrumento", ""), side=od.get("lado", ""),
+            quantity=Decimal(str(od.get("quantidade") or 0)),
+            client_order_id=od.get("client_order_id", ""),
+            fingerprint=od.get("fingerprint", ""),
+            agent_id=od.get("agente", ""),
+            reservation_id=od.get("reserva_id", ""),
+            provenance=od.get("procedencia"),
+            cost_basis_ref=Decimal(str(ref)) if ref else Decimal("0"),
+            filled_qty=Decimal(str(od.get("filled") or 0)),
+            avg_price=Decimal(str(od.get("preco_medio") or 0)),
+            fees=Decimal(str(od.get("fees") or 0)),
+            external_id=od.get("external_id", ""), note=od.get("nota", ""),
+            seen_fills=od.get("fills_vistos") or [])
 
     def pending_reconciliation(self) -> list[OrderRecord]:
         return [r for r in self.orders.values() if r.needs_reconciliation]
