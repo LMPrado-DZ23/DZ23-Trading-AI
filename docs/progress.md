@@ -280,3 +280,67 @@ git diff --check: passou
 ### Bloqueio externo
 
 Para publicar a mudança do workflow, o usuário precisa usar uma credencial/token com permissão de workflows no repositório ou aplicar manualmente o diff preparado.
+
+## Ciclo 15 — correção dos achados críticos da auditoria
+
+### Objetivo
+
+Corrigir os achados CRITICAL/HIGH de segurança e aceitação identificados pelas auditorias independentes.
+
+### Implementado
+
+O modo CCXT Live foi removido estruturalmente: `CCXTBridge` aceita somente testnet e o endpoint legado retorna 410 sem flag de reativação. A frase Live foi removida da configuração editável e deixa de ser retornada pela API. O KillSwitch agora persiste estado com escrita atômica, sobrevive a reinício e o reset executa reconciliação server-side; sem provider remoto, o resultado é `UNKNOWN` e o reset permanece bloqueado. O monitor não compara mais o ledger Paper consigo mesmo: a ausência de provider remoto é explicitamente `UNKNOWN`.
+
+O ExecutionRouter rejeita request incompatível com a decisão aprovada. A API valida datas de calendário, o onboarding declara FastAPI/Uvicorn/CCXT em `pyproject.toml`, e a UI remove controles Live e botões de ordem legados. O backup operacional deixou de incluir `config.json` e chaves.
+
+### Arquivos alterados
+
+`tradingagents/brokers/ccxt_bridge.py`, `tradingagents/execution/kill_switch.py`, `tradingagents/execution/router.py`, `service/app.py`, `service/static/index.html`, `scripts/backup_data.py`, `scripts/smoke_agency_api.py`, `pyproject.toml`, `docs/OPERATIONS-USER-READY.md` e testes de segurança.
+
+### Testes executados
+
+```text
+ruff seletivo: passou
+compileall: passou
+35 testes focados: passaram
+smoke_agency_api.py: passou
+922 testes completos passaram
+2 testes ignorados
+71 subtestes passaram
+```
+
+### Resultado
+
+Os dois achados CRITICAL de Live/bypass foram corrigidos e cobertos por regressão. Achados HIGH remanescentes incluem ledger financeiro incompleto, persistência distribuída, RBAC, TLS do deployment, alertas duráveis, hardening de restore/container e validação MT5 Demo real.
+
+### Riscos restantes
+
+A auditoria independente precisa ser repetida. MT5 Demo real e Docker permanecem dependências externas. O lint estrito histórico ainda precisa de triagem, e a UI ainda requer uma auditoria completa de acessibilidade/escape/erro.
+
+### Próximo ciclo
+
+Executar nova suíte, consolidar auditoria de verificação e corrigir achados HIGH internos restantes antes de candidate completion.
+
+## Ciclo 16 — regressão de segurança e estado financeiro Paper
+
+### Objetivo
+
+Retestar as correções críticas e fortalecer o estado financeiro mínimo usado pelo Risk Engine.
+
+### Implementado
+
+O Paper Ledger agora persiste equity inicial e PnL realizado, deriva margem disponível, margem usada, exposição bruta/líquida e drawdown do conjunto de posições, e calcula PnL ao fechar posição. Foi adicionado teste de compra, fechamento e PnL realizado.
+
+### Testes executados
+
+```text
+ruff seletivo: passou
+compileall: passou
+35 testes críticos passaram
+9 testes do ledger/segurança passaram
+smoke_agency_api.py: passou
+```
+
+### Riscos restantes
+
+Ainda falta integrar um provider remoto real ao worker e acionar bloqueio/alerta operacional de forma configurável, completar persistência distribuída, RBAC/TLS/container hardening, acessibilidade/escape do Floor e repetir a auditoria independente.

@@ -5,9 +5,8 @@ Regras (decisão do Prado, dono do sistema):
   Kraken, Gate.io, KuCoin, Mercado Bitcoin, Bitget) via CCXT.
 - MODO TESTNET: padrão; exchange sem testnet real ⇒ recusa (nunca degrada
   silenciosamente para live).
-- MODO LIVE (dinheiro real): existe e funciona, mas SÓ nasce com a frase de
-  autorização explícita do dono em LIVE_TRADING_CONFIRM — a confirmação é
-  DELE, não do software. Sem a frase exata, live recusa nascer.
+- MODO LIVE (dinheiro real): removido nesta branch segura; nenhuma configuração
+  pode criar um cliente com endpoints reais.
 - TODO envio de ordem passa OBRIGATORIAMENTE por assert_secure_for_capital
   (consumidor selado do Gate B) ANTES de qualquer chamada de rede.
 - Idempotência: clientOrderId determinístico derivado do job — retry NUNCA
@@ -57,21 +56,11 @@ class CCXTBridge:
             "TRADINGAGENTS_BROKER_JOURNAL", "/data/broker-journal.jsonl"))
 
         # --- fail-closed ANTES de qualquer objeto de rede existir ---
-        if mode not in ("testnet", "live"):
+        if mode != "testnet":
             raise BrokerSecurityError(
-                "TRADINGAGENTS_BROKER_MODE deve ser 'testnet' ou 'live' "
+                "TRADINGAGENTS_BROKER_MODE deve ser 'testnet'; modo live removido "
                 f"(recebido: {mode!r}).")
         self.mode = mode
-        if mode == "live":
-            confirm = (env.get("LIVE_TRADING_CONFIRM") or "").strip()
-            if confirm != LIVE_CONFIRM_PHRASE:
-                raise BrokerSecurityError(
-                    "Modo LIVE exige a frase exata de autorização do dono em "
-                    f"LIVE_TRADING_CONFIRM: '{LIVE_CONFIRM_PHRASE}'. Sem ela, "
-                    "dinheiro real não entra em jogo.")
-            if not (self.api_key and self.api_secret):
-                raise BrokerSecurityError(
-                    "Modo LIVE exige EXCHANGE_API_KEY e EXCHANGE_API_SECRET.")
         if self.exchange_name not in EXCHANGE_ALIASES:
             raise BrokerSecurityError(
                 f"exchange {self.exchange_name!r} fora da linha DZ23 "
@@ -94,7 +83,6 @@ class CCXTBridge:
                     "para as demais, o modo live (com a frase de autorização) "
                     "é o único caminho — nunca degrado silenciosamente.")
             self._ex.set_sandbox_mode(True)
-        # live: endpoints reais, sem sandbox — autorizado pela frase acima.
 
     # ------------------------------------------------------------------
     @staticmethod

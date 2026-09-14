@@ -61,7 +61,7 @@ curl -X POST http://127.0.0.1:8000/v1/execution/kill-switch \
 
 ## Backup e restore
 
-O backup inclui apenas os arquivos operacionais permitidos:
+O backup inclui apenas os arquivos operacionais permitidos e **não inclui `config.json` nem chaves de API**:
 
 ```bash
 python3 scripts/backup_data.py backup ./data ./backups/dz23-$(date -u +%Y%m%dT%H%M%SZ).tar.gz

@@ -5,7 +5,7 @@ import tarfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-FILES = ("config.json", "jobs.db", "agency-events.jsonl", "execution-events.jsonl", "paper-state.json", "shadow-state.json")
+FILES = ("jobs.db", "agency-events.jsonl", "execution-events.jsonl", "paper-state.json", "shadow-state.json", "kill-switch.json")
 
 
 def backup(data_dir: Path, destination: Path) -> Path:

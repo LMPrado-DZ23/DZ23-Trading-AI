@@ -35,7 +35,7 @@ assert engage.status_code == 200 and engage.json()["enabled"] is True
 blocked = client.post("/v1/execution/paper", headers=headers, json={"decision_id": "blocked", "strategy_id": "smoke-strategy", "instrument_id": "BTCUSDT", "side": "BUY", "entry_price": "100", "stop_loss": "98", "take_profit": "105", "risk_amount": "10", "risk_pct_equity": "0.001", "quantity": "1", "confidence": "0.8", "evidence_ids": ["smoke-evidence"], "bid": "99.9", "ask": "100.1", "last": "100"})
 assert blocked.status_code == 423
 reset = client.post("/v1/execution/kill-switch", headers=headers, json={"action": "reset", "actor": "smoke", "reconciliation_ok": True})
-assert reset.status_code == 200 and reset.json()["enabled"] is False
+assert reset.status_code == 423
 shadow = client.post("/v1/execution/shadow", headers=headers, json={"client_order_id": "smoke-shadow", "instrument_id": "BTCUSDT", "side": "BUY", "quantity": "1", "price": "100", "bid": "99.9", "ask": "100.1", "last": "100"})
 assert shadow.status_code == 200 and shadow.json()["orders_sent"] == 0
 assert client.get("/v1/execution/shadow", headers=headers).json()["trades"] >= 1

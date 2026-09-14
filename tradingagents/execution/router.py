@@ -44,6 +44,9 @@ class ExecutionRouter:
         current = now or datetime.now(timezone.utc)
         self.kill_switch.assert_allowed()
         self.metrics.inc("execution.attempts")
+        if (request.instrument_id != decision.instrument_id or request.account_id != decision.account_id or request.side is not decision.side or request.quantity != decision.quantity or request.stop_loss != decision.stop_loss or request.take_profit != decision.take_profit):
+            self.metrics.inc("execution.request_mismatch")
+            raise PermissionError("request não corresponde à decisão aprovada")
         risk = self.risk_engine.evaluate(decision, portfolio, snapshot, now=current)
         self._publish("risk.decision.created", decision.run_id, decision.decision_id, {"status": risk.status.value, "reason_codes": risk.reason_codes, "risk_decision_id": risk.risk_decision_id})
         if risk.status is not RiskStatus.APPROVE:

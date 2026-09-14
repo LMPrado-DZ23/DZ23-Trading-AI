@@ -1,11 +1,12 @@
 """Marco broker CCXT: fail-closed, gate incontornável, idempotência, redação."""
-import json
 import pytest
 
 from tradingagents.brokers.ccxt_bridge import (
-    BrokerSecurityError, CCXTBridge, EXCHANGE_ALIASES,
+    EXCHANGE_ALIASES,
+    BrokerSecurityError,
+    CCXTBridge,
 )
-from tradingagents.gates import InsecureTransportError, MARK_KEY, MARK_SCHEMA
+from tradingagents.gates import MARK_KEY, MARK_SCHEMA, InsecureTransportError
 
 
 def _env(**kw):
@@ -52,36 +53,10 @@ class TestFailClosed:
             CCXTBridge(env=_env(TRADINGAGENTS_EXCHANGE=ex),
                        journal_path=tmp_path / "j.jsonl")
 
-    def test_live_without_owner_phrase_refuses(self, tmp_path):
-        with pytest.raises(BrokerSecurityError, match="LIVE_TRADING_CONFIRM"):
+    def test_live_is_structurally_removed(self, tmp_path):
+        with pytest.raises(BrokerSecurityError, match="modo live removido"):
             CCXTBridge(env=_env(TRADINGAGENTS_BROKER_MODE="live"),
                        journal_path=tmp_path / "j.jsonl")
-        with pytest.raises(BrokerSecurityError):
-            CCXTBridge(env=_env(TRADINGAGENTS_BROKER_MODE="live",
-                                LIVE_TRADING_CONFIRM="autorizo"),
-                       journal_path=tmp_path / "j.jsonl")
-
-    @pytest.mark.parametrize("ex", sorted(EXCHANGE_ALIASES))
-    def test_live_with_owner_phrase_boots_ALL_nine_exchanges(self, ex, tmp_path):
-        from tradingagents.brokers.ccxt_bridge import LIVE_CONFIRM_PHRASE
-        b = CCXTBridge(env=_env(TRADINGAGENTS_EXCHANGE=ex,
-                                TRADINGAGENTS_BROKER_MODE="live",
-                                LIVE_TRADING_CONFIRM=LIVE_CONFIRM_PHRASE),
-                       journal_path=tmp_path / "j.jsonl")
-        st = b.status()
-        assert st["mode"] == "live" and st["sandbox"] is False
-
-    def test_gate_still_mandatory_in_live(self, tmp_path):
-        from tradingagents.brokers.ccxt_bridge import LIVE_CONFIRM_PHRASE
-        b = CCXTBridge(env=_env(TRADINGAGENTS_BROKER_MODE="live",
-                                LIVE_TRADING_CONFIRM=LIVE_CONFIRM_PHRASE),
-                       journal_path=tmp_path / "j.jsonl")
-        called = {"n": 0}
-        b._ex.create_order = lambda *a, **k: called.__setitem__("n", 1)
-        with pytest.raises(InsecureTransportError):
-            b.submit_order({}, job_id="j", symbol="BTC/USDT", side="buy",
-                           amount=0.001)
-        assert called["n"] == 0
 
     @pytest.mark.parametrize("ex", ["binance", "bybit", "okx", "gateio", "coinbase"])
     def test_testnet_capable_exchanges_boot_in_sandbox(self, ex, tmp_path):

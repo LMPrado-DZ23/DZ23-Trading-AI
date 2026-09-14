@@ -45,10 +45,16 @@ AUDIT_LOG = AuditLog(DATA / "execution-events.jsonl")
 EVENT_BUS = EventBus(AUDIT_LOG)
 PAPER_ADAPTER = PaperAdapter(state_path=DATA / "paper-state.json")
 SHADOW_ADAPTER = ShadowAdapter(state_path=DATA / "shadow-state.json")
-KILL_SWITCH = KillSwitch()
+KILL_SWITCH = KillSwitch(DATA / "kill-switch.json")
 METRICS = MetricsRegistry()
 EXECUTION_ROUTER = ExecutionRouter(risk_engine=RiskEngine(), audit_log=AUDIT_LOG, event_bus=EVENT_BUS, kill_switch=KILL_SWITCH, metrics=METRICS)
-PAPER_RECONCILIATION = ReconciliationMonitor(PAPER_ADAPTER.reconciliation_snapshot, PAPER_ADAPTER.reconciliation_snapshot)
+
+
+def remote_reconciliation_snapshot() -> dict:
+    raise RuntimeError("provider remoto de reconciliação não configurado")
+
+
+PAPER_RECONCILIATION = ReconciliationMonitor(PAPER_ADAPTER.reconciliation_snapshot, remote_reconciliation_snapshot)
 SUPERVISOR = WorkerSupervisor()
 SUPERVISOR.add("paper-reconciliation", PAPER_RECONCILIATION.run_once, interval_seconds=60)
 for _agent_id, _desk, _role in (
@@ -72,9 +78,9 @@ ALLOWED_KEYS = [
     "OPENROUTER_API_KEY", "OPENAI_COMPATIBLE_API_KEY",
     "FRED_API_KEY", "ALPHA_VANTAGE_API_KEY",
     "TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
-    "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET", "LIVE_TRADING_CONFIRM",
+    "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET",
 ]
-SECRETish = tuple(k for k in ALLOWED_KEYS if k.endswith(("_KEY", "_SECRET")))
+SECRETish = tuple(k for k in ALLOWED_KEYS if k.endswith(("_KEY", "_SECRET")) or k == "LIVE_TRADING_CONFIRM")
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 bearer = HTTPBearer(auto_error=False)
@@ -275,7 +281,12 @@ async def set_cfg(req: Request, _=Depends(auth)):
 async def new_job(req: Request, _=Depends(auth)):
     b = await req.json()
     t, d = str(b.get("ticker", "")).strip().upper(), str(b.get("trade_date", "")).strip()
-    if not t or len(d) != 10: raise HTTPException(422, "ticker e trade_date (AAAA-MM-DD) obrigatórios")
+    if not t or len(d) != 10:
+        raise HTTPException(422, "ticker e trade_date (AAAA-MM-DD) obrigatórios")
+    try:
+        datetime.strptime(d, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(422, "trade_date deve ser uma data válida no formato AAAA-MM-DD") from None
     idem = req.headers.get("Idempotency-Key") or uuid.uuid4().hex
     with db() as c:
         row = c.execute("SELECT id FROM jobs WHERE idem=?", (idem,)).fetchone()
@@ -322,8 +333,7 @@ def broker_status(_=Depends(auth)):
     try:
         from tradingagents.brokers.ccxt_bridge import CCXTBridge
         b = CCXTBridge(env=env, journal_path=str(DATA / "broker-journal.jsonl"))
-        return {"ready": True, **b.status(),
-                "nota": ("ordens serão REAIS" if b.mode=="live" else "ordens de mentira (testnet)")}
+        return {"ready": True, **b.status(), "nota": "ordens de teste (testnet); modo live removido"}
     except Exception as e:
         return {"ready": False, "erro": f"{type(e).__name__}: {e}"[:400]}
 
@@ -332,8 +342,7 @@ def broker_status(_=Depends(auth)):
 async def broker_order(req: Request, _=Depends(auth)):
     """EXECUTA uma ordem (testnet ou live conforme configuração) amarrada a
     um job concluído — a decisão analisada é o que se opera."""
-    if os.environ.get("LEGACY_BROKER_ORDER_ENABLED", "false").lower() != "true":
-        raise HTTPException(410, "endpoint legado bloqueado: use /v1/execution/paper ou o ExecutionRouter governado")
+    raise HTTPException(410, "endpoint legado permanentemente removido: use /v1/execution/paper ou o ExecutionRouter governado")
     b = await req.json()
     jid = str(b.get("job_id", "")).strip()
     symbol = str(b.get("symbol", "")).strip().upper()
@@ -500,7 +509,11 @@ async def execution_kill_switch(req: Request, _=Depends(auth)):
     if action == "engage":
         state = KILL_SWITCH.engage(str(body.get("reason", "bloqueio administrativo")), actor=str(body.get("actor", "api")))
     elif action == "reset":
-        state = KILL_SWITCH.reset(actor=str(body.get("actor", "api")), reconciliation_ok=bool(body.get("reconciliation_ok", False)))
+        report = PAPER_RECONCILIATION.run_once()
+        try:
+            state = KILL_SWITCH.reset(actor=str(body.get("actor", "api")), reconciliation_ok=report.is_safe)
+        except PermissionError as exc:
+            raise HTTPException(423, str(exc)) from exc
     else:
         raise HTTPException(422, "action deve ser engage ou reset")
     return {"enabled": state.enabled, "reason": state.reason, "changed_at": state.changed_at.isoformat(), "actor": state.actor}

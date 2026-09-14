@@ -14,6 +14,8 @@ class PaperAdapter:
     def __init__(self, *, account_id: str = "paper-account", starting_equity: Decimal = Decimal("100000"), slippage_bps: Decimal = Decimal("0"), state_path: str | Path | None = None):
         self.account_id = account_id
         self.equity = starting_equity
+        self.starting_equity = starting_equity
+        self.realized_pnl = Decimal("0")
         self.slippage_bps = slippage_bps
         self.state_path = Path(state_path) if state_path else None
         self.orders: dict[str, OrderAck] = {}
@@ -32,11 +34,12 @@ class PaperAdapter:
     def get_portfolio(self, account_id: str) -> PortfolioSnapshot:
         if account_id != self.account_id:
             raise ValueError("conta paper desconhecida")
+        gross = sum((position.average_price * position.quantity for position in self.positions.values()), Decimal("0"))
         return PortfolioSnapshot(
             snapshot_id=f"portfolio-{uuid4().hex}", account_id=self.account_id,
-            equity=self.equity, balance=self.equity, used_margin=Decimal("0"),
-            available_margin=self.equity, daily_pnl=Decimal("0"), drawdown_pct=Decimal("0"),
-            gross_exposure=Decimal("0"), net_exposure=Decimal("0"),
+            equity=self.equity, balance=self.equity, used_margin=gross,
+            available_margin=max(self.equity - gross, Decimal("0")), daily_pnl=self.realized_pnl, drawdown_pct=max((self.starting_equity - self.equity) / self.starting_equity * Decimal("100"), Decimal("0")),
+            gross_exposure=gross, net_exposure=sum((position.average_price * position.quantity * (Decimal("1") if position.side is Side.BUY else Decimal("-1") ) for position in self.positions.values()), Decimal("0")),
             positions=tuple(self.positions.values()), captured_at=datetime.now(timezone.utc),
         )
 
@@ -67,6 +70,8 @@ class PaperAdapter:
             avg = ((position.average_price * position.quantity) + (fill_price * request.quantity)) / qty
             self.positions[request.instrument_id] = Position(position.position_id, self.account_id, request.instrument_id, position.side, qty, avg)
         elif position:
+            closed = min(position.quantity, request.quantity)
+            self.realized_pnl += (fill_price - position.average_price) * closed * (Decimal("1") if position.side is Side.BUY else Decimal("-1"))
             remaining = position.quantity - request.quantity
             if remaining > 0:
                 self.positions[request.instrument_id] = Position(position.position_id, self.account_id, request.instrument_id, position.side, remaining, position.average_price)
@@ -114,6 +119,8 @@ class PaperAdapter:
         payload = {
             "account_id": self.account_id,
             "equity": str(self.equity),
+            "starting_equity": str(self.starting_equity),
+            "realized_pnl": str(self.realized_pnl),
             "slippage_bps": str(self.slippage_bps),
             "orders": {key: {**value.__dict__} if hasattr(value, "__dict__") else {"order_id": value.order_id, "client_order_id": value.client_order_id, "status": value.status.value, "accepted_quantity": str(value.accepted_quantity), "filled_quantity": str(value.filled_quantity), "average_price": str(value.average_price) if value.average_price is not None else None, "created_at": value.created_at.isoformat(), "message": value.message} for key, value in self.orders.items()},
             "positions": {key: {"position_id": value.position_id, "account_id": value.account_id, "instrument_id": value.instrument_id, "side": value.side.value, "quantity": str(value.quantity), "average_price": str(value.average_price), "unrealized_pnl": str(value.unrealized_pnl), "realized_pnl": str(value.realized_pnl)} for key, value in self.positions.items()},
@@ -130,6 +137,8 @@ class PaperAdapter:
         if data.get("account_id") != self.account_id:
             raise ValueError("estado Paper pertence a outra conta")
         self.equity = Decimal(data.get("equity", str(self.equity)))
+        self.starting_equity = Decimal(data.get("starting_equity", str(self.starting_equity)))
+        self.realized_pnl = Decimal(data.get("realized_pnl", "0"))
         self.slippage_bps = Decimal(data.get("slippage_bps", str(self.slippage_bps)))
         self.orders = {key: OrderAck(item["order_id"], item["client_order_id"], OrderStatus(item["status"]), Decimal(item["accepted_quantity"]), Decimal(item["filled_quantity"]), Decimal(item["average_price"]) if item.get("average_price") is not None else None, datetime.fromisoformat(item["created_at"]), item.get("message", "")) for key, item in data.get("orders", {}).items()}
         self.positions = {key: Position(item["position_id"], item["account_id"], item["instrument_id"], Side(item["side"]), Decimal(item["quantity"]), Decimal(item["average_price"]), Decimal(item.get("unrealized_pnl", "0")), Decimal(item.get("realized_pnl", "0"))) for key, item in data.get("positions", {}).items()}
