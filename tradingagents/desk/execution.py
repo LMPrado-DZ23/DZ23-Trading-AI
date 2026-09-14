@@ -234,6 +234,7 @@ class ExecutionCoordinator:
         self.ultimo_relatorio: dict | None = None
         # Preenchida pelo serviço/adaptador quando há corretora real.
         self.capacidades = CAPACIDADES_DESCONHECIDAS
+        self._pendencias_de_migracao: list[str] = []
         self.ordens_restauradas: list = []
         self.posicoes_restauradas: dict = {}
         # PORTÃO DE RECONCILIAÇÃO. Enquanto ligado, nenhum risco novo sai.
@@ -617,19 +618,21 @@ class ExecutionCoordinator:
                 # efetivamente travado no livro: o excedente sai do CAIXA.
                 # Debitar RESERVED além do travado deixaria a conta negativa
                 # e, mais tarde, a devolução tentaria criar dinheiro.
-                travado = self.ledger.reserved_cash()
+                rid = reserva["reservation_id"]
+                travado = self.ledger.reserved_cash(rid)
                 da_reserva = min(custo_real, travado) if travado > 0 else Decimal("0")
                 self.ledger.fill_buy(instrumento, quantidade, preco, taxa,
                                      reserved=da_reserva, ref=rec.order_id,
-                                     agent_id=rec.agente)
+                                     agent_id=rec.agente, reservation_id=rid)
                 sobra = Decimal(str(resultado.get("sobra") or 0))
                 if sobra > 0:
                     # Parte reservada e não usada volta ao caixa — limitada ao
                     # que o livro realmente travou, pelo mesmo motivo do fill:
                     # devolver o não travado seria criar dinheiro.
-                    devolvivel = min(sobra, self.ledger.reserved_cash())
+                    devolvivel = min(sobra, self.ledger.reserved_cash(rid))
                     if devolvivel > 0:
-                        self.ledger.release(devolvivel, ref=rec.order_id)
+                        self.ledger.release(devolvivel, ref=rec.order_id,
+                                            reservation_id=rid)
                 deficit = Decimal(str(resultado.get("deficit") or 0))
                 if deficit > 0:
                     # A corretora JÁ executou: não se desfaz o fill. Registra
@@ -715,10 +718,11 @@ class ExecutionCoordinator:
         # o que não foi travado criaria dinheiro; então devolve-se o que
         # existe e a diferença fica registrada como divergência, em vez de
         # sumir ou estourar.
-        travado = self.ledger.reserved_cash()
+        travado = self.ledger.reserved_cash(reservation_id)
         devolver = min(restante, travado)
         if devolver > 0:
-            self.ledger.release(devolver, ref=order_id or reservation_id)
+            self.ledger.release(devolver, ref=order_id or reservation_id,
+                                reservation_id=reservation_id)
         if devolver < restante:
             self.risk.registrar_divergencia_de_cobertura(
                 reservation_id, faltante=restante - devolver)
@@ -817,7 +821,8 @@ class ExecutionCoordinator:
             viva = self.risk.reserva(ei.reservation_id)
             dura = viva.hard_reserved_amount if viva else ei.reserved_amount
             if dura > 0:
-                self.ledger.reserve(dura, ref=rec.order_id)
+                self.ledger.reserve(dura, ref=rec.order_id,
+                                    reservation_id=ei.reservation_id)
 
         # 5. ENVIO
         try:
@@ -1283,6 +1288,7 @@ class ExecutionCoordinator:
             from .ledger import Ledger as _L
             self.ledger = _L.from_transactions(
                 lancamentos, currency=doc.get("moeda") or "USDT")
+            self._migrar_reserva_global(doc, self.ledger)
             # UMA referência econômica: o risco precisa ler o livro NOVO.
             # Sem isto ele seguia no antigo — duas verdades sobre o mesmo
             # dinheiro, e o capital investido "ressuscitava" no reinício.
@@ -1324,7 +1330,10 @@ class ExecutionCoordinator:
                 "lancamentos": len(lancamentos or []),
                 "reservas": reservas_restauradas,
                 "caixa": str(self.ledger.cash()),
-                "pendencias": [o["order_id"] for o in pendentes],
+                # O motivo do bloqueio precisa CHEGAR a quem lê o resultado:
+                # ficar só no estado interno esconderia a razão real.
+                "pendencias": ([o["order_id"] for o in pendentes]
+                               + list(self._pendencias_de_migracao)),
                 "abertas": [o["order_id"] for o in abertas],
                 "posicoes": list(posicoes),
                 "exige_reconciliacao": exige}
@@ -1344,6 +1353,38 @@ class ExecutionCoordinator:
         self.liberar_reserva_restante(
             res_id, motivo=f"ordem {rec.state.value}", order_id=rec.order_id)
         return True
+
+    def _migrar_reserva_global(self, doc: dict, livro) -> None:
+        """Snapshot antigo tem a conta global `RESERVED`, sem dono.
+
+        Atribuir esse saldo exige EVIDÊNCIA: só quando há exatamente uma
+        reserva viva e o valor bate. Com duas ou mais, dividir seria inventar
+        contabilidade — então o saldo fica onde está, o portão fecha e a
+        resolução passa a ser explícita.
+        """
+        self._pendencias_de_migracao = []
+        antigo = livro.balances().get("RESERVED", Decimal("0"))
+        if antigo <= 0:
+            return
+        reservas = doc.get("reservas") or []
+        if len(reservas) == 1:
+            unica = reservas[0]
+            valor = Decimal(str(unica.get("remaining_amount")
+                                or unica.get("amount") or 0))
+            if valor == antigo:
+                rid = unica["reservation_id"]
+                livro.transferir_reserva_legada(antigo, rid)
+                return
+            motivo = (f"UNKNOWN_RESERVATION_OWNERSHIP: saldo reservado antigo "
+                      f"({antigo}) não bate com a reserva viva ({valor})")
+            self._pendencias_de_migracao.append(motivo)
+            self.exigir_reconciliacao(motivo)
+            return
+        motivo = (f"UNKNOWN_RESERVATION_OWNERSHIP: saldo reservado antigo "
+                  f"({antigo}) com {len(reservas)} reservas vivas — dividir sem "
+                  "prova seria inventar contabilidade")
+        self._pendencias_de_migracao.append(motivo)
+        self.exigir_reconciliacao(motivo)
 
     def _ordem_de_doc(self, od: dict):
         """Reconstrói um OrderRecord do documento persistido.

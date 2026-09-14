@@ -95,30 +95,61 @@ class Ledger:
         return sum(self.balances().values(), ZERO) == ZERO
 
     # -- operações da mesa ---------------------------------------------
-    def reserve(self, amount: Decimal, ref: str) -> Transaction:
-        return self._post("reserve", [Entry("RESERVED", amount, "capital travado"),
+    @staticmethod
+    def conta_reserva(reservation_id: str = "") -> str:
+        """Conta de capital travado DESTA reserva.
+
+        Uma conta global fazia o livro saber apenas o total: uma ordem podia
+        consumir ou liberar dinheiro de outra, e a conferência por soma não
+        via nada de errado (R1=50/R2=150 soma igual a R1=100/R2=100).
+        """
+        return f"RESERVED:{reservation_id}" if reservation_id else "RESERVED"
+
+    def reserve(self, amount: Decimal, ref: str,
+                reservation_id: str = "") -> Transaction:
+        conta = self.conta_reserva(reservation_id)
+        return self._post("reserve", [Entry(conta, amount, "capital travado"),
                                       Entry(f"CASH:{self.currency}", -amount)], ref)
 
-    def release(self, amount: Decimal, ref: str) -> Transaction:
-        # Liberar mais do que está reservado levaria RESERVED abaixo de zero
+    def release(self, amount: Decimal, ref: str,
+                reservation_id: str = "") -> Transaction:
+        # Liberar mais do que ESTA reserva tem levaria a conta abaixo de zero
         # — dinheiro criado do nada, com o livro ainda "balanceado".
         if amount <= 0:
             raise ValueError(f"liberação precisa ser positiva (recebido {amount})")
-        reservado = self.balances().get("RESERVED", ZERO)
+        conta = self.conta_reserva(reservation_id)
+        reservado = self.balances().get(conta, ZERO)
         if amount > reservado:
             raise ValueError(
-                f"liberação de {amount} maior que o reservado ({reservado})")
+                f"liberação de {amount} maior que o reservado em {conta} "
+                f"({reservado})")
         return self._post("release", [Entry(f"CASH:{self.currency}", amount),
-                                      Entry("RESERVED", -amount, "reserva liberada")], ref)
+                                      Entry(conta, -amount, "reserva liberada")], ref)
+
+    def transferir_reserva_legada(self, amount: Decimal,
+                                  reservation_id: str) -> Transaction:
+        """Move o saldo da conta global antiga para a conta identificada.
+
+        Só é chamada quando há evidência de quem é o dono — nunca por rateio.
+        """
+        return self._post("migracao_reserva",
+                          [Entry(self.conta_reserva(reservation_id), amount,
+                                 "reserva identificada na migração"),
+                           Entry("RESERVED", -amount, "saldo legado movido")],
+                          f"migracao:{reservation_id}")
 
     def fill_buy(self, instrument: str, quantity: Decimal, price: Decimal,
                  fee: Decimal, *, reserved: Decimal, ref: str = "",
-                 agent_id: str = "") -> Transaction:
-        """Compra executada: reserva vira posição; sobra volta ao caixa."""
+                 agent_id: str = "", reservation_id: str = "") -> Transaction:
+        """Compra executada: reserva vira posição; sobra volta ao caixa.
+
+        `reserved` sai da conta DESTA reserva — nunca do bolo comum.
+        """
         cost = (quantity * price).quantize(Decimal("0.00000001"))
         entries = [Entry(f"POSITION:{instrument}", cost, "posição ao custo"),
                    Entry("FEES", fee, "corretagem"),
-                   Entry("RESERVED", -reserved, "reserva consumida")]
+                   Entry(self.conta_reserva(reservation_id), -reserved,
+                         "reserva consumida")]
         rest = reserved - cost - fee
         if rest != ZERO:
             entries.append(Entry(f"CASH:{self.currency}", rest, "sobra devolvida"))
@@ -203,9 +234,18 @@ class Ledger:
         """Dinheiro livre: nem reservado, nem transformado em posição."""
         return self.cash()
 
-    def reserved_cash(self) -> Decimal:
-        """Dinheiro separado para ordens ainda não executadas."""
-        return self.balances().get("RESERVED", ZERO)
+    def reserved_cash(self, reservation_id: str | None = None) -> Decimal:
+        """Dinheiro travado — de UMA reserva, ou o total.
+
+        Sem identificador devolve a soma, que serve para métricas. Toda
+        MOVIMENTAÇÃO, porém, exige a reserva específica: é o que impede uma
+        ordem de gastar a cobertura da outra.
+        """
+        saldos = self.balances()
+        if reservation_id is not None:
+            return saldos.get(self.conta_reserva(reservation_id), ZERO)
+        return sum((s for c, s in saldos.items()
+                    if c == "RESERVED" or c.startswith("RESERVED:")), ZERO)
 
     def invested_cost(self) -> Decimal:
         """Custo de aquisição das posições ABERTAS.

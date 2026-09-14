@@ -399,6 +399,17 @@ class RiskEngine:
             reservado_livro = self.carteira.reserved_cash()
             if reservado_livro < 0:
                 return False, f"reservado negativo no livro ({reservado_livro})"
+            # POR RESERVA, não só pelo total: R1=50/R2=150 soma igual a
+            # R1=100/R2=100, e a conferência agregada passaria com o dinheiro
+            # de uma ordem no lugar da outra.
+            with self._lock:
+                vivas = dict(self._reservations)
+            for rid, reserva in vivas.items():
+                no_livro = self.carteira.reserved_cash(rid)
+                if no_livro != reserva.remaining_amount:
+                    return False, (
+                        f"RESERVATION_LEDGER_MISMATCH reservation_id={rid}: "
+                        f"livro {no_livro} vs risco {reserva.remaining_amount}")
             if reservado_livro != self.reserved_total:
                 return False, (
                     f"reservado divergente: livro {reservado_livro} vs risco "

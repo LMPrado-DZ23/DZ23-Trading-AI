@@ -193,7 +193,9 @@ class TestConsistenciaEntreLivroERisco:
         m, risco, livro, coord = sistema()
         res = reservar(risco)
         enviar(coord, res)
-        livro.release(Decimal("10"), ref="desvio-manual")
+        # o desvio precisa ser na conta DA reserva: não existe mais bolo comum
+        livro.release(Decimal("10"), ref="desvio-manual",
+                      reservation_id=res.reservation_id)
         ok, motivo = risco.capital_state_consistent()
         assert ok is False and "reserv" in motivo.lower()
 
