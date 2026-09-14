@@ -399,3 +399,40 @@ class TestDinheiroRealNoServico:
         html = Path("service/static/index.html").read_text(encoding="utf-8")
         assert "PARADA DE EMERGÊNCIA" in html and "paradaEmergencia()" in html
         assert "liveStatus()" in html
+
+
+class TestRestauracaoDeAmbienteNoJob:
+    """Bug real pego pelo ruff (F821): o finally restaurava uma variável que
+    havia deixado de ser definida — toda falha de análise viraria NameError,
+    escondendo o erro verdadeiro e deixando a chave do inquilino no processo."""
+
+    def test_captura_e_restauracao_estao_no_mesmo_escopo(self):
+        import inspect
+
+        import service.app as m
+        fonte = inspect.getsource(m.run_job)
+        assert "_env_anterior = {" in fonte, "a captura do ambiente sumiu"
+        assert fonte.index("_env_anterior = {") < fonte.index("finally:")
+        assert "os.environ.pop(_k, None)" in fonte
+
+    def test_job_com_falha_nao_deixa_chave_no_processo(self, tmp_path, monkeypatch):
+        import os
+
+        from fastapi.testclient import TestClient
+        m = _load_app(tmp_path, monkeypatch)
+        m._FAILS.clear()
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        c = TestClient(m.app)
+        h = {"Authorization": "Bearer s3nh4"}
+        c.post("/v1/config", headers=h, json={"vars": {
+            "TRADINGAGENTS_LLM_PROVIDER": "groq", "GROQ_API_KEY": "gsk-do-tenant"}})
+        r = c.post("/v1/jobs", headers=h,
+                   json={"ticker": "NVDA", "trade_date": "2026-09-04"})
+        assert r.status_code in (200, 201)
+        import time as _t
+        for _ in range(60):                      # espera o job terminar
+            if os.environ.get("GROQ_API_KEY") is None:
+                break
+            _t.sleep(0.1)
+        assert os.environ.get("GROQ_API_KEY") is None, (
+            "a chave do inquilino ficou no ambiente do processo")

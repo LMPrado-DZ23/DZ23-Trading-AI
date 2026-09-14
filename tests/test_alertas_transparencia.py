@@ -10,9 +10,9 @@ from tradingagents.desk.alerts import Alerta, Notificador, avaliar_estado
 
 
 def estado(**kw):
-    base = dict(pendencias_reconciliacao=[], contabilidade_balanceada=True,
-                perda_hoje=Decimal("0"), limite_perda=Decimal("500"),
-                mesa_deveria_rodar=False, mesa_rodando=False, erros_do_ciclo=0)
+    base = {"pendencias_reconciliacao": [], "contabilidade_balanceada": True,
+                "perda_hoje": Decimal("0"), "limite_perda": Decimal("500"),
+                "mesa_deveria_rodar": False, "mesa_rodando": False, "erros_do_ciclo": 0}
     base.update(kw)
     return avaliar_estado(**base)
 

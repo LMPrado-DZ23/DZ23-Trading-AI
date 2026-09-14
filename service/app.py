@@ -5,6 +5,7 @@ Config vive em /data/config.json (chmod 600), editada PELO PAINEL, aplicada a
 cada job — sem redeploy, sem tocar em env no Coolify. Segredos nunca voltam
 inteiros ao navegador (exibição mascarada)."""
 import asyncio
+import contextlib
 import hmac
 import json
 import os
@@ -37,8 +38,10 @@ from tradingagents.telemetry import AuditLog, EventBus, MetricsRegistry
 from tradingagents.tenancy import AuthError, PostgresTenantStore, Principal, TenantStore
 from tradingagents.workers import WorkerSupervisor
 
-DATA = Path(os.environ.get("DATA_DIR", "/data")); DATA.mkdir(parents=True, exist_ok=True)
-CFG_PATH = DATA / "config.json"; DB = DATA / "jobs.db"
+DATA = Path(os.environ.get("DATA_DIR", "/data"))
+DATA.mkdir(parents=True, exist_ok=True)
+CFG_PATH = DATA / "config.json"
+DB = DATA / "jobs.db"
 HEALTH: dict = {"armazenamento": "?", "avisos": []}
 
 
@@ -349,10 +352,14 @@ def resolve_llm(cfg: dict):
                 raise ValueError(f"Falta a chave {p['key_from']} — pega grátis e cola na aba ⚙️.")
             env["OPENAI_COMPATIBLE_API_KEY"] = key
     else:
-        if prov: conf["llm_provider"] = prov
-        if url: conf["backend_url"] = url
-        if deep: conf["deep_think_llm"] = deep
-        if quick: conf["quick_think_llm"] = quick
+        if prov:
+            conf["llm_provider"] = prov
+        if url:
+            conf["backend_url"] = url
+        if deep:
+            conf["deep_think_llm"] = deep
+        if quick:
+            conf["quick_think_llm"] = quick
     return conf, env
 
 
@@ -375,13 +382,14 @@ def load_cfg(tenant_id: str = "legacy") -> dict:
         cfg = {key: os.environ[key] for key in ALLOWED_KEYS if os.environ.get(key)}
     path = tenant_cfg_path(tenant_id)
     if path.exists():
-        try: cfg.update(json.loads(path.read_text()))
-        except ValueError: pass
+        with contextlib.suppress(ValueError):
+            cfg.update(json.loads(path.read_text()))
     return cfg
 
 def save_cfg(cfg: dict, tenant_id: str = "legacy"):
     path = tenant_cfg_path(tenant_id)
-    path.write_text(json.dumps(cfg, indent=2)); os.chmod(path, 0o600)
+    path.write_text(json.dumps(cfg, indent=2))
+    os.chmod(path, 0o600)
 
 
 def request_tenant(request: Request) -> str:
@@ -391,19 +399,27 @@ def request_tenant(request: Request) -> str:
 def upd(jid, **kw):
     JOB_STORE.update(jid, **kw)
 
-_cancel = set(); _lock = threading.Lock()
+_cancel = set()
+_lock = threading.Lock()
 
 def run_job(jid, ticker, date, tenant_id="legacy"):
     with _lock:  # um job por vez: env é global do processo
         runtime = runtime_for_tenant_id(tenant_id)
-        if jid in _cancel: upd(jid, status="cancelled"); return
+        if jid in _cancel:
+            upd(jid, status="cancelled")
+            return
         upd(jid, status="running")
         try:
             runtime.agency.set_agent_status("market-scanner", "ANALYZING")
             runtime.agency.set_agent_status("strategy-agent", "ANALYZING")
             cfg = load_cfg(tenant_id)
+            # Guardado ANTES de qualquer mutação: o finally restaura isto, e
+            # sem a captura aqui ele estouraria NameError mascarando o erro
+            # real — além de deixar a chave de um inquilino no processo.
+            _env_anterior = {k: os.environ.get(k) for k in ALLOWED_KEYS}
             for k, v in cfg.items():
-                if k in ALLOWED_KEYS and v: os.environ[k] = str(v)
+                if k in ALLOWED_KEYS and v:
+                    os.environ[k] = str(v)
             from tradingagents.default_config import DEFAULT_CONFIG
             from tradingagents.graph.trading_graph import TradingAgentsGraph
             conf = dict(DEFAULT_CONFIG)
@@ -478,20 +494,26 @@ def get_cfg(request: Request, _=Depends(auth)):
     out = {}
     for k in ALLOWED_KEYS:
         v = cfg.get(k, "")
-        if not v: out[k] = {"set": False}
-        elif k in SECRETish: out[k] = {"set": True, "hint": "•••" + str(v)[-4:]}
-        else: out[k] = {"set": True, "value": v}
+        if not v:
+            out[k] = {"set": False}
+        elif k in SECRETish:
+            out[k] = {"set": True, "hint": "•••" + str(v)[-4:]}
+        else:
+            out[k] = {"set": True, "value": v}
     return {"config": out}
 
 @app.post("/v1/config")
 async def set_cfg(req: Request, _=Depends(auth)):
     body = await _json_body(req)
     tenant_id = request_tenant(req)
-    cfg = load_cfg(tenant_id); saved = []
+    cfg = load_cfg(tenant_id)
+    saved = []
     for k, v in (body.get("vars") or {}).items():
         if k in ALLOWED_KEYS and isinstance(v, str) and v.strip():
-            cfg[k] = v.strip(); saved.append(k)
-    if not saved: raise HTTPException(400, "nada para salvar")
+            cfg[k] = v.strip()
+            saved.append(k)
+    if not saved:
+        raise HTTPException(400, "nada para salvar")
     save_cfg(cfg, tenant_id)
     # Configuração que muda a mesa (corretora, feed, capital, limites) exige
     # reconstrução — senão o cliente salva e nada acontece até reiniciar.
@@ -536,14 +558,16 @@ def jobs_health(_=Depends(auth)):
 def get_job(jid: str, request: Request, _=Depends(auth)):
     tenant_id = request_tenant(request)
     result = JOB_STORE.get(jid, tenant_id)
-    if not result: raise HTTPException(404, "job não encontrado")
+    if not result:
+        raise HTTPException(404, "job não encontrado")
     return result
 
 @app.post("/v1/jobs/{jid}/cancel")
 def cancel(jid: str, request: Request, _=Depends(auth)):
     tenant_id = request_tenant(request)
     _cancel.add(jid)
-    if JOB_STORE.status(jid, tenant_id) == "queued": upd(jid, status="cancelled")
+    if JOB_STORE.status(jid, tenant_id) == "queued":
+        upd(jid, status="cancelled")
     return {"ok": True}
 
 

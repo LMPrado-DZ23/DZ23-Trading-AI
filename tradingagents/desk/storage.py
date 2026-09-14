@@ -16,8 +16,38 @@ Decisões:
 """
 from __future__ import annotations
 
+import contextlib
 import json
+import os
+import tempfile
 from pathlib import Path
+
+
+def escrever_json_atomico(caminho: Path, documento: dict) -> None:
+    """Grava JSON sem janela de corrupção e sem corrida entre escritas.
+
+    Um NOME FIXO de temporário (state.tmp) parece inofensivo até duas
+    gravações concorrerem: a primeira consome o arquivo no replace e a
+    segunda não o encontra mais (FileNotFoundError). O temporário aqui é
+    único por escrita, criado no MESMO diretório do destino — requisito para
+    que os.replace seja atômico — e o conteúdo vai ao disco com fsync antes
+    da troca, para que uma queda de energia não deixe arquivo pela metade.
+    """
+    caminho = Path(caminho)
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(caminho.parent),
+                               prefix=f".{caminho.stem}-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(documento, fh, ensure_ascii=False)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, caminho)
+    except BaseException:
+        # temporário órfão não pode ficar entulhando o volume
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
 
 
 class ArmazemDeEstado:
@@ -93,11 +123,7 @@ class ArmazemDeEstado:
             except Exception as exc:
                 self.aviso = (f"falha ao gravar no banco ({type(exc).__name__}); "
                               "gravado em arquivo local")
-        caminho = self._caminho(tenant_id, chave)
-        caminho.parent.mkdir(parents=True, exist_ok=True)
-        tmp = caminho.with_suffix(".tmp")
-        tmp.write_text(json.dumps(documento, ensure_ascii=False))
-        tmp.replace(caminho)              # atômico: nunca meio-arquivo
+        escrever_json_atomico(self._caminho(tenant_id, chave), documento)
         return "arquivo"
 
     def listar(self, tenant_id: str) -> list[str]:
@@ -106,7 +132,7 @@ class ArmazemDeEstado:
                 with self._conectar() as c, c.cursor() as cur:
                     cur.execute("SELECT chave FROM dz23_desk_state WHERE tenant_id=%s",
                                 (tenant_id,))
-                    return sorted(l[0] for l in cur.fetchall())
+                    return sorted(linha[0] for linha in cur.fetchall())
             except Exception:
                 pass
         base = (self.diretorio or Path(".")) / tenant_id
@@ -123,4 +149,4 @@ class ArmazemDeEstado:
                 "aviso": self.aviso}
 
 
-__all__ = ["ArmazemDeEstado"]
+__all__ = ["ArmazemDeEstado", "escrever_json_atomico"]

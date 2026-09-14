@@ -40,7 +40,7 @@ class TestIndicadores:
     def test_sma_and_rsi_match_manual_calculation(self):
         assert sma(serie([1, 2, 3, 4]), 2) == 3.5
         assert rsi(serie([10] * 20)) == 50.0            # sem variação
-        assert rsi(serie([i for i in range(1, 30)])) == 100.0   # só subiu
+        assert rsi(serie(list(range(1, 30)))) == 100.0   # só subiu
 
     def test_short_series_returns_none_instead_of_guessing(self):
         curta = serie([1, 2, 3])
@@ -109,7 +109,7 @@ class TestAprendizado:
 
     def _preencher(self, mem, retorno, n=AMOSTRA_MINIMA, regime=Regime.ALTA,
                    estrategia="trend_following", dias=1):
-        for i in range(n):
+        for _i in range(n):
             mem.registrar(Desfecho(estrategia, regime.value, "BTC/USDT",
                                    Decimal(str(retorno)),
                                    AGORA - timedelta(days=dias), 0.8))

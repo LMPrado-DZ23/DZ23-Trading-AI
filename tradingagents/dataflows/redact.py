@@ -19,6 +19,7 @@ Two complementary strategies, both applied:
 Pure stdlib.
 """
 
+import json as _json
 import os
 import re
 
@@ -54,7 +55,6 @@ _BASIC_RE = re.compile(r"(Basic\s+)[A-Za-z0-9+/=_.~-]+", re.IGNORECASE)
 # are json-decoded before matching, values are consumed to the first
 # UNESCAPED quote -- or to end-of-input when truncated (solves 1+2+3 on
 # fragments). Never both passes on the same text (idempotency).
-import json as _json
 
 _SENSITIVE_KEY_RE = re.compile(
     r"^(?:api[_-]?key|apikey|token|secret|password|authorization)$",

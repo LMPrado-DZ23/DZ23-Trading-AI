@@ -97,10 +97,10 @@ def _response(status, json_body=None, text=""):
 
 class TestFredKeyLeakage:
     def test_http_500_error_has_no_url_or_key(self):
-        with mock.patch.dict(os.environ, {"FRED_API_KEY": SECRET}):
-            with mock.patch.object(fred.requests, "get", return_value=_response(500)):
-                with pytest.raises(ValueError) as exc:
-                    fred._request("series/observations", {"series_id": "DFF"})
+        with mock.patch.dict(os.environ, {"FRED_API_KEY": SECRET}), \
+                mock.patch.object(fred.requests, "get", return_value=_response(500)), \
+                pytest.raises(ValueError) as exc:
+            fred._request("series/observations", {"series_id": "DFF"})
         msg = str(exc.value)
         assert SECRET not in msg
         assert "api_key" not in msg
@@ -120,10 +120,9 @@ class TestFredKeyLeakage:
 
     def test_400_still_surfaces_fred_message(self):
         body = {"error_message": "Bad value for variable series_id."}
-        with mock.patch.dict(os.environ, {"FRED_API_KEY": SECRET}):
-            with mock.patch.object(fred.requests, "get", return_value=_response(400, body)):
-                with pytest.raises(ValueError, match="Bad value for variable"):
-                    fred._request("series/observations", {"series_id": "???"})
+        with mock.patch.dict(os.environ, {"FRED_API_KEY": SECRET}), \
+                mock.patch.object(fred.requests, "get", return_value=_response(400, body)), pytest.raises(ValueError, match="Bad value for variable"):
+                fred._request("series/observations", {"series_id": "???"})
 
     def test_success_path_returns_json(self):
         with mock.patch.dict(os.environ, {"FRED_API_KEY": SECRET}), mock.patch.object(

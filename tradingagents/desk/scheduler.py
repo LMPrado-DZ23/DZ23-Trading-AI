@@ -85,10 +85,10 @@ class DeskScheduler:
         if self.armazem is not None:
             self.armazem.salvar(self.tenant_id, "mesa", dict(self.state.__dict__))
             return
-        self.state_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.state_path.with_suffix(".tmp")
-        tmp.write_text(self.state.to_json())      # escrita atômica
-        tmp.replace(self.state_path)
+        from .storage import escrever_json_atomico
+        # Temporário único por escrita: o laço grava a cada ciclo e duas
+        # gravações concorrentes sobre um .tmp fixo se atropelavam.
+        escrever_json_atomico(self.state_path, dict(self.state.__dict__))
 
     # -- recuperação ---------------------------------------------------
     def recover(self, exchange_lookup=None) -> dict:

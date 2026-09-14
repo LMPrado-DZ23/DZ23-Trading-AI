@@ -1,4 +1,4 @@
-"""Rodada-3 tests: centralized secret redaction (Codex acceptance spec — 
+"""Rodada-3 tests: centralized secret redaction (Codex acceptance spec —
 sentinel in remote body, URL, HTTP reason and chained exception, absent from
 caplog and tool return) and the Fase-0 UntrustedEvidence contract."""
 
@@ -59,11 +59,12 @@ class TestFredRedactionAcceptance:
 
     def test_sentinel_in_remote_body_is_redacted(self, caplog):
         body = f"Bad request for url https://api.stlouisfed.org/x?api_key={SECRET}"
-        with mock.patch.dict(os.environ, {"FRED_API_KEY": SECRET}):
-            with mock.patch.object(fred.requests, "get", return_value=self._resp400(body)):
-                with caplog.at_level(logging.DEBUG):
-                    with pytest.raises(ValueError) as exc:
-                        fred._request("series/observations", {"series_id": "DFF"})
+        with mock.patch.dict(os.environ, {"FRED_API_KEY": SECRET}), \
+                mock.patch.object(fred.requests, "get",
+                                  return_value=self._resp400(body)), \
+                caplog.at_level(logging.DEBUG), \
+                pytest.raises(ValueError) as exc:
+            fred._request("series/observations", {"series_id": "DFF"})
         combined = str(exc.value) + caplog.text
         assert SECRET not in combined
         assert "[REDACTED]" in str(exc.value)
@@ -72,10 +73,9 @@ class TestFredRedactionAcceptance:
         # Key echoed by the remote under a DIFFERENT value than our env
         # (other tenant / rotated key): pattern pass must still mask it.
         body = "denied: api_key=someoneelseskey9876543 is invalid"
-        with mock.patch.dict(os.environ, {"FRED_API_KEY": SECRET}):
-            with mock.patch.object(fred.requests, "get", return_value=self._resp400(body)):
-                with pytest.raises(ValueError) as exc:
-                    fred._request("series/observations", {"series_id": "DFF"})
+        with mock.patch.dict(os.environ, {"FRED_API_KEY": SECRET}), \
+                mock.patch.object(fred.requests, "get", return_value=self._resp400(body)), pytest.raises(ValueError) as exc:
+                fred._request("series/observations", {"series_id": "DFF"})
         assert "someoneelseskey9876543" not in str(exc.value)
 
 
@@ -83,11 +83,11 @@ class TestFredRedactionAcceptance:
 
 class TestUntrustedEvidence:
     def _ev(self, **kw):
-        base = dict(
-            source="reddit:r/stocks", kind="social",
-            content="NVDA to the moon", fetched_at="2026-09-06T10:00:00Z",
-            as_of="2026-09-05",
-        )
+        base = {
+            "source": "reddit:r/stocks", "kind": "social",
+            "content": "NVDA to the moon", "fetched_at": "2026-09-06T10:00:00Z",
+            "as_of": "2026-09-05",
+        }
         base.update(kw)
         return UntrustedEvidence(**base)
 

@@ -15,6 +15,7 @@ Regras que tornam o resultado confiável:
 """
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass, field
 from decimal import Decimal
 
@@ -121,10 +122,8 @@ def validar(trader, closes, instrumento: str, *, exchange: str = "binance",
     """
     for estagio in (AgentStage.VALIDATED, AgentStage.SHADOW, AgentStage.PAPER_ENABLED):
         if trader.spec.stage is not estagio:
-            try:
+            with contextlib.suppress(ValueError):
                 trader.spec.move_to(estagio)
-            except ValueError:
-                pass
 
     resultado = ResultadoValidacao(trader.strategy, instrumento, exchange)
     posicao: tuple[int, Decimal] | None = None

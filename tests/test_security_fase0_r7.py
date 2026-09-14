@@ -25,16 +25,15 @@ class TestOpenAIEnvEndpointResolution:
 
         env = {k: v for k, v in os.environ.items() if not k.endswith("_API_KEY")}
         env["OPENAI_BASE_URL"] = "https://attacker.example.com/v1"
-        with mock.patch.dict(os.environ, env, clear=True):
-            with pytest.raises(UntrustedBackendError):
+        with mock.patch.dict(os.environ, env, clear=True), pytest.raises(UntrustedBackendError):
                 OpenAIClient("gpt-5.6", provider="openai").get_llm()
 
     def test_langchain_env_alias_also_validated(self):
         from tradingagents.llm_clients.openai_client import OpenAIClient
 
-        with mock.patch.dict(os.environ, {"OPENAI_API_BASE": "https://attacker.example.com/v1"}):
-            with pytest.raises(UntrustedBackendError):
-                OpenAIClient("gpt-5.6", provider="openai").get_llm()
+        with mock.patch.dict(os.environ, {"OPENAI_API_BASE": "https://attacker.example.com/v1"}), \
+                pytest.raises(UntrustedBackendError):
+            OpenAIClient("gpt-5.6", provider="openai").get_llm()
 
     def test_conflicting_env_endpoints_rejected(self):
         from tradingagents.llm_clients.openai_client import OpenAIClient
@@ -42,8 +41,7 @@ class TestOpenAIEnvEndpointResolution:
         env = {"OPENAI_BASE_URL": "https://api.openai.com/v1",
                "OPENAI_API_BASE": "https://other.example.com/v1",
                "OPENAI_API_KEY": "sk-x-123456789"}
-        with mock.patch.dict(os.environ, env):
-            with pytest.raises(ValueError, match="Conflicting endpoint env vars"):
+        with mock.patch.dict(os.environ, env), pytest.raises(ValueError, match="Conflicting endpoint env vars"):
                 OpenAIClient("gpt-5.6", provider="openai").get_llm()
 
     def test_validated_env_endpoint_is_passed_explicitly(self):
@@ -82,8 +80,7 @@ class TestAzureEffectiveEndpoint:
         from tradingagents.llm_clients.azure_client import AzureOpenAIClient
 
         env = {k: v for k, v in os.environ.items() if k != "AZURE_OPENAI_ENDPOINT"}
-        with mock.patch.dict(os.environ, env, clear=True):
-            with pytest.raises(ValueError, match="requires an endpoint"):
+        with mock.patch.dict(os.environ, env, clear=True), pytest.raises(ValueError, match="requires an endpoint"):
                 AzureOpenAIClient("gpt-5.6").get_llm()
 
 
@@ -147,8 +144,11 @@ class TestDebateCarriesDerived:
             def invoke(self, p):
                 self.seen.append(str(p))
 
-                class R: pass
-                r = R(); r.content = "bull says"
+                class R:
+                    pass
+
+                r = R()
+                r.content = "bull says"
                 return r
 
         fake = Fake()
@@ -182,8 +182,11 @@ class TestDebateCarriesDerived:
             def invoke(self, p):
                 self.seen.append(str(p))
 
-                class R: pass
-                r = R(); r.content = "risky says"
+                class R:
+                    pass
+
+                r = R()
+                r.content = "risky says"
                 return r
 
         fake = Fake()
@@ -241,7 +244,8 @@ class TestMemorySectionForgery:
 class TestMarkPersistence:
     def test_logged_json_projection_includes_mark(self):
 
-        src = open("tradingagents/graph/trading_graph.py").read()
+        with open("tradingagents/graph/trading_graph.py") as fh:
+            src = fh.read()
         assert '"transport_security": final_state.get("transport_security")' in src
 
     def test_agent_state_declares_the_field(self):

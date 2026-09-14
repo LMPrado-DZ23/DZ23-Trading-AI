@@ -201,10 +201,10 @@ class TestEndToEndFinalDecision:
             return "Investment plan: Overweight. Rationale…"
 
         with mock.patch.object(rm, "invoke_structured_or_freetext",
-                               side_effect=fake_invoke_structured):
-            with mock.patch.object(rm, "bind_structured", side_effect=lambda l, s, n: l):
-                node = rm.create_research_manager(_FakeLLM("plan"))
-                upd = node(state)
+                               side_effect=fake_invoke_structured), \
+                mock.patch.object(rm, "bind_structured", side_effect=lambda llm, s, n: llm):
+            node = rm.create_research_manager(_FakeLLM("plan"))
+            upd = node(state)
         assert "source=agent:Investment Debate" in captured["prompt"]
         state["investment_plan"] = upd.get("investment_plan", "Plan: Overweight.")
 
@@ -212,9 +212,9 @@ class TestEndToEndFinalDecision:
         from tradingagents.agents.trader import trader as tr
 
         with mock.patch.object(tr, "invoke_structured_or_freetext",
-                               side_effect=fake_invoke_structured):
-            with mock.patch.object(tr, "bind_structured", side_effect=lambda l, s, n: l):
-                upd = tr.create_trader(_FakeLLM("x"))(state)
+                               side_effect=fake_invoke_structured), \
+                mock.patch.object(tr, "bind_structured", side_effect=lambda llm, s, n: llm):
+            upd = tr.create_trader(_FakeLLM("x"))(state)
         _assert_data_not_instruction(captured["prompt"])
         state["trader_investment_plan"] = "FINAL TRANSACTION PROPOSAL: **BUY** — sized per plan."
 
@@ -235,10 +235,10 @@ class TestEndToEndFinalDecision:
 
         state["past_context"] = ADVERSARIAL  # poisoned memory attempt
         with mock.patch.object(pm, "invoke_structured_or_freetext",
-                               side_effect=fake_invoke_structured):
-            with mock.patch.object(pm, "bind_structured", side_effect=lambda l, s, n: l):
-                node = pm.create_portfolio_manager(_FakeLLM("d"))
-                node(state)
+                               side_effect=fake_invoke_structured), \
+                mock.patch.object(pm, "bind_structured", side_effect=lambda llm, s, n: llm):
+            node = pm.create_portfolio_manager(_FakeLLM("d"))
+            node(state)
         final_prompt = captured["prompt"]
         _assert_data_not_instruction(final_prompt)
         assert "source=agent:Memory Log" in final_prompt

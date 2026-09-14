@@ -51,7 +51,10 @@ def rsi(valores, n: int = 14) -> float | None:
     if len(v) < n + 1:
         return None
     ganhos, perdas = [], []
-    for antes, depois in zip(v[-n - 1:-1], v[-n:]):
+    # strict=True: as duas fatias têm n elementos por construção (o len acima
+    # garante). Se um dia um índice mudar, isso estoura em vez de truncar em
+    # silêncio e devolver um RSI errado.
+    for antes, depois in zip(v[-n - 1:-1], v[-n:], strict=True):
         d = depois - antes
         ganhos.append(max(d, 0.0))
         perdas.append(max(-d, 0.0))
@@ -67,7 +70,10 @@ def atr_pct(valores, n: int = 14) -> float | None:
     v = _f(valores)
     if len(v) < n + 1:
         return None
-    variacoes = [abs(b - a) / a for a, b in zip(v[-n - 1:-1], v[-n:]) if a]
+    # strict=True pelo mesmo motivo: truncar aqui subestimaria a volatilidade
+    # e, por consequência, o tamanho da posição.
+    variacoes = [abs(b - a) / a
+                 for a, b in zip(v[-n - 1:-1], v[-n:], strict=True) if a]
     return fmean(variacoes) if variacoes else None
 
 

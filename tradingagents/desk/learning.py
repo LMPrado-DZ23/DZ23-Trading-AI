@@ -115,10 +115,8 @@ class MemoriaDeDesempenho:
             return
         if not self.caminho:
             return
-        self.caminho.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.caminho.with_suffix(".tmp")
-        tmp.write_text(json.dumps(payload, ensure_ascii=False))
-        tmp.replace(self.caminho)
+        from .storage import escrever_json_atomico
+        escrever_json_atomico(self.caminho, payload)
 
     # -- aprendizado ---------------------------------------------------
     def registrar(self, desfecho: Desfecho) -> None:

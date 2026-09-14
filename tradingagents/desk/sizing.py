@@ -45,7 +45,9 @@ def correlacao(a: str, b: str) -> float:
 
 def retornos(closes) -> list[float]:
     v = [float(c) for c in closes]
-    return [(b - a) / a for a, b in zip(v[:-1], v[1:]) if a]
+    # strict=True: v[:-1] e v[1:] têm sempre o mesmo tamanho para qualquer
+    # série; a checagem é de graça e protege contra alteração futura.
+    return [(b - a) / a for a, b in zip(v[:-1], v[1:], strict=True) if a]
 
 
 def volatilidade_por_vela(closes) -> float | None:
