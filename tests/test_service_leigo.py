@@ -349,6 +349,16 @@ class TestDominioOficial:
             assert "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" not in texto
 
 
+def _reconciliar_com_corretora_que_confirma(coord):
+    """Corretora que CONFIRMA o estado local: nenhuma ordem viva e as mesmas
+    posições que o livro tem. É o cenário 'tudo bate' — e mesmo ele precisa
+    passar pela reconciliação para gerar evidência."""
+    from decimal import Decimal as _D
+    posicoes = {i: _D(str(d["quantidade"]))
+                for i, d in coord.ledger.open_positions_detail().items()}
+    return coord.reconciliar(lambda coid: None, consultar_posicoes=lambda: posicoes)
+
+
 class TestDinheiroRealNoServico:
     """O caminho de dinheiro real existe e é honesto sobre o que falta."""
 
@@ -392,10 +402,18 @@ class TestDinheiroRealNoServico:
                       json={"frase": "qualquer"}).status_code == 422
         # Liberar exige DUAS condições: a frase E a reconciliação. Só a frase
         # não basta — pode haver ordem ou posição que o sistema desconhece.
-        # Mesa LIMPA: a frase basta, porque não há nada desconhecido.
+        # Mesa LIMPA ainda assim exige reconciliação: sem relatório do
+        # servidor não há evidência, e sem evidência não se libera.
+        sem_relatorio = c.post(
+            "/v1/live/liberar", headers=h,
+            json={"frase": "EU AUTORIZO OPERAR COM DINHEIRO REAL"})
+        assert sem_relatorio.status_code == 409
+        mesa = m._DESKS.get("legacy") or m._desk_boot("legacy")
+        m._DESKS["legacy"] = mesa
+        _reconciliar_com_corretora_que_confirma(mesa["coordinator"])
         limpa = c.post("/v1/live/liberar", headers=h,
                        json={"frase": "EU AUTORIZO OPERAR COM DINHEIRO REAL"})
-        assert limpa.status_code == 200
+        assert limpa.status_code == 200, limpa.text
 
         # Com ordem INCERTA, a liberação é recusada — e nenhuma afirmação do
         # cliente ("reconciliado": true) pode destravar isso.
@@ -422,7 +440,9 @@ class TestDinheiroRealNoServico:
         # Só após a reconciliação concluída no servidor a liberação passa.
         atual = m._DESKS.get("legacy") or m._desk_boot("legacy")
         m._DESKS["legacy"] = atual
-        atual["coordinator"].reconciliacao_concluida("conferido no teste")
+        # Reconciliação REAL do servidor: corretora sem ordens e sem posições.
+        rel = _reconciliar_com_corretora_que_confirma(atual["coordinator"])
+        assert rel["seguro"] is True, rel["divergencias"]
         ok = c.post("/v1/live/liberar", headers=h,
                     json={"frase": "EU AUTORIZO OPERAR COM DINHEIRO REAL"})
         assert ok.status_code == 200, ok.text

@@ -1558,6 +1558,17 @@ def _relatorio_de_reconciliacao(tenant_id: str) -> dict:
                           "não conferidas com a corretora")
     if getattr(coord, "reconciliacao_pendente", False):
         pendencias.append("portão de reconciliação ligado pelo restore")
+    # FRESHNESS: um relatório SAFE antigo não autoriza para sempre. Se o
+    # estado financeiro mudou depois dele, ele deixa de valer.
+    relatorio = getattr(coord, "ultimo_relatorio", None)
+    if relatorio is None:
+        pendencias.append("nenhuma reconciliação foi executada neste estado")
+    elif not relatorio.get("seguro"):
+        pendencias.append("última reconciliação não resultou em SAFE")
+    elif relatorio.get("oms_version") != getattr(coord, "oms_version", 0):
+        pendencias.append(
+            f"relatório é da versão {relatorio.get('oms_version')} e o estado "
+            f"já está na {getattr(coord, 'oms_version', 0)}: reconcilie de novo")
     if not coord.ledger.is_balanced():
         pendencias.append("livro-razão desbalanceado")
     return {"seguro": not pendencias, "pendencias": pendencias}
@@ -1908,7 +1919,14 @@ def desk_reconciliar(request: Request, _=Depends(auth)):
             raise RuntimeError("corretora não expõe consulta por ordem")
         return ponte.fetch_order_by_client_id(client_order_id)
 
-    resultado = coord.reconciliar(consultar if ponte is not None else None)
+    def consultar_posicoes():
+        if ponte is None or not hasattr(ponte, "fetch_positions"):
+            raise RuntimeError("corretora não expõe consulta de posições")
+        return ponte.fetch_positions()
+
+    resultado = coord.reconciliar(
+        consultar if ponte is not None else None,
+        consultar_posicoes=consultar_posicoes if ponte is not None else None)
     return {**resultado,
             "acao": ("portão liberado: pode operar" if resultado["seguro"] else
                      "confira as divergências na corretora antes de operar")}

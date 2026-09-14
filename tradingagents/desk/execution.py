@@ -65,7 +65,22 @@ def fingerprint(intent: OrderIntent) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
+# Estados em que a ordem ainda pode existir e mudar na corretora. TODOS
+# precisam ser conferidos após um reinício: o defeito encontrado pela
+# auditoria era consultar apenas UNKNOWN e declarar SAFE com uma ordem
+# ACKNOWLEDGED restaurada que podia ter sido preenchida no meio-tempo.
+ESTADOS_NAO_TERMINAIS = frozenset({
+    OrderState.SUBMITTING,
+    OrderState.ACKNOWLEDGED,
+    OrderState.PARTIALLY_FILLED,
+    OrderState.CANCEL_PENDING,
+    OrderState.UNKNOWN_RECONCILIATION_REQUIRED,
+})
+
+
 @dataclass
+
+
 class OrderRecord:
     order_id: str
     intent: OrderIntent
@@ -84,7 +99,18 @@ class OrderRecord:
 
     @property
     def needs_reconciliation(self) -> bool:
+        """Ordem cujo destino é DESCONHECIDO para nós.
+
+        Cuidado: isto é mais estreito que 'precisa ser conferida na
+        corretora'. Uma ordem ACKNOWLEDGED restaurada do disco não é
+        'unknown' localmente, mas pode ter sido preenchida enquanto o
+        processo estava morto. Para isso existe `ESTADOS_NAO_TERMINAIS`.
+        """
         return self.state is OrderState.UNKNOWN_RECONCILIATION_REQUIRED
+
+    @property
+    def nao_terminal(self) -> bool:
+        return self.state in ESTADOS_NAO_TERMINAIS
 
     # Registro restaurado do disco não tem `intent` (a intenção é de outro
     # processo). Estas propriedades dão a MESMA leitura nos dois casos — sem
@@ -189,6 +215,10 @@ class ExecutionCoordinator:
         self.orders: dict[str, OrderRecord] = {}
         self.perda_do_dia = Decimal("0")
         self.dia_corrente = ""
+        # Versão do estado financeiro: um relatório SAFE só vale para a
+        # versão em que foi emitido (freshness).
+        self.oms_version = 0
+        self.ultimo_relatorio: dict | None = None
         self.ordens_restauradas: list = []
         self.posicoes_restauradas: dict = {}
         # PORTÃO DE RECONCILIAÇÃO. Enquanto ligado, nenhum risco novo sai.
@@ -203,61 +233,191 @@ class ExecutionCoordinator:
         self.reconciliacao_pendente = True
         self.motivo_bloqueio = motivo
 
-    def reconciliar(self, consultar_corretora=None) -> dict:
-        """Confere o estado local com a CORRETORA e só então libera o portão.
+    def reconciliar(self, consultar_corretora=None, *,
+                    consultar_posicoes=None) -> dict:
+        """Confere o estado local com a CORRETORA. Exchange-first.
 
-        `consultar_corretora(client_order_id)` devolve o que a corretora diz
-        sobre a ordem, ou None se ela não existe lá. Sem essa função não há
-        reconciliação — e o portão permanece fechado, porque "não perguntei"
-        nunca pode virar "está tudo certo".
+        A auditoria encontrou três buracos na versão anterior, todos capazes
+        de declarar SAFE sobre uma mentira:
+        1. só ordens UNKNOWN eram consultadas — uma ACKNOWLEDGED restaurada
+           podia ter sido preenchida enquanto o processo estava morto;
+        2. posições nunca eram comparadas com a corretora, e ainda assim
+           `posicoes_restauradas` era limpo;
+        3. ordem FILLED na corretora só mudava campos do registro: o livro
+           ficava sem a posição e com a reserva presa.
+
+        `ledger.is_balanced()` continua sendo exigido, mas NÃO é prova de
+        igualdade com a corretora — só prova que a aritmética interna fecha.
         """
+        relatorio = {
+            "schema": "dz23.reconciliacao/1",
+            "em": utcnow().isoformat(),
+            "ordens_conferidas": 0, "ordens_status": "UNKNOWN",
+            "posicoes_status": "UNKNOWN", "livro_status": "UNKNOWN",
+            "divergencias": [], "seguro": False,
+        }
         if consultar_corretora is None:
-            return {"seguro": False, "conferidas": 0,
-                    "motivo": "sem acesso à corretora: nada foi conferido",
-                    "divergencias": ["consulta à corretora indisponível"]}
-        divergencias, conferidas = [], 0
+            relatorio["divergencias"].append(
+                "sem acesso à corretora: nada foi conferido")
+            return self._selar(relatorio)
+
+        # --- ORDENS: todas as não terminais, não apenas as UNKNOWN ---
         for rec in list(self.orders.values()):
-            if not rec.needs_reconciliation:
+            if not rec.nao_terminal:
                 continue
             chave = rec.client_order_id or rec.order_id
             try:
                 remota = consultar_corretora(chave)
             except Exception as exc:
-                divergencias.append(
+                relatorio["divergencias"].append(
                     f"{rec.order_id}: consulta falhou ({type(exc).__name__})")
                 continue
-            conferidas += 1
-            if remota is None:
-                # A corretora não conhece a ordem: ela nunca existiu lá.
-                rec.state = OrderState.REJECTED
-                rec.note = "reconciliada: inexistente na corretora"
-                # Ordem RESTAURADA não tem `intent` (é de outro processo).
-                # Sem este caminho, o capital ficava preso para sempre depois
-                # de um reinício — o oposto do bug original, e igualmente ruim.
-                self._liberar_reserva_de(rec)
-                continue
-            estado = str(remota.get("status", "")).lower()
-            if estado in ("closed", "filled"):
-                rec.state = OrderState.FILLED
-                rec.filled_qty = Decimal(str(remota.get("filled") or rec.filled_qty))
-                rec.avg_price = Decimal(str(remota.get("average") or rec.avg_price))
-                rec.external_id = remota.get("id") or rec.external_id
-                rec.note = "reconciliada: preenchida na corretora"
-            elif estado in ("canceled", "cancelled", "rejected", "expired"):
-                rec.state = OrderState.REJECTED
-                rec.note = f"reconciliada: {estado} na corretora"
-            else:
-                divergencias.append(
-                    f"{rec.order_id}: corretora reporta {estado!r} — ainda aberta")
-        restantes = [r.order_id for r in self.orders.values()
-                     if r.needs_reconciliation]
-        seguro = not divergencias and not restantes and self.ledger.is_balanced()
+            relatorio["ordens_conferidas"] += 1
+            self._aplicar_ordem_remota(rec, remota, relatorio)
+
+        restantes = [r.order_id for r in self.orders.values() if r.nao_terminal]
+        if restantes:
+            relatorio["divergencias"].append(
+                f"ordens ainda abertas na corretora: {', '.join(restantes[:5])}")
+        relatorio["ordens_status"] = "MATCHED" if not restantes else "MISMATCH"
+
+        # --- POSIÇÕES: comparação real, não limpeza otimista ---
+        relatorio.update(self._conferir_posicoes(consultar_posicoes, relatorio))
+
+        # --- LIVRO: invariante interno (necessário, não suficiente) ---
+        balanceado = self.ledger.is_balanced()
+        relatorio["livro_status"] = "BALANCED" if balanceado else "IMBALANCED"
+        if not balanceado:
+            relatorio["divergencias"].append("livro-razão desbalanceado")
+        return self._selar(relatorio)
+
+    def _selar(self, relatorio: dict) -> dict:
+        seguro = (not relatorio["divergencias"]
+                  and relatorio["ordens_status"] == "MATCHED"
+                  and relatorio["posicoes_status"] == "MATCHED"
+                  and relatorio["livro_status"] == "BALANCED")
+        relatorio["seguro"] = seguro
+        relatorio["oms_version"] = self.oms_version
         if seguro:
             self.reconciliacao_concluida("conferido com a corretora")
-            self.posicoes_restauradas = {}
-        return {"seguro": seguro, "conferidas": conferidas,
-                "divergencias": divergencias, "ordens_pendentes": restantes,
-                "livro_balanceado": self.ledger.is_balanced()}
+            self.ultimo_relatorio = relatorio
+        else:
+            self.exigir_reconciliacao(
+                "; ".join(relatorio["divergencias"])[:300] or "reconciliação incompleta")
+            self.ultimo_relatorio = relatorio
+        return relatorio
+
+    def _conferir_posicoes(self, consultar_posicoes, relatorio: dict) -> dict:
+        """Compara posição local com a da corretora. Sem a consulta, o
+        status é UNKNOWN — e UNKNOWN não libera nada."""
+        locais = {i: Decimal(str(d["quantidade"]))
+                  for i, d in self.ledger.open_positions_detail().items()}
+        restauradas = {i: Decimal(str(d.get("quantidade") or 0))
+                       for i, d in (self.posicoes_restauradas or {}).items()}
+        for inst, qtd in restauradas.items():
+            locais.setdefault(inst, qtd)
+        if consultar_posicoes is None:
+            if locais:
+                relatorio["divergencias"].append(
+                    "posições locais não puderam ser comparadas com a corretora")
+                return {"posicoes_status": "UNKNOWN"}
+            return {"posicoes_status": "MATCHED"}   # nada local e nada a conferir
+        try:
+            remotas_brutas = consultar_posicoes() or {}
+        except Exception as exc:
+            relatorio["divergencias"].append(
+                f"consulta de posições falhou ({type(exc).__name__})")
+            return {"posicoes_status": "UNKNOWN"}
+        remotas = {i: Decimal(str(q)) for i, q in remotas_brutas.items()
+                   if Decimal(str(q)) != 0}
+        for inst in sorted(set(locais) | set(remotas)):
+            local, remota = locais.get(inst, Decimal("0")), remotas.get(inst, Decimal("0"))
+            if local == remota:
+                continue
+            if local == 0:
+                relatorio["divergencias"].append(
+                    f"POSICAO_ORFA_REMOTA {inst}: corretora tem {remota} e o "
+                    "sistema não conhece essa posição")
+            elif remota == 0:
+                relatorio["divergencias"].append(
+                    f"POSICAO_AUSENTE_REMOTA {inst}: sistema tem {local} e a "
+                    "corretora não — NÃO apagada automaticamente")
+            else:
+                relatorio["divergencias"].append(
+                    f"QUANTIDADE_DIVERGENTE {inst}: local {local} vs corretora {remota}")
+        status = "MATCHED" if not any(
+            d.startswith(("POSICAO_", "QUANTIDADE_"))
+            for d in relatorio["divergencias"]) else "MISMATCH"
+        if status == "MATCHED":
+            self.posicoes_restauradas = {}     # só agora, após comparar
+        return {"posicoes_status": status}
+
+    def _aplicar_ordem_remota(self, rec, remota, relatorio: dict) -> None:
+        """Traz o que a corretora diz para dentro do OMS, do livro e do risco.
+
+        Passa pelo MESMO caminho de fill do fluxo normal — duplicar a lógica
+        contábil aqui seria criar uma segunda verdade.
+        """
+        if remota is None:
+            rec.state = OrderState.REJECTED
+            rec.note = "reconciliada: inexistente na corretora"
+            self._liberar_reserva_de(rec)
+            self.oms_version += 1
+            return
+        estado = str(remota.get("status", "")).lower()
+        if estado in ("closed", "filled"):
+            qtd = remota.get("filled")
+            preco = remota.get("average") or remota.get("price")
+            if qtd is None or preco is None:
+                # Corretora diz "fechada" mas não dá os números: não se
+                # inventa preço nem taxa. Fica incompleto e o portão fecha.
+                relatorio["divergencias"].append(
+                    f"{rec.order_id}: corretora reporta preenchida sem "
+                    "quantidade/preço — RECONCILIACAO_INCOMPLETA")
+                return
+            self._aplicar_fill_reconciliado(
+                rec, Decimal(str(qtd)), Decimal(str(preco)),
+                Decimal(str(remota.get("fee") or 0)),
+                fill_id=str(remota.get("id") or rec.order_id))
+            rec.external_id = remota.get("id") or rec.external_id
+            rec.note = "reconciliada: preenchida na corretora"
+        elif estado in ("canceled", "cancelled", "rejected", "expired"):
+            rec.state = OrderState.REJECTED
+            rec.note = f"reconciliada: {estado} na corretora"
+            self._liberar_reserva_de(rec)   # capital preso é estado incoerente
+            self.oms_version += 1
+        else:
+            relatorio["divergencias"].append(
+                f"{rec.order_id}: corretora reporta {estado!r} — ainda aberta")
+
+    def _aplicar_fill_reconciliado(self, rec, quantidade: Decimal,
+                                   preco: Decimal, taxa: Decimal,
+                                   fill_id: str) -> None:
+        """Aplica fill vindo da reconciliação: OMS + livro + risco, uma vez só."""
+        if fill_id in rec.seen_fills:
+            return                          # idempotente: fill repetido não conta
+        rec.seen_fills.add(fill_id)
+        rec.filled_qty = quantidade
+        rec.avg_price = preco
+        rec.fees = rec.fees + taxa
+        rec.state = OrderState.FILLED
+        reserva = self._reserva_de(rec)
+        if reserva is not None:
+            self.ledger.fill_buy(rec.instrumento, quantidade, preco, taxa,
+                                 reserved=reserva["amount"], ref=rec.order_id,
+                                 agent_id=rec.agente)
+            self.risk.release(reserva["reservation_id"])
+        self.oms_version += 1
+
+    def _reserva_de(self, rec) -> dict | None:
+        if rec.intent is not None:
+            return {"reservation_id": rec.intent.reservation.reservation_id,
+                    "amount": rec.intent.reservation.amount}
+        res_id = rec.reserva_id
+        for doc in self.risk.active_reservations():
+            if doc["reservation_id"] == res_id:
+                return {"reservation_id": res_id, "amount": Decimal(str(doc["amount"]))}
+        return None
 
     def reconciliacao_concluida(self, resultado: str = "conferido") -> None:
         """Só quem comparou com a corretora pode liberar.

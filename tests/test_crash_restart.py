@@ -148,9 +148,12 @@ class TestCrashDepoisDeEnviarComRespostaAmbigua:
             return {"id": "ex-1", "status": "closed", "filled": Decimal("1.5"),
                     "average": Decimal("100")}
 
-        relatorio = coord2.reconciliar(consultar)
-        assert relatorio["conferidas"] == 1
-        assert relatorio["seguro"] is True
+        # A posição também é conferida: a corretora informa 1.5 BTC, que é
+        # exatamente o que o fill reconciliado cria no livro.
+        relatorio = coord2.reconciliar(
+            consultar, consultar_posicoes=lambda: {"BTC/USDT": Decimal("1.5")})
+        assert relatorio["ordens_conferidas"] == 1
+        assert relatorio["seguro"] is True, relatorio["divergencias"]
         # 5. e SÓ agora o portão libera
         assert coord2.reconciliacao_pendente is False
 
@@ -172,8 +175,9 @@ class TestCrashDepoisDeEnviarComRespostaAmbigua:
         coord2.restaurar_estado(doc)
         assert risco2.available == Decimal("850.00")
 
-        relatorio = coord2.reconciliar(lambda coid: None)   # não existe lá
-        assert relatorio["seguro"] is True
+        relatorio = coord2.reconciliar(lambda coid: None,   # não existe lá
+                                       consultar_posicoes=lambda: {})
+        assert relatorio["seguro"] is True, relatorio["divergencias"]
         assert risco2.available == Decimal("1000"), (
             "ordem inexistente na corretora deve devolver o capital")
 
