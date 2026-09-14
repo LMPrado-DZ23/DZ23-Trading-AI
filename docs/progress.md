@@ -429,3 +429,9 @@ A suíte completa em ambiente sem `DATABASE_URL` passou novamente com `928 passe
 O repositório foi preparado para colaboração pública com README atualizado, CONTRIBUTING, SECURITY, CODE_OF_CONDUCT, SUPPORT, NOTICE, templates de issues e pull requests, Dependabot e CI ampliado para branches de feature, compileall, lint, smoke multi-tenant e validação do Compose. A auditoria local não encontrou chaves privadas, tokens reais ou arquivos `.env` de produção rastreados. A suíte completa passou com `928 passed, 2 skipped, 71 subtests passed, 18 warnings`.
 
 A visibilidade do repositório permanece privada até confirmação explícita do proprietário; descrição e tópicos públicos já foram configurados.
+
+## Ciclo 24 — ledger PostgreSQL e gates Classe A
+
+O ledger de jobs passou a usar `JobStore`, com PostgreSQL selecionado automaticamente por `DATABASE_URL` e SQLite mantido apenas para desenvolvimento local. A migração do schema SQLite legado remove a unicidade global de idempotência e a substitui por unicidade `(tenant_id, idem)`. O healthcheck do ledger foi exposto em `/v1/jobs/health`.
+
+Foi criado o documento de gates Classe A, distinguindo evidências locais de validações externas. A suíte completa após a alteração passou com `930 passed, 2 skipped, 71 subtests passed, 18 warnings`. Os smoke tests da API e multi-tenant passaram.

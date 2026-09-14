@@ -8,7 +8,6 @@ import asyncio
 import hmac
 import json
 import os
-import sqlite3
 import threading
 import time
 import traceback
@@ -29,6 +28,7 @@ from tradingagents.domain import (
     TradeDecision,
 )
 from tradingagents.execution import ExecutionRouter, KillSwitch, PaperAdapter, ShadowAdapter
+from tradingagents.job_store import JobStore
 from tradingagents.reconciliation_worker import ReconciliationMonitor
 from tradingagents.risk import RiskEngine
 from tradingagents.telemetry import AuditLog, EventBus, MetricsRegistry
@@ -37,6 +37,7 @@ from tradingagents.workers import WorkerSupervisor
 
 DATA = Path(os.environ.get("DATA_DIR", "/data")); DATA.mkdir(parents=True, exist_ok=True)
 CFG_PATH = DATA / "config.json"; DB = DATA / "jobs.db"
+JOB_STORE = JobStore(DB, os.environ.get("DATABASE_URL"))
 PASSWORD = os.environ.get("ACCESS_PASSWORD", "")
 MULTI_TENANT_ENABLED = os.environ.get("MULTI_TENANT_ENABLED", "false").lower() == "true"
 _TENANT_SIGNING_KEY = os.environ.get("TENANT_TOKEN_SIGNING_KEY")
@@ -304,23 +305,8 @@ def request_tenant(request: Request) -> str:
     principal = getattr(request.state, "principal", None)
     return principal.tenant_id if isinstance(principal, Principal) else "legacy"
 
-def db():
-    c = sqlite3.connect(DB); c.row_factory = sqlite3.Row
-    c.execute("""CREATE TABLE IF NOT EXISTS jobs(
-        id TEXT PRIMARY KEY, idem TEXT UNIQUE, ticker TEXT, trade_date TEXT,
-        status TEXT, error TEXT, decision TEXT, result TEXT,
-        created REAL, updated REAL, tenant_id TEXT NOT NULL DEFAULT 'legacy')""")
-    columns = {row[1] for row in c.execute("PRAGMA table_info(jobs)")}
-    if "tenant_id" not in columns:
-        c.execute("ALTER TABLE jobs ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'legacy'")
-    c.execute("CREATE INDEX IF NOT EXISTS idx_jobs_tenant_created ON jobs(tenant_id, created DESC)")
-    return c
-
 def upd(jid, **kw):
-    kw["updated"] = time.time()
-    with db() as c:
-        c.execute(f"UPDATE jobs SET {','.join(k+'=?' for k in kw)} WHERE id=?",
-                  [*kw.values(), jid])
+    JOB_STORE.update(jid, **kw)
 
 _cancel = set(); _lock = threading.Lock()
 
@@ -413,40 +399,37 @@ async def new_job(req: Request, _=Depends(auth)):
         raise HTTPException(422, "trade_date deve ser uma data válida no formato AAAA-MM-DD") from None
     idem = req.headers.get("Idempotency-Key") or uuid.uuid4().hex
     tenant_id = request_tenant(req)
-    with db() as c:
-        row = c.execute("SELECT id FROM jobs WHERE idem=? AND tenant_id=?", (idem, tenant_id)).fetchone()
-        if row: return {"id": row["id"], "idempotent": True}
-        jid = uuid.uuid4().hex[:16]
-        c.execute("INSERT INTO jobs(id,idem,ticker,trade_date,status,created,updated,tenant_id)"
-                  " VALUES(?,?,?,?,?,?,?,?)", (jid, idem, t, d, "queued", time.time(), time.time(), tenant_id))
+    existing = JOB_STORE.find_idempotent(tenant_id, idem)
+    if existing:
+        return {"id": existing, "idempotent": True}
+    jid = uuid.uuid4().hex[:16]
+    JOB_STORE.insert(job_id=jid, idem=idem, ticker=t, trade_date=d, tenant_id=tenant_id)
     threading.Thread(target=run_job, args=(jid, t, d, tenant_id), daemon=True).start()
     return {"id": jid}
 
 @app.get("/v1/jobs")
 def list_jobs(request: Request, _=Depends(auth)):
     tenant_id = request_tenant(request)
-    with db() as c:
-        rows = c.execute("SELECT id,ticker,trade_date,status,decision,created "
-                         "FROM jobs WHERE tenant_id=? ORDER BY created DESC LIMIT 50", (tenant_id,)).fetchall()
-    return {"jobs": [dict(r) for r in rows]}
+    return {"jobs": JOB_STORE.list(tenant_id)}
+
+
+@app.get("/v1/jobs/health")
+def jobs_health(_=Depends(auth)):
+    return JOB_STORE.healthcheck()
 
 
 @app.get("/v1/jobs/{jid}")
 def get_job(jid: str, request: Request, _=Depends(auth)):
     tenant_id = request_tenant(request)
-    with db() as c:
-        r = c.execute("SELECT * FROM jobs WHERE id=? AND tenant_id=?", (jid, tenant_id)).fetchone()
-    if not r: raise HTTPException(404, "job não encontrado")
-    o = dict(r); o["result"] = json.loads(o["result"]) if o.get("result") else None
-    return o
+    result = JOB_STORE.get(jid, tenant_id)
+    if not result: raise HTTPException(404, "job não encontrado")
+    return result
 
 @app.post("/v1/jobs/{jid}/cancel")
 def cancel(jid: str, request: Request, _=Depends(auth)):
     tenant_id = request_tenant(request)
     _cancel.add(jid)
-    with db() as c:
-        r = c.execute("SELECT status FROM jobs WHERE id=? AND tenant_id=?", (jid, tenant_id)).fetchone()
-    if r and r["status"] == "queued": upd(jid, status="cancelled")
+    if JOB_STORE.status(jid, tenant_id) == "queued": upd(jid, status="cancelled")
     return {"ok": True}
 
 

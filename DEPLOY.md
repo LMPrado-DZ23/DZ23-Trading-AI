@@ -29,7 +29,9 @@ O Compose Enterprise inclui PostgreSQL, Redis e Qdrant além do serviço DZ23. A
 
 O primeiro administrador deve ser criado uma única vez por `POST /v1/auth/bootstrap` com o header `X-Tenant-Bootstrap`. Depois do bootstrap, remova ou rotacione o token. Os acessos seguintes usam `POST /v1/auth/login` e `Authorization: Bearer <access_token>`. Papéis disponíveis são Viewer, Analyst, Operator, Risk Manager, Admin e Auditor; Live permanece proibido para todos.
 
-O isolamento por tenant cobre jobs, configuração, runtime da agência, Paper, Shadow, auditoria e KillSwitch. Quando `DATABASE_URL` está configurada, identidade, sessões e memberships usam PostgreSQL; sem ela, o SQLite permanece como fallback local. O ledger de jobs continua usando SQLite persistente nesta release e deve ser migrado para PostgreSQL antes de escalar horizontalmente. Redis e Qdrant já estão declarados no Compose para filas/cache e memória vetorial.
+O isolamento por tenant cobre jobs, configuração, runtime da agência, Paper, Shadow, auditoria e KillSwitch. Quando `DATABASE_URL` está configurada, identidade, sessões, memberships e ledger de jobs usam PostgreSQL; sem ela, o SQLite permanece como fallback local. Redis e Qdrant já estão declarados no Compose para filas/cache e memória vetorial.
+
+O endpoint autenticado `/v1/jobs/health` informa o backend ativo (`postgres` ou `sqlite`). Em desenvolvimento local, o fallback SQLite inclui migração do schema legado e isolamento de idempotência por tenant.
 
 ## 4. Validar Docker no host
 

@@ -85,6 +85,7 @@ O projeto é distribuído sob [Apache License 2.0](LICENSE). Consulte [NOTICE](N
 - [Deployment](DEPLOY.md)
 - [Operação para usuário](docs/OPERATIONS-USER-READY.md)
 - [Progresso verificado](docs/progress.md)
+- [Gates de release Classe A](docs/CLASS-A-RELEASE-GATES.md)
 - [Plano de implementação](docs/implementation-plan.md)
 - [Contribuição](CONTRIBUTING.md)
 - [Segurança](SECURITY.md)
