@@ -466,7 +466,15 @@ class ExecutionCoordinator:
                                      ref=rec.order_id, agent_id=rec.agente)
                 terminal = (rec.filled_qty + quantidade) >= alvo_total
                 if terminal:
+                    # Sobra da reserva (diferença entre reservado e executado)
+                    # volta ao capital disponível de uma vez.
                     self.risk.release(reserva["reservation_id"])
+                else:
+                    # PARCIAL: o risco consome exatamente o que o livro
+                    # consumiu. Manter o valor integral aqui faria
+                    # `available` mentir justamente enquanto a ordem está
+                    # aberta — e é `available` que decide se a próxima cabe.
+                    self.risk.consume(reserva["reservation_id"], consumida)
         else:
             # SAÍDA: reduz a posição, realiza o resultado e alimenta o freio.
             custo = self._custo_proporcional(instrumento, quantidade,

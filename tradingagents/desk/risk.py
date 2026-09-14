@@ -125,6 +125,43 @@ class RiskEngine:
             self._reservations[res.reservation_id] = res
             return res
 
+    def consume(self, reservation_id: str, amount: Decimal) -> Decimal:
+        """Consome PARTE de uma reserva, devolvendo o saldo restante.
+
+        O livro consumia a reserva proporcionalmente a cada fill enquanto o
+        risco mantinha o valor integral até o terminal: entre o primeiro
+        parcial e o último, `reserved_total` e `available` mentiam — e é
+        `available` que decide se a próxima ordem cabe.
+
+        Consumir MAIS que o reservado é recusado: seria admitir que a ordem
+        executou além da cobertura, o que só pode ser erro de contabilidade.
+        """
+        with self._lock:
+            reserva = self._reservations.get(reservation_id)
+            if reserva is None:
+                raise RiskVeto(
+                    f"reserva {reservation_id} não está viva: nada a consumir")
+            valor = Decimal(str(amount))
+            if valor <= 0:
+                raise RiskVeto("consumo precisa ser positivo")
+            if valor > reserva.amount:
+                raise RiskVeto(
+                    f"consumo de {valor} excede o reservado ({reserva.amount})")
+            restante = reserva.amount - valor
+            if restante <= 0:
+                del self._reservations[reservation_id]
+                return Decimal("0")
+            # RiskReservation é imutável por desenho: substitui-se o registro
+            # inteiro, em vez de mutar um valor financeiro no lugar.
+            from dataclasses import replace
+            self._reservations[reservation_id] = replace(reserva, amount=restante)
+            return restante
+
+    def reservation_amount(self, reservation_id: str) -> Decimal:
+        with self._lock:
+            reserva = self._reservations.get(reservation_id)
+            return reserva.amount if reserva else Decimal("0")
+
     def active_reservations(self) -> list[dict]:
         """Reservas vivas, para persistência.
 
