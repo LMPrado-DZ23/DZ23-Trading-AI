@@ -54,14 +54,44 @@ def sistema(broker=None, com_posicao=None, dono="agente-A"):
                        agent_id=dono)
     coord = ExecutionCoordinator(m, livro, risco, worker_id="w",
                                  broker=broker or Corretora())
+    _RISCO_ATUAL["risco"] = risco
     return m, risco, livro, coord
 
 
+# O coordenador em uso pelo teste corrente: a entrada precisa de reserva
+# VIVA no risco, então a fábrica reserva de verdade em vez de fabricar uma
+# intenção sem cobertura (que agora é corretamente recusada).
+_RISCO_ATUAL = {}
+
+
 def entrada(agent="agente-A", qtd="1", coid=""):
-    return ExecutionIntent(kind=Kind.ENTRY, side=Side.BUY,
-                           instrument="BTC/USDT", quantity=Decimal(qtd),
-                           agent_id=agent, account="conta-1",
-                           client_order_id=coid)
+    from datetime import timedelta
+
+    from tradingagents.desk.models import Action, TradeProposal, utcnow
+    risco = _RISCO_ATUAL.get("risco")
+    if risco is None:
+        return ExecutionIntent(kind=Kind.ENTRY, side=Side.BUY,
+                               instrument="BTC/USDT", quantity=Decimal(qtd),
+                               agent_id=agent, account="conta-1",
+                               client_order_id=coid)
+    existente = next((r for r in risco.active_reservations()
+                      if r["instrument"] == "BTC/USDT"
+                      and r["agent_id"] == agent), None)
+    if existente is None:
+        p = TradeProposal(agent_id=agent, strategy="s", instrument="BTC/USDT",
+                          action=Action.BUY, reason="t",
+                          desired_exposure_pct=Decimal("0.10"),
+                          confidence=Decimal("0.8"),
+                          valid_until=utcnow() + timedelta(minutes=5))
+        res = risco.reserve(p, Decimal("100"), agent_id=agent)
+        existente = {"reservation_id": res.reservation_id,
+                     "amount": str(res.amount), "quantity": str(res.quantity)}
+    return ExecutionIntent(
+        kind=Kind.ENTRY, side=Side.BUY, instrument="BTC/USDT",
+        quantity=Decimal(qtd), agent_id=agent, account="conta-1",
+        client_order_id=coid,
+        reservation_id=existente["reservation_id"],
+        reserved_amount=Decimal(str(existente["amount"])))
 
 
 def saida(agent="agente-A", qtd="1", coid="", custo="100"):
@@ -143,9 +173,12 @@ class TestEquivalenciaEntreOsLados:
     def test_inactive_mandate_blocks_both_sides(self, construir, posicao):
         from tradingagents.desk.models import utcnow
         m, risco, livro, coord = sistema(com_posicao=posicao)
+        # a intenção é montada com o mandato AINDA válido; a revogação vem
+        # depois, para que a recusa venha do caminho único e não da reserva
+        ei = construir()
         object.__setattr__(coord.mandate, "revoked_at", utcnow())
         with pytest.raises(ExecutionRefused, match="mandato"):
-            coord.submit_intent(construir())
+            coord.submit_intent(ei)
         assert not coord.broker.enviadas
 
     @pytest.mark.parametrize("construir,posicao", [

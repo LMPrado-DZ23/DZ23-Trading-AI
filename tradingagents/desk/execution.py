@@ -586,6 +586,8 @@ class ExecutionCoordinator:
         #    declarado aqui, não espalhado por dois caminhos.
         if ei.side is Side.SELL:
             self._autorizar_saida(ei)
+        else:
+            self._autorizar_entrada(ei)
 
         rec = self._novo_registro(ei, coid, fingerprint)
 
@@ -638,6 +640,56 @@ class ExecutionCoordinator:
                           "taxa": Decimal(str(taxa.get("cost") if isinstance(taxa, dict)
                                               else taxa or 0))})
         return [f for f in saida if f["quantidade"] > 0]
+
+    def _autorizar_entrada(self, ei) -> None:
+        """Regras que só valem para COMPRA. Declaradas, não implícitas.
+
+        A saída exigia lote aberto; a entrada não exigia nada dentro do
+        caminho único — a cobertura de capital vivia fora, no RiskEngine, e
+        quem chamasse submit_intent diretamente comprava sem reserva.
+
+        Recusar é sempre a resposta segura: a reserva é o que garante que o
+        mesmo dinheiro não foi prometido a duas ordens.
+        """
+        if not ei.reservation_id:
+            raise ExecutionRefused(
+                "entrada sem reserva de capital: comprar sem cobertura "
+                "permitiria prometer o mesmo dinheiro duas vezes")
+
+        reserva = None
+        for doc in self.risk.active_reservations():
+            if doc["reservation_id"] == ei.reservation_id:
+                reserva = doc
+                break
+        if reserva is None:
+            raise ExecutionRefused(
+                f"reserva {ei.reservation_id} não está viva no risco: pode "
+                "ter sido liberada, consumida ou nunca existido")
+
+        if reserva.get("instrument") != ei.instrument:
+            raise ExecutionRefused(
+                f"reserva é do instrumento {reserva.get('instrument')} e a "
+                f"ordem é de {ei.instrument}")
+        dono = reserva.get("agent_id") or ""
+        if dono and dono != ei.agent_id:
+            raise ExecutionRefused(
+                f"reserva pertence ao agente {dono}, não a {ei.agent_id}")
+        conta = reserva.get("account") or ""
+        if conta and conta != ei.account:
+            raise ExecutionRefused(
+                f"reserva é da conta {conta} e a ordem é da conta {ei.account}")
+
+        reservado = Decimal(str(reserva.get("amount") or 0))
+        if ei.reserved_amount and ei.reserved_amount != reservado:
+            raise ExecutionRefused(
+                f"valor declarado ({ei.reserved_amount}) diferente do valor "
+                f"reservado no risco ({reservado})")
+
+        qtd_reservada = Decimal(str(reserva.get("quantity") or 0))
+        if qtd_reservada > 0 and ei.quantity > qtd_reservada:
+            raise ExecutionRefused(
+                f"quantidade {ei.quantity} não é coberta pela reserva "
+                f"({qtd_reservada})")
 
     def _autorizar_saida(self, ei) -> None:
         """Regras que só valem para VENDA. Declaradas, não implícitas."""
