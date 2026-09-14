@@ -20,12 +20,15 @@ from tradingagents.desk.risk import RiskEngine
 
 
 def mandato():
+    # folga de execução ZERO: estes cenários medem capital exato
     return DeskMandate(mandate_id="m", owner="p", account="a", mode=Mode.PAPER,
-                       instruments=("BTC/USDT",), capital=Decimal("1000"))
+                       instruments=("BTC/USDT",), capital=Decimal("1000"),
+                       slippage_buffer_pct=Decimal("0"))
 
 
 class CorretoraQueAceita:
     mode = "testnet"
+    preco = Decimal("100")
 
     def __init__(self):
         self.enviadas = []
@@ -36,9 +39,12 @@ class CorretoraQueAceita:
         o id da ordem não é identidade de execução."""
         self.enviadas.append(coid)
         return {"id": f"ex-{coid}", "status": "filled", "filled": quantity,
-                "average": Decimal("100"), "fee": Decimal("0.1"),
+                # taxa ZERO: com folga de execução 0 nestes cenários, uma
+                # taxa criaria déficit de cobertura legítimo e travaria o
+                # portão — que tem teste próprio em test_deficit_reserva
+                "average": self.preco, "fee": Decimal("0"),
                 "trades": [{"id": f"trade-{coid}", "amount": quantity,
-                            "price": Decimal("100"), "fee": {"cost": Decimal("0.1")}}]}
+                            "price": self.preco, "fee": {"cost": Decimal("0")}}]}
 
 
 def sistema(broker=None):
@@ -229,6 +235,8 @@ class TestCrashDepoisDoFill:
     def test_daily_loss_survives_the_restart(self):
         m, risco, livro, coord = sistema()
         coord.submit(intencao(risco))
+        # a corretora executa a saída a 80 o que custou 100: prejuízo real
+        coord.broker.preco = Decimal("80")
         coord.close_position(instrument="BTC/USDT", quantity=Decimal("1.5"),
                              price=Decimal("80"), cost_basis=Decimal("150"),
                              agent_id="trader-trend")

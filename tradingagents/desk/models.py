@@ -207,6 +207,20 @@ class RiskReservation:
     # vínculo, uma segunda ordem apresentando o mesmo id e o valor original
     # passava na autorização, e o mesmo capital cobria duas ordens.
     bound_client_order_id: str = ""
+    # Folga de execução efetivamente separada no caixa. `amount` é o ALVO
+    # (notional) que dimensiona a quantidade; a cobertura dura é alvo+folga.
+    # Sem separar os dois, a folga autorizava gasto que ninguém reservou.
+    buffer_amount: Decimal = Decimal("0")
+
+    @property
+    def target_amount(self) -> Decimal:
+        """Notional alvo — base do dimensionamento da quantidade."""
+        return self.amount
+
+    @property
+    def hard_reserved_amount(self) -> Decimal:
+        """Dinheiro realmente travado: alvo + folga."""
+        return self.amount + self.buffer_amount
 
     @property
     def original_amount(self) -> Decimal:
@@ -218,7 +232,8 @@ class RiskReservation:
 
     @property
     def remaining_amount(self) -> Decimal:
-        return self.amount - self.consumed_amount
+        """Cobertura DURA ainda disponível (inclui a folga não usada)."""
+        return self.hard_reserved_amount - self.consumed_amount
 
     @property
     def remaining_quantity(self) -> Decimal:

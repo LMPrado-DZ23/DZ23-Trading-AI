@@ -23,7 +23,8 @@ def _confirma_ausencia(client_order_id):
 
 def sistema(capital="1000"):
     m = DeskMandate(mandate_id="m", owner="p", account="a", mode=Mode.PAPER,
-                    instruments=("BTC/USDT",), capital=Decimal(capital))
+                    instruments=("BTC/USDT",), capital=Decimal(capital),
+                    slippage_buffer_pct=Decimal("0"))
     risco = RiskEngine(m)
     livro = Ledger(opening_cash=m.capital)
     return m, risco, livro, ExecutionCoordinator(m, livro, risco, worker_id="w")

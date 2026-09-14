@@ -31,7 +31,7 @@ class Corretora:
 def sistema(capital="10000"):
     m = DeskMandate(mandate_id="m", owner="p", account="conta-1",
                     mode=Mode.PAPER, instruments=("BTC/USDT", "ETH/USDT"),
-                    capital=Decimal(capital))
+                    capital=Decimal(capital), slippage_buffer_pct=Decimal("0"))
     risco = RiskEngine(m)
     livro = Ledger(opening_cash=m.capital)
     coord = ExecutionCoordinator(m, livro, risco, worker_id="w",
@@ -178,4 +178,7 @@ class TestSnapshotRefleteOConsumo:
         coord2.restaurar_estado(doc)
         assert risco2.reserved_total == parcial, (
             "o consumo parcial não sobreviveu ao reinício")
-        assert risco2.available == m2.capital - parcial
+        # available desconta o que ainda está reservado E o que já virou
+        # posição — a parte consumida não volta a ficar livre
+        investido = coord2.ledger.invested_cost()
+        assert risco2.available == m2.capital - parcial - investido

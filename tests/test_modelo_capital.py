@@ -36,9 +36,12 @@ class Corretora:
 def sistema(capital="1000", instrumentos=("BTC/USDT", "ETH/USDT", "SOL/USDT",
                                           "ADA/USDT", "XRP/USDT"),
             max_posicoes=10):
+    # folga ZERO: estes cenários medem capital exato, e a folga de execução
+    # é política declarada — com ela, 4 × 250 não caberia em 1000
     m = DeskMandate(mandate_id="m", owner="p", account="conta-1",
                     mode=Mode.PAPER, instruments=instrumentos,
-                    capital=Decimal(capital), max_open_positions=max_posicoes)
+                    capital=Decimal(capital), max_open_positions=max_posicoes,
+                    slippage_buffer_pct=Decimal("0"))
     livro = Ledger(opening_cash=m.capital)
     risco = RiskEngine(m, carteira=livro)
     coord = ExecutionCoordinator(m, livro, risco, worker_id="w",
@@ -170,8 +173,11 @@ class TestReservaGuardaOriginal:
             risco.consume(res.reservation_id,
                           res.original_amount * Decimal(fatia))
             atual = risco.reserva(res.reservation_id)
+            # A invariante é sobre a COBERTURA DURA (alvo + folga), que é o
+            # dinheiro efetivamente travado.
             assert (atual.consumed_amount + atual.remaining_amount
-                    == atual.original_amount), "original != consumido + restante"
+                    == atual.hard_reserved_amount), (
+                "cobertura dura != consumido + restante")
 
     def test_fifty_then_twentyfive_percent(self):
         m, risco, livro, coord = sistema(capital="1000")

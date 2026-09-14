@@ -767,8 +767,13 @@ class ExecutionCoordinator:
                 del self.orders[rec.order_id]
                 self._by_key.pop(coid, None)
                 raise ExecutionRefused(str(exc)) from None
-        if ei.side is Side.BUY and ei.reserved_amount > 0:
-            self.ledger.reserve(ei.reserved_amount, ref=rec.order_id)
+        if ei.side is Side.BUY and ei.reservation_id:
+            # Trava a COBERTURA DURA (alvo + folga). Travar só o alvo deixava
+            # a folga a descoberto: o caixa cobria a diferença sem decisão.
+            viva = self.risk.reserva(ei.reservation_id)
+            dura = viva.hard_reserved_amount if viva else ei.reserved_amount
+            if dura > 0:
+                self.ledger.reserve(dura, ref=rec.order_id)
 
         # 5. ENVIO
         try:
@@ -785,8 +790,10 @@ class ExecutionCoordinator:
             rec.state = OrderState.REJECTED
             rec.note = f"{type(exc).__name__}: {exc}"[:200]
             if ei.kind is Kind.ENTRY:
-                if ei.reserved_amount > 0:
-                    self.ledger.release(ei.reserved_amount, ref=rec.order_id)
+                viva = self.risk.reserva(ei.reservation_id)
+                devolver = viva.hard_reserved_amount if viva else ei.reserved_amount
+                if devolver > 0:
+                    self.ledger.release(devolver, ref=rec.order_id)
                 self._liberar_reserva_de(rec)
             self.oms_version += 1
             return rec
@@ -1168,6 +1175,8 @@ class ExecutionCoordinator:
             "perda_do_dia": str(self.perda_do_dia),
             "oms_version": self.oms_version,
             "ultimo_relatorio": self.ultimo_relatorio,
+            # Incidentes são duráveis: reiniciar não resolve déficit.
+            "incidentes": self.risk.incidentes_doc(),
             "ordens": [self._ordem_para_doc(r) for r in self.orders.values()],
             "posicoes": self.ledger.open_positions_detail(),
             "caixa": str(self.ledger.cash()),
@@ -1221,6 +1230,7 @@ class ExecutionCoordinator:
         # relatório antigo (também zero) parecer atual.
         # Nunca REGREDIR: restaurar um documento antigo não pode fazer a
         # versão andar para trás, senão um relatório velho voltaria a valer.
+        self.risk.restaurar_incidentes(doc.get("incidentes"))
         self.oms_version = max(self.oms_version, int(doc.get("oms_version") or 0))
         self.ultimo_relatorio = doc.get("ultimo_relatorio")
 
@@ -1230,6 +1240,10 @@ class ExecutionCoordinator:
             from .ledger import Ledger as _L
             self.ledger = _L.from_transactions(
                 lancamentos, currency=doc.get("moeda") or "USDT")
+            # UMA referência econômica: o risco precisa ler o livro NOVO.
+            # Sem isto ele seguia no antigo — duas verdades sobre o mesmo
+            # dinheiro, e o capital investido "ressuscitava" no reinício.
+            self.risk.attach_portfolio_ledger(self.ledger)
 
         # 2) RESERVAS: capital reservado não pode virar disponível.
         reservas_restauradas = self.risk.restore_reservations(doc.get("reservas", []))

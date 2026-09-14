@@ -120,6 +120,19 @@ class RiskEngine:
             return Decimal("0")
         return self.carteira.reserved_cash()
 
+    def attach_portfolio_ledger(self, carteira) -> None:
+        """Religa o risco à carteira econômica, validando o contrato.
+
+        Setter livre deixaria passar um objeto sem a visão de capital — e o
+        erro só apareceria como número errado, não como falha.
+        """
+        for metodo in ("cash_available", "reserved_cash", "invested_cost",
+                       "open_positions_detail"):
+            if not callable(getattr(carteira, metodo, None)):
+                raise TypeError(
+                    f"carteira sem {metodo}(): não serve como fonte econômica")
+        self.carteira = carteira
+
     def invested_cost(self) -> Decimal:
         if self.carteira is None:
             return Decimal("0")
@@ -167,17 +180,47 @@ class RiskEngine:
             amount = (self.mandate.capital * pct).quantize(Decimal("0.01"), ROUND_DOWN)
             if amount <= 0:
                 raise RiskVeto("valor calculado nulo")
-            if amount > self.available:
+            # COBERTURA DURA = alvo + folga. A folga precisa caber no caixa
+            # agora: reservar só o alvo torcendo para os centavos aparecerem
+            # depois é o que deixava a folga a descoberto.
+            folga = (amount * getattr(self.mandate, "slippage_buffer_pct",
+                                      Decimal("0"))).quantize(
+                Decimal("0.00000001"))
+            dura = amount + folga
+            if dura > self.available:
                 raise RiskVeto(
-                    f"capital insuficiente: pedido {amount}, disponível {self.available}")
+                    f"capital insuficiente: cobertura necessária {dura} "
+                    f"(alvo {amount} + folga {folga}), disponível {self.available}")
+            # A quantidade sai do ALVO: folga não aumenta o que se negocia.
             qty = (amount / price).quantize(Decimal("0.00000001"), ROUND_DOWN)
             if qty <= 0:
                 raise RiskVeto("quantidade abaixo do mínimo negociável")
             res = RiskReservation(
                 reservation_id=uuid.uuid4().hex[:16], account=self.mandate.account,
                 instrument=proposal.instrument, amount=amount, quantity=qty,
+                buffer_amount=folga,
                 mandate_version=self.mandate.version, expires_at=default_expiry(10),
                 agent_id=agent_id or proposal.agent_id)
+            self._reservations[res.reservation_id] = res
+            return res
+
+    def reserve_exato(self, *, instrument: str, alvo: Decimal,
+                      agent_id: str = "") -> RiskReservation:
+        """Reserva um notional explícito — usada quando o alvo não vem de
+        percentual do mandato. Aplica a MESMA regra de cobertura dura."""
+        with self._lock:
+            folga = (alvo * getattr(self.mandate, "slippage_buffer_pct",
+                                    Decimal("0"))).quantize(Decimal("0.00000001"))
+            if alvo + folga > self.available:
+                raise RiskVeto(
+                    f"capital insuficiente: cobertura necessária {alvo + folga}, "
+                    f"disponível {self.available}")
+            res = RiskReservation(
+                reservation_id=uuid.uuid4().hex[:16],
+                account=self.mandate.account, instrument=instrument,
+                amount=alvo, quantity=Decimal("1"), buffer_amount=folga,
+                mandate_version=self.mandate.version,
+                expires_at=default_expiry(10), agent_id=agent_id)
             self._reservations[res.reservation_id] = res
             return res
 
@@ -247,14 +290,12 @@ class RiskEngine:
                 return {"estado": "DEFICIT", "deficit": str(custo),
                         "sobra": "0"}
 
-            cobertura = reserva.remaining_amount
-            # Cobertura dura = reservado + folga declarada na política.
-            folga = (reserva.original_amount
-                     * getattr(self.mandate, "slippage_buffer_pct",
-                               Decimal("0"))).quantize(Decimal("0.00000001"))
-            limite = cobertura + folga
+            # A folga JÁ está dentro de remaining_amount, porque foi
+            # separada no caixa na hora da reserva. Somá-la de novo aqui
+            # autorizaria gasto não financiado.
+            limite = reserva.remaining_amount
             deficit = custo - limite if custo > limite else Decimal("0")
-            consumido = min(custo, cobertura)
+            consumido = min(custo, limite)
 
             from dataclasses import replace
             atualizada = replace(
@@ -288,6 +329,18 @@ class RiskEngine:
             return {"estado": "PARTIALLY_CONSUMED", "deficit": str(deficit),
                     "sobra": "0"}
 
+    def incidentes_doc(self) -> dict:
+        """Incidentes para persistência — reiniciar não resolve déficit."""
+        return {"deficits": {k: str(v) for k, v in self._deficits.items()},
+                "conclusoes": self._concluidas}
+
+    def restaurar_incidentes(self, doc: dict | None) -> None:
+        if not doc:
+            return
+        for k, v in (doc.get("deficits") or {}).items():
+            self._deficits[k] = Decimal(str(v))
+        self._concluidas.update(doc.get("conclusoes") or {})
+
     def conclusao(self, reservation_id: str) -> dict | None:
         """Como esta reserva terminou — evidência para auditoria."""
         return self._concluidas.get(reservation_id)
@@ -305,6 +358,14 @@ class RiskEngine:
         if deficit > 0:
             return False, (f"déficit de cobertura de {deficit}: houve execução "
                            "mais cara que o capital reservado")
+        if self.carteira is not None:
+            reservado_livro = self.carteira.reserved_cash()
+            if reservado_livro < 0:
+                return False, f"reservado negativo no livro ({reservado_livro})"
+            if reservado_livro != self.reserved_total:
+                return False, (
+                    f"reservado divergente: livro {reservado_livro} vs risco "
+                    f"{self.reserved_total}")
         if self.carteira is not None and self.carteira.cash_available() < 0:
             return False, (f"caixa negativo ({self.carteira.cash_available()}): "
                            "há dinheiro comprometido além do disponível")
@@ -373,6 +434,7 @@ class RiskEngine:
                      # Derivados, para quem lê o documento não precisar
                      # recalcular (e errar) a conta.
                      "bound_client_order_id": res.bound_client_order_id,
+                     "buffer_amount": str(res.buffer_amount),
                      "remaining_amount": str(res.remaining_amount),
                      "remaining_quantity": str(res.remaining_quantity),
                      "mandate_version": res.mandate_version,
@@ -401,6 +463,7 @@ class RiskEngine:
                             doc.get("filled_quantity") or 0)),
                         bound_client_order_id=doc.get(
                             "bound_client_order_id") or "",
+                        buffer_amount=Decimal(str(doc.get("buffer_amount") or 0)),
                         quantity=Decimal(str(doc.get("quantity") or 0)),
                         mandate_version=doc.get("mandate_version", 1),
                         expires_at=_dt.fromisoformat(expira) if expira else None,
