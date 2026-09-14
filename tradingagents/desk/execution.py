@@ -196,8 +196,14 @@ class PaperBroker:
             return self.submitted[client_order_id]  # idempotente do lado da corretora
         price = self.price_for(instrument)
         fee = (quantity * price * self.fee_rate).quantize(Decimal("0.00000001"))
-        order = {"id": f"paper-{len(self.submitted) + 1}", "status": "filled",
-                 "filled": quantity, "average": price, "fee": fee}
+        oid = f"paper-{len(self.submitted) + 1}"
+        # O simulador emite a EXECUÇÃO individualizada, com identidade
+        # própria. Devolver só o acumulado obrigaria o coordenador a inventar
+        # um fill sintético — que é justamente o defeito que estamos tirando.
+        order = {"id": oid, "status": "filled", "filled": quantity,
+                 "average": price, "fee": fee,
+                 "trades": [{"id": f"{oid}-t1", "amount": quantity,
+                             "price": price, "fee": {"cost": fee}}]}
         self.submitted[client_order_id] = order
         return order
 
@@ -312,10 +318,10 @@ class ExecutionCoordinator:
         status é UNKNOWN — e UNKNOWN não libera nada."""
         locais = {i: Decimal(str(d["quantidade"]))
                   for i, d in self.ledger.open_positions_detail().items()}
-        restauradas = {i: Decimal(str(d.get("quantidade") or 0))
-                       for i, d in (self.posicoes_restauradas or {}).items()}
-        for inst, qtd in restauradas.items():
-            locais.setdefault(inst, qtd)
+        # As posições restauradas NÃO entram como verdade paralela: depois de
+        # aplicar os fills encontrados, o livro é a fonte. Somá-las aqui fazia
+        # uma posição já encerrada pela reconciliação reaparecer como
+        # divergência — e travava o portão para sempre.
         if consultar_posicoes is None:
             # Ausência de posição LOCAL não prova ausência na CORRETORA: é
             # exatamente o caso da posição órfã remota. Sem consulta, o
@@ -452,6 +458,13 @@ class ExecutionCoordinator:
         else:
             # SAÍDA: reduz a posição, realiza o resultado e alimenta o freio.
             custo = self._custo_proporcional(instrumento, quantidade)
+            if custo <= 0:
+                # Livro sem a posição (ex.: posição aberta fora deste livro).
+                # Usa o custo declarado pela saída, proporcional à fatia — e
+                # nunca zero, que transformaria a venda inteira em "lucro".
+                ref = getattr(rec, "cost_basis_ref", Decimal("0")) or Decimal("0")
+                alvo = rec.quantidade or quantidade
+                custo = (Decimal(str(ref)) * quantidade / alvo) if alvo else Decimal(str(ref))
             self.ledger.fill_sell(instrumento, quantidade, preco, taxa,
                                   cost_basis=custo, agent_id=rec.agente,
                                   ref=rec.order_id)
@@ -551,11 +564,38 @@ class ExecutionCoordinator:
             return rec
         rec.external_id = result.get("id")
         rec.state = OrderState.ACKNOWLEDGED
-        self.apply_fill(rec.order_id, fill_id=rec.external_id,
-                        quantity=Decimal(str(result["filled"])),
-                        price=Decimal(str(result["average"])),
-                        fee=Decimal(str(result.get("fee", 0))))
+        self.oms_version += 1
+        # ACK NÃO É EXECUÇÃO. A resposta do envio confirma o ciclo de vida da
+        # ordem; os efeitos econômicos vêm dos TRADES. Antes, o id da ORDEM
+        # era usado como identificador de execução e `filled` cumulativo
+        # entrava como delta: dois fills da mesma ordem seriam contados como
+        # um, e um segundo relatório cumulativo somaria em cima do anterior.
+        for fill in self._fills_da_resposta(result):
+            self.aplicar_fill(rec, side=rec.lado or "buy", **fill)
         return rec
+
+    @staticmethod
+    def _fills_da_resposta(result: dict) -> list[dict]:
+        """Extrai execuções INDIVIDUAIS da resposta do envio, se houver.
+
+        Sem trades individualizados não se inventa um fill sintético a partir
+        do acumulado: a ordem fica como ACK e os efeitos econômicos virão da
+        consulta de execuções (fetch_order_fills) ou do evento da corretora.
+        """
+        trades = result.get("trades") or result.get("fills") or []
+        saida = []
+        for t in trades:
+            fid = t.get("id") or t.get("fill_id") or t.get("tradeId")
+            if not fid:
+                continue        # execução sem identidade não é contabilizável
+            saida.append({"fill_id": str(fid),
+                          "quantidade": Decimal(str(t.get("amount")
+                                                    or t.get("quantity") or 0)),
+                          "preco": Decimal(str(t.get("price") or 0)),
+                          "taxa": Decimal(str((t.get("fee") or {}).get("cost")
+                                              if isinstance(t.get("fee"), dict)
+                                              else t.get("fee") or 0))})
+        return [f for f in saida if f["quantidade"] > 0]
 
     # -- eventos -------------------------------------------------------
     def apply_fill(self, order_id: str, *, fill_id: str, quantity: Decimal,
@@ -579,30 +619,76 @@ class ExecutionCoordinator:
                        price: Decimal, cost_basis: Decimal, agent_id: str,
                        fee: Decimal = Decimal("0"), client_order_id: str = "",
                        provenance: dict | None = None) -> dict:
-        """Encerra posição: vende na corretora e REALIZA o resultado no livro.
-        Sem isto a mesa acumula compras e nunca mostra lucro ou prejuízo."""
+        """Encerra posição PELO OMS — saída é ordem financeira como entrada.
+
+        Antes isto chamava broker.submit direto: sem OrderRecord, sem estado
+        durável, sem idempotência, e o timeout devolvia um dicionário solto
+        que morria com o processo. Era a segunda porta de dinheiro do
+        sistema, e a auditoria cobrou quatro vezes.
+        """
         coid = client_order_id or f"exit-{instrument}-{len(self.orders) + 1}"
+
+        # IDEMPOTÊNCIA: mesma saída pedida de novo devolve a MESMA ordem.
+        existente = self._by_key.get(coid)
+        if existente:
+            rec = self.orders[existente]
+            return {"estado": rec.state.value, "client_order_id": coid,
+                    "order_id": rec.order_id, "reaproveitada": True}
+
+        rec = OrderRecord.__new__(OrderRecord)
+        rec.order_id = f"ord-{len(self.orders) + 1}"
+        rec.intent = None
+        rec.state = OrderState.SUBMITTING
+        rec.filled_qty = Decimal("0")
+        rec.avg_price = Decimal("0")
+        rec.fees = Decimal("0")
+        rec.external_id = ""
+        rec.fingerprint = f"exit|{instrument}|{quantity}|{cost_basis}"
+        rec.note = ""
+        rec.seen_fills = set()
+        rec.instrument = instrument
+        rec.side = "sell"
+        rec.quantity = quantity
+        rec.provenance = provenance
+        rec._client_order_id = coid
+        rec.agent_id = agent_id
+        rec.reservation_id = ""
+        rec.cost_basis_ref = cost_basis
+        self.orders[rec.order_id] = rec
+        self._by_key[coid] = rec.order_id
+        self.oms_version += 1
+
         try:
             result = self.broker.submit(coid, instrument, "sell", quantity,
                                         **({"final_state": provenance}
                                            if provenance else {}))
         except BrokerTimeout:
-            return {"estado": "incerto", "motivo": "timeout na saída — reconciliar",
-                    "client_order_id": coid}
-        exec_price = Decimal(str(result.get("average") or price))
-        exec_fee = Decimal(str(result.get("fee") or fee))
-        tx = self.ledger.fill_sell(instrument, quantity, exec_price, exec_fee,
-                                   cost_basis=cost_basis, agent_id=agent_id,
-                                   ref=coid)
-        # FREIO DIÁRIO ALIMENTADO PELO RESULTADO REALIZADO.
-        # Antes, o contador de perda do dia só era movido por chamada manual
-        # em teste: existia um limite configurável que a operação real nunca
-        # atualizava — o freio não freava nada.
-        realizado = (exec_price * quantity) - cost_basis - exec_fee
-        self.registrar_resultado_realizado(realizado)
-        return {"estado": "encerrada", "client_order_id": coid,
-                "preco": str(exec_price), "tx": tx.tx_id,
-                "resultado": str(self.ledger.attribution().get(agent_id, Decimal("0")))}
+            # AMBÍGUO: a corretora pode ter recebido. Nada de reenvio cego, e
+            # o registro fica DURÁVEL para a reconciliação encontrar.
+            rec.state = OrderState.UNKNOWN_RECONCILIATION_REQUIRED
+            rec.note = "timeout na saída — reconciliar antes de qualquer envio"
+            self.exigir_reconciliacao(
+                f"saída {coid} em estado incerto: pode ter executado")
+            self.oms_version += 1
+            return {"estado": "incerto", "client_order_id": coid,
+                    "order_id": rec.order_id,
+                    "motivo": "timeout na saída — reconciliar"}
+        except Exception as exc:
+            rec.state = OrderState.REJECTED
+            rec.note = f"{type(exc).__name__}: {exc}"[:200]
+            self.oms_version += 1
+            return {"estado": "rejeitada", "client_order_id": coid,
+                    "order_id": rec.order_id, "motivo": rec.note}
+
+        rec.external_id = result.get("id") or ""
+        rec.state = OrderState.ACKNOWLEDGED
+        for fill in self._fills_da_resposta(result):
+            self.aplicar_fill(rec, side="sell", **fill)
+        realizado = self.ledger.attribution().get(agent_id, Decimal("0"))
+        return {"estado": rec.state.value, "client_order_id": coid,
+                "order_id": rec.order_id, "preco": str(rec.avg_price),
+                "quantidade": str(rec.filled_qty),
+                "resultado": str(realizado)}
 
     def request_cancel(self, order_id: str) -> OrderRecord:
         rec = self.orders[order_id]

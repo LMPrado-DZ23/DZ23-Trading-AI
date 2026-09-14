@@ -109,7 +109,7 @@ class TestCicloCompleto:
                                    price=Decimal("130"),
                                    cost_basis=rec.filled_qty * rec.avg_price,
                                    agent_id=agent)
-        assert out["estado"] == "encerrada"
+        assert out["estado"] in ("filled", "acknowledged")
         assert Decimal(out["resultado"]) > 0              # lucro atribuído
         assert led.attribution()[agent] > 0
         assert led.is_balanced()

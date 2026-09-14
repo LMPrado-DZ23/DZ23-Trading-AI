@@ -576,3 +576,102 @@ class TestGuardiaoSobreviveAoRestart:
         coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
         lista = PositionGuardian(coord).watchlist()
         assert "BTC/USDT" in lista
+
+
+class TestAckNaoEExecucao:
+    """ACHADO: o submit usava o id da ORDEM como identificador de execução e
+    `filled` cumulativo como delta. Dois fills da mesma ordem virariam um, e
+    um segundo relatório cumulativo somaria em cima do anterior."""
+
+    class CorretoraComTrades:
+        mode = "testnet"
+
+        def __init__(self, resposta):
+            self.resposta = resposta
+            self.chamadas = 0
+
+        def submit(self, coid, instrument, side, quantity, final_state=None):
+            self.chamadas += 1
+            return self.resposta
+
+    def _coord_com(self, resposta):
+        from tradingagents.desk.execution import ExecutionCoordinator
+        from tradingagents.desk.ledger import Ledger
+        from tradingagents.desk.models import DeskMandate, Mode
+        from tradingagents.desk.risk import RiskEngine
+        m = DeskMandate(mandate_id="m", owner="p", account="a", mode=Mode.PAPER,
+                        instruments=("BTC/USDT",), capital=Decimal("1000"))
+        risco = RiskEngine(m)
+        livro = Ledger(opening_cash=m.capital)
+        broker = self.CorretoraComTrades(resposta)
+        coord = ExecutionCoordinator(m, livro, risco, worker_id="w", broker=broker)
+        return coord, risco, livro, broker
+
+    def _intent(self, risco):
+        from datetime import timedelta
+
+        from tradingagents.desk.models import Action, Mode, TradeProposal
+        p = TradeProposal(agent_id="trader-trend", strategy="s",
+                          instrument="BTC/USDT", action=Action.BUY, reason="t",
+                          desired_exposure_pct=Decimal("0.15"),
+                          confidence=Decimal("0.8"),
+                          valid_until=utcnow() + timedelta(minutes=5))
+        res = risco.reserve(p, Decimal("100"), agent_id="trader-trend")
+        return risco.intent(res, Action.BUY, Mode.PAPER, "w",
+                            provenance={"x": 1})
+
+    def test_zero_fill_ack_produces_no_economic_effect(self):
+        coord, risco, livro, _ = self._coord_com(
+            {"id": "O1", "status": "open", "filled": 0, "average": None})
+        rec = coord.submit(self._intent(risco))
+        assert rec.state is OrderState.ACKNOWLEDGED
+        assert rec.filled_qty == Decimal("0") and not rec.seen_fills
+        assert livro.position_quantity("BTC/USDT") == Decimal("0")
+
+    def test_order_id_never_enters_seen_fills(self):
+        coord, risco, livro, _ = self._coord_com(
+            {"id": "O1", "status": "closed", "filled": Decimal("0.3"),
+             "average": Decimal("100"),
+             "trades": [{"id": "F1", "amount": Decimal("0.3"),
+                         "price": Decimal("100"), "fee": {"cost": 0}}]})
+        rec = coord.submit(self._intent(risco))
+        assert "O1" not in rec.seen_fills, "id da ORDEM entrou como execução"
+        assert rec.seen_fills == {"F1"}
+
+    def test_cumulative_filled_is_not_used_as_delta(self):
+        """Resposta diz filled=0.3 cumulativo e traz DOIS trades reais
+        (0.3 e 0.2): o resultado tem de ser 0.5, nunca 0.8."""
+        coord, risco, livro, _ = self._coord_com(
+            {"id": "O1", "status": "open", "filled": Decimal("0.3"),
+             "average": Decimal("100"),
+             "trades": [{"id": "F1", "amount": Decimal("0.3"),
+                         "price": Decimal("100"), "fee": {"cost": 0}},
+                        {"id": "F2", "amount": Decimal("0.2"),
+                         "price": Decimal("102"), "fee": {"cost": 0}}]})
+        rec = coord.submit(self._intent(risco))
+        assert rec.filled_qty == Decimal("0.5"), (
+            f"acumulado somado ao delta: {rec.filled_qty}")
+        assert livro.position_quantity("BTC/USDT") == Decimal("0.5")
+
+    def test_each_trade_is_applied_individually(self):
+        coord, risco, livro, _ = self._coord_com(
+            {"id": "O1", "status": "closed", "filled": Decimal("1"),
+             "average": Decimal("100"),
+             "trades": [{"id": "F1", "amount": Decimal("0.3"), "price": Decimal("100")},
+                        {"id": "F2", "amount": Decimal("0.2"), "price": Decimal("102")},
+                        {"id": "F3", "amount": Decimal("0.5"), "price": Decimal("101")}]})
+        rec = coord.submit(self._intent(risco))
+        assert rec.seen_fills == {"F1", "F2", "F3"}
+        assert rec.filled_qty == Decimal("1")
+        # média ponderada: (0.3*100 + 0.2*102 + 0.5*101)/1 = 100.9
+        assert abs(rec.avg_price - Decimal("100.9")) < Decimal("0.0001")
+
+    def test_response_without_trades_leaves_the_order_acknowledged(self):
+        """Sem execução identificada não se inventa fill sintético."""
+        coord, risco, livro, _ = self._coord_com(
+            {"id": "O1", "status": "closed", "filled": Decimal("1"),
+             "average": Decimal("100")})
+        rec = coord.submit(self._intent(risco))
+        assert rec.filled_qty == Decimal("0")
+        assert livro.position_quantity("BTC/USDT") == Decimal("0")
+        assert not rec.seen_fills

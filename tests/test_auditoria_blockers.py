@@ -44,16 +44,21 @@ class CorretoraQueExplode:
 
 
 class CorretoraOk:
-    def __init__(self):
+    """Corretora que executa ao preço configurado e devolve a execução com
+    identidade própria — o preço de execução vem da CORRETORA, não do
+    parâmetro local."""
+
+    def __init__(self, price=Decimal("100")):
         self.enviadas = []
         self.mode = "testnet"
+        self.price = price
 
-    def submit(self, coid, instrument, side, quantity):
-        # Sem "average": o coordenador usa o preço informado na saída, que é
-        # o que interessa para medir o resultado realizado.
+    def submit(self, coid, instrument, side, quantity, final_state=None):
         self.enviadas.append(coid)
         return {"id": f"ex-{coid}", "status": "closed", "filled": quantity,
-                "fee": Decimal("0")}
+                "average": self.price, "fee": Decimal("0"),
+                "trades": [{"id": f"t-{coid}", "amount": quantity,
+                            "price": self.price, "fee": {"cost": Decimal("0")}}]}
 
 
 def coordenador(broker):
@@ -132,6 +137,7 @@ class TestFreioDiarioVemDoLivro:
     atualizava. O teste antigo chamava register_loss à mão e 'passava'."""
 
     def _fechar_com_prejuizo(self, coord, prejuizo="50"):
+        coord.broker.price = Decimal("100") - Decimal(prejuizo)
         return coord.close_position(
             instrument="BTC/USDT", quantity=Decimal("1"),
             price=Decimal("100") - Decimal(prejuizo),
@@ -153,6 +159,7 @@ class TestFreioDiarioVemDoLivro:
     def test_profit_reduces_the_accumulated_loss(self):
         coord, _ = coordenador(CorretoraOk())
         self._fechar_com_prejuizo(coord, "30")
+        coord.broker.price = Decimal("120")
         coord.close_position(instrument="BTC/USDT", quantity=Decimal("1"),
                              price=Decimal("120"), cost_basis=Decimal("100"),
                              agent_id="t")

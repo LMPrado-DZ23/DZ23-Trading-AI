@@ -31,9 +31,14 @@ class CorretoraQueAceita:
         self.enviadas = []
 
     def submit(self, coid, instrument, side, quantity, final_state=None):
+        """Corretora que devolve a EXECUÇÃO individualizada, com id próprio.
+        Resposta só com acumulado não produz efeito econômico — de propósito:
+        o id da ordem não é identidade de execução."""
         self.enviadas.append(coid)
         return {"id": f"ex-{coid}", "status": "filled", "filled": quantity,
-                "average": Decimal("100"), "fee": Decimal("0.1")}
+                "average": Decimal("100"), "fee": Decimal("0.1"),
+                "trades": [{"id": f"trade-{coid}", "amount": quantity,
+                            "price": Decimal("100"), "fee": {"cost": Decimal("0.1")}}]}
 
 
 def sistema(broker=None):
@@ -305,3 +310,108 @@ class TestQuantidadeNaoEntraNaContabilidade:
         detalhe = livro.open_positions_detail()["BTC/USDT"]
         assert Decimal(detalhe["quantidade"]) == Decimal("0.6")
         assert Decimal(detalhe["custo_total"]) == Decimal("60.00000000")
+
+
+class TestSaidaPassaPeloOms:
+    """A saída era a segunda porta de dinheiro: ia direto ao broker, sem
+    registro durável. Timeout devolvia um dicionário que morria com o
+    processo."""
+
+    def _com_posicao(self):
+        m, risco, livro, coord = sistema()
+        livro.reserve(Decimal("100"), ref="r0")
+        livro.fill_buy("BTC/USDT", Decimal("1"), Decimal("100"), Decimal("0"),
+                       reserved=Decimal("100"), ref="o0", agent_id="trader-trend")
+        return m, risco, livro, coord
+
+    def test_exit_creates_a_durable_order_record(self):
+        m, risco, livro, coord = self._com_posicao()
+        out = coord.close_position(instrument="BTC/USDT", quantity=Decimal("1"),
+                                   price=Decimal("110"), cost_basis=Decimal("100"),
+                                   agent_id="trader-trend")
+        rec = coord.orders[out["order_id"]]
+        assert rec.lado == "sell" and rec.client_order_id == out["client_order_id"]
+        assert out["order_id"] in coord.snapshot_estado()["ordens"][-1]["order_id"]
+
+    def test_exit_timeout_persists_the_order_and_closes_the_gate(self):
+        m, risco, livro, coord = self._com_posicao()
+        from tradingagents.desk.execution import BrokerTimeout
+
+        class Timeout:
+            mode = "testnet"
+
+            def submit(self, *a, **k):
+                raise BrokerTimeout("resposta perdida na saída")
+
+        coord.broker = Timeout()
+        out = coord.close_position(instrument="BTC/USDT", quantity=Decimal("1"),
+                                   price=Decimal("110"), cost_basis=Decimal("100"),
+                                   agent_id="trader-trend")
+        assert out["estado"] == "incerto"
+        rec = coord.orders[out["order_id"]]
+        assert rec.state is OrderState.UNKNOWN_RECONCILIATION_REQUIRED
+        assert coord.reconciliacao_pendente is True
+        # e o registro sobrevive ao snapshot
+        doc = coord.snapshot_estado()
+        assert any(o["lado"] == "sell" for o in doc["ordens"])
+
+    def test_exit_is_idempotent(self):
+        """Pedir a mesma saída de novo não manda uma segunda venda."""
+        m, risco, livro, coord = self._com_posicao()
+        enviadas = []
+
+        class Conta(CorretoraQueAceita):
+            def submit(self, coid, instrument, side, quantity, final_state=None):
+                enviadas.append(coid)
+                return super().submit(coid, instrument, side, quantity, final_state)
+
+        coord.broker = Conta()
+        a = coord.close_position(instrument="BTC/USDT", quantity=Decimal("1"),
+                                 price=Decimal("110"), cost_basis=Decimal("100"),
+                                 agent_id="t", client_order_id="exit-fixo")
+        b = coord.close_position(instrument="BTC/USDT", quantity=Decimal("1"),
+                                 price=Decimal("110"), cost_basis=Decimal("100"),
+                                 agent_id="t", client_order_id="exit-fixo")
+        assert len(enviadas) == 1, "a mesma saída foi enviada duas vezes"
+        assert b.get("reaproveitada") is True
+        assert a["order_id"] == b["order_id"]
+
+    def test_exit_after_crash_is_adopted_not_resent(self):
+        """Timeout na saída, processo morre, reconciliação encontra a venda
+        executada: a posição zera e NENHUMA segunda venda é enviada."""
+        m, risco, livro, coord = self._com_posicao()
+        from tradingagents.desk.execution import BrokerTimeout
+
+        class Timeout:
+            mode = "testnet"
+
+            def submit(self, *a, **k):
+                raise BrokerTimeout("perdida")
+
+        coord.broker = Timeout()
+        coord.close_position(instrument="BTC/USDT", quantity=Decimal("1"),
+                             price=Decimal("110"), cost_basis=Decimal("100"),
+                             agent_id="trader-trend", client_order_id="exit-1")
+        doc = coord.snapshot_estado()
+
+        # processo novo
+        m2, risco2, livro2, coord2 = sistema()
+        livro2.reserve(Decimal("100"), ref="r0")
+        livro2.fill_buy("BTC/USDT", Decimal("1"), Decimal("100"), Decimal("0"),
+                        reserved=Decimal("100"), ref="o0", agent_id="trader-trend")
+        enviadas = []
+        coord2.broker = type("Nada", (), {
+            "mode": "testnet",
+            "submit": lambda self, *a, **k: enviadas.append(a)})()
+        coord2.restaurar_estado(doc)
+
+        rel = coord2.reconciliar(
+            lambda coid: {"resultado": "FOUND", "ordem": {
+                "id": "ex-sell", "status": "filled", "filled": "1",
+                "average": "110", "fee": "0"}},
+            consultar_posicoes=lambda: {})
+        # o restore substitui o livro pelo reconstruído dos lançamentos
+        assert coord2.ledger.position_quantity("BTC/USDT") == Decimal("0"), (
+            "a venda encontrada não fechou a posição")
+        assert not enviadas, "uma SEGUNDA venda foi enviada"
+        assert rel["seguro"] is True, rel["divergencias"]
