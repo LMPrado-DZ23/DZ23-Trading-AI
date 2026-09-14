@@ -209,6 +209,11 @@ class PaperBroker:
 
 
 class ExecutionCoordinator:
+    # Papéis com prerrogativa de encerrar posição de terceiros — sempre com
+    # registro. Lista explícita: quem pode mexer no dinheiro dos outros não
+    # se define por acidente.
+    PODEM_FECHAR_DE_TERCEIROS = frozenset({"position-guardian", "risk-manager",
+                                           "emergency"})
     """Aplica SOMENTE comandos autorizados; mantém estado e contabilidade."""
 
     def __init__(self, mandate: DeskMandate, ledger: Ledger, risk, *,
@@ -559,8 +564,11 @@ class ExecutionCoordinator:
                                         **({"final_state": intent.provenance}
                                            if intent.provenance else {}))
         except BrokerTimeout:
-            # Ambíguo: pode ter chegado. Nada de retry cego, nada de liberar.
-            rec.state = OrderState.UNKNOWN_RECONCILIATION_REQUIRED
+            # Ambíguo: pode ter chegado. Nada de retry cego, nada de liberar,
+            # e NOVO RISCO fica bloqueado até reconciliar.
+            self.marcar_incerta(
+                rec, f"ordem {intent.idempotency_key} em estado ambíguo: "
+                     "pode ter sido recebida pela corretora")
             rec.note = "timeout no envio — exige reconciliação"
             return rec
         except Exception as exc:
@@ -694,6 +702,16 @@ class ExecutionCoordinator:
                 f"saída de {quantity} maior que a posição conhecida "
                 f"({conhecida}) em {instrument}")
 
+        # POSSE: a posição tem dono. Outro agente fechando em silêncio
+        # destruiria a atribuição de resultado e, pior, deixaria o dono
+        # achando que ainda está exposto. Guardião e risco têm passe.
+        dono = self.ledger.position_owner(instrument)
+        if dono and agent_id != dono and agent_id not in self.PODEM_FECHAR_DE_TERCEIROS:
+            raise ExecutionRefused(
+                f"posição em {instrument} pertence a {dono}: {agent_id} não "
+                "pode encerrá-la. Guardião ou gestão de risco têm essa "
+                "prerrogativa, com registro")
+
 
         rec = OrderRecord.__new__(OrderRecord)
         rec.order_id = f"ord-{len(self.orders) + 1}"
@@ -725,11 +743,8 @@ class ExecutionCoordinator:
         except BrokerTimeout:
             # AMBÍGUO: a corretora pode ter recebido. Nada de reenvio cego, e
             # o registro fica DURÁVEL para a reconciliação encontrar.
-            rec.state = OrderState.UNKNOWN_RECONCILIATION_REQUIRED
-            rec.note = "timeout na saída — reconciliar antes de qualquer envio"
-            self.exigir_reconciliacao(
-                f"saída {coid} em estado incerto: pode ter executado")
-            self.oms_version += 1
+            self.marcar_incerta(
+                rec, f"saída {coid} em estado incerto: pode ter executado")
             return {"estado": "incerto", "client_order_id": coid,
                     "order_id": rec.order_id,
                     "motivo": "timeout na saída — reconciliar"}
@@ -758,12 +773,18 @@ class ExecutionCoordinator:
         return rec
 
     def confirm_cancel(self, order_id: str) -> OrderRecord:
+        """Cancelamento confirmado: terminaliza e devolve a reserva.
+
+        Lia `rec.intent.reservation` direto e estourava com ordem RESTAURADA
+        (que não tem intenção) — falhava justamente depois de um reinício.
+        Usa a mesma liberação canônica da reconciliação.
+        """
         rec = self.orders[order_id]
         if rec.state is not OrderState.CANCEL_PENDING:
             return rec
         rec.state = OrderState.CANCELLED
-        self.ledger.release(rec.intent.reservation.amount, ref=rec.order_id)
-        self.risk.release(rec.intent.reservation.reservation_id)
+        self._liberar_reserva_de(rec)
+        self.oms_version += 1
         return rec
 
     # -- reconciliação (MA-07) -----------------------------------------
@@ -784,6 +805,24 @@ class ExecutionCoordinator:
         if relatorio["divergencias"]:
             rec.note = "; ".join(relatorio["divergencias"])[:200]
         return rec
+
+    def marcar_incerta(self, rec, motivo: str) -> None:
+        """Transição canônica para estado AMBÍGUO.
+
+        Antes cada ponto atribuía o estado à mão e era fácil esquecer o
+        resto: o timeout da ENTRADA marcava a ordem como incerta mas não
+        ligava o portão — a mesa seguia abrindo posição sem saber se a
+        anterior existe na corretora. Aqui as quatro consequências andam
+        juntas: estado, portão, versão do OMS e invalidação do relatório.
+        """
+        rec.state = OrderState.UNKNOWN_RECONCILIATION_REQUIRED
+        rec.note = motivo[:200]
+        self.oms_version += 1
+        self.exigir_reconciliacao(motivo)
+        # Um relatório SAFE emitido antes desta mudança não vale mais.
+        if self.ultimo_relatorio and self.ultimo_relatorio.get("seguro"):
+            self.ultimo_relatorio = {**self.ultimo_relatorio, "seguro": False,
+                                     "invalidado_por": motivo[:120]}
 
     def registrar_resultado_realizado(self, resultado: Decimal) -> Decimal:
         """Soma o resultado realizado ao acumulado do dia e propaga à ponte.

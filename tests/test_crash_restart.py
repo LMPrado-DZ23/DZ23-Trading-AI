@@ -317,11 +317,11 @@ class TestSaidaPassaPeloOms:
     registro durável. Timeout devolvia um dicionário que morria com o
     processo."""
 
-    def _com_posicao(self):
+    def _com_posicao(self, dono="trader-trend"):
         m, risco, livro, coord = sistema()
         livro.reserve(Decimal("100"), ref="r0")
         livro.fill_buy("BTC/USDT", Decimal("1"), Decimal("100"), Decimal("0"),
-                       reserved=Decimal("100"), ref="o0", agent_id="trader-trend")
+                       reserved=Decimal("100"), ref="o0", agent_id=dono)
         return m, risco, livro, coord
 
     def test_exit_creates_a_durable_order_record(self):
@@ -357,7 +357,7 @@ class TestSaidaPassaPeloOms:
 
     def test_exit_is_idempotent(self):
         """Pedir a mesma saída de novo não manda uma segunda venda."""
-        m, risco, livro, coord = self._com_posicao()
+        m, risco, livro, coord = self._com_posicao(dono="t")
         enviadas = []
 
         class Conta(CorretoraQueAceita):
@@ -423,8 +423,10 @@ class TestSegurancaDaSaida:
     def _com_posicao(self, qtd="1"):
         m, risco, livro, coord = sistema()
         livro.reserve(Decimal("100"), ref="r0")
+        # o dono da posição é quem fecha nestes cenários; a posse tem teste
+        # dedicado em TestPosseDaPosicao
         livro.fill_buy("BTC/USDT", Decimal(qtd), Decimal("100"), Decimal("0"),
-                       reserved=Decimal("100"), ref="o0", agent_id="trader-trend")
+                       reserved=Decimal("100"), ref="o0", agent_id="t")
         enviadas = []
 
         class Conta(CorretoraQueAceita):
@@ -622,3 +624,150 @@ class TestSaidaRespeitaOMandato:
                                  price=Decimal("110"), cost_basis=Decimal("100"),
                                  agent_id="t")
         assert not enviadas
+
+
+class TestEntradaAmbiguaTrancaNovoRisco:
+    """UNKNOWN → BLOCK NEW RISK. O timeout da ENTRADA marcava a ordem como
+    incerta mas NÃO ligava o portão: a mesa seguia abrindo posição sem saber
+    se a anterior existe na corretora."""
+
+    def _sistema(self):
+        """Dois instrumentos: assim a segunda tentativa é barrada pelo
+        PORTÃO, e não pelo veto de reserva duplicada no mesmo ativo."""
+        from tradingagents.desk.execution import BrokerTimeout
+        from tradingagents.desk.models import DeskMandate, Mode
+        m = DeskMandate(mandate_id="m", owner="p", account="a", mode=Mode.PAPER,
+                        instruments=("BTC/USDT", "ETH/USDT"),
+                        capital=Decimal("10000"))
+        risco = RiskEngine(m)
+        livro = Ledger(opening_cash=m.capital)
+        coord = ExecutionCoordinator(m, livro, risco, worker_id="w")
+        chamadas = []
+
+        class Timeout:
+            mode = "testnet"
+
+            def submit(self, coid, instrument, side, quantity, final_state=None):
+                chamadas.append(coid)
+                raise BrokerTimeout("resposta perdida")
+
+        coord.broker = Timeout()
+        return m, risco, coord, chamadas
+
+    def test_ambiguous_entry_blocks_the_next_entry(self):
+        from tradingagents.desk.execution import ExecutionRefused, OrderState
+        m, risco, coord, chamadas = self._sistema()
+        # a segunda intenção é criada ANTES, para que a recusa venha do
+        # PORTÃO e não do veto de reserva duplicada no mesmo instrumento
+        segunda = self._intencao(risco, "ETH/USDT")
+        rec = coord.submit(self._intencao(risco, "BTC/USDT"))
+        assert rec.state is OrderState.UNKNOWN_RECONCILIATION_REQUIRED
+        assert coord.reconciliacao_pendente is True, (
+            "ordem incerta não ligou o portão: a mesa seguiria operando")
+        with pytest.raises(ExecutionRefused, match="reconcilia"):
+            coord.submit(segunda)
+        assert len(chamadas) == 1, "uma segunda ordem foi enviada às cegas"
+
+    @staticmethod
+    def _intencao(risco, instrumento):
+        from datetime import timedelta
+
+        from tradingagents.desk.models import Action, Mode, TradeProposal
+        p = TradeProposal(agent_id="trader-trend", strategy="s",
+                          instrument=instrumento, action=Action.BUY, reason="t",
+                          desired_exposure_pct=Decimal("0.05"),
+                          confidence=Decimal("0.8"),
+                          valid_until=utcnow() + timedelta(minutes=5))
+        res = risco.reserve(p, Decimal("100"), agent_id="trader-trend")
+        return risco.intent(res, Action.BUY, Mode.PAPER, "w",
+                            provenance={"x": 1})
+
+    def test_ambiguous_entry_advances_the_oms_version(self):
+        m, risco, coord, _ = self._sistema()
+        antes = coord.oms_version
+        coord.submit(self._intencao(risco, "BTC/USDT"))
+        assert coord.oms_version > antes, (
+            "versão não avançou: um relatório SAFE anterior continuaria "
+            "valendo depois de uma ordem virar incerta")
+
+    def test_a_previous_safe_report_stops_authorising(self):
+        m, risco, coord, _ = self._sistema()
+        coord.ultimo_relatorio = {"seguro": True, "oms_version": coord.oms_version}
+        coord.submit(self._intencao(risco, "BTC/USDT"))
+        assert coord.ultimo_relatorio["oms_version"] != coord.oms_version
+
+
+class TestCancelamentoAposRestart:
+    """confirm_cancel lia rec.intent.reservation e estourava com ordem
+    restaurada — falhava exatamente depois de um reinício."""
+
+    def test_confirm_cancel_works_on_a_restored_order(self):
+        from tradingagents.desk.execution import OrderState
+        m, risco, livro, coord = sistema()
+        res = intencao(risco).reservation
+        doc = {"schema": "dz23.oms/2", "worker_id": "w", "dia": "",
+               "perda_do_dia": "0", "oms_version": 5,
+               "ordens": [{"order_id": "ord-c", "estado": "cancel_pending",
+                           "fingerprint": "fp", "filled": "0",
+                           "preco_medio": "0", "fees": "0", "fills_vistos": [],
+                           "external_id": "", "nota": "", "instrumento": "BTC/USDT",
+                           "quantidade": "1.5", "lado": "buy",
+                           "client_order_id": "coid-c", "agente": "trader-trend",
+                           "reserva_id": res.reservation_id,
+                           "procedencia": None, "custo_referencia": ""}],
+               "posicoes": {}, "caixa": "850", "moeda": "USDT",
+               "lancamentos": [],
+               "reservas": [{"reservation_id": res.reservation_id, "account": "a",
+                             "agent_id": "trader-trend", "instrument": "BTC/USDT",
+                             "amount": str(res.amount), "quantity": str(res.quantity),
+                             "mandate_version": 1, "expires_at": None}]}
+        m2, risco2, livro2, coord2 = sistema()
+        coord2.restaurar_estado(doc)
+        assert risco2.reserved_total > 0
+        rec = coord2.confirm_cancel("ord-c")      # não pode estourar
+        assert rec.state is OrderState.CANCELLED
+        assert risco2.reserved_total == Decimal("0"), (
+            "cancelamento confirmado não devolveu a reserva")
+
+
+class TestPosseDaPosicao:
+    """Outro agente fechando em silêncio destrói a atribuição de resultado e
+    deixa o dono achando que ainda está exposto."""
+
+    def _com_posicao_de(self, dono="trader-trend"):
+        m, risco, livro, coord = sistema()
+        livro.reserve(Decimal("100"), ref="r0")
+        livro.fill_buy("BTC/USDT", Decimal("1"), Decimal("100"), Decimal("0"),
+                       reserved=Decimal("100"), ref="o0", agent_id=dono)
+        enviadas = []
+
+        class Conta(CorretoraQueAceita):
+            def submit(self, coid, instrument, side, quantity, final_state=None):
+                enviadas.append(coid)
+                return super().submit(coid, instrument, side, quantity, final_state)
+
+        coord.broker = Conta()
+        return coord, enviadas
+
+    def test_another_agent_cannot_close_someone_elses_position(self):
+        from tradingagents.desk.execution import ExecutionRefused
+        coord, enviadas = self._com_posicao_de("trader-trend")
+        with pytest.raises(ExecutionRefused, match="pertence a"):
+            coord.close_position(instrument="BTC/USDT", quantity=Decimal("1"),
+                                 price=Decimal("110"), cost_basis=Decimal("100"),
+                                 agent_id="trader-breakout")
+        assert not enviadas
+
+    def test_the_owner_can_close(self):
+        coord, enviadas = self._com_posicao_de("trader-trend")
+        out = coord.close_position(instrument="BTC/USDT", quantity=Decimal("1"),
+                                   price=Decimal("110"), cost_basis=Decimal("100"),
+                                   agent_id="trader-trend")
+        assert out["estado"] in ("filled", "acknowledged") and enviadas
+
+    def test_the_guardian_may_close_on_behalf(self):
+        coord, enviadas = self._com_posicao_de("trader-trend")
+        coord.close_position(instrument="BTC/USDT", quantity=Decimal("1"),
+                             price=Decimal("110"), cost_basis=Decimal("100"),
+                             agent_id="position-guardian")
+        assert enviadas, "o guardião precisa conseguir encerrar posição órfã"
