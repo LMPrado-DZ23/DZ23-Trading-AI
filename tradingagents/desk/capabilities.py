@@ -75,8 +75,16 @@ class MatrizDeCapacidades:
         return self.estados.get(capacidade, Status.DESCONHECIDA)
 
     def suporta(self, capacidade: Capacidade) -> bool:
-        """Utilizável: exercitada com sucesso OU presente e não contestada."""
+        """Utilizável: o método existe e não foi contestado pela corretora.
+
+        Cuidado: isto NÃO é prova. Para afirmações que sustentam dinheiro —
+        provar que uma ordem não existe, por exemplo — use `comprovada`.
+        """
         return self.status(capacidade) in (Status.SUPORTADA, Status.PRESENTE)
+
+    def comprovada(self, capacidade: Capacidade) -> bool:
+        """Exercitada com sucesso. É o único estado que PROVA algo."""
+        return self.status(capacidade) is Status.SUPORTADA
 
     @property
     def disponiveis(self) -> frozenset:
@@ -86,24 +94,30 @@ class MatrizDeCapacidades:
         return [c for c in Capacidade if not self.suporta(c)]
 
     def pode_provar_ausencia(self) -> bool:
-        """Sem consulta direta por id, não se prova que uma ordem não existe.
+        """Só uma consulta EXERCITADA prova que uma ordem não existe.
 
-        Varrer histórico pode ENCONTRAR, nunca provar ausência — e tratar
-        "não achei" como "não existe" devolveria capital de ordem viva.
-        Método que responde "não suportado" também não prova nada.
+        Varrer histórico pode ENCONTRAR, nunca provar ausência. E um método
+        que apenas EXISTE não provou nada: pode estourar na primeira chamada
+        real — justamente quando a resposta decide se capital volta ou não.
         """
-        return self.status(Capacidade.CONSULTAR_ORDEM_POR_ID) in (
-            Status.SUPORTADA, Status.PRESENTE)
+        return self.comprovada(Capacidade.CONSULTAR_ORDEM_POR_ID)
 
     def pode_descobrir_ordens_orfas(self) -> bool:
         return self.suporta(Capacidade.LISTAR_ORDENS_ABERTAS)
 
     def nivel_de_confianca(self) -> str:
-        if not self.ausentes():
+        """`completo` exige TODAS exercitadas com sucesso.
+
+        Métodos que só existem não tornam a corretora verificada — chamar
+        isso de completo seria prometer uma garantia que ninguém testou.
+        """
+        if all(self.comprovada(c) for c in Capacidade):
             return "completo"
-        if self.disponiveis:
+        if not self.disponiveis:
+            return "insuficiente"
+        if any(self.comprovada(c) for c in Capacidade):
             return "parcial"
-        return "insuficiente"
+        return "nao_verificado"
 
     def explicacao(self) -> str:
         faltando = self.ausentes()

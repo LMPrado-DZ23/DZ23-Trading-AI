@@ -168,3 +168,105 @@ class TestCapacidadeReal:
     def test_listing_open_orders_is_its_own_capability(self):
         from tradingagents.desk.capabilities import Capacidade
         assert Capacidade.LISTAR_ORDENS_ABERTAS
+
+
+class TestPresenteNaoEProva:
+    """`PRESENTE` significa 'o método existe'. Tratar isso como capacidade
+    comprovada faz uma corretora nunca exercitada parecer plenamente
+    verificada — e a reconciliação se apoiar em algo que pode estourar."""
+
+    class Completa:
+        id = "tudo-presente"
+
+        def fetch_order(self, *a, **k):
+            return {}
+
+        def fetch_orders(self, *a, **k):
+            return []
+
+        def fetch_open_orders(self, *a, **k):
+            return []
+
+        def fetch_my_trades(self, *a, **k):
+            return []
+
+        def fetch_balance(self):
+            return {"total": {}}
+
+    def test_without_probing_nothing_is_supported(self):
+        from tradingagents.desk.capabilities import Capacidade, Status, detectar_capacidades
+        cap = detectar_capacidades(self.Completa())
+        for c in Capacidade:
+            assert cap.status(c) is not Status.SUPORTADA, (
+                f"{c.value} foi dada como comprovada sem ter sido exercitada")
+            assert cap.status(c) is Status.PRESENTE
+
+    def test_all_present_is_not_full_confidence(self):
+        from tradingagents.desk.capabilities import detectar_capacidades
+        cap = detectar_capacidades(self.Completa())
+        assert cap.nivel_de_confianca() != "completo"
+        assert cap.nivel_de_confianca() == "nao_verificado"
+
+    def test_probing_upgrades_what_it_can_exercise(self):
+        from tradingagents.desk.capabilities import Capacidade as C, Status, detectar_capacidades
+        cap = detectar_capacidades(self.Completa(), sondar=True)
+        # esta corretora falsa aceita fetch_order() sem argumentos
+        assert cap.status(C.CONSULTAR_ORDEM_POR_ID) is Status.SUPORTADA
+        assert cap.nivel_de_confianca() == "completo"
+
+    def test_proving_absence_requires_a_supported_lookup(self):
+        from tradingagents.desk.capabilities import detectar_capacidades
+        presente = detectar_capacidades(self.Completa())
+        assert presente.pode_provar_ausencia() is False, (
+            "método apenas presente não prova que uma ordem não existe")
+        sondada = detectar_capacidades(self.Completa(), sondar=True)
+        assert sondada.pode_provar_ausencia() is True
+
+
+class TestIdentidadeCanonicaDaOrdem:
+    """Adaptador e reconciliação precisam ler identidade da MESMA forma:
+    listas divergentes fazem uma ordem conhecida virar órfã só por diferença
+    de representação entre corretoras."""
+
+    def test_okx_style_client_id_is_recognised(self):
+        from tradingagents.desk.identity import order_identities
+        ids = order_identities({"id": "ex-1", "clientOrderId": None,
+                                "info": {"clOrdId": "dz23-X"}})
+        assert "dz23-X" in ids and "ex-1" in ids
+
+    def test_orig_client_order_id_is_recognised(self):
+        from tradingagents.desk.identity import order_identities
+        ids = order_identities({"id": "ex-2",
+                                "info": {"origClientOrderId": "dz23-Y"}})
+        assert "dz23-Y" in ids
+
+    def test_empty_values_are_not_identities(self):
+        from tradingagents.desk.identity import order_identities
+        ids = order_identities({"id": None, "clientOrderId": "",
+                                "info": {"clOrdId": None}})
+        assert ids == set()
+
+    def test_a_known_okx_order_is_not_an_orphan(self):
+        m, risco, livro, coord = sistema()
+        coord.orders["ord-1"] = coord._montar_registro(
+            order_id="ord-1", state=OrderState.ACKNOWLEDGED,
+            instrument="BTC/USDT", side="buy", quantity=Decimal("1"),
+            client_order_id="dz23-X", agent_id="A")
+        rel = coord.reconciliar(
+            lambda coid: {"resultado": "FOUND", "ordem": {"id": "ex-1",
+                                                          "status": "canceled"}},
+            consultar_posicoes=lambda: {},
+            consultar_fills=lambda coid, exid="": [],
+            consultar_ordens_abertas=lambda: [
+                {"id": "ex-1", "clientOrderId": None,
+                 "info": {"clOrdId": "dz23-X"}, "symbol": "BTC/USDT",
+                 "amount": Decimal("1"), "status": "open"}])
+        assert not any("ORDEM_ORFA_REMOTA" in d for d in rel["divergencias"]), (
+            "ordem conhecida virou órfã por diferença de representação")
+
+    def test_both_layers_use_the_same_function(self):
+        import inspect
+
+        from tradingagents.desk import brokers, execution
+        assert "order_identities" in inspect.getsource(execution)
+        assert "order_identities" in inspect.getsource(brokers)

@@ -21,6 +21,7 @@ from decimal import Decimal
 from enum import Enum
 
 from .capabilities import DESCONHECIDA as CAPACIDADES_DESCONHECIDAS
+from .identity import order_identities
 from .ledger import Ledger
 from .models import DeskMandate, MandateError, Mode, OrderIntent, utcnow
 
@@ -421,14 +422,10 @@ class ExecutionCoordinator:
                 if chave:
                     conhecidas.add(str(chave))
 
-        orfas = []
-        for o in remotas:
-            identidades = {str(v) for v in (
-                o.get("id"), o.get("clientOrderId"),
-                (o.get("info") or {}).get("clientOrderId")) if v}
-            if identidades & conhecidas:
-                continue
-            orfas.append(o)
+        # MESMA normalização usada pelo adaptador: listas próprias em cada
+        # camada fariam uma ordem conhecida virar órfã por diferença de
+        # representação entre corretoras.
+        orfas = [o for o in remotas if not order_identities(o) & conhecidas]
 
         for o in orfas:
             relatorio["divergencias"].append(

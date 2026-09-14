@@ -144,12 +144,27 @@ class TestRelatorioDeclaraOLimite:
 
 
 class TestNivelDeConfiancaDeclarado:
-    def test_full_capabilities_report_high_confidence(self):
+    def test_present_but_unprobed_is_not_full_confidence(self):
+        """Corrige uma premissa MINHA da rodada anterior: método que só
+        existe não torna a corretora verificada."""
         cap = detectar_capacidades(ExchangeCompleta())
-        assert cap.nivel_de_confianca() == "completo"
+        assert cap.nivel_de_confianca() == "nao_verificado"
+
+    def test_probing_upgrades_what_it_can_exercise(self):
+        """A sondagem é só de LEITURA e sem efeito: consultas que exigem um
+        identificador real (fetch_order) não podem ser exercitadas em vazio
+        e permanecem PRESENTE. Isso é honesto — e é por isso que
+        pode_provar_ausencia continua False até haver consulta de verdade."""
+        from tradingagents.desk.capabilities import Capacidade, Status
+        cap = detectar_capacidades(ExchangeCompleta(), sondar=True)
+        assert cap.status(Capacidade.LISTAR_ORDENS_ABERTAS) is Status.SUPORTADA
+        assert cap.status(Capacidade.CONSULTAR_POSICOES) is Status.SUPORTADA
+        assert cap.status(Capacidade.CONSULTAR_ORDEM_POR_ID) is Status.PRESENTE
+        assert cap.nivel_de_confianca() == "parcial"
+        assert cap.pode_provar_ausencia() is False
 
     def test_partial_capabilities_report_partial_confidence(self):
-        cap = detectar_capacidades(ExchangeSemTrades())
+        cap = detectar_capacidades(ExchangeSemTrades(), sondar=True)
         assert cap.nivel_de_confianca() == "parcial"
 
     def test_the_level_is_explained_in_words(self):

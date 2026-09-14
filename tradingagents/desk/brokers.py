@@ -182,10 +182,9 @@ class CCXTDeskBroker:
 
     @staticmethod
     def _identidades(o: dict) -> set:
-        info = o.get("info") or {}
-        return {c for c in (o.get("clientOrderId"), info.get("clientOrderId"),
-                            info.get("clOrdId"), o.get("id"),
-                            info.get("origClientOrderId")) if c}
+        """Delegação estrita à normalização canônica — sem lista própria."""
+        from .identity import order_identities
+        return order_identities(o)
 
     def capacidades(self):
         """Matriz de capacidades desta corretora, detectada por comportamento."""
