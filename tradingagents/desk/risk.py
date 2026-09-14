@@ -88,6 +88,7 @@ class RiskEngine:
         self._reservations: dict[str, RiskReservation] = {}
         self._concluidas: dict[str, dict] = {}
         self._deficits: dict[str, Decimal] = {}
+        self._incidentes: dict[str, dict] = {}
 
     # -- consultas -----------------------------------------------------
     @property
@@ -287,6 +288,10 @@ class RiskEngine:
                 # Reserva já concluída: um custo extra aqui é déficit puro.
                 self._deficits[reservation_id] = (
                     self._deficits.get(reservation_id, Decimal("0")) + custo)
+                self.abrir_incidente(
+                    "RESERVATION_DEFICIT", amount=custo,
+                    reservation_id=reservation_id,
+                    evidence="execução sobre reserva já concluída")
                 return {"estado": "DEFICIT", "deficit": str(custo),
                         "sobra": "0"}
 
@@ -305,6 +310,10 @@ class RiskEngine:
             if deficit > 0:
                 self._deficits[reservation_id] = (
                     self._deficits.get(reservation_id, Decimal("0")) + deficit)
+                self.abrir_incidente(
+                    "RESERVATION_DEFICIT", amount=deficit,
+                    reservation_id=reservation_id,
+                    evidence=f"execução custou {custo} contra cobertura {limite}")
 
             if terminal or atualizada.remaining_quantity <= 0:
                 sobra = atualizada.remaining_amount
@@ -332,7 +341,9 @@ class RiskEngine:
     def incidentes_doc(self) -> dict:
         """Incidentes para persistência — reiniciar não resolve déficit."""
         return {"deficits": {k: str(v) for k, v in self._deficits.items()},
-                "conclusoes": self._concluidas}
+                "conclusoes": self._concluidas,
+                # Reiniciar não é resolução.
+                "incidentes": self._incidentes}
 
     def restaurar_incidentes(self, doc: dict | None) -> None:
         if not doc:
@@ -340,6 +351,7 @@ class RiskEngine:
         for k, v in (doc.get("deficits") or {}).items():
             self._deficits[k] = Decimal(str(v))
         self._concluidas.update(doc.get("conclusoes") or {})
+        self._incidentes.update(doc.get("incidentes") or {})
 
     def terminalizar(self, reservation_id: str, *, motivo: str) -> Decimal:
         """Encerra a reserva e devolve QUANTO deve voltar ao caixa.
@@ -366,17 +378,80 @@ class RiskEngine:
             }
             return max(restante, Decimal("0"))
 
+    # ============================================ incidentes financeiros
+    # Conclusão responde "como a reserva terminou?"; incidente responde "há
+    # violação financeira ainda não resolvida?". Gravar a divergência apenas
+    # na conclusão fazia a violação sumir da decisão de risco assim que a
+    # reserva era terminalizada.
+    def abrir_incidente(self, tipo: str, *, amount: Decimal,
+                        reservation_id: str = "", order_id: str = "",
+                        evidence: str = "") -> str:
+        import uuid as _uuid
+        chave = f"{tipo}:{reservation_id or order_id}"
+        existente = self._incidentes.get(chave)
+        if existente and existente["status"] == "OPEN":
+            # Mesma violação econômica: soma em vez de multiplicar registros.
+            existente["amount"] = str(Decimal(existente["amount"]) + amount)
+            return existente["incident_id"]
+        inc = {
+            "incident_id": "inc_" + _uuid.uuid4().hex[:12],
+            "type": tipo,
+            "reservation_id": reservation_id,
+            "order_id": order_id,
+            "amount": str(amount),
+            "currency": getattr(self.carteira, "currency", "USDT"),
+            "opened_at": utcnow().isoformat(),
+            "evidence": evidence,
+            "status": "OPEN",
+            "resolved_at": "", "resolved_by": "", "resolution_evidence": "",
+        }
+        self._incidentes[chave] = inc
+        return inc["incident_id"]
+
+    def incidentes(self) -> list[dict]:
+        return list(self._incidentes.values())
+
+    def incidentes_abertos(self) -> list[dict]:
+        return [i for i in self._incidentes.values() if i["status"] == "OPEN"]
+
+    def resolve_risk_incident(self, incident_id: str, *, actor: str,
+                              evidence: str, reason: str = "") -> dict:
+        """Fecha um incidente COM evidência e autor.
+
+        Saldos voltarem a bater sozinhos não resolve nada: o defeito
+        aconteceu, e esquecer porque os números coincidiram depois é como
+        apagar o registro do acidente porque o carro foi consertado.
+        """
+        if not actor:
+            raise ValueError("resolução exige um responsável identificado")
+        if not evidence or not evidence.strip():
+            raise ValueError(
+                "resolução exige evidência: sem ela não há como auditar por "
+                "que a violação deixou de valer")
+        for inc in self._incidentes.values():
+            if inc["incident_id"] != incident_id:
+                continue
+            if inc["status"] != "OPEN":
+                return inc
+            # O histórico NUNCA é apagado: o registro muda de status.
+            inc["status"] = "RESOLVED"
+            inc["resolved_at"] = utcnow().isoformat()
+            inc["resolved_by"] = actor
+            inc["resolution_evidence"] = f"{evidence.strip()} | {reason}".strip(" |")
+            return inc
+        raise ValueError(f"incidente {incident_id} não encontrado")
+
     def registrar_divergencia_de_cobertura(self, reservation_id: str, *,
                                            faltante: Decimal) -> None:
-        """O risco tinha reserva que o livro não travou.
-
-        Não é déficit de execução (nada foi gasto a mais), mas é
-        inconsistência entre as duas visões e precisa aparecer.
-        """
+        """O risco tinha reserva que o livro não travou."""
         doc = self._concluidas.get(reservation_id) or {}
         doc["cobertura_nao_travada"] = str(faltante)
         doc["estado"] = "DIVERGENTE"
         self._concluidas[reservation_id] = doc
+        self.abrir_incidente(
+            "COVERAGE_LEDGER_MISMATCH", amount=faltante,
+            reservation_id=reservation_id,
+            evidence=f"reserva viva de {faltante} sem lastro no livro")
 
     def conclusao(self, reservation_id: str) -> dict | None:
         """Como esta reserva terminou — evidência para auditoria."""
@@ -391,6 +466,15 @@ class RiskEngine:
 
         Livro balanceado prova aritmética; isto prova POLÍTICA.
         """
+        # 1) Incidente financeiro em aberto bloqueia, ponto. Só resolução
+        #    explícita com evidência tira o bloqueio.
+        abertos = self.incidentes_abertos()
+        if abertos:
+            i = abertos[0]
+            return False, (
+                f"incidente financeiro em aberto: {i['type']} "
+                f"incident_id={i['incident_id']} valor={i['amount']} "
+                f"reserva={i['reservation_id'] or '-'}")
         deficit = self.deficit_total()
         if deficit > 0:
             return False, (f"déficit de cobertura de {deficit}: houve execução "
@@ -404,6 +488,17 @@ class RiskEngine:
             # de uma ordem no lugar da outra.
             with self._lock:
                 vivas = dict(self._reservations)
+            no_livro_ids = set(self.carteira.reservation_balances())
+            orfas = no_livro_ids - set(vivas)
+            if orfas:
+                return False, (
+                    f"ORPHAN_LEDGER_RESERVATION: o livro tem capital travado "
+                    f"em {', '.join(sorted(orfas))} sem reserva viva no risco")
+            faltando = set(vivas) - no_livro_ids
+            if faltando:
+                return False, (
+                    f"MISSING_LEDGER_RESERVATION: o risco tem "
+                    f"{', '.join(sorted(faltando))} sem lastro no livro")
             for rid, reserva in vivas.items():
                 no_livro = self.carteira.reserved_cash(rid)
                 if no_livro != reserva.remaining_amount:

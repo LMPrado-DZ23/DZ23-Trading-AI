@@ -88,7 +88,10 @@ class TestExecucaoMaisCaraQueAReserva:
                            fill_id="f1")
         assert livro.is_balanced() is True
         ok, motivo = risco.capital_state_consistent()
-        assert ok is False and "déficit" in motivo.lower()
+        # a mensagem passou a identificar o INCIDENTE, que é mais preciso
+        # que a palavra "déficit": diz o tipo, o id e a reserva envolvida
+        assert ok is False
+        assert "RESERVATION_DEFICIT" in motivo and "incident_id=" in motivo
 
     def test_new_entry_is_blocked_after_a_deficit(self):
         m, risco, livro, coord = sistema()

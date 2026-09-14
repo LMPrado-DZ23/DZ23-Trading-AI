@@ -793,6 +793,22 @@ class ExecutionCoordinator:
                 "reconciliação pendente: o estado real é desconhecido "
                 f"({self.motivo_bloqueio})")
 
+        # 3b. INCIDENTE FINANCEIRO é outra dimensão: o portão de
+        # reconciliação cuida do que é DESCONHECIDO; isto cuida do que é
+        # sabidamente violado. Um não substitui o outro.
+        #
+        # Aqui se verifica apenas INCIDENTE ABERTO, e não a consistência
+        # completa: a reserva desta ordem ainda não foi travada no livro
+        # (quem trava é o passo 4b, logo abaixo), então exigir os saldos
+        # casados neste ponto acusaria a própria ordem que está nascendo.
+        abertos = self.risk.incidentes_abertos()
+        if abertos:
+            i = abertos[0]
+            raise ExecutionRefused(
+                f"incidente financeiro em aberto ({i['type']}, "
+                f"incident_id={i['incident_id']}): resolva com evidência "
+                "antes de assumir risco novo")
+
         # 4. AUTORIZAÇÃO POR LADO — o que muda entre comprar e vender está
         #    declarado aqui, não espalhado por dois caminhos.
         if ei.side is Side.SELL:
@@ -1320,7 +1336,12 @@ class ExecutionCoordinator:
         self.ordens_restauradas = doc.get("ordens", [])
         self.posicoes_restauradas = doc.get("posicoes", {})
         posicoes = doc.get("posicoes", {})
-        exige = bool(pendentes or abertas or posicoes)
+        # O retorno precisa CONCORDAR com o estado interno: dizer
+        # exige_reconciliacao=False com o portão ligado por migração
+        # ambígua faria quem lê o resultado confiar em algo falso.
+        exige = bool(pendentes or abertas or posicoes
+                     or self._pendencias_de_migracao
+                     or self.risk.incidentes_abertos())
         if exige:
             self.exigir_reconciliacao(
                 f"{len(pendentes)} ordem(ns) incerta(s), {len(abertas)} aberta(s) "
@@ -1378,12 +1399,18 @@ class ExecutionCoordinator:
             motivo = (f"UNKNOWN_RESERVATION_OWNERSHIP: saldo reservado antigo "
                       f"({antigo}) não bate com a reserva viva ({valor})")
             self._pendencias_de_migracao.append(motivo)
+            self.risk.abrir_incidente(
+                "UNKNOWN_RESERVATION_OWNERSHIP", amount=antigo,
+                reservation_id=unica["reservation_id"], evidence=motivo)
             self.exigir_reconciliacao(motivo)
             return
         motivo = (f"UNKNOWN_RESERVATION_OWNERSHIP: saldo reservado antigo "
                   f"({antigo}) com {len(reservas)} reservas vivas — dividir sem "
                   "prova seria inventar contabilidade")
         self._pendencias_de_migracao.append(motivo)
+        self.risk.abrir_incidente(
+            "UNKNOWN_RESERVATION_OWNERSHIP", amount=antigo,
+            evidence=motivo)
         self.exigir_reconciliacao(motivo)
 
     def _ordem_de_doc(self, od: dict):

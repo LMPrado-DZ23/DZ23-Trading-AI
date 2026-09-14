@@ -247,6 +247,14 @@ class Ledger:
         return sum((s for c, s in saldos.items()
                     if c == "RESERVED" or c.startswith("RESERVED:")), ZERO)
 
+    def reservation_balances(self) -> dict:
+        """Saldo travado POR reserva — uma leitura só, sem parsing espalhado."""
+        saldos = {}
+        for conta, saldo in self.balances().items():
+            if conta.startswith("RESERVED:") and saldo != ZERO:
+                saldos[conta.split(":", 1)[1]] = saldo
+        return saldos
+
     def invested_cost(self) -> Decimal:
         """Custo de aquisição das posições ABERTAS.
 
