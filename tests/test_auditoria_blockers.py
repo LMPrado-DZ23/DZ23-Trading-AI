@@ -11,11 +11,9 @@ from decimal import Decimal
 import pytest
 
 from tradingagents.desk.brokers import BrokerAdapterError, _pode_ter_chegado
-from tradingagents.desk.execution import (BrokerTimeout, ExecutionCoordinator,
-                                          OrderState)
+from tradingagents.desk.execution import BrokerTimeout, ExecutionCoordinator, OrderState
 from tradingagents.desk.ledger import Ledger
-from tradingagents.desk.models import (Action, DeskMandate, Mode, OrderIntent,
-                                       utcnow)
+from tradingagents.desk.models import Action, DeskMandate, Mode, OrderIntent, utcnow
 from tradingagents.desk.risk import RiskEngine
 
 
@@ -215,7 +213,7 @@ class TestProcedenciaRealChegaNaCorretora:
                         source="http://feed-inseguro", strategy="s", agent_id="a")
 
     def test_cycle_attaches_provenance_to_every_intent(self):
-        from tradingagents.desk.models import (AgentStage, MarketSnapshot, Mode)
+        from tradingagents.desk.models import AgentStage, MarketSnapshot
         from tradingagents.desk.orchestrator import DeskOrchestrator
         from tradingagents.desk.traders import default_desk
         m = mandato()
@@ -246,7 +244,7 @@ class TestProcedenciaRealChegaNaCorretora:
                 return {"id": "ex-1", "status": "filled", "filled": quantity,
                         "average": Decimal("100"), "fee": Decimal("0")}
 
-        from tradingagents.desk.models import (AgentStage, MarketSnapshot)
+        from tradingagents.desk.models import AgentStage, MarketSnapshot
         from tradingagents.desk.orchestrator import DeskOrchestrator
         from tradingagents.desk.traders import default_desk
         m = mandato()
