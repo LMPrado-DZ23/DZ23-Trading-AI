@@ -86,6 +86,8 @@ class RiskEngine:
         self.carteira = carteira
         self._lock = threading.Lock()
         self._reservations: dict[str, RiskReservation] = {}
+        self._concluidas: dict[str, dict] = {}
+        self._deficits: dict[str, Decimal] = {}
 
     # -- consultas -----------------------------------------------------
     @property
@@ -224,6 +226,91 @@ class RiskEngine:
                 return Decimal("0")
             self._reservations[reservation_id] = atualizada
             return atualizada.remaining_amount
+
+    # ------------------------------------------------ custo real vs cobertura
+    def registrar_execucao(self, reservation_id: str, *, custo: Decimal,
+                           quantidade: Decimal, terminal: bool) -> dict:
+        """Confronta o CUSTO REAL com a cobertura e conclui a reserva.
+
+        Consumir proporcionalmente à quantidade estima a alocação; não prova
+        cobertura. O custo real é quantidade × preço executado + taxa, e com
+        slippage ele pode passar do reservado. Quando passa, a execução NÃO
+        é desfeita — a corretora já executou — mas o déficit é registrado e o
+        risco novo é travado.
+        """
+        with self._lock:
+            reserva = self._reservations.get(reservation_id)
+            if reserva is None:
+                # Reserva já concluída: um custo extra aqui é déficit puro.
+                self._deficits[reservation_id] = (
+                    self._deficits.get(reservation_id, Decimal("0")) + custo)
+                return {"estado": "DEFICIT", "deficit": str(custo),
+                        "sobra": "0"}
+
+            cobertura = reserva.remaining_amount
+            # Cobertura dura = reservado + folga declarada na política.
+            folga = (reserva.original_amount
+                     * getattr(self.mandate, "slippage_buffer_pct",
+                               Decimal("0"))).quantize(Decimal("0.00000001"))
+            limite = cobertura + folga
+            deficit = custo - limite if custo > limite else Decimal("0")
+            consumido = min(custo, cobertura)
+
+            from dataclasses import replace
+            atualizada = replace(
+                reserva,
+                consumed_amount=reserva.consumed_amount + consumido,
+                filled_quantity=reserva.filled_quantity + quantidade)
+            if deficit > 0:
+                self._deficits[reservation_id] = (
+                    self._deficits.get(reservation_id, Decimal("0")) + deficit)
+
+            if terminal or atualizada.remaining_quantity <= 0:
+                sobra = atualizada.remaining_amount
+                # Conclusão fica registrada: apagar a reserva sem deixar
+                # rastro tiraria a única evidência do consumo terminal.
+                self._concluidas[reservation_id] = {
+                    "reservation_id": reservation_id,
+                    "estado": "DEFICIT" if deficit > 0 else (
+                        "CONSUMED" if sobra <= 0 else "RELEASED"),
+                    "original_amount": str(reserva.original_amount),
+                    "consumed_amount": str(atualizada.consumed_amount),
+                    "sobra_liberada": str(max(sobra, Decimal("0"))),
+                    "original_quantity": str(reserva.original_quantity),
+                    "filled_quantity": str(atualizada.filled_quantity),
+                    "deficit": str(deficit),
+                }
+                del self._reservations[reservation_id]
+                return {"estado": self._concluidas[reservation_id]["estado"],
+                        "deficit": str(deficit), "sobra": str(max(sobra, Decimal("0")))}
+
+            self._reservations[reservation_id] = atualizada
+            return {"estado": "PARTIALLY_CONSUMED", "deficit": str(deficit),
+                    "sobra": "0"}
+
+    def conclusao(self, reservation_id: str) -> dict | None:
+        """Como esta reserva terminou — evidência para auditoria."""
+        return self._concluidas.get(reservation_id)
+
+    def deficit_total(self) -> Decimal:
+        """Quanto foi executado ALÉM da cobertura reservada."""
+        return sum(self._deficits.values(), Decimal("0"))
+
+    def capital_state_consistent(self) -> tuple[bool, str]:
+        """O estado de capital fecha com a política?
+
+        Livro balanceado prova aritmética; isto prova POLÍTICA.
+        """
+        deficit = self.deficit_total()
+        if deficit > 0:
+            return False, (f"déficit de cobertura de {deficit}: houve execução "
+                           "mais cara que o capital reservado")
+        if self.carteira is not None and self.carteira.cash_available() < 0:
+            return False, (f"caixa negativo ({self.carteira.cash_available()}): "
+                           "há dinheiro comprometido além do disponível")
+        if self.reserved_total < 0:
+            return False, "reservado negativo"
+        return True, "capital consistente"
 
     def bind(self, reservation_id: str, client_order_id: str) -> None:
         """Vincula a reserva a UMA ordem. Idempotente para o mesmo vínculo.

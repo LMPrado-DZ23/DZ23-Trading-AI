@@ -77,6 +77,13 @@ class DeskMandate:
     max_position_pct: Decimal = Decimal("0.25")
     max_open_positions: int = 4
     version: int = 1
+    # Folga DECLARADA para custo de execução acima do reservado: o
+    # dimensionamento reserva quantidade × preço esperado, mas a execução
+    # ainda paga taxa e pode sofrer slippage. Sem uma folga explícita,
+    # qualquer taxa viraria "déficit" e travaria a mesa a cada compra; com
+    # folga implícita, um slippage grave passaria despercebido. 1% cobre
+    # taxa típica de corretora (0,1%–0,6%) com margem.
+    slippage_buffer_pct: Decimal = Decimal("0.01")
     valid_until: datetime | None = None
     revoked_at: datetime | None = None
     live_authorized: bool = False      # só verdadeiro com a frase do dono

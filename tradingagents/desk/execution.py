@@ -603,30 +603,30 @@ class ExecutionCoordinator:
         if lado == "buy":
             reserva = self._reserva_de(rec)
             if reserva is not None:
-                # RESERVA PROPORCIONAL: liberar tudo no primeiro parcial
-                # deixaria a parte que ainda pode executar sem cobertura.
                 alvo_total = rec.quantidade or quantidade
-                proporcao = (quantidade / alvo_total) if alvo_total else Decimal("1")
-                # Base ORIGINAL da reserva, não o saldo: compor percentuais
-                # sobre um saldo que já encolheu erra a partir do 2º fill.
-                base = Decimal(str(reserva.get("original_amount")
-                                   or reserva["amount"]))
-                consumida = (base * proporcao).quantize(Decimal("0.00000001"))
-                self.ledger.fill_buy(instrumento, quantidade, preco, taxa,
-                                     reserved=consumida,
-                                     ref=rec.order_id, agent_id=rec.agente)
                 terminal = (rec.filled_qty + quantidade) >= alvo_total
-                if terminal:
-                    # Sobra da reserva (diferença entre reservado e executado)
-                    # volta ao capital disponível de uma vez.
-                    self.risk.release(reserva["reservation_id"])
-                else:
-                    # PARCIAL: o risco consome exatamente o que o livro
-                    # consumiu. Manter o valor integral aqui faria
-                    # `available` mentir justamente enquanto a ordem está
-                    # aberta — e é `available` que decide se a próxima cabe.
-                    self.risk.consume(reserva["reservation_id"], consumida,
-                                      quantidade=quantidade)
+                # CUSTO REAL da execução — é isto que sai do caixa, não a
+                # estimativa proporcional. Slippage e taxa entram aqui.
+                custo_real = (preco * quantidade + taxa).quantize(
+                    Decimal("0.00000001"))
+                resultado = self.risk.registrar_execucao(
+                    reserva["reservation_id"], custo=custo_real,
+                    quantidade=quantidade, terminal=terminal)
+
+                self.ledger.fill_buy(instrumento, quantidade, preco, taxa,
+                                     reserved=custo_real, ref=rec.order_id,
+                                     agent_id=rec.agente)
+                sobra = Decimal(str(resultado.get("sobra") or 0))
+                if sobra > 0:
+                    # Parte reservada e não usada volta ao caixa.
+                    self.ledger.release(sobra, ref=rec.order_id)
+                deficit = Decimal(str(resultado.get("deficit") or 0))
+                if deficit > 0:
+                    # A corretora JÁ executou: não se desfaz o fill. Registra
+                    # o déficit e trava risco novo.
+                    self.exigir_reconciliacao(
+                        f"RISK_RESERVATION_DEFICIT: execução custou {deficit} "
+                        f"além da cobertura reservada em {instrumento}")
         else:
             # SAÍDA: reduz a posição, realiza o resultado e alimenta o freio.
             custo = self._custo_proporcional(instrumento, quantidade,
