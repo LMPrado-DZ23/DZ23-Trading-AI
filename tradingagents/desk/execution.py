@@ -634,6 +634,23 @@ class ExecutionCoordinator:
         sistema, e a auditoria cobrou quatro vezes.
         """
         coid = client_order_id or f"exit-{instrument}-{len(self.orders) + 1}"
+        fingerprint = (f"exit|{instrument}|{quantity}|{cost_basis}|{agent_id}|"
+                       f"{self.mandate.account}")
+        # IDEMPOTÊNCIA PRIMEIRO: um reenvio da MESMA saída precisa ser
+        # reconhecido antes de qualquer validação de estado. Depois da
+        # primeira venda a posição já é zero, e validar antes faria o retry
+        # legítimo ser recusado — empurrando o operador a criar outra ordem.
+        existente = self._by_key.get(coid)
+        if existente:
+            rec = self.orders[existente]
+            if rec.fingerprint and rec.fingerprint != fingerprint:
+                raise IdempotencyConflict(
+                    f"client_order_id {coid} já existe com conteúdo diferente: "
+                    "reaproveitar silenciosamente enviaria uma ordem que você "
+                    "não pediu")
+            return {"estado": rec.state.value, "client_order_id": coid,
+                    "order_id": rec.order_id, "reaproveitada": True}
+
         if quantity <= 0:
             raise ExecutionRefused("quantidade de saída precisa ser positiva")
 
@@ -645,28 +662,38 @@ class ExecutionCoordinator:
                 "nenhuma saída automática é enviada. Reconcilie primeiro "
                 f"({self.motivo_bloqueio})")
 
-        # TAMANHO: não se vende mais do que se tem. Em spot isso viraria
-        # venda a descoberto — exposição na direção oposta, sem autorização.
+        # MANDATO: a saída não pode ter menos verificação que a entrada.
+        # Instrumento fora do mandato, mandato revogado ou vencido param aqui,
+        # antes de qualquer contato com a corretora.
+        try:
+            # assert_active já cobre revogação, validade e instrumento fora
+            # do mandato — usar o contrato existente em vez de reimplementar.
+            self.mandate.assert_active(instrument=instrument)
+        except MandateError as exc:
+            raise ExecutionRefused(f"mandato inativo: {exc}") from None
+        # A autorização LIVE não é verificada aqui de novo: assert_active()
+        # acima já recusa mandato em LIVE sem autorização ativa. Duplicar a
+        # checagem daria falsa sensação de cobertura — o teste de mutação
+        # mostrou que a linha extra não decidia nada.
+
+        # TAMANHO: só se vende o que se tem. Posição desconhecida ou zero
+        # NÃO autoriza venda: em spot isso viraria venda a descoberto —
+        # exposição na direção oposta, sem ninguém autorizar. E cost_basis é
+        # informação contábil, não prova de que existe ativo na corretora.
         conhecida = self.ledger.position_quantity(instrument)
-        if conhecida > 0 and quantity > conhecida:
+        # Posição zero e venda maior que a posição são recusas distintas com
+        # mensagens distintas — a segunda também cobriria o caso zero, mas a
+        # primeira explica ao operador o que realmente aconteceu.
+        if conhecida <= 0:
+            raise ExecutionRefused(
+                f"nenhuma posição conhecida em {instrument}: saída automática "
+                "recusada. Posição aberta fora do sistema precisa ser adotada "
+                "por reconciliação antes de ser encerrada")
+        if quantity > conhecida:
             raise ExecutionRefused(
                 f"saída de {quantity} maior que a posição conhecida "
                 f"({conhecida}) em {instrument}")
 
-        # Impressão digital do PEDIDO: o mesmo identificador com conteúdo
-        # diferente é conflito, não reaproveitamento.
-        fingerprint = (f"exit|{instrument}|{quantity}|{cost_basis}|{agent_id}|"
-                       f"{self.mandate.account}")
-        existente = self._by_key.get(coid)
-        if existente:
-            rec = self.orders[existente]
-            if rec.fingerprint and rec.fingerprint != fingerprint:
-                raise IdempotencyConflict(
-                    f"client_order_id {coid} já existe com conteúdo diferente: "
-                    "reaproveitar silenciosamente enviaria uma ordem que você "
-                    "não pediu")
-            return {"estado": rec.state.value, "client_order_id": coid,
-                    "order_id": rec.order_id, "reaproveitada": True}
 
         rec = OrderRecord.__new__(OrderRecord)
         rec.order_id = f"ord-{len(self.orders) + 1}"

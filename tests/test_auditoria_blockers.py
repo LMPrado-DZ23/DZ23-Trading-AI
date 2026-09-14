@@ -61,11 +61,22 @@ class CorretoraOk:
                             "price": self.price, "fee": {"cost": Decimal("0")}}]}
 
 
-def coordenador(broker):
+def coordenador(broker, com_posicao="1"):
+    """Coordenador com posição REAL no livro quando pedido.
+
+    Saída agora exige posição conhecida — vender sem ela seria venda a
+    descoberto. Os cenários de freio diário precisam da compra antes.
+    """
     m = mandato()
     risco = RiskEngine(m)
-    return ExecutionCoordinator(m, Ledger(opening_cash=m.capital), risco,
-                                worker_id="w", broker=broker), risco
+    livro = Ledger(opening_cash=m.capital)
+    if com_posicao:
+        livro.reserve(Decimal("100"), ref="r0")
+        livro.fill_buy("BTC/USDT", Decimal(com_posicao), Decimal("100"),
+                       Decimal("0"), reserved=Decimal("100"), ref="o0",
+                       agent_id="t")
+    return ExecutionCoordinator(m, livro, risco, worker_id="w",
+                                broker=broker), risco
 
 
 def intencao(risco, quantidade="1", preco="100"):
@@ -151,13 +162,13 @@ class TestFreioDiarioVemDoLivro:
             "o resultado realizado não alimentou o freio diário")
 
     def test_losses_accumulate(self):
-        coord, _ = coordenador(CorretoraOk())
+        coord, _ = coordenador(CorretoraOk(), com_posicao="2")
         self._fechar_com_prejuizo(coord, "30")
         self._fechar_com_prejuizo(coord, "20")
         assert coord.perda_do_dia == Decimal("50")
 
     def test_profit_reduces_the_accumulated_loss(self):
-        coord, _ = coordenador(CorretoraOk())
+        coord, _ = coordenador(CorretoraOk(), com_posicao="2")
         self._fechar_com_prejuizo(coord, "30")
         coord.broker.price = Decimal("120")
         coord.close_position(instrument="BTC/USDT", quantity=Decimal("1"),

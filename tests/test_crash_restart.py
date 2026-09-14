@@ -506,8 +506,11 @@ class TestCustoDeReferenciaSobreviveAoRestart:
             def submit(self, *a, **k):
                 raise BrokerTimeout("perdida")
 
+        # posição REAL no livro: vender sem ela é venda a descoberto
+        livro.reserve(Decimal("100"), ref="r0")
+        livro.fill_buy("BTC/USDT", Decimal("1"), Decimal("100"), Decimal("0"),
+                       reserved=Decimal("100"), ref="o0", agent_id="trader-trend")
         coord.broker = Timeout()
-        # livro NÃO conhece a posição: é o caso que exercita o fallback
         coord.close_position(instrument="BTC/USDT", quantity=Decimal("1"),
                              price=Decimal("90"), cost_basis=Decimal("100"),
                              agent_id="trader-trend", client_order_id="exit-9")
@@ -525,3 +528,97 @@ class TestCustoDeReferenciaSobreviveAoRestart:
         # vendeu a 90 o que custou 100 => prejuízo de 10, nunca lucro de 90
         assert coord2.perda_do_dia == Decimal("10"), (
             f"resultado errado após reinício: perda={coord2.perda_do_dia}")
+
+
+class TestPosicaoZeroNaoPermiteVenda:
+    """Bug introduzido por MIM na rodada anterior: a checagem era
+    `conhecida > 0 and quantity > conhecida`, então com posição ZERO
+    qualquer venda passava — venda a descoberto sem ninguém autorizar."""
+
+    def _sistema_sem_posicao(self):
+        m, risco, livro, coord = sistema()
+        enviadas = []
+
+        class Conta(CorretoraQueAceita):
+            def submit(self, coid, instrument, side, quantity, final_state=None):
+                enviadas.append(coid)
+                return super().submit(coid, instrument, side, quantity, final_state)
+
+        coord.broker = Conta()
+        return coord, livro, enviadas
+
+    def test_selling_with_zero_position_is_refused(self):
+        from tradingagents.desk.execution import ExecutionRefused
+        coord, livro, enviadas = self._sistema_sem_posicao()
+        assert livro.position_quantity("BTC/USDT") == Decimal("0")
+        with pytest.raises(ExecutionRefused):
+            coord.close_position(instrument="BTC/USDT", quantity=Decimal("1"),
+                                 price=Decimal("110"), cost_basis=Decimal("100"),
+                                 agent_id="t")
+        assert not enviadas, "venda a descoberto chegou à corretora"
+
+    def test_cost_basis_does_not_authorise_a_sale(self):
+        """cost_basis é informação CONTÁBIL: não prova que existe ativo na
+        corretora."""
+        from tradingagents.desk.execution import ExecutionRefused
+        coord, livro, enviadas = self._sistema_sem_posicao()
+        with pytest.raises(ExecutionRefused):
+            coord.close_position(instrument="BTC/USDT", quantity=Decimal("0.1"),
+                                 price=Decimal("110"),
+                                 cost_basis=Decimal("999999"), agent_id="t")
+        assert not enviadas
+
+
+class TestSaidaRespeitaOMandato:
+    """A saída não pode ter menos verificação que a entrada."""
+
+    def _coord(self, instrumentos=("BTC/USDT",), modo=None, live_ok=False):
+        from tradingagents.desk.models import DeskMandate, Mode
+        m = DeskMandate(mandate_id="m", owner="p", account="a",
+                        mode=modo or Mode.PAPER, instruments=instrumentos,
+                        capital=Decimal("1000"), live_authorized=live_ok)
+        risco = RiskEngine(m)
+        livro = Ledger(opening_cash=m.capital)
+        livro.reserve(Decimal("100"), ref="r0")
+        livro.fill_buy("BTC/USDT", Decimal("1"), Decimal("100"), Decimal("0"),
+                       reserved=Decimal("100"), ref="o0", agent_id="t")
+        enviadas = []
+
+        class Conta(CorretoraQueAceita):
+            def submit(self, coid, instrument, side, quantity, final_state=None):
+                enviadas.append(coid)
+                return super().submit(coid, instrument, side, quantity, final_state)
+
+        coord = ExecutionCoordinator(m, livro, risco, worker_id="w",
+                                     broker=Conta())
+        return coord, enviadas
+
+    def test_instrument_outside_the_mandate_is_refused(self):
+        from tradingagents.desk.execution import ExecutionRefused
+        coord, enviadas = self._coord(instrumentos=("ETH/USDT",))
+        with pytest.raises(ExecutionRefused, match="mandato"):
+            coord.close_position(instrument="BTC/USDT", quantity=Decimal("1"),
+                                 price=Decimal("110"), cost_basis=Decimal("100"),
+                                 agent_id="t")
+        assert not enviadas
+
+    def test_revoked_mandate_blocks_the_exit(self):
+        from tradingagents.desk.execution import ExecutionRefused
+        coord, enviadas = self._coord()
+        from tradingagents.desk.models import utcnow as _agora
+        object.__setattr__(coord.mandate, "revoked_at", _agora())
+        with pytest.raises(ExecutionRefused, match="mandato inativo"):
+            coord.close_position(instrument="BTC/USDT", quantity=Decimal("1"),
+                                 price=Decimal("110"), cost_basis=Decimal("100"),
+                                 agent_id="t")
+        assert not enviadas
+
+    def test_live_without_authorisation_blocks_the_exit(self):
+        from tradingagents.desk.execution import ExecutionRefused
+        from tradingagents.desk.models import Mode
+        coord, enviadas = self._coord(modo=Mode.LIVE, live_ok=False)
+        with pytest.raises(ExecutionRefused, match="LIVE sem autorização"):
+            coord.close_position(instrument="BTC/USDT", quantity=Decimal("1"),
+                                 price=Decimal("110"), cost_basis=Decimal("100"),
+                                 agent_id="t")
+        assert not enviadas
