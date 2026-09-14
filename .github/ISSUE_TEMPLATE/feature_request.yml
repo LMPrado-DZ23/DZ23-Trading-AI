@@ -1,0 +1,28 @@
+name: Feature request
+description: Proponha uma melhoria técnica ou de produto.
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema ou necessidade
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposta
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Impacto em segurança, risco ou execução
+      description: Explique se altera tenants, RBAC, Risk Engine, ordens, reconciliação ou dados financeiros.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas consideradas

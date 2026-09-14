@@ -423,3 +423,9 @@ Validação: `compileall` passou; `ruff` focalizado passou; 19 testes focados pa
 ## Ciclo 22 — regressão pós-PostgreSQL
 
 A suíte completa em ambiente sem `DATABASE_URL` passou novamente com `928 passed, 2 skipped, 71 subtests passed, 18 warnings` em 3m25s. Isso comprova que o fallback local não regrediu. A conexão real PostgreSQL depende do serviço Docker do host autorizado e permanece não declarada como validada.
+
+## Ciclo 23 — preparação open source
+
+O repositório foi preparado para colaboração pública com README atualizado, CONTRIBUTING, SECURITY, CODE_OF_CONDUCT, SUPPORT, NOTICE, templates de issues e pull requests, Dependabot e CI ampliado para branches de feature, compileall, lint, smoke multi-tenant e validação do Compose. A auditoria local não encontrou chaves privadas, tokens reais ou arquivos `.env` de produção rastreados. A suíte completa passou com `928 passed, 2 skipped, 71 subtests passed, 18 warnings`.
+
+A visibilidade do repositório permanece privada até confirmação explícita do proprietário; descrição e tópicos públicos já foram configurados.

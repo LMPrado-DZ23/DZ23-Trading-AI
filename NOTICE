@@ -1,0 +1,7 @@
+TradingAgents DZ23
+
+This project includes original work and modifications by its contributors and builds on concepts and/or code from:
+
+- TauricResearch/TradingAgents — Apache License 2.0. See LICENSE and the upstream repository for attribution and license terms.
+
+Third-party dependencies retain their own licenses. Consult package metadata and lock/build artifacts for the complete dependency attribution set.

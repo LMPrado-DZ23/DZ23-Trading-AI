@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "feat/**"]
   pull_request:
 
 concurrency:
@@ -28,6 +28,8 @@ jobs:
           pip install -e ".[dev]"
       - name: Run test suite
         run: pytest -q
+      - name: Compile application modules
+        run: python -m compileall -q tradingagents service scripts
 
   smoke-install:
     name: clean-install smoke
@@ -59,3 +61,23 @@ jobs:
         # The repo is fully clean under the strict select, so we lint everything
         # (results/ and worklog/ are excluded via pyproject extend-exclude).
         run: ruff check .
+
+  smoke:
+    name: public smoke checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install project
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install pyyaml
+      - name: Run API and multi-tenant smoke tests
+        run: |
+          python scripts/smoke_agency_api.py
+          python scripts/smoke_multitenant.py
+      - name: Validate compose YAML
+        run: python -c "import yaml, pathlib; yaml.safe_load(pathlib.Path('docker-compose.yml').read_text())"

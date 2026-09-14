@@ -1,0 +1,45 @@
+name: Bug report
+description: Reporte um problema reproduzível sem incluir dados sensíveis.
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Não inclua secrets, credenciais de corretora, dados pessoais ou logs de produção. Vulnerabilidades devem seguir SECURITY.md."
+  - type: input
+    id: version
+    attributes:
+      label: Commit ou versão
+      placeholder: "d616e86"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Ambiente
+      placeholder: "Ubuntu 24.04, Python 3.12, Docker"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Passos para reproduzir
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Resultado esperado
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Resultado observado
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs sanitizados
+      description: Remova tokens, chaves, emails, IDs de conta e dados privados.
