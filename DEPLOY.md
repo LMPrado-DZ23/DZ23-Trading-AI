@@ -23,11 +23,34 @@ MT5_MODE=DEMO
 
 Nunca coloque chaves em imagens Docker, repositórios ou logs. Credenciais, quando necessárias para pesquisa ou Demo, devem ficar somente no ambiente/volume protegido.
 
-## 3. Healthchecks
+## 3. Deployment Enterprise multi-tenant
+
+O Compose Enterprise inclui PostgreSQL, Redis e Qdrant além do serviço DZ23. Ative o modo multi-tenant com `MULTI_TENANT_ENABLED=true`, defina `TENANT_TOKEN_SIGNING_KEY` com pelo menos 32 caracteres aleatórios e defina um `TENANT_BOOTSTRAP_TOKEN` secreto. Use `.env.enterprise.example` como referência, substituindo todos os valores de exemplo.
+
+O primeiro administrador deve ser criado uma única vez por `POST /v1/auth/bootstrap` com o header `X-Tenant-Bootstrap`. Depois do bootstrap, remova ou rotacione o token. Os acessos seguintes usam `POST /v1/auth/login` e `Authorization: Bearer <access_token>`. Papéis disponíveis são Viewer, Analyst, Operator, Risk Manager, Admin e Auditor; Live permanece proibido para todos.
+
+O isolamento por tenant cobre jobs, configuração, runtime da agência, Paper, Shadow, auditoria e KillSwitch. O banco SQLite ainda é utilizado como fallback local de identidade/jobs; para um deployment Classe A, o próximo gate obrigatório é migrar o armazenamento operacional para PostgreSQL e validar migrations/backup no host real. Redis e Qdrant já estão declarados no Compose para filas/cache e memória vetorial.
+
+## 4. Validar Docker no host
+
+Em um host com Docker instalado, execute:
+
+```bash
+docker compose config
+docker compose build
+docker compose up -d
+docker compose ps
+curl http://127.0.0.1:8080/healthz
+curl http://127.0.0.1:8080/readyz
+```
+
+Não exponha PostgreSQL, Redis ou Qdrant publicamente. Coloque o serviço atrás de TLS/reverse proxy, configure backup dos volumes e mantenha os secrets fora do Git.
+
+## 5. Healthchecks
 
 O endpoint público `/healthz` confirma que o processo está vivo. O endpoint `/readyz` informa se o serviço está pronto ou bloqueado pelo KillSwitch. `/metrics` exige autenticação.
 
-## 4. Primeiro uso
+## 6. Primeiro uso
 
 Comece pelo Shadow Trading e verifique que o resumo informa `orders_sent: 0`. Depois use Paper Trading. Só depois de validar backtest, walk-forward, Shadow, Paper, reconciliação, backup/restore e kill switch deve ser considerada uma conta MT5 Demo isolada.
 

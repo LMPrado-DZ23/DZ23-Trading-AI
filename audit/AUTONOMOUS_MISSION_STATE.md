@@ -4,17 +4,17 @@
 | --- | --- |
 | mission_id | `DZ23-FINAL-26-20260913` |
 | objective | Executar a instrução final da seção 26 e deixar o TradingAgents DZ23 funcional para Paper e Demo, seguro por padrão, observável, auditável, documentado e publicado na branch autorizada. |
-| state | `BLOCKED` |
-| iteration | `18` |
+| state | `EXECUTING` |
+| iteration | `19` |
 | started_at | `2026-09-13T20:45:00-03:00` |
-| heartbeat_at | `2026-09-13T21:34:20-03:00` |
-| last_progress_at | `2026-09-13T21:34:20-03:00` |
-| current_task | Encerrar release candidate seguro e documentar limites externos. |
+| heartbeat_at | `2026-09-14T01:10:05-03:00` |
+| last_progress_at | `2026-09-14T01:10:05-03:00` |
+| current_task | Integrar e validar a fundação multi-tenant Enterprise. |
 | attempt_count | `1` |
 | same_failure_count | `0` |
 | current_failure | `none` |
 | current_strategy | Auditoria independente por Engenharia, Segurança/DevSecOps e Produto/QA; corrigir achados internos; regressão completa; publicar e validar release. |
-| next_action | Validar Docker/MT5 Demo/RBAC/UX em ambiente autorizado; não habilitar Live. |
+| next_action | Executar regressão completa, revisar diff, publicar e validar no Docker do usuário quando conectado. |
 
 ## Acceptance criteria
 
@@ -56,6 +56,9 @@
 - [x] Docker Compose resiliente.
 - [x] Runbook e checklist de release.
 - [x] Suíte completa final.
+- [x] Identidade, sessões, memberships e RBAC multi-tenant.
+- [x] Isolamento de jobs/configuração/runtime Paper/Shadow/agência por tenant.
+- [x] Compose Enterprise com PostgreSQL, Redis e Qdrant declarados.
 
 ## Pending tasks
 
@@ -65,6 +68,8 @@
 - [x] Corrigir achados internos críticos/HIGH e repetir testes.
 - [ ] Validar Docker no host autorizado.
 - [ ] Validar MT5 Demo real quando terminal/conta estiverem disponíveis.
+- [ ] Migrar o armazenamento operacional de fallback SQLite para PostgreSQL e validar migrations.
+- [ ] Validar Docker no ambiente conectado do usuário.
 
 ## Blockers
 

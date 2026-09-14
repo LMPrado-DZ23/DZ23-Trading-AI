@@ -387,3 +387,29 @@ compileall: passou
 O código está seguro por padrão para operação local governada, sem Live CCXT e sem endpoint legado de ordens. A execução Paper do serviço permanece bloqueada enquanto o provider remoto de reconciliação não produzir `MATCHED`; isso é intencional e fail-closed, não uma integração Demo concluída.
 
 Não foram declarados como concluídos: validação de terminal/conta MT5 Demo real, Docker/Compose no host de deployment, RBAC multiusuário, acessibilidade/UX completa, lint histórico integral e CI remoto com permissão de workflows.
+
+## Ciclo 19 — fundação multi-tenant Enterprise
+
+### Implementado
+
+Foi adicionado um núcleo de identidade com tenants, usuários, memberships, papéis, permissões, sessões assinadas por HMAC, expiração, revogação e hashing scrypt. A API agora suporta bootstrap one-shot do primeiro administrador, login multi-tenant, criação administrativa de tenants/usuários e autorização centralizada por rota.
+
+Jobs e configurações são escopados por `tenant_id`. Runtime de agência, Paper, Shadow, auditoria e KillSwitch são criados por tenant, e os endpoints de Trading Floor/execução usam o runtime correspondente. O Compose foi ampliado com PostgreSQL, Redis, Qdrant e Ollama opcional; Live e dinheiro real permanecem bloqueados.
+
+### Evidências
+
+```text
+25 testes focados passaram
+smoke_multitenant.py passou com dois tenants
+smoke_agency_api.py passou
+compileall passou
+compose-yaml-valid passou
+```
+
+### Limitações honestas
+
+O sandbox desta sessão não possui o binário Docker, portanto `docker compose config/build/up` não foi executado. O serviço ainda mantém SQLite como fallback local para identidade/jobs; PostgreSQL/Redis/Qdrant estão declarados no Compose, mas a migração operacional para PostgreSQL e os testes de persistência no host real ainda são gates externos. MT5 Demo real, provider de reconciliação real, TLS, RBAC de deployment e CI remoto continuam dependentes do ambiente do usuário.
+
+## Ciclo 20 — regressão da fundação multi-tenant
+
+A suíte completa em ambiente sanitizado passou com `928 passed, 2 skipped, 71 subtests passed, 18 warnings`. Os testes focados, `smoke_multitenant.py`, `smoke_agency_api.py`, compileall e validação YAML do Compose também passaram. Docker runtime não foi executado porque o binário não está disponível neste sandbox; o Compose Enterprise deve ser validado no PC/host do usuário.
