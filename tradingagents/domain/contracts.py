@@ -168,6 +168,7 @@ class OrderRequest:
     take_profit: Decimal
     environment: Environment = Environment.PAPER
     metadata: dict[str, Any] = field(default_factory=dict)
+    time_in_force: str = "GTC"
 
     def __post_init__(self) -> None:
         for name in ("client_order_id", "decision_id", "run_id", "strategy_id", "account_id", "instrument_id", "venue"):

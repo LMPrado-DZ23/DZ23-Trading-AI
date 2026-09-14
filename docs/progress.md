@@ -364,3 +364,26 @@ scanner de referências Live em brokers/service não encontrou resultados
 ### Pendências reais
 
 A reauditoria final ainda precisa confirmar o lote. Permanecem limitações externas: provider remoto/MT5 Demo, Docker/host de deployment e permissão de workflow no GitHub. UX de erro/loading, acessibilidade, RBAC e lint histórico continuam melhorias antes de um release público amplo.
+
+## Ciclo 18 — hardening final de integridade e fail-closed
+
+### Implementado
+
+O `ExecutionRouter` agora é fail-closed mesmo quando nenhum guard é injetado; apenas uma reconciliação segura explícita permite a submissão. O PaperAdapter valida over-close antes de criar ACK ou alterar o ledger, evita registros FILLED para operações rejeitadas e unifica o mark-to-market com cash e posições marcadas. `OrderRequest` passou a transportar `time_in_force`, que é comparado ao campo correspondente da decisão.
+
+### Evidências finais locais
+
+```text
+15 testes focados do hardening: passaram
+smoke_agency_api.py: passou
+compileall: passou
+925 testes completos em ambiente sanitizado: passaram
+2 testes ignorados por dependências/credenciais externas
+71 subtestes passaram
+```
+
+### Status de release
+
+O código está seguro por padrão para operação local governada, sem Live CCXT e sem endpoint legado de ordens. A execução Paper do serviço permanece bloqueada enquanto o provider remoto de reconciliação não produzir `MATCHED`; isso é intencional e fail-closed, não uma integração Demo concluída.
+
+Não foram declarados como concluídos: validação de terminal/conta MT5 Demo real, Docker/Compose no host de deployment, RBAC multiusuário, acessibilidade/UX completa, lint histórico integral e CI remoto com permissão de workflows.

@@ -57,6 +57,9 @@ class PaperAdapter:
             raise ValueError("PaperAdapter exige preço positivo para fill determinístico")
         slippage = price * self.slippage_bps / Decimal("10000")
         fill_price = price + (direction * slippage)
+        position = self.positions.get(request.instrument_id)
+        if position and position.side is not request.side and request.quantity > position.quantity:
+            raise ValueError("PaperAdapter não permite fechar além da posição; short não habilitado")
         ack = OrderAck(
             order_id=f"paper-{uuid4().hex}", client_order_id=request.client_order_id,
             status=OrderStatus.FILLED, accepted_quantity=request.quantity,
@@ -64,7 +67,6 @@ class PaperAdapter:
             created_at=datetime.now(timezone.utc), message="paper fill determinístico",
         )
         self.orders[request.client_order_id] = ack
-        position = self.positions.get(request.instrument_id)
         signed_qty = direction * request.quantity
         self.cash -= fill_price * signed_qty
         if position and position.side is request.side:
@@ -72,9 +74,6 @@ class PaperAdapter:
             avg = ((position.average_price * position.quantity) + (fill_price * request.quantity)) / qty
             self.positions[request.instrument_id] = Position(position.position_id, self.account_id, request.instrument_id, position.side, qty, avg)
         elif position:
-            if request.quantity > position.quantity:
-                self.cash += fill_price * signed_qty
-                raise ValueError("PaperAdapter não permite fechar além da posição; short não habilitado")
             closed = min(position.quantity, request.quantity)
             self.realized_pnl += (fill_price - position.average_price) * closed * (Decimal("1") if position.side is Side.BUY else Decimal("-1"))
             remaining = position.quantity - request.quantity
@@ -108,6 +107,7 @@ class PaperAdapter:
     def mark_to_market(self, prices: dict[str, Decimal]) -> dict[str, Decimal]:
         unrealized = Decimal("0")
         gross = Decimal("0")
+        marked_value = Decimal("0")
         for instrument_id, position in self.positions.items():
             price = prices.get(instrument_id)
             if price is None or price <= 0:
@@ -115,7 +115,8 @@ class PaperAdapter:
             direction = Decimal("1") if position.side is Side.BUY else Decimal("-1")
             unrealized += (price - position.average_price) * position.quantity * direction
             gross += price * position.quantity
-        equity = self.equity + unrealized
+            marked_value += price * position.quantity
+        equity = self.cash + marked_value
         return {"equity": equity, "unrealized_pnl": unrealized, "gross_exposure": gross, "positions": Decimal(str(len(self.positions)))}
 
     def _save(self) -> None:

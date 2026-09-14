@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
+import pytest
+
 from tradingagents.domain import (
     MarketSnapshot,
     OrderRequest,
@@ -27,11 +29,15 @@ def make_request():
     return OrderRequest("coid-router", "dec-router", "run-router", "strategy", "paper-account", "BTCUSDT", "paper", Side.BUY, "MARKET", Decimal("1"), Decimal("100"), Decimal("98"), Decimal("105"))
 
 
+def router(log, bus):
+    return ExecutionRouter(risk_engine=RiskEngine(), audit_log=log, event_bus=bus, reconciliation_guard=lambda: True)
+
+
 def test_router_requires_risk_and_publishes_events(tmp_path):
     log = AuditLog(tmp_path / "events.jsonl")
     bus = EventBus()
     decision, snapshot = make_decision()
-    result = ExecutionRouter(risk_engine=RiskEngine(), audit_log=log, event_bus=bus).submit(decision, make_portfolio(), snapshot, PaperAdapter(), request=make_request())
+    result = router(log, bus).submit(decision, make_portfolio(), snapshot, PaperAdapter(), request=make_request())
     assert result.risk.status.value == "APPROVE"
     assert result.order is not None
     assert {event.event.event_type for event in bus.replay()} == {"risk.decision.created", "order.submitted", "order.accepted"}
@@ -42,7 +48,7 @@ def test_router_blocks_stale_data_without_calling_adapter(tmp_path):
     log = AuditLog(tmp_path / "events.jsonl")
     bus = EventBus()
     decision, snapshot = make_decision(stale=True)
-    result = ExecutionRouter(risk_engine=RiskEngine(), audit_log=log, event_bus=bus).submit(decision, make_portfolio(), snapshot, PaperAdapter(), request=make_request())
+    result = router(log, bus).submit(decision, make_portfolio(), snapshot, PaperAdapter(), request=make_request())
     assert result.order is None
     assert result.risk.status.value == "REJECT"
     assert "STALE_FEED" in result.risk.reason_codes
@@ -52,9 +58,16 @@ def test_router_is_idempotent(tmp_path):
     log = AuditLog(tmp_path / "events.jsonl")
     bus = EventBus()
     adapter = PaperAdapter()
-    router = ExecutionRouter(risk_engine=RiskEngine(), audit_log=log, event_bus=bus)
+    execution = router(log, bus)
     decision, snapshot = make_decision()
-    first = router.submit(decision, make_portfolio(), snapshot, adapter, request=make_request())
-    second = router.submit(decision, make_portfolio(), snapshot, adapter, request=make_request())
+    first = execution.submit(decision, make_portfolio(), snapshot, adapter, request=make_request())
+    second = execution.submit(decision, make_portfolio(), snapshot, adapter, request=make_request())
     assert first.order == second.order
     assert len(adapter.orders) == 1
+
+
+def test_router_without_reconciliation_guard_is_fail_closed(tmp_path):
+    router_without_guard = ExecutionRouter(risk_engine=RiskEngine(), audit_log=AuditLog(tmp_path / "events.jsonl"), event_bus=EventBus())
+    decision, snapshot = make_decision()
+    with pytest.raises(PermissionError, match="reconciliação"):
+        router_without_guard.submit(decision, make_portfolio(), snapshot, PaperAdapter(), request=make_request())
