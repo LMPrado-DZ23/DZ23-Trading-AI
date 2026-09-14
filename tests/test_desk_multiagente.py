@@ -40,8 +40,10 @@ def uptrend(n=40, start=100.0, step=1.5):
     return [start + i * step for i in range(n)]
 
 
-def crash(n=25):
-    return [100.0] * (n - 1) + [70.0]
+def crash(n=40):
+    """Cenário de reversão COM histórico suficiente: o trader precisa de 30+
+    velas para ler o mercado; série curta vira abstenção (e está certo)."""
+    return [100.0 + (i % 3) * 0.3 for i in range(n - 4)] + [88.0, 86.0, 84.0, 82.0]
 
 
 def breakout(n=30):
@@ -159,9 +161,18 @@ class TestCenario06AbstencaoNaoViraOrdem:
         assert p.action is Action.DATA_INSUFFICIENT
 
     def test_no_trade_reason_is_explicit(self):
+        """A abstenção explica o mercado, não só a regra: o leigo precisa
+        entender POR QUE a mesa ficou parada."""
         t = enable([BreakoutTrader("t", UNIVERSE)])[0]
         p = t.propose(snap("BTC/USDT", [100.0] * 30))
-        assert p.action is Action.NO_TRADE and "sem rompimento" in p.reason
+        assert p.action is Action.NO_TRADE
+        assert "lateral" in p.reason and "sem direção" in p.reason
+
+    def test_breakout_says_so_when_its_regime_matches_but_price_did_not_break(self):
+        t = enable([BreakoutTrader("t", UNIVERSE)])[0]
+        subindo_de_leve = [100.0 + i * 1.2 for i in range(30)]
+        p = t.propose(snap("BTC/USDT", subindo_de_leve))
+        assert "sem rompimento" in p.reason or p.action is Action.BUY
 
 
 class TestCenario07MandatoEIntencao:

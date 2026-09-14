@@ -49,6 +49,7 @@
 <button class="btn secondary" onclick="deskCycle()">Rodar um ciclo</button>
 <button class="btn secondary" onclick="feedTest()">Testar dados de mercado</button>
 <button class="btn secondary" onclick="avaliar()">Avaliar equipe</button>
+<button class="btn secondary" onclick="aprendizado()">O que aprenderam</button>
 <button class="btn secondary" onclick="doBackup()">Gerar backup</button>
 <button class="btn secondary" onclick="liveStatus()">Dinheiro real: posso?</button>
 <button class="btn danger" onclick="paradaEmergencia()" style="background:#c0392b;color:#fff">PARADA DE EMERGÊNCIA</button>
@@ -135,5 +136,10 @@ d.checklist.map(i=>`<div class="metric-line"><span>${i.pronto?'✔':'○'} ${esc
 async function paradaEmergencia(){if(!confirm('PARAR TUDO agora? Entradas param e envios de ordem são bloqueados.'))return;
 const r=await api('/v1/live/parada-emergencia',{method:'POST'});
 toast(r.ok?'PARADO: envios bloqueados; posições seguem com o guardião':'falhou',r.ok?'ok':'bad');deskLoad()}
+async function aprendizado(){const r=await api('/v1/desk/aprendizado');if(!r.ok)return toast('falhou','bad');const d=r.data;
+$('deskMsg').innerHTML=(d.estrategias.length?`<table class="table"><thead><tr><th>Estratégia</th><th>Ops</th><th>Acerto</th><th>Retorno médio</th><th>Melhor cenário</th><th>Situação</th></tr></thead><tbody>`+
+d.estrategias.map(e=>`<tr><td>${escapeHtml(e.estrategia)}</td><td>${e.operacoes}</td><td>${(e.taxa_acerto*100).toFixed(0)}%</td><td class="${e.retorno_medio>=0?'ok':'bad'}">${(e.retorno_medio*100).toFixed(2)}%</td><td>${escapeHtml(e.melhor_regime||'—')}</td><td>${e.rebaixar?'<b class="bad">rebaixada</b>':(e.maduro?'ativa':'aprendendo')}</td></tr>`).join('')+'</tbody></table>'
+:'<div class="muted">Ainda sem operações fechadas. Os agentes aprendem de desfecho realizado — não de expectativa.</div>')
++`<div class="muted">${escapeHtml(d.como_funciona)}</div><div class="warn">${escapeHtml(d.aviso)}</div>`}
 function escapeHtml(value){return String(value??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}boot();verSignup();
 </script></body></html>

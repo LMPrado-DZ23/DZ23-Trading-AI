@@ -9,7 +9,9 @@ from __future__ import annotations
 from decimal import Decimal
 from statistics import fmean, pstdev
 
+from .learning import MemoriaDeDesempenho
 from .models import Action, AgentSpec, AgentStage, MarketSnapshot, TradeProposal, default_expiry
+from .signals import Leitura, Regime, interpretar
 
 
 def _sma(values, n: int) -> Decimal:
@@ -20,7 +22,13 @@ class BaseTrader:
     strategy = "base"
     needs = 20
 
-    def __init__(self, agent_id: str, universe: tuple[str, ...], version: str = "1"):
+    regimes_favoraveis: tuple[Regime, ...] = ()
+
+    def __init__(self, agent_id: str, universe: tuple[str, ...], version: str = "1",
+                 memoria: MemoriaDeDesempenho | None = None):
+        # A memória é COMPARTILHADA pela mesa: o que um trader aprende sobre
+        # um regime não fica preso nele.
+        self.memoria = memoria
         self.spec = AgentSpec(agent_id=agent_id, role="trader",
                               strategy=self.strategy, version=version,
                               stage=AgentStage.REGISTERED,
@@ -70,7 +78,43 @@ class BaseTrader:
             # Cenário 06: dado insuficiente nunca vira ordem.
             return self._no(snap, f"dados insuficientes (precisa de {self.needs} velas)",
                             action=Action.DATA_INSUFFICIENT)
-        return self._evaluate(snap)
+        leitura = interpretar(snap.instrument, snap.closes)
+        self.ultima_leitura = leitura
+        if not leitura.suficiente():
+            return self._no(snap, f"leitura indefinida: {leitura.resumo()}",
+                            action=Action.DATA_INSUFFICIENT)
+        if self.regimes_favoraveis and leitura.regime not in self.regimes_favoraveis:
+            return self._no(snap, f"regime {leitura.regime.value} não é o meu "
+                                  f"terreno ({leitura.resumo()})")
+        if self.memoria:
+            rebaixar, motivo = self.memoria.deve_rebaixar(self.strategy)
+            if rebaixar:
+                return self._no(snap, f"estratégia rebaixada pelo histórico: {motivo}")
+        proposta = self._evaluate(snap)
+        return self._aplicar_aprendizado(proposta, leitura)
+
+    def _aplicar_aprendizado(self, p: TradeProposal, leitura: Leitura) -> TradeProposal:
+        """Ajusta confiança e tamanho pelo histórico NAQUELE regime. Só reduz
+        exposição; aumentar é prerrogativa do mandato, não do aprendizado."""
+        if p.action not in (Action.BUY, Action.SELL, Action.REDUCE):
+            return p
+        conf, expo = p.confidence, p.desired_exposure_pct
+        notas = [f"leitura: {leitura.resumo()}", f"força {leitura.forca:.2f}"]
+        if self.memoria:
+            conf = self.memoria.ajuste_de_confianca(self.strategy, leitura.regime, conf)
+            fator = self.memoria.fator_de_exposicao(self.strategy, leitura.regime)
+            if fator < 1:
+                expo = (expo * fator).quantize(Decimal("0.0001"))
+                notas.append(f"exposição reduzida a {fator} pelo histórico")
+            st = self.memoria.estatistica(self.strategy, leitura.regime)
+            if st.maduro:
+                notas.append(f"histórico neste regime: {st.taxa_acerto:.0%} de "
+                             f"acerto em {st.amostras} operações")
+        # a força do sinal modula a confiança: sinal fraco, convicção menor
+        conf = (conf * Decimal(str(0.6 + 0.4 * leitura.forca))).quantize(Decimal("0.001"))
+        from dataclasses import replace
+        return replace(p, confidence=conf, desired_exposure_pct=expo,
+                       reason=p.reason + " | " + " | ".join(notas))
 
     def _evaluate(self, snap: MarketSnapshot) -> TradeProposal:  # pragma: no cover
         raise NotImplementedError
@@ -88,6 +132,7 @@ class TrendTrader(BaseTrader):
     """Segue tendência: compra quando a média curta cruza acima da longa."""
     strategy = "trend_following"
     needs = 30
+    regimes_favoraveis = (Regime.ALTA,)
 
     def _thesis_dead(self, snap):
         fast, slow = _sma(snap.closes, 10), _sma(snap.closes, 30)
@@ -106,6 +151,7 @@ class MeanReversionTrader(BaseTrader):
     """Reversão à média: compra exagero de queda contra a média."""
     strategy = "mean_reversion"
     needs = 20
+    regimes_favoraveis = (Regime.LATERAL, Regime.BAIXA, Regime.VOLATIL)
 
     def _thesis_dead(self, snap):
         window = [float(c) for c in snap.closes[-20:]]
@@ -129,6 +175,7 @@ class BreakoutTrader(BaseTrader):
     """Rompimento: compra quando supera a máxima recente com folga."""
     strategy = "breakout"
     needs = 25
+    regimes_favoraveis = (Regime.ALTA, Regime.VOLATIL)
 
     def _evaluate(self, snap):
         prior = snap.closes[-25:-1]
@@ -140,8 +187,10 @@ class BreakoutTrader(BaseTrader):
                          "perder a máxima rompida", "0.5")
 
 
-def default_desk(universe: tuple[str, ...]) -> list[BaseTrader]:
-    """Mesa padrão: três estratégias distintas, não três cópias do mesmo prompt."""
-    return [TrendTrader("trader-trend", universe),
-            MeanReversionTrader("trader-reversion", universe),
-            BreakoutTrader("trader-breakout", universe)]
+def default_desk(universe: tuple[str, ...],
+                 memoria: MemoriaDeDesempenho | None = None) -> list[BaseTrader]:
+    """Mesa padrão: três estratégias distintas, cada uma com seu terreno, e
+    todas compartilhando a mesma memória de desempenho."""
+    return [TrendTrader("trader-trend", universe, memoria=memoria),
+            MeanReversionTrader("trader-reversion", universe, memoria=memoria),
+            BreakoutTrader("trader-breakout", universe, memoria=memoria)]

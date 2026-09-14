@@ -490,7 +490,14 @@ async def set_cfg(req: Request, _=Depends(auth)):
         if k in ALLOWED_KEYS and isinstance(v, str) and v.strip():
             cfg[k] = v.strip(); saved.append(k)
     if not saved: raise HTTPException(400, "nada para salvar")
-    save_cfg(cfg, tenant_id); return {"saved": saved}
+    save_cfg(cfg, tenant_id)
+    # Configuração que muda a mesa (corretora, feed, capital, limites) exige
+    # reconstrução — senão o cliente salva e nada acontece até reiniciar.
+    if any(k.startswith(("TRADINGAGENTS_DESK", "LIVE_", "EXCHANGE_")) or
+           k in ("TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE")
+           for k in saved):
+        _desk_reset(tenant_id)
+    return {"saved": saved}
 
 @app.post("/v1/jobs")
 async def new_job(req: Request, _=Depends(auth)):
@@ -1077,7 +1084,9 @@ def _desk_boot(tenant_id: str) -> dict:
     mandate = DeskMandate(mandate_id=f"desk-{tenant_id}", owner=tenant_id,
                           account=f"paper-{tenant_id}", mode=Mode.PAPER,
                           instruments=universe, capital=capital)
-    traders = default_desk(universe)
+    from tradingagents.desk.learning import MemoriaDeDesempenho
+    memoria = MemoriaDeDesempenho(DATA / "desks" / tenant_id / "aprendizado.json")
+    traders = default_desk(universe, memoria=memoria)
     for t in traders:
         for stage in (AgentStage.VALIDATED, AgentStage.SHADOW, AgentStage.PAPER_ENABLED):
             t.spec.move_to(stage)
@@ -1091,7 +1100,8 @@ def _desk_boot(tenant_id: str) -> dict:
     coord = ExecutionCoordinator(mandate, ledger, risk, worker_id=f"worker-{tenant_id}",
                                  broker=broker)
     orch = DeskOrchestrator(mandate, traders, worker_id=f"worker-{tenant_id}",
-                            risk=risk, positions_provider=ledger.open_positions)
+                            risk=risk, positions_provider=ledger.open_positions,
+                            memoria=memoria)
 
     feed_kind = (cfg.get("TRADINGAGENTS_DESK_FEED") or "fixture").strip().lower()
     if feed_kind == "real":
@@ -1104,7 +1114,11 @@ def _desk_boot(tenant_id: str) -> dict:
         def snaps_fn():
             """Fixture ROTULADA: prova a coordenação da mesa, não o mercado."""
             alta = tuple(Decimal(str(100 + i * 1.5)) for i in range(40))
-            queda = tuple([Decimal("100")] * 24 + [Decimal("70")])
+            # cenário de reversão: precisa de histórico suficiente para o
+            # trader LER o mercado — série curta vira abstenção, e com razão.
+            queda = tuple([Decimal(str(100 + (i % 3) * 0.3)) for i in range(36)]
+                          + [Decimal("88"), Decimal("86"), Decimal("84"),
+                             Decimal("82")])
             return [MarketSnapshot(inst, "1h", _now(), alta if n == 0 else queda,
                                    source="fixture")
                     for n, inst in enumerate(universe)]
@@ -1117,6 +1131,7 @@ def _desk_boot(tenant_id: str) -> dict:
         broker.price_provider = prices_fn
 
     desk = {"orchestrator": orch, "ledger": ledger, "coordinator": coord,
+            "memoria": memoria,
             "guardian": PositionGuardian(coord), "cycles": [],
             "feed_kind": feed_kind, "broker_mode": broker_mode, "scheduler": None}
 
@@ -1448,3 +1463,20 @@ async def live_resume(req: Request, _=Depends(auth)):
     _DESKS.pop(tid, None)          # reconstrói limpo no próximo uso
     return {"ok": True, "liberado": True,
             "aviso": "envios liberados; confira os tetos antes de retomar"}
+
+
+@app.get("/v1/desk/aprendizado")
+def desk_learning(request: Request, _=Depends(auth)):
+    """O que os agentes aprenderam — visível, não caixa-preta."""
+    d = _desk_of(request)
+    mem = d.get("memoria")
+    linhas = mem.relatorio() if mem else []
+    return {"estrategias": linhas,
+            "amostra_minima": __import__("tradingagents.desk.learning",
+                                         fromlist=["AMOSTRA_MINIMA"]).AMOSTRA_MINIMA,
+            "como_funciona": ("Cada operação FECHADA vira estatística por "
+                              "estratégia e regime. Abaixo da amostra mínima o "
+                              "comportamento não muda; histórico ruim reduz "
+                              "exposição; histórico bom NÃO aumenta além do "
+                              "teto do seu mandato."),
+            "aviso": "desempenho passado não prevê o futuro"}

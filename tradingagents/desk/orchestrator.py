@@ -58,7 +58,8 @@ class DeskOrchestrator:
     """Executa o mandato; distribui trabalho. NÃO amplia limites."""
 
     def __init__(self, mandate: DeskMandate, traders, *, worker_id: str,
-                 risk: RiskEngine | None = None, positions_provider=None):
+                 risk: RiskEngine | None = None, positions_provider=None,
+                 memoria=None):
         self.mandate = mandate
         self.traders = list(traders)
         self.worker_id = worker_id
@@ -69,6 +70,7 @@ class DeskOrchestrator:
         # consumida, mas a exposição continua. Sem esta fonte a mesa
         # recompraria o mesmo ativo no ciclo seguinte (achado em teste vivo).
         self.positions_provider = positions_provider or (lambda: set())
+        self.memoria = memoria
         # Livro da mesa: quem abriu o quê, a que preço. É daqui que sai a
         # gestão de saída — sem isso a mesa só compra e nunca realiza.
         self.book: dict[str, Position] = {}
@@ -145,10 +147,27 @@ class DeskOrchestrator:
         self.book[instrument] = Position(instrument, quantity, price, agent_id,
                                          cost_basis)
 
-    def close_position(self, instrument: str) -> Position | None:
-        """Posição encerrada sai do livro e o instrumento fica livre."""
+    def close_position(self, instrument: str, preco_saida=None) -> Position | None:
+        """Posição encerrada sai do livro, o instrumento fica livre — e o
+        resultado vira APRENDIZADO (só aqui, porque só agora é realizado)."""
         self.owner_by_instrument.pop(instrument, None)
-        return self.book.pop(instrument, None)
+        pos = self.book.pop(instrument, None)
+        if pos and preco_saida is not None and self.memoria and pos.entry_price:
+            from datetime import timezone
+            from decimal import Decimal as _D
+
+            from .learning import Desfecho
+            retorno = (_D(str(preco_saida)) - pos.entry_price) / pos.entry_price
+            trader = next((t for t in self.traders
+                           if t.spec.agent_id == pos.agent_id), None)
+            leitura = getattr(trader, "ultima_leitura", None)
+            self.memoria.registrar(Desfecho(
+                estrategia=getattr(trader, "strategy", pos.agent_id),
+                regime=(leitura.regime.value if leitura else "indefinido"),
+                instrumento=instrument, retorno=retorno,
+                fechado_em=utcnow().astimezone(timezone.utc),
+                forca_do_sinal=(leitura.forca if leitura else 0.0)))
+        return pos
 
     # -- kill switch com semânticas distintas (cenário 13) -------------
     def pause_entries(self) -> None:
