@@ -21,6 +21,7 @@ from .models import (
     default_expiry,
     utcnow,
 )
+from .sizing import limite_de_correlacao
 
 
 class RiskVeto(RuntimeError):
@@ -32,9 +33,10 @@ class PortfolioAllocator:
 
     policy = "dz23.allocator/1"
 
-    def arbitrate(self, proposals, *, open_positions=(), owner_by_instrument=None
-                  ) -> PortfolioDecision:
+    def arbitrate(self, proposals, *, open_positions=(), owner_by_instrument=None,
+                  exposicoes: dict | None = None) -> PortfolioDecision:
         owner_by_instrument = owner_by_instrument or {}
+        exposicoes = dict(exposicoes) if exposicoes is not None else {}
         admitted, vetoed, claimed = [], [], {}
         for p in sorted(proposals, key=lambda x: (-x.confidence, x.agent_id)):
             if not p.is_actionable():
@@ -56,6 +58,15 @@ class PortfolioAllocator:
             if p.instrument in open_positions:
                 vetoed.append((p, "já existe posição aberta neste instrumento"))
                 continue
+            # CORRELAÇÃO: BTC e ETH andam juntos. Comprar os dois não é
+            # diversificar — é dobrar a mesma aposta, e perder o dobro junto.
+            if exposicoes:
+                cabe, motivo = limite_de_correlacao(
+                    p.instrument, p.desired_exposure_pct, exposicoes)
+                if not cabe:
+                    vetoed.append((p, motivo))
+                    continue
+                exposicoes[p.instrument] = p.desired_exposure_pct
             claimed[p.instrument] = p
             admitted.append(p)
         return PortfolioDecision(tuple(admitted), tuple(vetoed), self.policy)

@@ -12,7 +12,8 @@ from statistics import fmean, pstdev
 from .costs import custo_de_operar, vale_a_pena
 from .learning import MemoriaDeDesempenho
 from .models import Action, AgentSpec, AgentStage, MarketSnapshot, TradeProposal, default_expiry
-from .signals import Leitura, Regime, interpretar
+from .signals import Leitura, Regime, confirmacao_superior, interpretar
+from .sizing import tamanho_por_risco
 
 
 def _sma(values, n: int) -> Decimal:
@@ -27,6 +28,9 @@ class BaseTrader:
     # Movimento que a estratégia espera capturar (alvo). Sem isto não há como
     # saber se o sinal paga o custo — e o robô opera no vermelho sem notar.
     movimento_alvo = Decimal("0.02")
+    # Confirmação no prazo maior: sinal de 1h contra tendência de 4h é o
+    # falso rompimento clássico. None = a estratégia não exige confirmação.
+    fator_confirmacao: int | None = 4
 
     def __init__(self, agent_id: str, universe: tuple[str, ...], version: str = "1",
                  memoria: MemoriaDeDesempenho | None = None,
@@ -87,6 +91,7 @@ class BaseTrader:
                             action=Action.DATA_INSUFFICIENT)
         leitura = interpretar(snap.instrument, snap.closes)
         self.ultima_leitura = leitura
+        self.ultima_serie = snap.closes
         if not leitura.suficiente():
             return self._no(snap, f"leitura indefinida: {leitura.resumo()}",
                             action=Action.DATA_INSUFFICIENT)
@@ -98,6 +103,14 @@ class BaseTrader:
             if rebaixar:
                 return self._no(snap, f"estratégia rebaixada pelo histórico: {motivo}")
         proposta = self._evaluate(snap)
+        if proposta.action is Action.BUY and self.fator_confirmacao:
+            ok, nota = confirmacao_superior(snap.closes, self.fator_confirmacao)
+            if ok is None:
+                return self._no(snap, f"sem confirmação de prazo maior: {nota}")
+            if ok is False:
+                return self._no(snap, f"sinal sem apoio: {nota}")
+            proposta = proposta.__class__(**{**proposta.__dict__,
+                                             "reason": proposta.reason + f" | {nota}"})
         return self._aplicar_aprendizado(proposta, leitura)
 
     def _aplicar_aprendizado(self, p: TradeProposal, leitura: Leitura) -> TradeProposal:
@@ -119,6 +132,17 @@ class BaseTrader:
                              f"acerto em {st.amostras} operações")
         # a força do sinal modula a confiança: sinal fraco, convicção menor
         conf = (conf * Decimal(str(0.6 + 0.4 * leitura.forca))).quantize(Decimal("0.001"))
+
+        # TAMANHO POR RISCO: percentual fixo trata ativo calmo e ativo violento
+        # como se fossem a mesma aposta. Aqui o tamanho sai da volatilidade.
+        calculado = tamanho_por_risco(self.capital, self.ultima_serie or (),
+                                      teto_exposicao=expo)
+        if calculado is not None:
+            expo = calculado.fracao_do_capital
+            notas.append(calculado.motivo)
+            if expo <= 0:
+                return self._no_com_leitura(p, leitura,
+                                            "volatilidade exige posição menor que o mínimo")
 
         # GATE DE CUSTO: o movimento esperado precisa pagar ida e volta, com
         # margem. É o filtro que separa robô que opera de robô que lucra.
@@ -192,6 +216,7 @@ class MeanReversionTrader(BaseTrader):
     needs = 20
     regimes_favoraveis = (Regime.LATERAL, Regime.BAIXA, Regime.VOLATIL)
     movimento_alvo = Decimal("0.025")    # volta à média: alvo curto
+    fator_confirmacao = None             # opera contra o movimento, por desenho
 
     def _thesis_dead(self, snap):
         window = [float(c) for c in snap.closes[-20:]]

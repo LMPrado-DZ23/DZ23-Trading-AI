@@ -1110,7 +1110,7 @@ def _desk_boot(tenant_id: str) -> dict:
         from tradingagents.desk.market import MarketFeedProviders, PublicMarketFeed
         prov = MarketFeedProviders(
             PublicMarketFeed(cfg.get("TRADINGAGENTS_EXCHANGE") or "binance"),
-            universe, timeframe="1h", limit=60)
+            universe, timeframe="1h", limit=240)
         snaps_fn, prices_fn = prov.snapshots, prov.prices
     else:
         def snaps_fn():

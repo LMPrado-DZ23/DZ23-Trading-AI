@@ -174,3 +174,35 @@ def interpretar(instrumento: str, closes) -> Leitura:
 
 __all__ = ["Regime", "Leitura", "interpretar", "sma", "ema", "rsi", "atr_pct",
            "momentum", "zscore", "suporte_resistencia"]
+
+
+# ------------------------------------------------- confirmação multi-prazo
+def agregar(closes, fator: int):
+    """Reamostra a série para um prazo maior (ex.: 1h -> 4h com fator 4).
+
+    Usa o ÚLTIMO fechamento de cada bloco — é o que uma vela de prazo maior
+    de fato fecha. Blocos incompletos no fim são descartados: usar vela em
+    formação de 4h é olhar o futuro pela janela.
+    """
+    if fator <= 1:
+        return tuple(closes)
+    completos = len(closes) // fator
+    if completos == 0:
+        return ()
+    return tuple(closes[(i + 1) * fator - 1] for i in range(completos))
+
+
+def confirmacao_superior(closes, fator: int = 4) -> tuple[bool | None, str]:
+    """O prazo maior concorda com a alta? Sem dados suficientes, devolve
+    None — e quem chama decide (aqui: não opera sem confirmação)."""
+    serie = agregar(closes, fator)
+    # 10 velas agregadas = ~1,7 dia em 4h: mínimo para a média significar algo.
+    if len(serie) < 10:
+        return None, (f"sem histórico para o prazo {fator}x "
+                      f"({len(serie)} velas agregadas; preciso de 10)")
+    curta, longa = sma(serie, 3), sma(serie, 10)
+    if curta is None or longa is None:
+        return None, "prazo maior sem médias calculáveis"
+    if curta > longa:
+        return True, f"prazo {fator}x confirma alta (média 5 acima da 20)"
+    return False, f"prazo {fator}x NÃO confirma: média 5 abaixo da 20"

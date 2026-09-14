@@ -121,7 +121,9 @@ class DeskOrchestrator:
         decision = self.allocator.arbitrate(
             actionable,
             open_positions=self.open_exposure(),
-            owner_by_instrument=self.owner_by_instrument)
+            owner_by_instrument=self.owner_by_instrument,
+            exposicoes={i: p.cost_basis / self.mandate.capital
+                        for i, p in self.book.items() if self.mandate.capital})
         report.admitted = len(decision.admitted)
         report.vetoed = [(p.agent_id, why) for p, why in decision.vetoed]
 

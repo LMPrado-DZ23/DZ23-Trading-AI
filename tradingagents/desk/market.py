@@ -53,7 +53,7 @@ class PublicMarketFeed:
             self._client = getattr(ccxt, ccxt_id)({"enableRateLimit": True})
         return self._client
 
-    def ohlcv(self, instrument: str, timeframe: str = "1h", limit: int = 60) -> list:
+    def ohlcv(self, instrument: str, timeframe: str = "1h", limit: int = 240) -> list:
         key = (self.exchange_id, instrument, timeframe, limit)
         now = time.time()
         with self._lock:
@@ -68,7 +68,7 @@ class PublicMarketFeed:
             self._cache[key] = (now, rows)
         return rows
 
-    def snapshot(self, instrument: str, timeframe: str = "1h", limit: int = 60,
+    def snapshot(self, instrument: str, timeframe: str = "1h", limit: int = 240,
                  *, now: datetime | None = None) -> MarketSnapshot:
         now = now or datetime.now(timezone.utc)
         step = TIMEFRAME_SECONDS.get(timeframe, 3600)
@@ -106,7 +106,7 @@ class MarketFeedProviders:
     """Adapta o feed aos contratos que o agendador espera."""
 
     def __init__(self, feed: PublicMarketFeed, instruments, timeframe: str = "1h",
-                 limit: int = 60):
+                 limit: int = 240):
         self.feed = feed
         self.instruments = tuple(instruments)
         self.timeframe = timeframe
