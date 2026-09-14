@@ -14,7 +14,7 @@ banco não responder, **o serviço não cai**: ele avisa no painel e continua
 usando o banco local.
 
 ## 2. Conferir se subiu
-Abra `SEU-DOMINIO/healthz`. Deve responder algo como:
+Abra `dz23trading.com.br/healthz`. Deve responder algo como:
 `{"status":"ok","app":"tradingagents-operavel/9","armazenamento":"sqlite"}`
 - `status: degraded` → o painel mostra o aviso e o que corrigir.
 - Nada responde → o contêiner não subiu: veja os logs no Coolify.

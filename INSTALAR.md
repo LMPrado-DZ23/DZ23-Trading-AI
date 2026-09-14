@@ -30,8 +30,8 @@ DESK_INTERVAL_SECONDS=300
 
 Opcional (login social):
 ```
-GOOGLE_CLIENT_ID= / GOOGLE_CLIENT_SECRET= / GOOGLE_REDIRECT_URI=https://SEU-DOMINIO/v1/auth/oauth/google/callback
-MICROSOFT_CLIENT_ID= / MICROSOFT_CLIENT_SECRET= / MICROSOFT_REDIRECT_URI=https://SEU-DOMINIO/v1/auth/oauth/microsoft/callback
+GOOGLE_CLIENT_ID= / GOOGLE_CLIENT_SECRET= / GOOGLE_REDIRECT_URI=https://dz23trading.com.br/v1/auth/oauth/google/callback
+MICROSOFT_CLIENT_ID= / MICROSOFT_CLIENT_SECRET= / MICROSOFT_REDIRECT_URI=https://dz23trading.com.br/v1/auth/oauth/microsoft/callback
 ```
 > As URLs de redirecionamento precisam ser cadastradas **iguais** no Google
 > Cloud e no Azure, senão o provedor recusa o login.
@@ -43,15 +43,15 @@ problema em `/healthz` e no painel — ele nunca morre calado.
 No painel da Woovi, cadastre:
 
 ```
-https://SEU-DOMINIO/v1/webhooks/woovi
+https://dz23trading.com.br/v1/webhooks/woovi
 ```
 
 Evento: cobrança concluída. O sistema **só** ativa plano com webhook
 assinado — corpo adulterado ou assinatura ausente são recusados.
 
 ## 4. Conferir se subiu
-- `https://SEU-DOMINIO/healthz` → `status: ok`, `banco: Supabase ...`
-- `https://SEU-DOMINIO/` → tela de login com o botão **Criar conta**
+- `https://dz23trading.com.br/healthz` → `status: ok`, `banco: Supabase ...`
+- `https://dz23trading.com.br/` → tela de login com o botão **Criar conta**
 - Logado como admin: **Administração → banco** (`/v1/admin/database`)
 
 ## 5. Primeira venda

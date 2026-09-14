@@ -321,3 +321,29 @@ class TestValidadorNaoRecursivo:
         fonte = inspect.getsource(m._json_body)
         assert fonte.count("_json_body") == 1
         assert "await req.json()" in fonte
+
+
+class TestDominioOficial:
+    """A documentação precisa apontar para o domínio real — endereço errado
+    em guia de instalação custa uma hora de suporte por cliente."""
+
+    def test_install_guide_uses_the_official_domain(self):
+        guia = Path("INSTALAR.md").read_text(encoding="utf-8")
+        assert "dz23trading.com.br" in guia
+        assert "SEU-DOMINIO" not in guia
+        assert "https://dz23trading.com.br/v1/webhooks/woovi" in guia
+
+    def test_domain_checklist_exists_with_every_registration(self):
+        doc = Path("DOMINIO-E-CADASTROS.md").read_text(encoding="utf-8")
+        for item in ("150.230.85.211", "/v1/webhooks/woovi",
+                     "/v1/auth/oauth/google/callback",
+                     "/v1/auth/oauth/microsoft/callback", "SUPABASE_PROJECT_REF"):
+            assert item in doc, f"faltou no checklist: {item}"
+
+    def test_no_secret_value_in_any_doc(self):
+        import re
+        for nome in ("INSTALAR.md", "DOMINIO-E-CADASTROS.md", ".env.example"):
+            texto = Path(nome).read_text(encoding="utf-8")
+            assert not re.search(r"GOCSPX-[A-Za-z0-9_-]{10,}", texto)
+            assert "sb_publishable_" not in texto
+            assert "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" not in texto
