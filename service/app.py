@@ -514,6 +514,45 @@ def agency_health(request: Request, _=Depends(auth)):
     return {"runtime": "READY", "event_sequence": runtime.agency.event_bus.latest_sequence, "agents": len(runtime.agency.agents), "meetings": len(runtime.agency.meetings), "audit_log": str(DATA / "agency-events.jsonl")}
 
 
+@app.get("/v1/office/snapshot")
+def office_snapshot(request: Request, _=Depends(auth)):
+    runtime = runtime_for(request)
+    agency = runtime.agency.snapshot()
+    agents_by_id = runtime.agency.agents
+    for desk in agency["desks"]:
+        desk["agents_data"] = [agents_by_id[agent_id] for agent_id in desk["agents"]]
+    kill_state = runtime.kill_switch.state
+    return {
+        "schema_version": "1.0",
+        "mode": "PAPER_SHADOW",
+        "live_trading": False,
+        "agency": agency,
+        "paper": runtime.paper.reconciliation_snapshot(),
+        "shadow": runtime.shadow.summary(),
+        "kill_switch": {"enabled": kill_state.enabled, "reason": kill_state.reason, "changed_at": kill_state.changed_at.isoformat(), "actor": kill_state.actor},
+        "jobs": JOB_STORE.list(request_tenant(request), limit=10),
+        "job_store": JOB_STORE.healthcheck(),
+        "sequences": {"agency": runtime.agency.event_bus.latest_sequence, "execution": runtime.execution_event_bus.latest_sequence},
+    }
+
+
+@app.get("/v1/office/events")
+def office_events(request: Request, after_agency: int = 0, after_execution: int = 0, _=Depends(auth)):
+    if after_agency < 0 or after_execution < 0:
+        raise HTTPException(422, "cursores devem ser não-negativos")
+    runtime = runtime_for(request)
+    items = [
+        {"stream": "agency", "sequence": item.sequence, "event": item.event.as_dict()}
+        for item in runtime.agency.event_bus.replay(after_agency)
+    ]
+    items.extend(
+        {"stream": "execution", "sequence": item.sequence, "event": item.event.as_dict()}
+        for item in runtime.execution_event_bus.replay(after_execution)
+    )
+    items.sort(key=lambda item: item["event"]["occurred_at"])
+    return {"schema_version": "1.0", "events": items}
+
+
 @app.post("/v1/agency/agents/{agent_id}/status")
 async def agency_agent_status(agent_id: str, req: Request, _=Depends(auth)):
     body = await req.json()
@@ -642,6 +681,7 @@ class TenantRuntime:
         root.mkdir(parents=True, exist_ok=True)
         audit = AuditLog(root / "execution-events.jsonl")
         bus = EventBus(audit)
+        self.execution_event_bus = bus
         self.agency_audit = AuditLog(root / "agency-events.jsonl")
         self.agency = AgencyRuntime(audit_log=self.agency_audit, event_bus=EventBus(self.agency_audit))
         self.paper = PaperAdapter(state_path=root / "paper-state.json")
@@ -664,6 +704,6 @@ def runtime_for(request: Request):
 
 def runtime_for_tenant_id(tenant_id: str):
     if tenant_id == "legacy" or not MULTI_TENANT_ENABLED:
-        return type("LegacyRuntime", (), {"agency": AGENCY, "paper": PAPER_ADAPTER, "shadow": SHADOW_ADAPTER, "kill_switch": KILL_SWITCH, "metrics": METRICS, "router": EXECUTION_ROUTER, "reconciliation": PAPER_RECONCILIATION})()
+        return type("LegacyRuntime", (), {"agency": AGENCY, "paper": PAPER_ADAPTER, "shadow": SHADOW_ADAPTER, "kill_switch": KILL_SWITCH, "metrics": METRICS, "router": EXECUTION_ROUTER, "reconciliation": PAPER_RECONCILIATION, "execution_event_bus": EVENT_BUS})()
     with _TENANT_RUNTIME_LOCK:
         return _TENANT_RUNTIMES.setdefault(tenant_id, TenantRuntime(tenant_id))

@@ -42,6 +42,13 @@ with TestClient(app) as client:
     assert client.get("/v1/jobs", headers=beta_headers).json()["jobs"] == []
     assert client.get("/v1/agency/events", headers=headers).json()["events"] == []
     assert client.get("/v1/agency/events", headers=beta_headers).json()["events"] == []
+    office = client.get("/v1/office/snapshot", headers=headers)
+    assert office.status_code == 200, office.text
+    assert office.json()["mode"] == "PAPER_SHADOW"
+    assert office.json()["live_trading"] is False
+    assert office.json()["job_store"]["status"] == "ok"
+    office_events = client.get("/v1/office/events", headers=headers)
+    assert office_events.status_code == 200 and office_events.json()["schema_version"] == "1.0"
     assert client.post("/v1/auth/logout", headers=beta_headers).status_code == 200
     assert client.get("/v1/auth/me", headers=beta_headers).status_code == 401
 print("multi-tenant smoke passed")
