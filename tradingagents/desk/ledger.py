@@ -187,6 +187,38 @@ class Ledger:
             }
         return detalhe
 
+    # ---------------------------------------------- visão de capital
+    # Estados DISTINTOS do dinheiro. Tratá-los como sinônimos é o que fazia o
+    # capital investido reaparecer como disponível:
+    #   caixa + reservado + investido = patrimônio (antes do resultado)
+    def cash_available(self) -> Decimal:
+        """Dinheiro livre: nem reservado, nem transformado em posição."""
+        return self.cash()
+
+    def reserved_cash(self) -> Decimal:
+        """Dinheiro separado para ordens ainda não executadas."""
+        return self.balances().get("RESERVED", ZERO)
+
+    def invested_cost(self) -> Decimal:
+        """Custo de aquisição das posições ABERTAS.
+
+        Este é o valor que sumia da conta: depois do fill a reserva acaba, e
+        sem esta parcela o mesmo dinheiro voltava a parecer livre.
+        """
+        total = ZERO
+        for conta, saldo in self.balances().items():
+            if conta.startswith("POSITION:"):
+                total += saldo
+        return total
+
+    def portfolio_equity(self) -> Decimal:
+        """Patrimônio contábil: caixa + reservado + custo das posições.
+
+        Não inclui resultado NÃO realizado — posição a mercado exigiria preço
+        corrente, que o livro não conhece e não deve adivinhar.
+        """
+        return self.cash_available() + self.reserved_cash() + self.invested_cost()
+
     def position_lots(self, instrument: str) -> list[dict]:
         """Lotes vivos POR AGENTE, derivados dos lançamentos.
 

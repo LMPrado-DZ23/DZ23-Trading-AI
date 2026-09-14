@@ -177,7 +177,14 @@ class PortfolioDecision:
 
 @dataclass(frozen=True)
 class RiskReservation:
-    """Capital efetivamente travado. Emitido só pelo RiskEngine."""
+    """Capital efetivamente travado. Emitido só pelo RiskEngine.
+
+    `amount` e `quantity` são os valores ORIGINAIS e nunca mudam. Antes o
+    `amount` era sobrescrito a cada consumo: deixava de ser o valor
+    reservado e passava a ser o saldo, então o consumo proporcional seguinte
+    era calculado sobre uma base que já havia encolhido — 50% + 25% dava
+    37,5 em vez de 25 restantes.
+    """
     reservation_id: str
     account: str
     instrument: str
@@ -186,6 +193,25 @@ class RiskReservation:
     mandate_version: int
     expires_at: datetime
     agent_id: str = ""
+    # Acumulados de consumo. Só estes mudam.
+    consumed_amount: Decimal = Decimal("0")
+    filled_quantity: Decimal = Decimal("0")
+
+    @property
+    def original_amount(self) -> Decimal:
+        return self.amount
+
+    @property
+    def original_quantity(self) -> Decimal:
+        return self.quantity
+
+    @property
+    def remaining_amount(self) -> Decimal:
+        return self.amount - self.consumed_amount
+
+    @property
+    def remaining_quantity(self) -> Decimal:
+        return self.quantity - self.filled_quantity
 
 
 @dataclass(frozen=True)

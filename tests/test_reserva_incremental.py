@@ -94,7 +94,8 @@ class TestConsumoProporcionalNoRisco:
                                quantidade=res.quantity * Decimal(fatia),
                                preco=Decimal("100"), taxa=Decimal("0"),
                                fill_id=f"f{i}")
-            soma = sum((Decimal(str(r["amount"]))
+            # `amount` é o ORIGINAL; o que ainda está travado é o restante
+            soma = sum((Decimal(str(r["remaining_amount"]))
                         for r in risco.active_reservations()), Decimal("0"))
             assert risco.reserved_total == soma, (
                 f"invariante quebrada após o fill {i}")
@@ -145,7 +146,7 @@ class TestConsumoNaoAbreBrechaDeRisco:
             "o capital que virou posição precisa voltar a ficar disponível — "
             "nem mais, nem menos")
         # e a invariante continua valendo
-        soma = sum((Decimal(str(r["amount"]))
+        soma = sum((Decimal(str(r["remaining_amount"]))
                     for r in risco.active_reservations()), Decimal("0"))
         assert risco.reserved_total == soma
 

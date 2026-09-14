@@ -607,8 +607,11 @@ class ExecutionCoordinator:
                 # deixaria a parte que ainda pode executar sem cobertura.
                 alvo_total = rec.quantidade or quantidade
                 proporcao = (quantidade / alvo_total) if alvo_total else Decimal("1")
-                consumida = (reserva["amount"] * proporcao).quantize(
-                    Decimal("0.00000001"))
+                # Base ORIGINAL da reserva, não o saldo: compor percentuais
+                # sobre um saldo que já encolheu erra a partir do 2º fill.
+                base = Decimal(str(reserva.get("original_amount")
+                                   or reserva["amount"]))
+                consumida = (base * proporcao).quantize(Decimal("0.00000001"))
                 self.ledger.fill_buy(instrumento, quantidade, preco, taxa,
                                      reserved=consumida,
                                      ref=rec.order_id, agent_id=rec.agente)
@@ -678,12 +681,15 @@ class ExecutionCoordinator:
 
     def _reserva_de(self, rec) -> dict | None:
         if rec.intent is not None:
-            return {"reservation_id": rec.intent.reservation.reservation_id,
-                    "amount": rec.intent.reservation.amount}
+            r = rec.intent.reservation
+            return {"reservation_id": r.reservation_id, "amount": r.amount,
+                    "original_amount": r.original_amount}
         res_id = rec.reserva_id
         for doc in self.risk.active_reservations():
             if doc["reservation_id"] == res_id:
-                return {"reservation_id": res_id, "amount": Decimal(str(doc["amount"]))}
+                return {"reservation_id": res_id,
+                    "amount": Decimal(str(doc["amount"])),
+                    "original_amount": Decimal(str(doc["amount"]))}
         return None
 
     def reconciliacao_concluida(self, resultado: str = "conferido") -> None:
@@ -747,6 +753,13 @@ class ExecutionCoordinator:
 
         rec = self._novo_registro(ei, coid, fingerprint)
 
+        # 4b. O livro precisa TRAVAR o caixa agora: o risco autoriza, mas
+        # quem move dinheiro é a contabilidade. Sem isto o caixa seguia
+        # cheio até o fill e a identidade de capital fechava por compensação
+        # de sinais (RESERVED negativo), escondendo o erro.
+        if ei.side is Side.BUY and ei.reserved_amount > 0:
+            self.ledger.reserve(ei.reserved_amount, ref=rec.order_id)
+
         # 5. ENVIO
         try:
             resultado = self.broker.submit(
@@ -762,6 +775,8 @@ class ExecutionCoordinator:
             rec.state = OrderState.REJECTED
             rec.note = f"{type(exc).__name__}: {exc}"[:200]
             if ei.kind is Kind.ENTRY:
+                if ei.reserved_amount > 0:
+                    self.ledger.release(ei.reserved_amount, ref=rec.order_id)
                 self._liberar_reserva_de(rec)
             self.oms_version += 1
             return rec

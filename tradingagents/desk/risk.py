@@ -75,22 +75,74 @@ class PortfolioAllocator:
 class RiskEngine:
     """Calcula quantidade, aplica limites e trava capital de forma atômica."""
 
-    def __init__(self, mandate: DeskMandate):
+    def __init__(self, mandate: DeskMandate, carteira=None):
+        """`carteira` é o Ledger — a AUTORIDADE econômica.
+
+        Sem ele o risco só conhece reservas e usa o capital do mandato como
+        referência, o que ignora o dinheiro já transformado em posição. O
+        risco aplica política; não mantém uma segunda contabilidade.
+        """
         self.mandate = mandate
+        self.carteira = carteira
         self._lock = threading.Lock()
         self._reservations: dict[str, RiskReservation] = {}
 
     # -- consultas -----------------------------------------------------
     @property
     def reserved_total(self) -> Decimal:
-        return sum((r.amount for r in self._reservations.values()), Decimal("0"))
+        # O que ainda está travado é o RESTANTE, não o valor original.
+        return sum((r.remaining_amount for r in self._reservations.values()),
+                   Decimal("0"))
 
     @property
     def available(self) -> Decimal:
-        return self.mandate.capital - self.reserved_total
+        """Capital que pode ser alocado AGORA.
+
+        Antes era `capital - reservas`: depois do fill terminal a reserva
+        some e os mesmos 250 voltavam a parecer livres, com a posição ainda
+        aberta — o mesmo dinheiro podia ser alocado indefinidamente. Agora o
+        caixa vem do livro, que já desconta o que virou posição.
+
+        O capital do mandato continua valendo como TETO de política: lucro
+        realizado não amplia sozinho o limite estrutural da mesa.
+        """
+        if self.carteira is None:
+            return self.mandate.capital - self.reserved_total
+        caixa = self.carteira.cash_available()
+        return caixa - self.reserved_total + self._reservado_no_livro()
+
+    def _reservado_no_livro(self) -> Decimal:
+        """O livro já move o reservado para fora do caixa; sem isto a reserva
+        seria descontada duas vezes."""
+        if self.carteira is None:
+            return Decimal("0")
+        return self.carteira.reserved_cash()
+
+    def invested_cost(self) -> Decimal:
+        if self.carteira is None:
+            return Decimal("0")
+        return self.carteira.invested_cost()
+
+    def gross_exposure(self) -> Decimal:
+        """Exposição bruta: posição aberta + reservas ainda executáveis.
+
+        Uma posição totalmente preenchida não some do risco só porque a
+        reserva dela acabou.
+        """
+        return self.invested_cost() + self.reserved_total
 
     def open_instruments(self) -> set[str]:
-        return {r.instrument for r in self._reservations.values()}
+        """Instrumentos com exposição viva: reservas E posições abertas.
+
+        Derivar só das reservas fazia o instrumento sumir da lista assim que
+        o fill terminava — e a política de 'uma entrada por instrumento'
+        deixava de valer exatamente quando havia posição de verdade.
+        """
+        abertos = {r.instrument for r in self._reservations.values()}
+        if self.carteira is not None:
+            abertos |= {i for i, d in self.carteira.open_positions_detail().items()
+                        if Decimal(str(d["quantidade"])) > 0}
+        return abertos
 
     # -- reserva -------------------------------------------------------
     def reserve(self, proposal: TradeProposal, price: Decimal, *,
@@ -104,7 +156,9 @@ class RiskEngine:
         if pct <= 0:
             raise RiskVeto("exposição desejada nula")
         with self._lock:  # atômico: duas propostas não travam o mesmo capital
-            if len(self._reservations) >= self.mandate.max_open_positions:
+            # Posições ABERTAS contam para o limite: uma posição preenchida
+            # sem reserva continua sendo uma posição.
+            if len(self.open_instruments()) >= self.mandate.max_open_positions:
                 raise RiskVeto("limite de posições simultâneas atingido")
             if proposal.instrument in self.open_instruments():
                 raise RiskVeto(f"já há reserva ativa para {proposal.instrument}")
@@ -144,23 +198,31 @@ class RiskEngine:
             valor = Decimal(str(amount))
             if valor <= 0:
                 raise RiskVeto("consumo precisa ser positivo")
-            if valor > reserva.amount:
+            if valor > reserva.remaining_amount:
                 raise RiskVeto(
-                    f"consumo de {valor} excede o reservado ({reserva.amount})")
-            restante = reserva.amount - valor
-            if restante <= 0:
+                    f"consumo de {valor} excede o restante da reserva "
+                    f"({reserva.remaining_amount})")
+            # O ORIGINAL nunca é tocado: só o acumulado consumido cresce.
+            # Sem isso o próximo consumo proporcional usaria uma base que já
+            # encolheu.
+            from dataclasses import replace
+            consumido = reserva.consumed_amount + valor
+            atualizada = replace(reserva, consumed_amount=consumido)
+            if atualizada.remaining_amount <= 0:
                 del self._reservations[reservation_id]
                 return Decimal("0")
-            # RiskReservation é imutável por desenho: substitui-se o registro
-            # inteiro, em vez de mutar um valor financeiro no lugar.
-            from dataclasses import replace
-            self._reservations[reservation_id] = replace(reserva, amount=restante)
-            return restante
+            self._reservations[reservation_id] = atualizada
+            return atualizada.remaining_amount
+
+    def reserva(self, reservation_id: str):
+        """A reserva viva, com original/consumido/restante."""
+        with self._lock:
+            return self._reservations.get(reservation_id)
 
     def reservation_amount(self, reservation_id: str) -> Decimal:
         with self._lock:
             reserva = self._reservations.get(reservation_id)
-            return reserva.amount if reserva else Decimal("0")
+            return reserva.remaining_amount if reserva else Decimal("0")
 
     def active_reservations(self) -> list[dict]:
         """Reservas vivas, para persistência.
@@ -176,6 +238,14 @@ class RiskEngine:
                      "instrument": res.instrument,
                      "amount": str(res.amount),
                      "quantity": str(res.quantity),
+                     # Acumulados: sem eles o reinício devolveria a reserva
+                     # ao valor cheio, e o consumo já feito sumiria.
+                     "consumed_amount": str(res.consumed_amount),
+                     "filled_quantity": str(res.filled_quantity),
+                     # Derivados, para quem lê o documento não precisar
+                     # recalcular (e errar) a conta.
+                     "remaining_amount": str(res.remaining_amount),
+                     "remaining_quantity": str(res.remaining_quantity),
                      "mandate_version": res.mandate_version,
                      "expires_at": res.expires_at.isoformat()
                      if res.expires_at else None}
@@ -196,6 +266,10 @@ class RiskEngine:
                         account=doc.get("account", ""),
                         instrument=doc["instrument"],
                         amount=Decimal(str(doc["amount"])),
+                        consumed_amount=Decimal(str(
+                            doc.get("consumed_amount") or 0)),
+                        filled_quantity=Decimal(str(
+                            doc.get("filled_quantity") or 0)),
                         quantity=Decimal(str(doc.get("quantity") or 0)),
                         mandate_version=doc.get("mandate_version", 1),
                         expires_at=_dt.fromisoformat(expira) if expira else None,
