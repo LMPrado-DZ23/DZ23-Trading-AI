@@ -15,6 +15,12 @@ from tradingagents.desk.models import Action, DeskMandate, Mode, TradeProposal, 
 from tradingagents.desk.risk import RiskEngine
 
 
+def _confirma_ausencia(client_order_id):
+    """Dublê de corretora que CONFIRMA não conhecer a ordem — diferente de
+    'não achei na janela', que é UNKNOWN e mantém a reserva."""
+    return {"resultado": "CONFIRMED_NOT_FOUND", "ordem": None}
+
+
 def sistema(capital="1000"):
     m = DeskMandate(mandate_id="m", owner="p", account="a", mode=Mode.PAPER,
                     instruments=("BTC/USDT",), capital=Decimal(capital))
@@ -97,7 +103,7 @@ class TestPosicoesSaoComparadasComACorretora:
     def test_remote_orphan_position_is_detected(self):
         """Local não sabe da posição; a corretora tem 0.5 BTC."""
         m, risco, _, coord = sistema()
-        rel = coord.reconciliar(lambda coid: None,
+        rel = coord.reconciliar(_confirma_ausencia,
                                 consultar_posicoes=lambda: {"BTC/USDT": "0.5"})
         assert rel["seguro"] is False
         assert any("POSICAO_ORFA_REMOTA" in d for d in rel["divergencias"])
@@ -107,7 +113,7 @@ class TestPosicoesSaoComparadasComACorretora:
         livro.reserve(Decimal("150"), ref="r")
         livro.fill_buy("BTC/USDT", Decimal("1.5"), Decimal("100"), Decimal("0"),
                        reserved=Decimal("150"), ref="o", agent_id="t")
-        rel = coord.reconciliar(lambda coid: None, consultar_posicoes=lambda: {})
+        rel = coord.reconciliar(_confirma_ausencia, consultar_posicoes=lambda: {})
         assert rel["seguro"] is False
         assert any("POSICAO_AUSENTE_REMOTA" in d for d in rel["divergencias"])
         assert livro.open_positions_detail(), "posição apagada silenciosamente"
@@ -117,7 +123,7 @@ class TestPosicoesSaoComparadasComACorretora:
         livro.reserve(Decimal("150"), ref="r")
         livro.fill_buy("BTC/USDT", Decimal("0.5"), Decimal("100"), Decimal("0"),
                        reserved=Decimal("150"), ref="o", agent_id="t")
-        rel = coord.reconciliar(lambda coid: None,
+        rel = coord.reconciliar(_confirma_ausencia,
                                 consultar_posicoes=lambda: {"BTC/USDT": "0.7"})
         assert rel["seguro"] is False
         assert any("QUANTIDADE_DIVERGENTE" in d for d in rel["divergencias"])
@@ -127,7 +133,7 @@ class TestPosicoesSaoComparadasComACorretora:
         livro.reserve(Decimal("150"), ref="r")
         livro.fill_buy("BTC/USDT", Decimal("1"), Decimal("100"), Decimal("0"),
                        reserved=Decimal("150"), ref="o", agent_id="t")
-        rel = coord.reconciliar(lambda coid: None)      # sem consulta de posição
+        rel = coord.reconciliar(_confirma_ausencia)      # sem consulta de posição
         assert rel["posicoes_status"] == "UNKNOWN" and rel["seguro"] is False
 
 
@@ -203,7 +209,7 @@ class TestLivroBalanceadoNaoEProvaDeIgualdade:
         """O livro pode fechar perfeitamente e estar economicamente errado."""
         m, risco, livro, coord = sistema()
         assert livro.is_balanced()
-        rel = coord.reconciliar(lambda coid: None,
+        rel = coord.reconciliar(_confirma_ausencia,
                                 consultar_posicoes=lambda: {"BTC/USDT": "0.5"})
         assert rel["livro_status"] == "BALANCED"
         assert rel["seguro"] is False, (
@@ -211,7 +217,7 @@ class TestLivroBalanceadoNaoEProvaDeIgualdade:
 
     def test_report_separates_each_dimension(self):
         m, risco, _, coord = sistema()
-        rel = coord.reconciliar(lambda coid: None, consultar_posicoes=lambda: {})
+        rel = coord.reconciliar(_confirma_ausencia, consultar_posicoes=lambda: {})
         for campo in ("ordens_status", "posicoes_status", "livro_status",
                       "oms_version", "em"):
             assert campo in rel, f"relatório sem {campo}"
@@ -243,7 +249,7 @@ class TestSemConsultaRemotaNuncaEMatched:
 
     def test_no_provider_and_no_local_state_is_unknown_not_matched(self):
         m, risco, _, coord = sistema()
-        rel = coord.reconciliar(lambda coid: None)      # sem consulta de posições
+        rel = coord.reconciliar(_confirma_ausencia)      # sem consulta de posições
         assert rel["posicoes_status"] == "UNKNOWN"
         assert rel["seguro"] is False
         assert coord.reconciliacao_pendente is True
@@ -254,7 +260,7 @@ class TestSemConsultaRemotaNuncaEMatched:
         def explode():
             raise RuntimeError("exchange fora do ar")
 
-        rel = coord.reconciliar(lambda coid: None, consultar_posicoes=explode)
+        rel = coord.reconciliar(_confirma_ausencia, consultar_posicoes=explode)
         assert rel["posicoes_status"] == "UNKNOWN" and rel["seguro"] is False
 
 
@@ -371,3 +377,81 @@ class TestFillIdNaoPodeSerOrderId:
             coord.aplicar_fill(coord.orders["ord-1"], side="buy",
                                quantidade=Decimal("1"), preco=Decimal("100"),
                                taxa=Decimal("0"), fill_id="")
+
+
+class TestReservaProporcionalEmParcial:
+    """ACHADO: o primeiro fill parcial liberava a reserva INTEIRA, deixando
+    sem cobertura a parte que ainda podia executar."""
+
+    def test_partial_buy_keeps_the_remaining_reservation(self):
+        m, risco, livro, coord = sistema()
+        res = reserva(risco)                       # 150 sobre 1.5 de alvo
+        coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
+        rec = coord.orders["ord-1"]
+        coord.aplicar_fill(rec, side="buy", quantidade=Decimal("0.45"),
+                           preco=Decimal("100"), taxa=Decimal("0"),
+                           fill_id="t-1")          # 30% de 1.5
+        assert rec.state is OrderState.PARTIALLY_FILLED
+        assert risco.reserved_total > 0, (
+            "o primeiro parcial liberou a reserva toda: os 70% restantes "
+            "ficariam sem cobertura")
+
+    def test_terminal_fill_releases_the_reservation(self):
+        m, risco, livro, coord = sistema()
+        res = reserva(risco)
+        coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
+        rec = coord.orders["ord-1"]
+        coord.aplicar_fill(rec, side="buy", quantidade=Decimal("1.5"),
+                           preco=Decimal("100"), taxa=Decimal("0"), fill_id="t-1")
+        assert rec.state is OrderState.FILLED
+        assert risco.reserved_total == Decimal("0")
+
+
+class TestVersaoDoOmsSobreviveAoRestart:
+    """Sem persistir a versão, o frescor do relatório é teatro: tudo volta a
+    zero e um relatório antigo parece atual."""
+
+    def test_version_is_restored(self):
+        m, risco, _, coord = sistema()
+        res = reserva(risco)
+        coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
+        coord.reconciliar(_confirma_ausencia, consultar_posicoes=lambda: {})
+        versao = coord.oms_version
+        assert versao > 0
+        doc = coord.snapshot_estado()
+
+        m2, risco2, _, coord2 = sistema()
+        assert coord2.oms_version == 0
+        coord2.restaurar_estado(doc)
+        assert coord2.oms_version == versao, "a versão do OMS voltou a zero"
+
+    def test_a_new_mutation_advances_the_restored_version(self):
+        m, risco, _, coord = sistema()
+        res = reserva(risco)
+        coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
+        coord.reconciliar(_confirma_ausencia, consultar_posicoes=lambda: {})
+        doc = coord.snapshot_estado()
+        m2, risco2, _, coord2 = sistema()
+        coord2.restaurar_estado(doc)
+        antes = coord2.oms_version
+        res2 = reserva(risco2)
+        coord2.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res2))
+        coord2.reconciliar(_confirma_ausencia, consultar_posicoes=lambda: {})
+        assert coord2.oms_version > antes
+
+
+class TestOrdemForaDaJanelaMantemReserva:
+    """UNKNOWN não pode devolver capital."""
+
+    def test_unknown_lookup_keeps_the_reservation(self):
+        m, risco, _, coord = sistema()
+        res = reserva(risco)
+        coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
+        assert risco.reserved_total == Decimal("150.00")
+        rel = coord.reconciliar(
+            lambda coid: {"resultado": "UNKNOWN", "ordem": None,
+                          "motivo": "fora da janela consultada"},
+            consultar_posicoes=lambda: {})
+        assert rel["seguro"] is False
+        assert risco.reserved_total == Decimal("150.00"), (
+            "capital devolvido sobre ordem de destino desconhecido")

@@ -175,8 +175,9 @@ class TestCrashDepoisDeEnviarComRespostaAmbigua:
         coord2.restaurar_estado(doc)
         assert risco2.available == Decimal("850.00")
 
-        relatorio = coord2.reconciliar(lambda coid: None,   # não existe lá
-                                       consultar_posicoes=lambda: {})
+        relatorio = coord2.reconciliar(
+            lambda coid: {"resultado": "CONFIRMED_NOT_FOUND", "ordem": None},
+            consultar_posicoes=lambda: {})
         assert relatorio["seguro"] is True, relatorio["divergencias"]
         assert risco2.available == Decimal("1000"), (
             "ordem inexistente na corretora deve devolver o capital")

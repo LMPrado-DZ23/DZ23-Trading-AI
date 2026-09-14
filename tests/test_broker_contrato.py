@@ -99,30 +99,90 @@ class TestConsultaDePosicoes:
 
 
 class TestConsultaDeOrdem:
-    def test_finds_by_client_order_id(self):
-        a = adaptador(ExchangeFalsa(ordens=[
-            {"id": "ex-1", "clientOrderId": "coid-1", "status": "CLOSED",
-             "filled": 1.5, "average": 100, "fee": {"cost": 0.1},
-             "info": {"tradeId": "t-99"}}]))
-        o = a.fetch_order_by_client_id("coid-1")
-        assert o["status"] == "closed" and o["filled"] == 1.5
-        assert o["fill_id"] == "t-99", "o id do trade precisa vir do payload"
+    """Três respostas distintas. Confundi-las é o que devolve capital de uma
+    ordem viva."""
 
-    def test_finds_by_okx_style_client_id(self):
+    def test_direct_lookup_finds_the_order(self):
+        class ComBusca(ExchangeFalsa):
+            def fetch_order(self, oid, symbol=None):
+                return {"id": "ex-1", "clientOrderId": oid, "status": "CLOSED",
+                        "filled": 1.5, "average": 100, "fee": {"cost": 0.1},
+                        "info": {"tradeId": "t-99"}}
+
+        r = adaptador(ComBusca()).fetch_order_by_client_id("coid-1")
+        assert r["resultado"] == "FOUND"
+        assert r["ordem"]["status"] == "closed" and r["ordem"]["fill_id"] == "t-99"
+
+    def test_exchange_saying_order_not_found_is_confirmation(self):
+        class OrderNotFound(Exception):
+            pass
+
+        class Nega(ExchangeFalsa):
+            def fetch_order(self, oid, symbol=None):
+                raise OrderNotFound("unknown order")
+
+        r = adaptador(Nega()).fetch_order_by_client_id("coid-1")
+        assert r["resultado"] == "CONFIRMED_NOT_FOUND"
+
+    def test_network_failure_is_unknown_never_confirmation(self):
+        class Cai(ExchangeFalsa):
+            def fetch_order(self, oid, symbol=None):
+                raise RuntimeError("timeout")
+
+        r = adaptador(Cai()).fetch_order_by_client_id("coid-1")
+        assert r["resultado"] == "UNKNOWN"
+
+    def test_order_outside_the_history_window_is_unknown(self):
+        """A ordem alvo é a 10ª de 100; a janela consultada traz as últimas.
+        Não aparecer NÃO prova que não existe."""
+        ordens = [{"id": f"ex-{i}", "clientOrderId": f"coid-{i}",
+                   "status": "closed"} for i in range(60, 100)]
+        a = adaptador(ExchangeFalsa(ordens=ordens))
+        r = a.fetch_order_by_client_id("coid-10")
+        assert r["resultado"] == "UNKNOWN", (
+            "ordem fora da janela foi tratada como inexistente")
+        assert "NÃO prova" in r["motivo"]
+
+    def test_history_scan_can_still_find(self):
         a = adaptador(ExchangeFalsa(ordens=[
             {"id": "ex-2", "info": {"clOrdId": "coid-2"}, "status": "open"}]))
-        assert a.fetch_order_by_client_id("coid-2")["status"] == "open"
+        r = a.fetch_order_by_client_id("coid-2")
+        assert r["resultado"] == "FOUND" and r["ordem"]["status"] == "open"
 
-    def test_unknown_order_returns_none(self):
-        a = adaptador(ExchangeFalsa(ordens=[]))
-        assert a.fetch_order_by_client_id("coid-x") is None
 
-    def test_error_is_unknown_not_none(self):
-        """None significa 'a corretora não conhece a ordem' e DEVOLVE o
-        capital. Uma falha de rede jamais pode ser lida assim."""
-        a = adaptador(ExchangeFalsa(erro=RuntimeError("500")))
+class TestConsultaDeExecucoes:
+    """order.filled é CUMULATIVO; os efeitos econômicos vêm dos fills."""
+
+    class ComTrades(ExchangeFalsa):
+        def __init__(self, trades, **kw):
+            super().__init__(**kw)
+            self._trades = trades
+
+        def fetch_my_trades(self, *a, **k):
+            if self._erro:
+                raise self._erro
+            return self._trades
+
+    def test_returns_canonical_fills(self):
+        a = adaptador(self.ComTrades([
+            {"id": "t-1", "order": "ex-1", "symbol": "BTC/USDT", "side": "buy",
+             "amount": 0.3, "price": 100, "fee": {"cost": 0.03, "currency": "USDT"},
+             "timestamp": 1}]))
+        fills = a.fetch_order_fills("coid-1", "ex-1")
+        assert len(fills) == 1
+        f = fills[0]
+        assert f["fill_id"] == "t-1" and f["quantity"] == Decimal("0.3")
+        assert isinstance(f["price"], Decimal) and f["fee_currency"] == "USDT"
+
+    def test_fill_without_identifier_is_refused(self):
+        a = adaptador(self.ComTrades([
+            {"order": "ex-1", "amount": 0.3, "price": 100}]))
+        with pytest.raises(BrokerConsultaIndisponivel, match="deduplicar"):
+            a.fetch_order_fills("coid-1", "ex-1")
+
+    def test_missing_capability_is_refused(self):
         with pytest.raises(BrokerConsultaIndisponivel):
-            a.fetch_order_by_client_id("coid-1")
+            adaptador(ExchangeFalsa()).fetch_order_fills("coid-1")
 
 
 class TestIntegracaoComAReconciliacao:

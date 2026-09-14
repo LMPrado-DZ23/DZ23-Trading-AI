@@ -12,6 +12,16 @@ from decimal import Decimal
 from .execution import BrokerTimeout
 
 
+def _e_ordem_inexistente(exc: BaseException) -> bool:
+    """A corretora afirmou que a ordem não existe?
+
+    Só classes que significam EXATAMENTE isso. Erro de rede, permissão ou
+    parâmetro não provam ausência — e tratá-los como ausência devolveria
+    capital de uma ordem viva.
+    """
+    return type(exc).__name__ in {"OrderNotFound", "InvalidOrder"}
+
+
 class BrokerConsultaIndisponivel(RuntimeError):
     """Consulta à corretora falhou: o resultado é DESCONHECIDO, e desconhecido
     mantém o portão fechado. Nunca deve virar 'nada encontrado'."""
@@ -62,6 +72,7 @@ def _pode_ter_chegado(exc: BaseException) -> bool:
 
 
 class CCXTDeskBroker:
+    JANELA_HISTORICO = 200
     """Envia ordens reais (testnet por padrão) pelo contrato do executor.
 
     `final_state` é o estado com a marca de transporte exigida pelo gate de
@@ -80,21 +91,97 @@ class CCXTDeskBroker:
     # dublês nos testes: o caminho real nunca foi exercitado. O adaptador
     # traduz a resposta do CCXT para uma estrutura canônica — o coordenador
     # não pode interpretar objeto específico de exchange.
-    def fetch_order_by_client_id(self, client_order_id: str) -> dict | None:
-        """Estado canônico da ordem, ou None se a corretora não a conhece."""
+    def fetch_order_by_client_id(self, client_order_id: str) -> dict:
+        """Estado da ordem na corretora, com TRÊS respostas distintas.
+
+        O contrato anterior devolvia None tanto para "a corretora confirma
+        que não existe" quanto para "não apareci na janela que consultei" —
+        e o coordenador DEVOLVIA O CAPITAL nos dois casos. Uma ordem antiga,
+        fora das últimas 50, liberava reserva estando viva.
+
+        resultado:
+          FOUND               -> `ordem` preenchida
+          CONFIRMED_NOT_FOUND -> a corretora respondeu que não conhece
+          UNKNOWN             -> não foi possível provar ausência
+        """
         ex = self.bridge._ex
+        # 1) consulta DIRETA por id, quando a corretora suporta: é a única
+        #    que prova ausência.
+        if hasattr(ex, "fetch_order"):
+            try:
+                o = ex.fetch_order(client_order_id)
+                if o:
+                    return {"resultado": "FOUND", "ordem": self._ordem_canonica(o)}
+            except Exception as exc:
+                if _e_ordem_inexistente(exc):
+                    return {"resultado": "CONFIRMED_NOT_FOUND", "ordem": None,
+                            "motivo": f"corretora respondeu {type(exc).__name__}"}
+                # qualquer outra falha é desconhecimento, não ausência
+                return {"resultado": "UNKNOWN", "ordem": None,
+                        "motivo": f"consulta direta falhou ({type(exc).__name__})"}
+
+        # 2) varredura do histórico: pode ENCONTRAR, nunca provar ausência.
+        if not hasattr(ex, "fetch_orders"):
+            return {"resultado": "UNKNOWN", "ordem": None,
+                    "motivo": "corretora não expõe consulta de ordens"}
         try:
-            ordens = ex.fetch_orders(None, None, 50) if hasattr(ex, "fetch_orders") else []
+            ordens = ex.fetch_orders(None, None, self.JANELA_HISTORICO)
+        except Exception as exc:
+            return {"resultado": "UNKNOWN", "ordem": None,
+                    "motivo": f"consulta de histórico falhou ({type(exc).__name__})"}
+        for o in ordens or []:
+            if client_order_id in self._identidades(o):
+                return {"resultado": "FOUND", "ordem": self._ordem_canonica(o)}
+        return {"resultado": "UNKNOWN", "ordem": None,
+                "motivo": (f"ordem não apareceu nas últimas "
+                           f"{len(ordens or [])} ordens consultadas — isso NÃO "
+                           "prova que ela não existe")}
+
+    def fetch_order_fills(self, client_order_id: str,
+                          exchange_order_id: str = "") -> list[dict]:
+        """Execuções (trades) da ordem. É daqui que saem os efeitos
+        econômicos: `order.filled` é CUMULATIVO e não serve como delta."""
+        ex = self.bridge._ex
+        if not hasattr(ex, "fetch_my_trades"):
+            raise BrokerConsultaIndisponivel(
+                "corretora não expõe consulta de execuções")
+        try:
+            trades = ex.fetch_my_trades()
         except Exception as exc:
             raise BrokerConsultaIndisponivel(
-                f"consulta de ordens falhou ({type(exc).__name__})") from exc
-        for o in ordens or []:
-            info = o.get("info") or {}
-            candidatos = {o.get("clientOrderId"), info.get("clientOrderId"),
-                          info.get("clOrdId"), o.get("id")}
-            if client_order_id in {c for c in candidatos if c}:
-                return self._ordem_canonica(o)
-        return None
+                f"consulta de execuções falhou ({type(exc).__name__})") from exc
+        saida = []
+        for t in trades or []:
+            if (t.get("order") not in (exchange_order_id, client_order_id)
+                    and client_order_id not in self._identidades(t)):
+                continue
+            fid = t.get("id") or (t.get("info") or {}).get("tradeId")
+            if not fid:
+                # Sem identidade de execução não há como deduplicar: inventar
+                # unicidade é o caminho para contabilizar duas vezes.
+                raise BrokerConsultaIndisponivel(
+                    "execução sem identificador: impossível deduplicar")
+            taxa = t.get("fee") or {}
+            saida.append({
+                "fill_id": str(fid),
+                "exchange_order_id": t.get("order") or "",
+                "client_order_id": client_order_id,
+                "instrument": t.get("symbol") or "",
+                "side": (t.get("side") or "").lower(),
+                "quantity": Decimal(str(t.get("amount") or 0)),
+                "price": Decimal(str(t.get("price") or 0)),
+                "fee": Decimal(str(taxa.get("cost") or 0)),
+                "fee_currency": taxa.get("currency") or "",
+                "timestamp": t.get("timestamp"),
+            })
+        return saida
+
+    @staticmethod
+    def _identidades(o: dict) -> set:
+        info = o.get("info") or {}
+        return {c for c in (o.get("clientOrderId"), info.get("clientOrderId"),
+                            info.get("clOrdId"), o.get("id"),
+                            info.get("origClientOrderId")) if c}
 
     def fetch_positions(self) -> dict:
         """Posições por instrumento, em Decimal. Zero é omitido."""

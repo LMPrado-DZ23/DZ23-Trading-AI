@@ -360,11 +360,28 @@ class ExecutionCoordinator:
         Passa pelo MESMO caminho de fill do fluxo normal — duplicar a lógica
         contábil aqui seria criar uma segunda verdade.
         """
+        # Contrato de três respostas. Devolver capital exige CONFIRMAÇÃO de
+        # ausência — "não achei na janela que consultei" não é confirmação.
+        if isinstance(remota, dict) and "resultado" in remota:
+            resultado = remota.get("resultado")
+            if resultado == "UNKNOWN":
+                relatorio["divergencias"].append(
+                    f"{rec.order_id}: destino desconhecido na corretora "
+                    f"({remota.get('motivo', 'sem motivo')}) — reserva mantida")
+                return
+            if resultado == "CONFIRMED_NOT_FOUND":
+                rec.state = OrderState.REJECTED
+                rec.note = "reconciliada: corretora CONFIRMA que não existe"
+                self._liberar_reserva_de(rec)
+                self.oms_version += 1
+                return
+            remota = remota.get("ordem")
         if remota is None:
-            rec.state = OrderState.REJECTED
-            rec.note = "reconciliada: inexistente na corretora"
-            self._liberar_reserva_de(rec)
-            self.oms_version += 1
+            # Contrato antigo (dublês de teste): sem confirmação explícita,
+            # trata-se como desconhecido — fail-closed.
+            relatorio["divergencias"].append(
+                f"{rec.order_id}: consulta sem confirmação de ausência — "
+                "reserva mantida")
             return
         estado = str(remota.get("status", "")).lower()
         if estado in ("closed", "filled"):
@@ -420,10 +437,18 @@ class ExecutionCoordinator:
         if lado == "buy":
             reserva = self._reserva_de(rec)
             if reserva is not None:
+                # RESERVA PROPORCIONAL: liberar tudo no primeiro parcial
+                # deixaria a parte que ainda pode executar sem cobertura.
+                alvo_total = rec.quantidade or quantidade
+                proporcao = (quantidade / alvo_total) if alvo_total else Decimal("1")
+                consumida = (reserva["amount"] * proporcao).quantize(
+                    Decimal("0.00000001"))
                 self.ledger.fill_buy(instrumento, quantidade, preco, taxa,
-                                     reserved=reserva["amount"],
+                                     reserved=consumida,
                                      ref=rec.order_id, agent_id=rec.agente)
-                self.risk.release(reserva["reservation_id"])
+                terminal = (rec.filled_qty + quantidade) >= alvo_total
+                if terminal:
+                    self.risk.release(reserva["reservation_id"])
         else:
             # SAÍDA: reduz a posição, realiza o resultado e alimenta o freio.
             custo = self._custo_proporcional(instrumento, quantidade)
@@ -683,6 +708,8 @@ class ExecutionCoordinator:
             "worker_id": self.worker_id,
             "dia": self.dia_corrente,
             "perda_do_dia": str(self.perda_do_dia),
+            "oms_version": self.oms_version,
+            "ultimo_relatorio": self.ultimo_relatorio,
             "ordens": [self._ordem_para_doc(r) for r in self.orders.values()],
             "posicoes": self.ledger.open_positions_detail(),
             "caixa": str(self.ledger.cash()),
@@ -728,6 +755,12 @@ class ExecutionCoordinator:
             return {"restaurado": False, "motivo": "sem estado anterior",
                     "pendencias": [], "exige_reconciliacao": False}
         self.restaurar_estado_do_dia(doc)
+        # Sem isto o frescor vira teatro: versão zerada no restart faria um
+        # relatório antigo (também zero) parecer atual.
+        # Nunca REGREDIR: restaurar um documento antigo não pode fazer a
+        # versão andar para trás, senão um relatório velho voltaria a valer.
+        self.oms_version = max(self.oms_version, int(doc.get("oms_version") or 0))
+        self.ultimo_relatorio = doc.get("ultimo_relatorio")
 
         # 1) LIVRO: reconstruído dos lançamentos (mantém a auditabilidade).
         lancamentos = doc.get("lancamentos")
