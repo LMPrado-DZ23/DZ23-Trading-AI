@@ -135,6 +135,8 @@ ALLOWED_KEYS = [
     "TRADINGAGENTS_DESK_INSTRUMENTS", "TRADINGAGENTS_DESK_CAPITAL",
     "LIVE_MAX_ORDER_VALUE", "LIVE_MAX_DAILY_LOSS",
     "LIVE_TRADING_CONFIRM",
+    "ALERTA_TELEGRAM_TOKEN", "ALERTA_TELEGRAM_CHAT", "ALERTA_WEBHOOK_URL",
+    "TRANSPARENCIA_PUBLICA", "TRANSPARENCIA_NOME",
 ]
 SECRETish = tuple(k for k in ALLOWED_KEYS if k.endswith(("_KEY", "_SECRET")))
 
@@ -1165,6 +1167,23 @@ def _desk_boot(tenant_id: str) -> dict:
             "feed_kind": feed_kind, "broker_mode": broker_mode, "scheduler": None}
 
     def _record(out):
+        # A cada ciclo, avalia e envia alertas — é o que acorda o dono sem
+        # ele precisar abrir o painel.
+        try:
+            from tradingagents.desk.alerts import avaliar_estado
+            coord_, led_, sched_ = desk["coordinator"], desk["ledger"], desk["scheduler"]
+            corretora_ = getattr(coord_.broker, "bridge", None)
+            alertas = avaliar_estado(
+                pendencias_reconciliacao=[r.order_id for r in coord_.pending_reconciliation()],
+                contabilidade_balanceada=led_.is_balanced(),
+                perda_hoje=getattr(corretora_, "realized_loss_today", Decimal("0")),
+                limite_perda=getattr(corretora_, "max_daily_loss", Decimal("0")),
+                mesa_deveria_rodar=True, mesa_rodando=True,
+                erros_do_ciclo=sched_.state.errors if sched_ else 0)
+            if alertas:
+                _notificador(tenant_id).enviar(alertas)
+        except Exception:
+            pass          # alerta nunca pode derrubar o ciclo
         desk["cycles"].append({"em": _now().isoformat(), "origem": feed_kind,
                                "resumo": out.get("resumo", ""),
                                "vetos": out.get("vetos", []),
@@ -1549,3 +1568,102 @@ def desk_viability(request: Request, _=Depends(auth)):
                          "resultado. Reduza custo (exchange mais barata), "
                          "aumente o alvo, ou não opere."),
             "aviso": "expectativa calculada; não é previsão"}
+
+
+# =============================================================== ALERTAS ⑥
+def _notificador(tenant_id: str):
+    from tradingagents.desk.alerts import Notificador
+    cfg = load_cfg(tenant_id)
+    chave = f"_notificador_{tenant_id}"
+    atual = _DESKS.get(tenant_id, {}).get(chave)
+    if atual is None:
+        atual = Notificador(
+            telegram_token=cfg.get("ALERTA_TELEGRAM_TOKEN", ""),
+            telegram_chat=cfg.get("ALERTA_TELEGRAM_CHAT", ""),
+            webhook_url=cfg.get("ALERTA_WEBHOOK_URL", ""))
+        if tenant_id in _DESKS:
+            _DESKS[tenant_id][chave] = atual
+    return atual
+
+
+def _estado_para_alertas(d: dict) -> list:
+    from decimal import Decimal as D
+
+    from tradingagents.desk.alerts import avaliar_estado
+    coord, led, sched = d["coordinator"], d["ledger"], d["scheduler"]
+    corretora = getattr(coord.broker, "bridge", None)
+    return avaliar_estado(
+        pendencias_reconciliacao=[r.order_id for r in coord.pending_reconciliation()],
+        contabilidade_balanceada=led.is_balanced(),
+        perda_hoje=getattr(corretora, "realized_loss_today", D("0")),
+        limite_perda=getattr(corretora, "max_daily_loss", D("0")),
+        mesa_deveria_rodar=not sched.state.stopped,
+        mesa_rodando=sched.running,
+        erros_do_ciclo=sched.state.errors)
+
+
+@app.get("/v1/alertas")
+def listar_alertas(request: Request, _=Depends(auth)):
+    """O que exigiria sua atenção AGORA, e o histórico do que já avisou."""
+    tid = request_tenant(request)
+    d = _desk_of(request)
+    notificador = _notificador(tid)
+    alertas = _estado_para_alertas(d)
+    return {"ativos": [{"codigo": a.codigo, "severidade": a.severidade,
+                        "titulo": a.titulo, "detalhe": a.detalhe, "acao": a.acao}
+                       for a in alertas],
+            "canal_configurado": notificador.configurado,
+            "historico": notificador.historico[-20:],
+            "como_configurar": ("Em Configuração: ALERTA_TELEGRAM_TOKEN e "
+                                "ALERTA_TELEGRAM_CHAT, ou ALERTA_WEBHOOK_URL")}
+
+
+@app.post("/v1/alertas/verificar")
+def disparar_alertas(request: Request, _=Depends(auth)):
+    """Avalia e ENVIA o que houver. O worker chama isto a cada ciclo."""
+    tid = request_tenant(request)
+    d = _desk_of(request)
+    alertas = _estado_para_alertas(d)
+    resultado = _notificador(tid).enviar(alertas)
+    return {"avaliados": len(alertas), **resultado}
+
+
+# ======================================================= TRANSPARÊNCIA ⑦
+@app.get("/publico/{tenant_id}")
+def pagina_publica(tenant_id: str):
+    """Página PÚBLICA com o histórico real — inclusive as perdas.
+
+    Só existe se o dono ligar (TRANSPARENCIA_PUBLICA=true). Mostra desempenho
+    e comportamento; NUNCA saldo, chave, ordem individual ou dado de conta.
+    Num mercado cheio de promessa vazia, mostrar o resultado real — com as
+    perdas — é o argumento de venda mais forte que existe.
+    """
+    cfg = load_cfg(tenant_id)
+    if (cfg.get("TRANSPARENCIA_PUBLICA") or "").strip().lower() != "true":
+        raise HTTPException(404, "esta agência não publicou seus resultados")
+    d = _DESKS.get(tenant_id)
+    if d is None:
+        try:
+            d = _desk_boot(tenant_id)
+            _DESKS[tenant_id] = d
+        except Exception:
+            raise HTTPException(503, "dados indisponíveis no momento") from None
+    mem, led, coord = d.get("memoria"), d["ledger"], d["coordinator"]
+    fechadas = [r for r in coord.orders.values() if r.state.value == "filled"]
+    return {
+        "agencia": cfg.get("TRANSPARENCIA_NOME") or "Agência DZ23",
+        "modo": d["orchestrator"].mandate.mode.value,
+        "fonte_de_dados": d.get("feed_kind", "fixture"),
+        "estrategias": (mem.relatorio() if mem else []),
+        "operacoes_executadas": len(fechadas),
+        "instrumentos": list(d["orchestrator"].mandate.instruments),
+        "contabilidade_fecha": led.is_balanced(),
+        "compromissos": [
+            "Mostramos o histórico real, incluindo as perdas.",
+            "A mesa opera em modo simulado/testnet salvo indicação contrária.",
+            "Nada aqui é recomendação de investimento.",
+            "Desempenho passado não prevê resultado futuro.",
+        ],
+        "o_que_nao_mostramos": ["saldo", "chaves", "ordens individuais",
+                                "dados de conta"],
+    }

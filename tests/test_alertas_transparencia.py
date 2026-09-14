@@ -1,0 +1,139 @@
+"""Alertas que acordam o dono e página pública que mostra a verdade."""
+from __future__ import annotations
+
+import importlib
+from decimal import Decimal
+
+from fastapi.testclient import TestClient
+
+from tradingagents.desk.alerts import Alerta, Notificador, avaliar_estado
+
+
+def estado(**kw):
+    base = dict(pendencias_reconciliacao=[], contabilidade_balanceada=True,
+                perda_hoje=Decimal("0"), limite_perda=Decimal("500"),
+                mesa_deveria_rodar=False, mesa_rodando=False, erros_do_ciclo=0)
+    base.update(kw)
+    return avaliar_estado(**base)
+
+
+class TestRegrasDeAlerta:
+    def test_healthy_desk_generates_nothing(self):
+        assert estado() == []
+
+    def test_uncertain_order_is_urgent(self):
+        a = estado(pendencias_reconciliacao=["ord-1"])[0]
+        assert a.severidade == "urgente" and "incerto" in a.titulo
+        assert "reconcilie" in a.acao
+
+    def test_unbalanced_book_is_urgent(self):
+        a = estado(contabilidade_balanceada=False)[0]
+        assert a.codigo == "livro_desbalanceado" and a.severidade == "urgente"
+
+    def test_warns_before_the_daily_limit_not_only_after(self):
+        perto = estado(perda_hoje=Decimal("420"), limite_perda=Decimal("500"))
+        assert perto[0].codigo == "limite_perda_proximo"
+        assert perto[0].severidade == "atencao"
+
+    def test_limit_reached_is_urgent(self):
+        a = estado(perda_hoje=Decimal("500"), limite_perda=Decimal("500"))[0]
+        assert a.codigo == "limite_perda_atingido" and a.severidade == "urgente"
+
+    def test_desk_stopped_when_it_should_run(self):
+        a = estado(mesa_deveria_rodar=True, mesa_rodando=False)[0]
+        assert a.codigo == "mesa_parada"
+
+    def test_running_desk_does_not_alert(self):
+        assert estado(mesa_deveria_rodar=True, mesa_rodando=True) == []
+
+    def test_repeated_cycle_errors_alert(self):
+        assert any(a.codigo == "ciclos_com_erro" for a in estado(erros_do_ciclo=3))
+
+    def test_every_alert_says_what_to_do(self):
+        todos = estado(pendencias_reconciliacao=["o1"], contabilidade_balanceada=False,
+                       perda_hoje=Decimal("500"), limite_perda=Decimal("500"),
+                       mesa_deveria_rodar=True, erros_do_ciclo=5)
+        assert len(todos) >= 4
+        assert all(a.acao and a.titulo and a.detalhe for a in todos)
+
+
+class TestEntregaSemVirarRuido:
+    def _notificador(self, **kw):
+        recebidos = []
+        n = Notificador(webhook_url="https://exemplo/hook",
+                        transporte=recebidos.append, **kw)
+        return n, recebidos
+
+    def test_same_alert_is_not_repeated_within_the_silence_window(self):
+        n, recebidos = self._notificador(silencio=1800)
+        a = estado(contabilidade_balanceada=False)
+        n.enviar(a, agora=1000)
+        r = n.enviar(a, agora=1200)
+        assert len(recebidos) == 1 and r["silenciados"] == ["livro_desbalanceado"]
+
+    def test_after_the_window_it_alerts_again(self):
+        n, recebidos = self._notificador(silencio=600)
+        a = estado(contabilidade_balanceada=False)
+        n.enviar(a, agora=1000)
+        n.enviar(a, agora=2000)
+        assert len(recebidos) == 2
+
+    def test_without_channel_the_alert_is_kept_not_lost(self):
+        n = Notificador()
+        r = n.enviar(estado(contabilidade_balanceada=False))
+        assert r["canal_configurado"] is False
+        assert n.historico and n.historico[-1]["codigo"] == "livro_desbalanceado"
+
+    def test_delivery_failure_is_reported_not_swallowed(self):
+        def explode(a):
+            raise RuntimeError("telegram fora do ar")
+        n = Notificador(webhook_url="https://x/h", transporte=explode)
+        r = n.enviar(estado(contabilidade_balanceada=False))
+        assert r["falhas"] and "livro_desbalanceado" in r["falhas"][0]
+
+    def test_message_never_carries_secrets(self):
+        a = Alerta("x", "urgente", "t", "d", "a")
+        texto = a.texto()
+        assert "token" not in texto.lower() and "api" not in texto.lower()
+
+
+class TestNoServico:
+    def _app(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("ACCESS_PASSWORD", "s3nh4")
+        monkeypatch.setenv("DATA_DIR", str(tmp_path))
+        import service.app as m
+        importlib.reload(m)
+        m._FAILS.clear()
+        m._DESKS.clear()
+        return m, TestClient(m.app), {"Authorization": "Bearer s3nh4"}
+
+    def test_alert_route_lists_and_explains(self, tmp_path, monkeypatch):
+        m, c, h = self._app(tmp_path, monkeypatch)
+        d = c.get("/v1/alertas", headers=h).json()
+        assert "ativos" in d and "como_configurar" in d
+        assert d["canal_configurado"] is False
+
+    def test_public_page_is_off_by_default(self, tmp_path, monkeypatch):
+        m, c, h = self._app(tmp_path, monkeypatch)
+        assert c.get("/publico/legacy").status_code == 404
+
+    def test_public_page_shows_truth_when_enabled(self, tmp_path, monkeypatch):
+        m, c, h = self._app(tmp_path, monkeypatch)
+        c.post("/v1/config", headers=h, json={"vars": {
+            "TRANSPARENCIA_PUBLICA": "true", "TRANSPARENCIA_NOME": "Mesa do Prado"}})
+        r = c.get("/publico/legacy")          # SEM autenticação, de propósito
+        assert r.status_code == 200
+        d = r.json()
+        assert d["agencia"] == "Mesa do Prado"
+        assert any("perdas" in x for x in d["compromissos"])
+        assert any("passado não prevê" in x for x in d["compromissos"])
+        assert "saldo" in d["o_que_nao_mostramos"]
+
+    def test_public_page_never_leaks_account_data(self, tmp_path, monkeypatch):
+        m, c, h = self._app(tmp_path, monkeypatch)
+        c.post("/v1/config", headers=h, json={"vars": {
+            "TRANSPARENCIA_PUBLICA": "true", "EXCHANGE_API_KEY": "chave-secreta-xyz",
+            "GROQ_API_KEY": "gsk-secreta"}})
+        texto = c.get("/publico/legacy").text
+        assert "chave-secreta-xyz" not in texto and "gsk-secreta" not in texto
+        assert "saldo" not in texto.lower().split("o_que_nao_mostramos")[0]
