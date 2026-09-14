@@ -613,13 +613,23 @@ class ExecutionCoordinator:
                     reserva["reservation_id"], custo=custo_real,
                     quantidade=quantidade, terminal=terminal)
 
+                # A parcela que sai de RESERVED não pode passar do que está
+                # efetivamente travado no livro: o excedente sai do CAIXA.
+                # Debitar RESERVED além do travado deixaria a conta negativa
+                # e, mais tarde, a devolução tentaria criar dinheiro.
+                travado = self.ledger.reserved_cash()
+                da_reserva = min(custo_real, travado) if travado > 0 else Decimal("0")
                 self.ledger.fill_buy(instrumento, quantidade, preco, taxa,
-                                     reserved=custo_real, ref=rec.order_id,
+                                     reserved=da_reserva, ref=rec.order_id,
                                      agent_id=rec.agente)
                 sobra = Decimal(str(resultado.get("sobra") or 0))
                 if sobra > 0:
-                    # Parte reservada e não usada volta ao caixa.
-                    self.ledger.release(sobra, ref=rec.order_id)
+                    # Parte reservada e não usada volta ao caixa — limitada ao
+                    # que o livro realmente travou, pelo mesmo motivo do fill:
+                    # devolver o não travado seria criar dinheiro.
+                    devolvivel = min(sobra, self.ledger.reserved_cash())
+                    if devolvivel > 0:
+                        self.ledger.release(devolvivel, ref=rec.order_id)
                 deficit = Decimal(str(resultado.get("deficit") or 0))
                 if deficit > 0:
                     # A corretora JÁ executou: não se desfaz o fill. Registra
@@ -679,6 +689,40 @@ class ExecutionCoordinator:
         if qtd <= 0:
             return Decimal("0")
         return (custo * quantidade / qtd).quantize(Decimal("0.00000001"))
+
+    def liberar_reserva_restante(self, reservation_id: str, *, motivo: str,
+                                 order_id: str = "") -> Decimal:
+        """ÚNICA responsável por devolver cobertura não usada ao caixa.
+
+        Havia três aritméticas diferentes — rejeição, cancelamento e
+        reconciliação — e a rejeição chamava duas delas em sequência: o livro
+        recebia a reserva de volta DUAS vezes, o caixa passava do capital e
+        RESERVED ficava negativo. Dinheiro criado do nada, com o livro ainda
+        fechando.
+
+        Devolve sempre o RESTANTE da cobertura dura, nunca o alvo. É
+        idempotente: a segunda chamada não movimenta dinheiro.
+        """
+        if not reservation_id:
+            return Decimal("0")
+        # O RiskEngine decide sob lock quem terminaliza; quem perder a
+        # corrida recebe zero e não toca no livro.
+        restante = self.risk.terminalizar(reservation_id, motivo=motivo)
+        if restante <= 0:
+            return Decimal("0")
+        # O livro pode ter travado MENOS que o risco reservou (estado
+        # restaurado de um snapshot sem o lançamento, por exemplo). Devolver
+        # o que não foi travado criaria dinheiro; então devolve-se o que
+        # existe e a diferença fica registrada como divergência, em vez de
+        # sumir ou estourar.
+        travado = self.ledger.reserved_cash()
+        devolver = min(restante, travado)
+        if devolver > 0:
+            self.ledger.release(devolver, ref=order_id or reservation_id)
+        if devolver < restante:
+            self.risk.registrar_divergencia_de_cobertura(
+                reservation_id, faltante=restante - devolver)
+        return devolver
 
     def _reserva_de(self, rec) -> dict | None:
         if rec.intent is not None:
@@ -790,11 +834,10 @@ class ExecutionCoordinator:
             rec.state = OrderState.REJECTED
             rec.note = f"{type(exc).__name__}: {exc}"[:200]
             if ei.kind is Kind.ENTRY:
-                viva = self.risk.reserva(ei.reservation_id)
-                devolver = viva.hard_reserved_amount if viva else ei.reserved_amount
-                if devolver > 0:
-                    self.ledger.release(devolver, ref=rec.order_id)
-                self._liberar_reserva_de(rec)
+                self.liberar_reserva_restante(
+                    ei.reservation_id,
+                    motivo=f"ordem rejeitada: {rec.note}"[:120],
+                    order_id=rec.order_id)
             self.oms_version += 1
             return rec
 
@@ -1287,23 +1330,19 @@ class ExecutionCoordinator:
                 "exige_reconciliacao": exige}
 
     def _liberar_reserva_de(self, rec) -> bool:
-        """Libera a reserva de uma ordem, com ou sem a intenção em memória."""
-        if rec.intent is not None:
-            self.ledger.release(rec.intent.reservation.amount, ref=rec.order_id)
-            self.risk.release(rec.intent.reservation.reservation_id)
-            return True
-        res_id = rec.reserva_id
+        """Compatibilidade: DELEGA à liberação canônica, sem aritmética própria.
+
+        Antes calculava o valor por conta própria (usando o ALVO, não a
+        cobertura restante) e chamava `ledger.release` direto. Somado ao
+        release explícito do caminho de rejeição, devolvia o dinheiro duas
+        vezes.
+        """
+        res_id = rec.reserva_id or (rec.intent.reservation.reservation_id
+                                    if rec.intent is not None else "")
         if not res_id:
             return False
-        valor = None
-        for doc in self.risk.active_reservations():
-            if doc["reservation_id"] == res_id:
-                valor = Decimal(str(doc["amount"]))
-                break
-        if valor is None:
-            return False
-        self.ledger.release(valor, ref=rec.order_id)
-        self.risk.release(res_id)
+        self.liberar_reserva_restante(
+            res_id, motivo=f"ordem {rec.state.value}", order_id=rec.order_id)
         return True
 
     def _ordem_de_doc(self, od: dict):

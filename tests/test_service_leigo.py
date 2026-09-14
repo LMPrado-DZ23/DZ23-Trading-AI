@@ -489,3 +489,41 @@ class TestRestauracaoDeAmbienteNoJob:
             _t.sleep(0.1)
         assert os.environ.get("GROQ_API_KEY") is None, (
             "a chave do inquilino ficou no ambiente do processo")
+
+
+class TestMarcaDoProduto:
+    """Os ícones precisam ser servidos — sem rota, o favicon e o ícone de
+    atalho simplesmente não aparecem."""
+
+    @staticmethod
+    def _cliente():
+        # sem `with`: o ciclo de vida reinicia o agendador, que só pode
+        # subir uma vez por processo
+        from fastapi.testclient import TestClient
+
+        import service.app as m
+        return TestClient(m.app)
+
+    def test_the_favicon_is_served(self):
+        r = self._cliente().get("/favicon.ico")
+        assert r.status_code == 200 and len(r.content) > 0
+
+    def test_the_logo_is_served(self):
+        c = self._cliente()
+        for arquivo in ("dz23-logo-192.png", "dz23-logo-512.png",
+                        "favicon-32.png"):
+            r = c.get(f"/static/marca/{arquivo}")
+            assert r.status_code == 200, arquivo
+            assert r.content[:4] == b"\x89PNG", f"{arquivo} não é PNG"
+
+    def test_arbitrary_paths_are_refused(self):
+        """Nome arbitrário leria qualquer arquivo do disco."""
+        c = self._cliente()
+        for tentativa in ("..%2F..%2Fapp.py", "segredo.env", "app.py"):
+            r = c.get(f"/static/marca/{tentativa}")
+            assert r.status_code in (404, 400), tentativa
+
+    def test_the_pages_reference_the_brand(self):
+        html = self._cliente().get("/").text
+        assert "/static/marca/favicon" in html
+        assert "/static/marca/dz23-logo-192.png" in html

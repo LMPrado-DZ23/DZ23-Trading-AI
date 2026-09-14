@@ -100,6 +100,14 @@ class Ledger:
                                       Entry(f"CASH:{self.currency}", -amount)], ref)
 
     def release(self, amount: Decimal, ref: str) -> Transaction:
+        # Liberar mais do que está reservado levaria RESERVED abaixo de zero
+        # — dinheiro criado do nada, com o livro ainda "balanceado".
+        if amount <= 0:
+            raise ValueError(f"liberação precisa ser positiva (recebido {amount})")
+        reservado = self.balances().get("RESERVED", ZERO)
+        if amount > reservado:
+            raise ValueError(
+                f"liberação de {amount} maior que o reservado ({reservado})")
         return self._post("release", [Entry(f"CASH:{self.currency}", amount),
                                       Entry("RESERVED", -amount, "reserva liberada")], ref)
 

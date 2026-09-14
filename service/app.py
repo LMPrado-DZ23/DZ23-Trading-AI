@@ -505,6 +505,28 @@ def metrics(_=Depends(auth)):
 @app.get("/")
 def index(): return FileResponse(STATIC / "index.html")
 
+
+@app.get("/static/marca/{arquivo}", include_in_schema=False)
+def marca(arquivo: str):
+    """Serve os arquivos da marca (favicon, ícone de atalho, logo).
+
+    Caminho fixo e nome simples: a pasta é pública por natureza, mas aceitar
+    nome arbitrário abriria leitura de qualquer arquivo do disco.
+    """
+    permitidos = {"favicon.ico", "favicon-32.png", "favicon-64.png",
+                  "dz23-logo.png", "dz23-logo-512.png", "dz23-logo-192.png"}
+    if arquivo not in permitidos:
+        raise HTTPException(status_code=404, detail="arquivo não encontrado")
+    caminho = STATIC / "marca" / arquivo
+    if not caminho.exists():
+        raise HTTPException(status_code=404, detail="arquivo não encontrado")
+    return FileResponse(caminho, headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return FileResponse(STATIC / "marca" / "favicon.ico")
+
 @app.get("/v1/config")
 def get_cfg(request: Request, _=Depends(auth)):
     cfg = load_cfg(request_tenant(request))

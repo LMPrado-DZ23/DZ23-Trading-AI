@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="service/static/marca/dz23-logo-512.png" alt="DZ23 Trading Platform" width="180">
+</p>
+
 # DZ23 Trading Agency
 
 Agência autônoma de agentes de trading, operável pelo navegador e vendável

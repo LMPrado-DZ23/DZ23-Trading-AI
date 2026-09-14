@@ -341,6 +341,43 @@ class RiskEngine:
             self._deficits[k] = Decimal(str(v))
         self._concluidas.update(doc.get("conclusoes") or {})
 
+    def terminalizar(self, reservation_id: str, *, motivo: str) -> Decimal:
+        """Encerra a reserva e devolve QUANTO deve voltar ao caixa.
+
+        Atômico: dois eventos de cancelamento simultâneos não podem devolver
+        o dinheiro duas vezes. Quem chega depois recebe zero.
+        """
+        with self._lock:
+            reserva = self._reservations.pop(reservation_id, None)
+            if reserva is None:
+                return Decimal("0")     # já terminalizada: no-op seguro
+            restante = reserva.remaining_amount
+            self._concluidas[reservation_id] = {
+                "reservation_id": reservation_id,
+                "estado": "RELEASED",
+                "motivo": motivo[:200],
+                "original_amount": str(reserva.original_amount),
+                "hard_reserved_amount": str(reserva.hard_reserved_amount),
+                "consumed_amount": str(reserva.consumed_amount),
+                "sobra_liberada": str(max(restante, Decimal("0"))),
+                "original_quantity": str(reserva.original_quantity),
+                "filled_quantity": str(reserva.filled_quantity),
+                "deficit": "0",
+            }
+            return max(restante, Decimal("0"))
+
+    def registrar_divergencia_de_cobertura(self, reservation_id: str, *,
+                                           faltante: Decimal) -> None:
+        """O risco tinha reserva que o livro não travou.
+
+        Não é déficit de execução (nada foi gasto a mais), mas é
+        inconsistência entre as duas visões e precisa aparecer.
+        """
+        doc = self._concluidas.get(reservation_id) or {}
+        doc["cobertura_nao_travada"] = str(faltante)
+        doc["estado"] = "DIVERGENTE"
+        self._concluidas[reservation_id] = doc
+
     def conclusao(self, reservation_id: str) -> dict | None:
         """Como esta reserva terminou — evidência para auditoria."""
         return self._concluidas.get(reservation_id)
