@@ -1,7 +1,6 @@
 """Research Manager: turns the bull/bear debate into a structured investment plan for the trader."""
 
 from __future__ import annotations
-from tradingagents.dataflows.evidence import wrap_report_for_prompt
 
 from tradingagents.agents.schemas import ResearchPlan, render_research_plan
 from tradingagents.agents.utils.agent_utils import (
@@ -13,6 +12,7 @@ from tradingagents.agents.utils.structured import (
     bind_structured,
     invoke_structured_or_freetext,
 )
+from tradingagents.dataflows.evidence import wrap_report_for_prompt
 
 
 def create_research_manager(llm):

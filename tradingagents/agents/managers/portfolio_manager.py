@@ -9,7 +9,6 @@ back gracefully to free-text generation.
 """
 
 from __future__ import annotations
-from tradingagents.dataflows.evidence import wrap_report_for_prompt
 
 from tradingagents.agents.schemas import PortfolioDecision, render_pm_decision
 from tradingagents.agents.utils.agent_utils import (
@@ -22,6 +21,7 @@ from tradingagents.agents.utils.structured import (
     bind_structured,
     invoke_structured_or_freetext,
 )
+from tradingagents.dataflows.evidence import wrap_report_for_prompt
 
 
 def create_portfolio_manager(llm):

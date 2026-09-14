@@ -109,13 +109,11 @@ class TestFredKeyLeakage:
 
     def test_connection_error_has_no_url_or_key(self):
         url_with_key = f"https://api.stlouisfed.org/fred/x?api_key={SECRET}"
-        with mock.patch.dict(os.environ, {"FRED_API_KEY": SECRET}):
-            with mock.patch.object(
-                fred.requests, "get",
-                side_effect=requests.ConnectionError(f"failed for {url_with_key}"),
-            ):
-                with pytest.raises(ConnectionError) as exc:
-                    fred._request("series/observations", {"series_id": "DFF"})
+        with mock.patch.dict(os.environ, {"FRED_API_KEY": SECRET}), mock.patch.object(
+            fred.requests, "get",
+            side_effect=requests.ConnectionError(f"failed for {url_with_key}"),
+        ), pytest.raises(ConnectionError) as exc:
+            fred._request("series/observations", {"series_id": "DFF"})
         msg = str(exc.value)
         assert SECRET not in msg and "api_key" not in msg
         assert "ConnectionError" in msg
@@ -128,12 +126,11 @@ class TestFredKeyLeakage:
                     fred._request("series/observations", {"series_id": "???"})
 
     def test_success_path_returns_json(self):
-        with mock.patch.dict(os.environ, {"FRED_API_KEY": SECRET}):
-            with mock.patch.object(
-                fred.requests, "get",
-                return_value=_response(200, {"observations": []}),
-            ):
-                assert fred._request("series/observations", {}) == {"observations": []}
+        with mock.patch.dict(os.environ, {"FRED_API_KEY": SECRET}), mock.patch.object(
+            fred.requests, "get",
+            return_value=_response(200, {"observations": []}),
+        ):
+            assert fred._request("series/observations", {}) == {"observations": []}
 
 
 # -------------------------------------------------------- backend policy ----

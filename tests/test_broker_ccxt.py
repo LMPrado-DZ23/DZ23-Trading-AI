@@ -53,17 +53,26 @@ class TestFailClosed:
             CCXTBridge(env=_env(TRADINGAGENTS_EXCHANGE=ex),
                        journal_path=tmp_path / "j.jsonl")
 
-    def test_live_is_structurally_removed(self, tmp_path):
-        with pytest.raises(BrokerSecurityError, match="modo live removido"):
+    def test_live_mode_is_refused_under_platform_policy(self, tmp_path):
+        """Invariante da plataforma nesta árvore: LIVE_TRADING=false. O modo
+        live foi removido da ponte. DECISÃO PENDENTE DO DONO: ele havia
+        autorizado live por frase antes da unificação — enquanto não decidir,
+        recusar é o comportamento correto."""
+        with pytest.raises(BrokerSecurityError, match="testnet"):
             CCXTBridge(env=_env(TRADINGAGENTS_BROKER_MODE="live"),
                        journal_path=tmp_path / "j.jsonl")
-
-    @pytest.mark.parametrize("ex", ["binance", "bybit", "okx", "gateio", "coinbase"])
-    def test_testnet_capable_exchanges_boot_in_sandbox(self, ex, tmp_path):
-        b = CCXTBridge(env=_env(TRADINGAGENTS_EXCHANGE=ex),
+        with pytest.raises(BrokerSecurityError):
+            CCXTBridge(env=_env(TRADINGAGENTS_BROKER_MODE="live",
+                                LIVE_TRADING_CONFIRM="EU AUTORIZO OPERAR COM DINHEIRO REAL"),
                        journal_path=tmp_path / "j.jsonl")
-        st = b.status()
-        assert st["mode"] == "testnet" and st["sandbox"] is True
+
+    def test_no_hidden_live_path_in_the_bridge(self):
+        import inspect
+
+        from tradingagents.brokers import ccxt_bridge
+        fonte = inspect.getsource(ccxt_bridge)
+        assert "set_sandbox_mode(True)" in fonte
+        assert "LIVE_CONFIRM_PHRASE" not in fonte
 
 
 class TestGateIsMandatory:

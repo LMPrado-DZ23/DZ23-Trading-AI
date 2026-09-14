@@ -39,6 +39,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "fastapi>=0.115.0",
+    "httpx>=0.27.0",
+    "ccxt>=4.5.0",
     "ruff>=0.15",
     "pytest>=8.0",
     "pytest-subtests>=0.13",
@@ -48,15 +51,24 @@ dev = [
 bedrock = [
     "langchain-aws>=1.5.0",
 ]
+# Produto completo (painel + banco + corretoras/feed da mesa):
+#   pip install "tradingagents[desk]"
+desk = [
+    "fastapi>=0.115.0",
+    "uvicorn>=0.34.0",
+    "psycopg[binary]>=3.2.0",
+    "ccxt>=4.5.0",
+]
 
 [project.scripts]
 tradingagents = "cli.main:app"
 
 [tool.setuptools.packages.find]
-include = ["tradingagents*", "cli*"]
+include = ["tradingagents*", "cli*", "service*"]
 
 [tool.setuptools.package-data]
 cli = ["static/*"]
+service = ["static/*.html", "static/*.css", "static/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -84,6 +96,9 @@ select = ["E", "W", "F", "I", "B", "UP", "C4", "SIM"]
 ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
+# FastAPI declara dependências como valor padrão (Depends(...)): B008 é falso
+# positivo por desenho do framework.
+"service/app.py" = ["B008"]
 "**/__init__.py" = ["F401"]   # intentional re-exports
 
 [tool.ruff.lint.isort]

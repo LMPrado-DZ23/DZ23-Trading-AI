@@ -1,110 +1,26 @@
+# Subida local ou em qualquer host com Docker. No Coolify, basta o Dockerfile,
+# a variável ACCESS_PASSWORD e o volume /data — este arquivo é o equivalente
+# manual, com reinício automático (o serviço volta sozinho se cair).
 services:
   tradingagents:
     build: .
-    env_file:
-      - .env
-    environment:
-      DATA_DIR: /data
-      MULTI_TENANT_ENABLED: "true"
-      TENANT_TOKEN_SIGNING_KEY: ${TENANT_TOKEN_SIGNING_KEY:?defina uma chave aleatória de pelo menos 32 caracteres}
-      TENANT_BOOTSTRAP_TOKEN: ${TENANT_BOOTSTRAP_TOKEN:?defina o token de bootstrap inicial}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-dz23}:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dz23}
-      REDIS_URL: redis://redis:6379/0
-      QDRANT_URL: http://qdrant:6333
-      LIVE_TRADING: "false"
-      PAPER_TRADING: "true"
-      SHADOW_TRADING: "true"
-      REAL_MONEY_EXECUTION: "false"
-      LEGACY_BROKER_ORDER_ENABLED: "false"
-      MT5_MODE: DEMO
-    volumes:
-      - tradingagents_data:/data
+    restart: unless-stopped
     ports:
       - "8080:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      qdrant:
-        condition: service_started
-    restart: unless-stopped
+    environment:
+      ACCESS_PASSWORD: "${ACCESS_PASSWORD:?defina uma senha forte de 20+ caracteres}"
+      # Opcional: PostgreSQL. Se a URL estiver errada ou o banco fora do ar,
+      # o serviço NÃO cai — degrada para o banco local e avisa no painel.
+      # DATABASE_URL: "postgresql://usuario:senha@postgres:5432/tradingagents"
+      DESK_INTERVAL_SECONDS: "300"
+    volumes:
+      - tradingagents-data:/data
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3)"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=4).status==200 else 1)"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 20s
 
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-dz23}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-dz23}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dz23} -d ${POSTGRES_DB:-dz23}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  qdrant:
-    image: qdrant/qdrant:latest
-    volumes:
-      - qdrant_data:/qdrant/storage
-    ports:
-      - "127.0.0.1:6333:6333"
-
-  ollama:
-    image: ollama/ollama:latest
-    volumes:
-      - ollama_data:/root/.ollama
-    profiles:
-      - ollama
-
-  tradingagents-ollama:
-    build: .
-    env_file:
-      - .env
-    environment:
-      DATA_DIR: /data
-      MULTI_TENANT_ENABLED: "true"
-      TENANT_TOKEN_SIGNING_KEY: ${TENANT_TOKEN_SIGNING_KEY:?defina TENANT_TOKEN_SIGNING_KEY}
-      TENANT_BOOTSTRAP_TOKEN: ${TENANT_BOOTSTRAP_TOKEN:?defina TENANT_BOOTSTRAP_TOKEN}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-dz23}:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dz23}
-      REDIS_URL: redis://redis:6379/0
-      QDRANT_URL: http://qdrant:6333
-      TRADINGAGENTS_LLM_PROVIDER: ollama
-      OLLAMA_BASE_URL: http://ollama:11434/v1
-      LIVE_TRADING: "false"
-      PAPER_TRADING: "true"
-      REAL_MONEY_EXECUTION: "false"
-    volumes:
-      - tradingagents_data:/data
-    depends_on:
-      - ollama
-      - postgres
-      - redis
-    restart: unless-stopped
-    profiles:
-      - ollama
-
 volumes:
-  tradingagents_data:
-  ollama_data:
-  postgres_data:
-  redis_data:
-  qdrant_data:
+  tradingagents-data:

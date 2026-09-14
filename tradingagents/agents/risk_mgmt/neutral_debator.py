@@ -1,10 +1,10 @@
-from tradingagents.dataflows.evidence import wrap_report_for_prompt
 from tradingagents.agents.utils.agent_utils import (
     gather_wrapped_reports,
     get_instrument_context_from_state,
     get_language_instruction,
     opponent_argument_or_opening,
 )
+from tradingagents.dataflows.evidence import wrap_report_for_prompt
 
 
 def create_neutral_debator(llm):

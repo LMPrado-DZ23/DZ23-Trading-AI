@@ -75,9 +75,8 @@ class TestAzureEffectiveEndpoint:
 
         env = {"AZURE_OPENAI_ENDPOINT": "https://evil.example.com",
                "AZURE_OPENAI_API_KEY": "azkey-123456789"}
-        with mock.patch.dict(os.environ, env):
-            with pytest.raises(UntrustedBackendError):
-                AzureOpenAIClient("gpt-5.6").get_llm()
+        with mock.patch.dict(os.environ, env), pytest.raises(UntrustedBackendError):
+            AzureOpenAIClient("gpt-5.6").get_llm()
 
     def test_missing_endpoint_fails_closed(self):
         from tradingagents.llm_clients.azure_client import AzureOpenAIClient
