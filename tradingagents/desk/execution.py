@@ -771,13 +771,11 @@ class ExecutionCoordinator:
             rec = self._ordem_de_doc(od)
             if rec is not None:
                 self.orders[rec.order_id] = rec
-                if rec.client_order_id or rec.fingerprint:
-                    # A chave de idempotência é o client_order_id — a mesma
-                    # usada no fluxo normal. Restaurar por fingerprint
-                    # quebrava o retry após reinício: o mesmo pedido criaria
-                    # uma SEGUNDA ordem na corretora.
-                    if rec.client_order_id:
-                        self._by_key[rec.client_order_id] = rec.order_id
+                # A chave de idempotência é o client_order_id — a mesma usada
+                # no fluxo normal. Restaurar por fingerprint quebrava o retry
+                # após reinício: o mesmo pedido criaria uma SEGUNDA ordem.
+                if rec.client_order_id:
+                    self._by_key[rec.client_order_id] = rec.order_id
             estado = od.get("estado")
             if estado == OrderState.UNKNOWN_RECONCILIATION_REQUIRED.value:
                 pendentes.append(od)
