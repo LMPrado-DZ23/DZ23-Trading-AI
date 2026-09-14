@@ -476,3 +476,51 @@ class TestCredencialDeInquilinoNaoVazaPorAmbiente:
         restauracoes = fonte.count("os.environ.pop(")
         assert restauracoes >= escritas, (
             f"{escritas} escritas no ambiente e só {restauracoes} restaurações")
+
+
+class TestBacktestMedeOQueOperaDeVerdade:
+    """ACHADO E: produção saía em -5%/+8% e o backtest simulava -alvo/2 e
+    +alvo. O relatório media uma estratégia que não era a operada."""
+
+    def test_backtest_and_production_share_the_same_policy_object(self):
+        import inspect
+
+        from tradingagents.desk.traders import default_desk
+        from tradingagents.desk.validation import validar as _validar_backtest
+        fonte = inspect.getsource(_validar_backtest)
+        assert "trader.exit_policy" in fonte, (
+            "o backtest precisa consumir a política da estratégia, não uma cópia")
+        for trader in default_desk(("BTC/USDT",)):
+            assert trader.exit_policy.alvo == trader.movimento_alvo
+
+    def test_production_exit_uses_the_policy_too(self):
+        import inspect
+
+        from tradingagents.desk.traders import BaseTrader
+        fonte = inspect.getsource(BaseTrader.manage)
+        assert "self.exit_policy.avaliar" in fonte
+        assert '"-0.05"' not in fonte and '"0.08"' not in fonte, (
+            "número de saída fixo na produção é o que divergia do backtest")
+
+    def test_policy_refuses_a_stop_bigger_than_the_target(self):
+        """Aritmética, não opinião: stop maior que alvo exige acerto alto só
+        para empatar — e os custos pioram a conta."""
+        from tradingagents.desk.policy import ExitPolicy
+        with pytest.raises(ValueError, match="empatar"):
+            ExitPolicy(alvo=Decimal("0.02"), stop=Decimal("-0.05"))
+
+    def test_policy_reports_the_break_even_hit_rate(self):
+        from tradingagents.desk.policy import policy_for
+        p = policy_for(Decimal("0.04"))
+        sem_custo = p.acerto_minimo()
+        com_custo = p.acerto_minimo(Decimal("0.003"))
+        assert com_custo > sem_custo, "o custo tem de elevar o acerto necessário"
+        assert Decimal("0.3") < com_custo < Decimal("0.45")
+
+    def test_same_policy_decides_in_both_environments(self):
+        """A prova direta: a mesma função decide a saída nos dois lados."""
+        from tradingagents.desk.traders import TrendTrader
+        t = TrendTrader("t", ("BTC/USDT",))
+        assert t.exit_policy.avaliar(t.exit_policy.alvo)[0] is True
+        assert t.exit_policy.avaliar(t.exit_policy.stop)[1] == "stop"
+        assert t.exit_policy.avaliar(Decimal("0.001"))[0] is False
