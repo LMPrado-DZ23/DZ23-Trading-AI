@@ -38,9 +38,6 @@ EXCHANGE_ALIASES = {
 }
 
 
-LIVE_CONFIRM_PHRASE = "EU AUTORIZO OPERAR COM DINHEIRO REAL"
-
-
 class BrokerSecurityError(RuntimeError):
     """Refusal by construction — live nunca acontece por acidente."""
 
