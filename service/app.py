@@ -62,14 +62,25 @@ JOB_STORE = _build_job_store()
 PASSWORD = os.environ.get("ACCESS_PASSWORD", "")
 MULTI_TENANT_ENABLED = os.environ.get("MULTI_TENANT_ENABLED", "false").lower() == "true"
 _TENANT_SIGNING_KEY = os.environ.get("TENANT_TOKEN_SIGNING_KEY")
-if MULTI_TENANT_ENABLED and not _TENANT_SIGNING_KEY:
-    raise RuntimeError("TENANT_TOKEN_SIGNING_KEY é obrigatório no modo multi-tenant")
-if MULTI_TENANT_ENABLED and os.environ.get("DATABASE_URL"):
-    TENANT_STORE = PostgresTenantStore(os.environ["DATABASE_URL"], signing_key=_TENANT_SIGNING_KEY)
-elif MULTI_TENANT_ENABLED:
-    TENANT_STORE = TenantStore(DATA / "identity.db", signing_key=_TENANT_SIGNING_KEY)
-else:
-    TENANT_STORE = None
+TENANT_STORE = None
+if MULTI_TENANT_ENABLED:
+    # Configuração errada NÃO pode matar o contêiner: o dono ficaria com um
+    # 502 mudo, sem página para ler o que fazer. Desliga o multi-tenant,
+    # mantém o serviço de pé e diz exatamente como corrigir.
+    try:
+        if not _TENANT_SIGNING_KEY:
+            raise ValueError("TENANT_TOKEN_SIGNING_KEY é obrigatório")
+        if os.environ.get("DATABASE_URL"):
+            TENANT_STORE = PostgresTenantStore(os.environ["DATABASE_URL"],
+                                               signing_key=_TENANT_SIGNING_KEY)
+        else:
+            TENANT_STORE = TenantStore(DATA / "identity.db",
+                                       signing_key=_TENANT_SIGNING_KEY)
+    except Exception as _exc:
+        MULTI_TENANT_ENABLED = False
+        HEALTH["avisos"].append(
+            f"multi-tenant desligado: {_exc}. Defina TENANT_TOKEN_SIGNING_KEY "
+            "com 32+ caracteres aleatórios e reinicie para habilitar contas.")
 TENANT_BOOTSTRAP_TOKEN = os.environ.get("TENANT_BOOTSTRAP_TOKEN", "")
 STATIC = Path(__file__).parent / "static"
 AGENCY_AUDIT = AuditLog(DATA / "agency-events.jsonl")
@@ -343,7 +354,14 @@ def tenant_cfg_path(tenant_id: str = "legacy") -> Path:
 
 
 def load_cfg(tenant_id: str = "legacy") -> dict:
-    cfg = {key: os.environ[key] for key in ALLOWED_KEYS if os.environ.get(key)}
+    # Em multi-tenant, variáveis de ambiente NÃO servem de configuração
+    # padrão: senão a chave de IA do servidor (ou de um inquilino que mexeu
+    # no processo) apareceria para todos. Só o modo de instalação única
+    # ("legacy") herda do ambiente.
+    if MULTI_TENANT_ENABLED and tenant_id != "legacy":
+        cfg: dict = {}
+    else:
+        cfg = {key: os.environ[key] for key in ALLOWED_KEYS if os.environ.get(key)}
     path = tenant_cfg_path(tenant_id)
     if path.exists():
         try: cfg.update(json.loads(path.read_text()))
@@ -401,6 +419,13 @@ def run_job(jid, ticker, date, tenant_id="legacy"):
             upd(jid, status="failed",
                 error=f"{type(e).__name__}: {e}"[:2000] + "\n" +
                       traceback.format_exc()[-1500:])
+        finally:
+            # a chave de um inquilino não pode sobrar no processo para o próximo
+            for _k, _antes in _env_anterior.items():
+                if _antes is None:
+                    os.environ.pop(_k, None)
+                else:
+                    os.environ[_k] = _antes
 
 async def _json_body(req: Request) -> dict:
     """Corpo JSON validado: requisição malformada é 422 com mensagem legível,
@@ -858,6 +883,84 @@ async def woovi_webhook(request: Request):
     SUBS.save(nova)
     return {"ok": True, "tenant": tenant, "plano": nova.plan_code,
             "expira_em": nova.expires_at.isoformat()}
+
+# ================================================================== CADASTRO
+# Autoatendimento: o cliente cria a própria agência, recebe o período de
+# teste e pode assinar. Sem isto não há produto para vender — só instalação
+# manual pelo dono.
+#
+# DECISÃO ASSUMIDA: cadastro aberto por padrão (SIGNUP_ENABLED=true). Para
+# um SaaS que se vende sozinho, exigir token do administrador mataria a
+# conversão. Quem quiser produto fechado põe SIGNUP_ENABLED=false.
+SIGNUP_ENABLED = os.environ.get("SIGNUP_ENABLED", "true").strip().lower() != "false"
+_SIGNUP_ATTEMPTS: dict = {}
+SIGNUP_MAX, SIGNUP_WINDOW = 5, 3600
+
+
+def _signup_rate_limit(ip: str) -> None:
+    """Cadastro aberto sem limite vira fábrica de contas de robô."""
+    agora = time.time()
+    janela = [t for t in _SIGNUP_ATTEMPTS.get(ip, []) if agora - t < SIGNUP_WINDOW]
+    if len(janela) >= SIGNUP_MAX:
+        raise HTTPException(429, "muitos cadastros deste endereço; tente mais tarde")
+    janela.append(agora)
+    _SIGNUP_ATTEMPTS[ip] = janela
+
+
+def _validar_senha(senha: str) -> None:
+    if len(senha) < 12:
+        raise HTTPException(422, "a senha precisa de pelo menos 12 caracteres")
+    if senha.lower() in ("senha123456789", "123456789012", "password1234"):
+        raise HTTPException(422, "escolha uma senha menos previsível")
+
+
+def _validar_email(email: str) -> str:
+    email = (email or "").strip().lower()
+    if "@" not in email or "." not in email.split("@")[-1] or len(email) < 6:
+        raise HTTPException(422, "e-mail inválido")
+    return email
+
+
+@app.get("/v1/auth/signup-status")
+def signup_status():
+    """Público: o painel precisa saber se mostra 'Criar conta'."""
+    return {"habilitado": SIGNUP_ENABLED and MULTI_TENANT_ENABLED and bool(TENANT_STORE),
+            "dias_de_teste": PLANS["trial"].period_days,
+            "planos": [{"codigo": p.code, "nome": p.name, "preco": p.price_brl}
+                       for p in PLANS.values() if p.price_cents > 0]}
+
+
+@app.post("/v1/auth/signup")
+async def tenant_signup(request: Request):
+    """Cria agência + administrador + período de teste, em uma chamada."""
+    if not (SIGNUP_ENABLED and MULTI_TENANT_ENABLED and TENANT_STORE):
+        raise HTTPException(404, "cadastro desabilitado neste servidor")
+    _signup_rate_limit(_client_ip(request))
+    body = await _json_body(request)
+    nome = str(body.get("agencia", "")).strip()
+    email = _validar_email(str(body.get("email", "")))
+    senha = str(body.get("senha") or body.get("password") or "")
+    if len(nome) < 2:
+        raise HTTPException(422, "informe o nome da sua agência")
+    _validar_senha(senha)
+    try:
+        tenant_id = TENANT_STORE.create_tenant(nome)
+        user_id = TENANT_STORE.create_user(email, senha)
+        TENANT_STORE.add_member(tenant_id, user_id, "admin")
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from None
+    except Exception as exc:
+        # e-mail repetido chega como erro de banco: vira mensagem humana,
+        # nunca um 500 com detalhe interno.
+        if "unique" in str(exc).lower() or "duplicate" in str(exc).lower():
+            raise HTTPException(409, "este e-mail já tem conta; faça login") from None
+        raise HTTPException(500, "não foi possível criar a conta agora") from None
+    sub = SUBS.ensure(tenant_id)      # teste começa na criação
+    token = TENANT_STORE.login(email, senha, tenant_id)
+    return {"ok": True, "tenant_id": tenant_id, "access_token": token,
+            "plano": sub.plan_code, "teste_expira_em": sub.expires_at.isoformat(),
+            "proximo_passo": "Configure a IA (Groq é grátis) e rode a primeira análise"}
+
 
 # ===================================================================== MESA
 # Mesa autônoma multiagente. UMA POR INQUILINO: nenhum tenant enxerga

@@ -14,7 +14,16 @@
       <div class="eyebrow">Comece aqui · acesso seguro</div><h2 id="authTitle">Entrar na agência</h2><p class="muted" id="authSubtitle">Use o tenant, e-mail e senha cadastrados.</p>
       <div id="loginForm"><div class="field"><label>Tenant ID</label><input class="input" id="loginTenant" autocomplete="organization" placeholder="ten_..."></div><div class="field"><label>E-mail</label><input class="input" id="loginEmail" type="email" autocomplete="username"></div><div class="field"><label>Senha</label><input class="input" id="loginPassword" type="password" autocomplete="current-password"></div><button class="btn primary full" onclick="login()">Entrar</button></div>
       <div id="bootstrapForm" class="hide"><div class="field"><label>Nome da organização</label><input class="input" id="bootOrg" value="DZ23 Trading Agency"></div><div class="field"><label>E-mail do administrador</label><input class="input" id="bootEmail" type="email"></div><div class="field"><label>Senha do administrador (mínimo 12 caracteres)</label><input class="input" id="bootPassword" type="password"></div><div class="field"><label>Token de bootstrap do servidor</label><input class="input" id="bootToken" type="password"></div><button class="btn primary full" onclick="bootstrap()">Criar agência e administrador</button></div>
-      <div id="authMsg" class="message"></div>
+      <div id="signupForm" class="hide">
+<div class="field"><label>Nome da sua agência</label><input class="input" id="suAgencia" placeholder="Ex.: Mesa do Prado"></div>
+<div class="field"><label>Seu e-mail</label><input class="input" id="suEmail" type="email"></div>
+<div class="field"><label>Senha (mínimo 12 caracteres)</label><input class="input" id="suSenha" type="password"></div>
+<button class="btn primary full" onclick="criarConta()">Criar conta e começar o teste grátis</button>
+<p class="muted" id="suInfo"></p>
+<button class="btn secondary full" style="margin-top:6px" onclick="mostrarLogin()">Já tenho conta</button>
+</div>
+<button class="btn secondary full hide" id="btnCriarConta" style="margin-top:8px" onclick="mostrarCadastro()">Criar conta</button>
+<div id="authMsg" class="message"></div>
     </div></div>
   </div>
 </section>
@@ -105,5 +114,17 @@ const d=r.data;box.innerHTML=`<h3>Pague com PIX</h3>${d.qrcode_imagem?`<img src=
 ${d.brcode?`<div class="field"><label>PIX copia e cola</label><input class="input" readonly value="${escapeHtml(d.brcode)}" onclick="this.select()"></div>`:''}
 ${d.link?`<a class="btn secondary" href="${escapeHtml(d.link)}" target="_blank" style="text-decoration:none">Abrir página de pagamento</a>`:''}
 <p class="muted">Assim que a Woovi confirmar, seu plano é ativado automaticamente. Clique em Atualizar para conferir.</p>`}
-function escapeHtml(value){return String(value??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}boot();
+function mostrarCadastro(){$('loginForm').classList.add('hide');$('bootstrapForm')&&$('bootstrapForm').classList.add('hide');$('signupForm').classList.remove('hide');$('btnCriarConta').classList.add('hide');$('authTitle').textContent='Criar sua agência';$('authSubtitle').textContent='Teste grátis, sem cartão.'}
+function mostrarLogin(){$('signupForm').classList.add('hide');$('loginForm').classList.remove('hide');$('btnCriarConta').classList.remove('hide');$('authTitle').textContent='Entrar';$('authSubtitle').textContent='Acesse sua agência.'}
+async function criarConta(){const body={agencia:$('suAgencia').value.trim(),email:$('suEmail').value.trim(),senha:$('suSenha').value};
+if(!body.agencia||!body.email||body.senha.length<12)return $('authMsg').innerHTML='<span class="bad">Preencha tudo; a senha precisa de 12+ caracteres.</span>';
+$('authMsg').innerHTML='<span class="muted">Criando sua agência...</span>';
+const r=await fetch('/v1/auth/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+const d=await r.json();
+if(!r.ok)return $('authMsg').innerHTML='<span class="bad">'+escapeHtml(d.detail||'não foi possível criar a conta')+'</span>';
+sessionStorage.setItem('dz23_token',d.access_token);localStorage.setItem('dz23_tenant',d.tenant_id);
+const me=await api('/v1/auth/me');if(me.ok)enterApp(me.data)}
+async function verSignup(){try{const st=await fetch('/v1/auth/signup-status').then(r=>r.json());
+if(st.habilitado){$('btnCriarConta').classList.remove('hide');$('suInfo').textContent=st.dias_de_teste+' dias grátis; depois a partir de '+(st.planos[0]?st.planos[0].preco:'')+'/mês.'}}catch(e){}}
+function escapeHtml(value){return String(value??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}boot();verSignup();
 </script></body></html>
