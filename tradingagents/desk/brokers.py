@@ -12,6 +12,11 @@ from decimal import Decimal
 from .execution import BrokerTimeout
 
 
+class BrokerConsultaIndisponivel(RuntimeError):
+    """Consulta à corretora falhou: o resultado é DESCONHECIDO, e desconhecido
+    mantém o portão fechado. Nunca deve virar 'nada encontrado'."""
+
+
 class BrokerAdapterError(RuntimeError):
     """Falha ANTES de a requisição poder ter chegado à corretora.
 
@@ -69,6 +74,73 @@ class CCXTDeskBroker:
         self.final_state = final_state
         self.mode = self.bridge.mode
         self.submitted: dict[str, dict] = {}
+
+    # ------------------------------------------------ consultas canônicas
+    # A reconciliação depende destes contratos. Eles existiam apenas como
+    # dublês nos testes: o caminho real nunca foi exercitado. O adaptador
+    # traduz a resposta do CCXT para uma estrutura canônica — o coordenador
+    # não pode interpretar objeto específico de exchange.
+    def fetch_order_by_client_id(self, client_order_id: str) -> dict | None:
+        """Estado canônico da ordem, ou None se a corretora não a conhece."""
+        ex = self.bridge._ex
+        try:
+            ordens = ex.fetch_orders(None, None, 50) if hasattr(ex, "fetch_orders") else []
+        except Exception as exc:
+            raise BrokerConsultaIndisponivel(
+                f"consulta de ordens falhou ({type(exc).__name__})") from exc
+        for o in ordens or []:
+            info = o.get("info") or {}
+            candidatos = {o.get("clientOrderId"), info.get("clientOrderId"),
+                          info.get("clOrdId"), o.get("id")}
+            if client_order_id in {c for c in candidatos if c}:
+                return self._ordem_canonica(o)
+        return None
+
+    def fetch_positions(self) -> dict:
+        """Posições por instrumento, em Decimal. Zero é omitido."""
+        ex = self.bridge._ex
+        if not hasattr(ex, "fetch_balance"):
+            raise BrokerConsultaIndisponivel(
+                "corretora não expõe consulta de saldo/posição")
+        try:
+            saldo = ex.fetch_balance()
+        except Exception as exc:
+            raise BrokerConsultaIndisponivel(
+                f"consulta de posições falhou ({type(exc).__name__})") from exc
+        if not isinstance(saldo, dict):
+            raise BrokerConsultaIndisponivel("resposta de saldo malformada")
+        total = saldo.get("total")
+        if not isinstance(total, dict):
+            raise BrokerConsultaIndisponivel("saldo sem a seção 'total'")
+        cotacao = self._moeda_de_cotacao()
+        posicoes: dict[str, Decimal] = {}
+        for moeda, quantidade in total.items():
+            if moeda == cotacao:
+                continue                     # caixa não é posição
+            try:
+                qtd = Decimal(str(quantidade))
+            except (TypeError, ValueError, ArithmeticError):
+                raise BrokerConsultaIndisponivel(
+                    f"quantidade inválida para {moeda}: {quantidade!r}") from None
+            if qtd != 0:
+                posicoes[f"{moeda}/{cotacao}"] = qtd
+        return posicoes
+
+    def _moeda_de_cotacao(self) -> str:
+        for instrumento in getattr(self, "universe", ()) or ():
+            if "/" in instrumento:
+                return instrumento.split("/")[1]
+        return "USDT"
+
+    @staticmethod
+    def _ordem_canonica(o: dict) -> dict:
+        info = o.get("info") or {}
+        return {"id": o.get("id"), "status": (o.get("status") or "").lower(),
+                "filled": o.get("filled"), "average": o.get("average") or o.get("price"),
+                "fee": ((o.get("fee") or {}).get("cost") if isinstance(o.get("fee"), dict)
+                        else o.get("fee")) or 0,
+                "fill_id": info.get("tradeId") or info.get("execId"),
+                "client_order_id": o.get("clientOrderId") or info.get("clOrdId")}
 
     def submit(self, client_order_id: str, instrument: str, side: str,
                quantity: Decimal, final_state: dict | None = None) -> dict:

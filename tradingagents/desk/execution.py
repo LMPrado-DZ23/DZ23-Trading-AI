@@ -317,11 +317,13 @@ class ExecutionCoordinator:
         for inst, qtd in restauradas.items():
             locais.setdefault(inst, qtd)
         if consultar_posicoes is None:
-            if locais:
-                relatorio["divergencias"].append(
-                    "posições locais não puderam ser comparadas com a corretora")
-                return {"posicoes_status": "UNKNOWN"}
-            return {"posicoes_status": "MATCHED"}   # nada local e nada a conferir
+            # Ausência de posição LOCAL não prova ausência na CORRETORA: é
+            # exatamente o caso da posição órfã remota. Sem consulta, o
+            # status é UNKNOWN — sempre — e UNKNOWN não libera nada.
+            relatorio["divergencias"].append(
+                "posições não foram comparadas com a corretora (sem consulta "
+                "disponível): pode existir posição remota desconhecida")
+            return {"posicoes_status": "UNKNOWN"}
         try:
             remotas_brutas = consultar_posicoes() or {}
         except Exception as exc:
@@ -375,10 +377,15 @@ class ExecutionCoordinator:
                     f"{rec.order_id}: corretora reporta preenchida sem "
                     "quantidade/preço — RECONCILIACAO_INCOMPLETA")
                 return
-            self._aplicar_fill_reconciliado(
-                rec, Decimal(str(qtd)), Decimal(str(preco)),
-                Decimal(str(remota.get("fee") or 0)),
-                fill_id=str(remota.get("id") or rec.order_id))
+            # fill_id REAL: o id da ORDEM não serve — uma ordem tem vários
+            # fills, e deduplicar por ela esconderia execuções parciais.
+            fid = (remota.get("fill_id") or remota.get("trade_id")
+                   or (f"{remota.get('id') or rec.order_id}:{qtd}@{preco}"))
+            self.aplicar_fill(rec, side=rec.lado or "buy",
+                              quantidade=Decimal(str(qtd)),
+                              preco=Decimal(str(preco)),
+                              taxa=Decimal(str(remota.get("fee") or 0)),
+                              fill_id=str(fid))
             rec.external_id = remota.get("id") or rec.external_id
             rec.note = "reconciliada: preenchida na corretora"
         elif estado in ("canceled", "cancelled", "rejected", "expired"):
@@ -390,24 +397,65 @@ class ExecutionCoordinator:
             relatorio["divergencias"].append(
                 f"{rec.order_id}: corretora reporta {estado!r} — ainda aberta")
 
-    def _aplicar_fill_reconciliado(self, rec, quantidade: Decimal,
-                                   preco: Decimal, taxa: Decimal,
-                                   fill_id: str) -> None:
-        """Aplica fill vindo da reconciliação: OMS + livro + risco, uma vez só."""
+    def aplicar_fill(self, rec, *, side: str, quantidade: Decimal,
+                     preco: Decimal, taxa: Decimal, fill_id: str) -> bool:
+        """Operação canônica de execução — usada pelo fluxo normal E pela
+        reconciliação.
+
+        Antes a reconciliação chamava `fill_buy` incondicionalmente: uma
+        VENDA reconciliada criava posição em vez de fechá-la, e o resultado
+        realizado nunca aparecia. Duas implementações financeiras é uma
+        verdade a mais do que o sistema pode ter.
+
+        Devolve False quando o fill já foi contabilizado (idempotência).
+        """
+        if not fill_id:
+            raise ValueError("fill sem identificador não pode ser aplicado")
         if fill_id in rec.seen_fills:
-            return                          # idempotente: fill repetido não conta
+            return False                    # mesmo fill nunca conta duas vezes
         rec.seen_fills.add(fill_id)
-        rec.filled_qty = quantidade
-        rec.avg_price = preco
+        lado = (side or "").lower()
+        instrumento = rec.instrumento
+
+        if lado == "buy":
+            reserva = self._reserva_de(rec)
+            if reserva is not None:
+                self.ledger.fill_buy(instrumento, quantidade, preco, taxa,
+                                     reserved=reserva["amount"],
+                                     ref=rec.order_id, agent_id=rec.agente)
+                self.risk.release(reserva["reservation_id"])
+        else:
+            # SAÍDA: reduz a posição, realiza o resultado e alimenta o freio.
+            custo = self._custo_proporcional(instrumento, quantidade)
+            self.ledger.fill_sell(instrumento, quantidade, preco, taxa,
+                                  cost_basis=custo, agent_id=rec.agente,
+                                  ref=rec.order_id)
+            self.registrar_resultado_realizado(
+                (preco * quantidade) - custo - taxa)
+
+        anterior = rec.filled_qty
+        rec.filled_qty = anterior + quantidade
+        # preço médio ponderado pelos fills, não o último preço
+        if rec.filled_qty > 0:
+            rec.avg_price = ((anterior * rec.avg_price + quantidade * preco)
+                             / rec.filled_qty)
         rec.fees = rec.fees + taxa
-        rec.state = OrderState.FILLED
-        reserva = self._reserva_de(rec)
-        if reserva is not None:
-            self.ledger.fill_buy(rec.instrumento, quantidade, preco, taxa,
-                                 reserved=reserva["amount"], ref=rec.order_id,
-                                 agent_id=rec.agente)
-            self.risk.release(reserva["reservation_id"])
+        alvo = rec.quantidade
+        rec.state = (OrderState.FILLED if alvo and rec.filled_qty >= alvo
+                     else OrderState.PARTIALLY_FILLED)
         self.oms_version += 1
+        return True
+
+    def _custo_proporcional(self, instrumento: str, quantidade: Decimal) -> Decimal:
+        """Custo de aquisição da fatia vendida, proporcional à posição."""
+        detalhe = self.ledger.open_positions_detail().get(instrumento)
+        if not detalhe:
+            return Decimal("0")
+        qtd = Decimal(str(detalhe["quantidade"]))
+        custo = Decimal(str(detalhe["custo_total"]))
+        if qtd <= 0:
+            return Decimal("0")
+        return (custo * quantidade / qtd).quantize(Decimal("0.00000001"))
 
     def _reserva_de(self, rec) -> dict | None:
         if rec.intent is not None:

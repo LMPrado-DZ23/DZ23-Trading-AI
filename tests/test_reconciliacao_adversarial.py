@@ -235,3 +235,139 @@ class TestFrescorDoRelatorio:
         assert coord.oms_version > versao_no_relatorio, (
             "a versão do OMS não avançou: um relatório antigo continuaria "
             "valendo depois de o estado mudar")
+
+
+class TestSemConsultaRemotaNuncaEMatched:
+    """ACHADO: local vazio + sem consulta virava MATCHED. Ausência de posição
+    LOCAL não prova ausência na CORRETORA — é o caso da posição órfã."""
+
+    def test_no_provider_and_no_local_state_is_unknown_not_matched(self):
+        m, risco, _, coord = sistema()
+        rel = coord.reconciliar(lambda coid: None)      # sem consulta de posições
+        assert rel["posicoes_status"] == "UNKNOWN"
+        assert rel["seguro"] is False
+        assert coord.reconciliacao_pendente is True
+
+    def test_provider_error_is_unknown_too(self):
+        m, risco, _, coord = sistema()
+
+        def explode():
+            raise RuntimeError("exchange fora do ar")
+
+        rel = coord.reconciliar(lambda coid: None, consultar_posicoes=explode)
+        assert rel["posicoes_status"] == "UNKNOWN" and rel["seguro"] is False
+
+
+class TestVendaReconciliadaFechaPosicao:
+    """ACHADO CRÍTICO: a reconciliação chamava fill_buy incondicionalmente —
+    uma VENDA reconciliada criava posição em vez de fechá-la."""
+
+    def _com_posicao(self):
+        m, risco, livro, coord = sistema()
+        livro.reserve(Decimal("100"), ref="r0")
+        livro.fill_buy("BTC/USDT", Decimal("1"), Decimal("100"), Decimal("0"),
+                       reserved=Decimal("100"), ref="o0", agent_id="trader-trend")
+        return m, risco, livro, coord
+
+    def _ordem_de_saida(self, coord):
+        from tradingagents.desk.execution import OrderRecord
+        rec = OrderRecord.__new__(OrderRecord)
+        rec.order_id, rec.intent = "exit-1", None
+        rec.state = OrderState.UNKNOWN_RECONCILIATION_REQUIRED
+        rec.filled_qty = Decimal("0")
+        rec.avg_price = Decimal("0")
+        rec.fees = Decimal("0")
+        rec.external_id = ""
+        rec.fingerprint = "fp-exit"
+        rec.note = ""
+        rec.seen_fills = set()
+        rec.instrument = "BTC/USDT"
+        rec.side = "sell"
+        rec.quantity = Decimal("1")
+        rec.provenance = None
+        rec._client_order_id = "coid-exit"
+        rec.agent_id = "trader-trend"
+        rec.reservation_id = ""
+        coord.orders["exit-1"] = rec
+        return rec
+
+    def test_reconciled_sell_closes_the_position_and_realizes_pnl(self):
+        m, risco, livro, coord = self._com_posicao()
+        self._ordem_de_saida(coord)
+        assert livro.position_quantity("BTC/USDT") == Decimal("1")
+
+        rel = coord.reconciliar(
+            lambda coid: {"id": "ex-sell", "status": "filled", "filled": "1",
+                          "average": "110", "fee": "0.5"},
+            consultar_posicoes=lambda: {})
+
+        assert livro.position_quantity("BTC/USDT") == Decimal("0"), (
+            "a venda reconciliada não fechou a posição")
+        # resultado realizado = 110 - 100 - 0.5 = 9.5 de LUCRO
+        atribuicao = livro.attribution().get("trader-trend", Decimal("0"))
+        assert atribuicao > 0, "o lucro da saída não foi realizado no livro"
+        assert rel["seguro"] is True, rel["divergencias"]
+
+    def test_reconciled_sell_at_a_loss_feeds_the_daily_brake(self):
+        m, risco, livro, coord = self._com_posicao()
+        self._ordem_de_saida(coord)
+        coord.reconciliar(
+            lambda coid: {"id": "ex", "status": "filled", "filled": "1",
+                          "average": "80", "fee": "0"},
+            consultar_posicoes=lambda: {})
+        assert coord.perda_do_dia == Decimal("20"), (
+            "prejuízo descoberto na reconciliação não alimentou o freio diário")
+
+    def test_a_sell_never_creates_a_position(self):
+        m, risco, livro, coord = self._com_posicao()
+        self._ordem_de_saida(coord)
+        coord.reconciliar(
+            lambda coid: {"id": "ex", "status": "filled", "filled": "1",
+                          "average": "110", "fee": "0"},
+            consultar_posicoes=lambda: {})
+        assert "BTC/USDT" not in livro.open_positions_detail()
+
+
+class TestFillIdNaoPodeSerOrderId:
+    """ACHADO: deduplicar por id da ORDEM esconderia execuções parciais —
+    uma ordem tem vários fills."""
+
+    def test_two_partial_fills_of_the_same_order_are_both_counted(self):
+        m, risco, livro, coord = sistema()
+        res = reserva(risco)
+        coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
+        rec = coord.orders["ord-1"]
+
+        aplicou1 = coord.aplicar_fill(rec, side="buy", quantidade=Decimal("0.3"),
+                                      preco=Decimal("100"), taxa=Decimal("0"),
+                                      fill_id="trade-1")
+        aplicou2 = coord.aplicar_fill(rec, side="buy", quantidade=Decimal("0.2"),
+                                      preco=Decimal("102"), taxa=Decimal("0"),
+                                      fill_id="trade-2")
+        assert aplicou1 and aplicou2, "o segundo fill foi engolido"
+        assert rec.filled_qty == Decimal("0.5")
+        # preço médio ponderado: (0.3*100 + 0.2*102)/0.5 = 100.8
+        assert abs(rec.avg_price - Decimal("100.8")) < Decimal("0.0001")
+        assert rec.state is OrderState.PARTIALLY_FILLED
+
+    def test_the_same_fill_id_is_ignored(self):
+        m, risco, livro, coord = sistema()
+        res = reserva(risco)
+        coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
+        rec = coord.orders["ord-1"]
+        coord.aplicar_fill(rec, side="buy", quantidade=Decimal("0.3"),
+                           preco=Decimal("100"), taxa=Decimal("0"),
+                           fill_id="trade-1")
+        repetido = coord.aplicar_fill(rec, side="buy", quantidade=Decimal("0.3"),
+                                      preco=Decimal("100"), taxa=Decimal("0"),
+                                      fill_id="trade-1")
+        assert repetido is False and rec.filled_qty == Decimal("0.3")
+
+    def test_a_fill_without_identifier_is_refused(self):
+        m, risco, _, coord = sistema()
+        res = reserva(risco)
+        coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
+        with pytest.raises(ValueError, match="identificador"):
+            coord.aplicar_fill(coord.orders["ord-1"], side="buy",
+                               quantidade=Decimal("1"), preco=Decimal("100"),
+                               taxa=Decimal("0"), fill_id="")

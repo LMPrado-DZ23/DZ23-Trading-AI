@@ -1912,21 +1912,22 @@ def desk_reconciliar(request: Request, _=Depends(auth)):
         raise HTTPException(409, "mesa não carregada")
     coord = d["coordinator"]
     corretora = coord.broker
-    ponte = getattr(corretora, "bridge", None)
 
     def consultar(client_order_id: str):
-        if ponte is None or not hasattr(ponte, "fetch_order_by_client_id"):
+        if not hasattr(corretora, "fetch_order_by_client_id"):
             raise RuntimeError("corretora não expõe consulta por ordem")
-        return ponte.fetch_order_by_client_id(client_order_id)
+        return corretora.fetch_order_by_client_id(client_order_id)
 
     def consultar_posicoes():
-        if ponte is None or not hasattr(ponte, "fetch_positions"):
+        if not hasattr(corretora, "fetch_positions"):
             raise RuntimeError("corretora não expõe consulta de posições")
-        return ponte.fetch_positions()
+        return corretora.fetch_positions()
 
+    tem_consulta = hasattr(corretora, "fetch_order_by_client_id")
+    tem_posicoes = hasattr(corretora, "fetch_positions")
     resultado = coord.reconciliar(
-        consultar if ponte is not None else None,
-        consultar_posicoes=consultar_posicoes if ponte is not None else None)
+        consultar if tem_consulta else None,
+        consultar_posicoes=consultar_posicoes if tem_posicoes else None)
     return {**resultado,
             "acao": ("portão liberado: pode operar" if resultado["seguro"] else
                      "confira as divergências na corretora antes de operar")}
