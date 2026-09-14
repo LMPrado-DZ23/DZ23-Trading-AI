@@ -748,6 +748,117 @@ def runtime_for_tenant_id(tenant_id: str):
         return _TENANT_RUNTIMES.setdefault(tenant_id, TenantRuntime(tenant_id))
 
 
+# ================================================================== COBRANÇA
+# PIX via Woovi. O servidor só ativa plano com webhook ASSINADO (verificado
+# com a chave pública) — nada que venha do navegador libera acesso.
+from tradingagents.billing.store import SubscriptionStore  # noqa: E402
+from tradingagents.billing.woovi import (  # noqa: E402
+    PLANS,
+    BillingError,
+    WebhookRejected,
+    WooviClient,
+    apply_paid_event,
+    verify_webhook,
+)
+
+
+def _build_subscription_store():
+    """Mesma regra do resto: banco fora do ar degrada, não derruba. Sem isso,
+    um Postgres indisponível impediria o cliente até de PAGAR."""
+    dsn = os.environ.get("DATABASE_URL")
+    if dsn:
+        try:
+            return SubscriptionStore(DATA / "subscriptions.db", dsn)
+        except Exception as exc:
+            HEALTH["avisos"].append(
+                "assinaturas: PostgreSQL indisponível "
+                f"({type(exc).__name__}); usando o banco local do volume.")
+    return SubscriptionStore(DATA / "subscriptions.db", None)
+
+
+SUBS = _build_subscription_store()
+
+
+def _woovi_public_key() -> str:
+    return (os.environ.get("WOOVI_WEBHOOK_PUBLIC_KEY")
+            or load_cfg().get("WOOVI_WEBHOOK_PUBLIC_KEY") or "")
+
+
+def require_plan(request: Request, feature: str = "mesa"):
+    """Portão de acesso. Assinatura vencida bloqueia o que custa dinheiro
+    (mesa, análises), mas NUNCA a página de pagamento nem o login — senão o
+    cliente não consegue nem pagar para voltar."""
+    tenant = request_tenant(request)
+    sub = SUBS.ensure(tenant)
+    if not sub.is_active():
+        raise HTTPException(402, {
+            "erro": "assinatura expirada",
+            "plano_atual": sub.plan_code,
+            "acao": "Assine em Plano e pagamento para continuar usando",
+        })
+    return sub
+
+
+@app.get("/v1/billing/planos")
+def billing_plans(_=Depends(auth)):
+    return {"planos": [{"codigo": p.code, "nome": p.name, "preco": p.price_brl,
+                        "preco_centavos": p.price_cents, "dias": p.period_days,
+                        "recursos": list(p.features)}
+                       for p in PLANS.values()]}
+
+
+@app.get("/v1/billing/status")
+def billing_status(request: Request, _=Depends(auth)):
+    sub = SUBS.ensure(request_tenant(request))
+    return {"plano": sub.plan_code, "nome": sub.plan.name, "status": sub.status,
+            "ativo": sub.is_active(), "expira_em": sub.expires_at.isoformat(),
+            "gateway_configurado": WooviClient().configured}
+
+
+@app.post("/v1/billing/checkout")
+async def billing_checkout(req: Request, _=Depends(auth)):
+    """Gera a cobrança PIX. Não ativa nada: quem ativa é o webhook assinado."""
+    body = await _json_body(req)
+    plano = str(body.get("plano", "starter")).strip().lower()
+    if plano not in PLANS or PLANS[plano].price_cents <= 0:
+        raise HTTPException(422, "plano inválido")
+    tenant = request_tenant(req)
+    correlation = f"dz23-{tenant}-{plano}-{time.strftime('%Y%m')}"
+    try:
+        resposta = WooviClient().create_charge(tenant, plano, correlation)
+    except BillingError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    return {"ok": True, "correlation_id": correlation,
+            **WooviClient.charge_view(resposta)}
+
+
+@app.post("/v1/webhooks/woovi")
+async def woovi_webhook(request: Request):
+    """PÚBLICO por necessidade — e por isso verificado por assinatura RSA
+    sobre o corpo BRUTO. Sem assinatura válida, nada é ativado."""
+    raw = await request.body()
+    assinatura = (request.headers.get("x-webhook-signature")
+                  or request.headers.get("signature") or "")
+    try:
+        evento = verify_webhook(raw, assinatura, _woovi_public_key())
+    except WebhookRejected as exc:
+        raise HTTPException(401, str(exc)) from None
+    charge = evento.get("charge") or {}
+    if (evento.get("event") or charge.get("status", "")).upper() not in (
+            "OPENPIX:CHARGE_COMPLETED", "COMPLETED", "PAID"):
+        return {"ok": True, "ignorado": "evento não é de pagamento concluído"}
+    correlation = charge.get("correlationID", "")
+    partes = correlation.split("-")
+    if len(partes) < 3 or partes[0] != "dz23":
+        return {"ok": True, "ignorado": "cobrança não pertence a este sistema"}
+    tenant, plano = partes[1], partes[2]
+    charge_id = charge.get("identifier") or correlation
+    atual = SUBS.get(tenant)
+    nova = apply_paid_event(atual, tenant, plano, charge_id)
+    SUBS.save(nova)
+    return {"ok": True, "tenant": tenant, "plano": nova.plan_code,
+            "expira_em": nova.expires_at.isoformat()}
+
 # ===================================================================== MESA
 # Mesa autônoma multiagente. UMA POR INQUILINO: nenhum tenant enxerga
 # agentes, carteira, ordens ou ciclos de outro — isolamento é requisito do
@@ -857,7 +968,7 @@ def _desk_reset(tenant_id: str) -> None:
 
 
 @app.get("/v1/desk/status")
-def desk_status(request: Request, _=Depends(auth)):
+def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
     try:
         d = _desk_of(request)
     except Exception as exc:
@@ -893,7 +1004,7 @@ def desk_status(request: Request, _=Depends(auth)):
 
 
 @app.post("/v1/desk/cycle")
-def desk_cycle(request: Request, _=Depends(auth)):
+def desk_cycle(request: Request, _=Depends(auth), __=Depends(require_plan)):
     d = _desk_of(request)
     out = d["scheduler"].run_once()
     enviados, encerrados = [], []
@@ -904,7 +1015,7 @@ def desk_cycle(request: Request, _=Depends(auth)):
 
 
 @app.post("/v1/desk/scheduler/{action}")
-def desk_scheduler(action: str, request: Request, _=Depends(auth)):
+def desk_scheduler(action: str, request: Request, _=Depends(auth), __=Depends(require_plan)):
     """Liga/desliga o laço autônomo. Ligado, roda sozinho — fechar o
     navegador não interrompe nada. Start reconcilia ANTES de retomar."""
     d = _desk_of(request)
@@ -1038,3 +1149,5 @@ def onboarding(request: Request, _=Depends(auth)):
             "total": len(itens),
             "saude": {"status": "degraded" if HEALTH["avisos"] else "ok",
                       "avisos": HEALTH["avisos"]}}
+
+

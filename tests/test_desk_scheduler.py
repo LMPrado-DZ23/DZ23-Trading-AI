@@ -120,9 +120,12 @@ class TestCenario11ReinicioReconcilia:
 
         sched.snapshot_provider = explode
         assert sched.start() is True
-        deadline = utcnow() + timedelta(seconds=4)
-        while sched.state.errors < 1 and utcnow() < deadline:
-            pass
-        assert sched.running          # laço continua vivo apesar do erro
+        # espera determinística: dorme entre checagens em vez de girar a CPU
+        # (o laço roda em thread; busy-wait a fazia perder a janela).
+        import time as _t
+        deadline = _t.monotonic() + 8
+        while sched.state.errors < 1 and _t.monotonic() < deadline:
+            _t.sleep(0.05)
+        assert sched.state.errors >= 1, "o ciclo defeituoso deveria contar erro"
+        assert sched.running          # e o laço continua vivo apesar do erro
         sched.stop()
-        assert sched.state.errors >= 1
