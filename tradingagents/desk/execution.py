@@ -625,7 +625,8 @@ class ExecutionCoordinator:
                     # consumiu. Manter o valor integral aqui faria
                     # `available` mentir justamente enquanto a ordem está
                     # aberta — e é `available` que decide se a próxima cabe.
-                    self.risk.consume(reserva["reservation_id"], consumida)
+                    self.risk.consume(reserva["reservation_id"], consumida,
+                                      quantidade=quantidade)
         else:
             # SAÍDA: reduz a posição, realiza o resultado e alimenta o freio.
             custo = self._custo_proporcional(instrumento, quantidade,
@@ -757,6 +758,15 @@ class ExecutionCoordinator:
         # quem move dinheiro é a contabilidade. Sem isto o caixa seguia
         # cheio até o fill e a identidade de capital fechava por compensação
         # de sinais (RESERVED negativo), escondendo o erro.
+        if ei.side is Side.BUY and ei.reservation_id:
+            # Vínculo ANTES de travar caixa e de enviar: é o que impede duas
+            # ordens concorrentes de nascerem da mesma reserva.
+            try:
+                self.risk.bind(ei.reservation_id, coid)
+            except Exception as exc:
+                del self.orders[rec.order_id]
+                self._by_key.pop(coid, None)
+                raise ExecutionRefused(str(exc)) from None
         if ei.side is Side.BUY and ei.reserved_amount > 0:
             self.ledger.reserve(ei.reserved_amount, ref=rec.order_id)
 
@@ -850,6 +860,25 @@ class ExecutionCoordinator:
             raise ExecutionRefused(
                 f"reserva é da conta {conta} e a ordem é da conta {ei.account}")
 
+        # VÍNCULO: uma reserva financia UMA ordem. Sem isto, uma segunda
+        # ordem apresentando o mesmo id e o valor ORIGINAL passava — e o
+        # mesmo capital cobria duas ordens na corretora.
+        vinculada = reserva.get("bound_client_order_id") or ""
+        coid_pedido = ei.client_order_id
+        if vinculada and coid_pedido and vinculada != coid_pedido:
+            raise ExecutionRefused(
+                f"reserva {ei.reservation_id} já financia a ordem {vinculada}: "
+                "não pode cobrir uma segunda")
+
+        # COBERTURA: o que ainda cobre é o RESTANTE, não o original.
+        restante = Decimal(str(reserva.get("remaining_amount")
+                               or reserva.get("amount") or 0))
+        qtd_restante = Decimal(str(reserva.get("remaining_quantity")
+                                   or reserva.get("quantity") or 0))
+        if not vinculada and restante <= 0:
+            raise ExecutionRefused(
+                f"reserva {ei.reservation_id} já foi consumida")
+
         reservado = Decimal(str(reserva.get("amount") or 0))
         if ei.reserved_amount and ei.reserved_amount != reservado:
             raise ExecutionRefused(
@@ -861,6 +890,10 @@ class ExecutionCoordinator:
             raise ExecutionRefused(
                 f"quantidade {ei.quantity} não é coberta pela reserva "
                 f"({qtd_reservada})")
+        if not vinculada and qtd_restante > 0 and ei.quantity > qtd_restante:
+            raise ExecutionRefused(
+                f"quantidade {ei.quantity} maior que a parte ainda não "
+                f"executada da reserva ({qtd_restante})")
 
     def _autorizar_saida(self, ei) -> None:
         """Regras que só valem para VENDA. Declaradas, não implícitas."""

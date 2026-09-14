@@ -196,6 +196,10 @@ class RiskReservation:
     # Acumulados de consumo. Só estes mudam.
     consumed_amount: Decimal = Decimal("0")
     filled_quantity: Decimal = Decimal("0")
+    # Ordem que esta reserva financia. Uma reserva cobre UMA ordem: sem este
+    # vínculo, uma segunda ordem apresentando o mesmo id e o valor original
+    # passava na autorização, e o mesmo capital cobria duas ordens.
+    bound_client_order_id: str = ""
 
     @property
     def original_amount(self) -> Decimal:

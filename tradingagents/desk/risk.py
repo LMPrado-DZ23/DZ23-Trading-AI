@@ -179,7 +179,8 @@ class RiskEngine:
             self._reservations[res.reservation_id] = res
             return res
 
-    def consume(self, reservation_id: str, amount: Decimal) -> Decimal:
+    def consume(self, reservation_id: str, amount: Decimal,
+                quantidade: Decimal | None = None) -> Decimal:
         """Consome PARTE de uma reserva, devolvendo o saldo restante.
 
         O livro consumia a reserva proporcionalmente a cada fill enquanto o
@@ -202,17 +203,57 @@ class RiskEngine:
                 raise RiskVeto(
                     f"consumo de {valor} excede o restante da reserva "
                     f"({reserva.remaining_amount})")
-            # O ORIGINAL nunca é tocado: só o acumulado consumido cresce.
-            # Sem isso o próximo consumo proporcional usaria uma base que já
-            # encolheu.
+            qtd = Decimal(str(quantidade)) if quantidade is not None else None
+            if qtd is not None:
+                if qtd <= 0:
+                    raise RiskVeto("quantidade consumida precisa ser positiva")
+                if reserva.filled_quantity + qtd > reserva.original_quantity:
+                    raise RiskVeto(
+                        f"quantidade {qtd} excede a quantidade restante da "
+                        f"reserva ({reserva.remaining_quantity})")
+            # O ORIGINAL nunca é tocado: só os acumulados crescem. Valor e
+            # quantidade avançam JUNTOS, no mesmo lock — estado parcial entre
+            # os dois deixaria a cobertura inconsistente.
             from dataclasses import replace
             consumido = reserva.consumed_amount + valor
-            atualizada = replace(reserva, consumed_amount=consumido)
+            preenchida = reserva.filled_quantity + (qtd or Decimal("0"))
+            atualizada = replace(reserva, consumed_amount=consumido,
+                                 filled_quantity=preenchida)
             if atualizada.remaining_amount <= 0:
                 del self._reservations[reservation_id]
                 return Decimal("0")
             self._reservations[reservation_id] = atualizada
             return atualizada.remaining_amount
+
+    def bind(self, reservation_id: str, client_order_id: str) -> None:
+        """Vincula a reserva a UMA ordem. Idempotente para o mesmo vínculo.
+
+        Dentro do mesmo lock do consumo: dois workers tentando vincular a
+        mesma reserva a ordens diferentes não podem vencer os dois, senão o
+        mesmo capital financiaria duas ordens na corretora.
+        """
+        if not client_order_id:
+            raise RiskVeto("vínculo exige identificador de ordem")
+        with self._lock:
+            reserva = self._reservations.get(reservation_id)
+            if reserva is None:
+                raise RiskVeto(
+                    f"reserva {reservation_id} não está viva: nada a vincular")
+            atual = reserva.bound_client_order_id
+            if atual and atual != client_order_id:
+                raise RiskVeto(
+                    f"reserva {reservation_id} já está vinculada à ordem "
+                    f"{atual}: uma reserva financia uma ordem só")
+            if atual == client_order_id:
+                return                      # idempotente
+            from dataclasses import replace
+            self._reservations[reservation_id] = replace(
+                reserva, bound_client_order_id=client_order_id)
+
+    def vinculo(self, reservation_id: str) -> str:
+        with self._lock:
+            reserva = self._reservations.get(reservation_id)
+            return reserva.bound_client_order_id if reserva else ""
 
     def reserva(self, reservation_id: str):
         """A reserva viva, com original/consumido/restante."""
@@ -244,6 +285,7 @@ class RiskEngine:
                      "filled_quantity": str(res.filled_quantity),
                      # Derivados, para quem lê o documento não precisar
                      # recalcular (e errar) a conta.
+                     "bound_client_order_id": res.bound_client_order_id,
                      "remaining_amount": str(res.remaining_amount),
                      "remaining_quantity": str(res.remaining_quantity),
                      "mandate_version": res.mandate_version,
@@ -270,6 +312,8 @@ class RiskEngine:
                             doc.get("consumed_amount") or 0)),
                         filled_quantity=Decimal(str(
                             doc.get("filled_quantity") or 0)),
+                        bound_client_order_id=doc.get(
+                            "bound_client_order_id") or "",
                         quantity=Decimal(str(doc.get("quantity") or 0)),
                         mandate_version=doc.get("mandate_version", 1),
                         expires_at=_dt.fromisoformat(expira) if expira else None,
