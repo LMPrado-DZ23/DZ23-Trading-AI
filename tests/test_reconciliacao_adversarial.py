@@ -150,7 +150,8 @@ class TestFillRemotoEntraNoLivro:
         rel = coord.reconciliar(
             lambda coid: {"id": "ex-9", "status": "filled",
                           "filled": "1.5", "average": "100", "fee": "0.15"},
-            consultar_posicoes=lambda: {"BTC/USDT": "1.5"})
+            consultar_posicoes=lambda: {"BTC/USDT": "1.5"},
+            consultar_fills=lambda coid, exid="": [{"fill_id": "t-ex9", "quantity": Decimal("1.5"), "price": Decimal("100"), "fee": Decimal("0"), "side": "buy"}],)
 
         assert rel["seguro"] is True, rel["divergencias"]
         rec = coord.orders["ord-1"]
@@ -168,11 +169,15 @@ class TestFillRemotoEntraNoLivro:
         coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
         remota = {"id": "ex-9", "status": "filled", "filled": "1.5",
                   "average": "100", "fee": "0.15"}
+        fills = [{"fill_id": "t-ex9", "quantity": Decimal("1.5"),
+                  "price": Decimal("100"), "fee": Decimal("0"), "side": "buy"}]
         coord.reconciliar(lambda coid: remota,
-                          consultar_posicoes=lambda: {"BTC/USDT": "1.5"})
+                          consultar_posicoes=lambda: {"BTC/USDT": "1.5"},
+                          consultar_fills=lambda coid, exid="": fills)
         qtd = coord.ledger.position_quantity("BTC/USDT")
         coord.reconciliar(lambda coid: remota,
-                          consultar_posicoes=lambda: {"BTC/USDT": "1.5"})
+                          consultar_posicoes=lambda: {"BTC/USDT": "1.5"},
+                          consultar_fills=lambda coid, exid="": fills)
         assert coord.ledger.position_quantity("BTC/USDT") == qtd, (
             "reconciliar duas vezes dobrou a posição")
 
@@ -305,7 +310,8 @@ class TestVendaReconciliadaFechaPosicao:
         rel = coord.reconciliar(
             lambda coid: {"id": "ex-sell", "status": "filled", "filled": "1",
                           "average": "110", "fee": "0.5"},
-            consultar_posicoes=lambda: {})
+            consultar_posicoes=lambda: {},
+            consultar_fills=lambda coid, exid="": [{"fill_id": "s-110", "quantity": Decimal("1"), "price": Decimal("110"), "fee": Decimal("0"), "side": "sell"}],)
 
         assert livro.position_quantity("BTC/USDT") == Decimal("0"), (
             "a venda reconciliada não fechou a posição")
@@ -320,7 +326,8 @@ class TestVendaReconciliadaFechaPosicao:
         coord.reconciliar(
             lambda coid: {"id": "ex", "status": "filled", "filled": "1",
                           "average": "80", "fee": "0"},
-            consultar_posicoes=lambda: {})
+            consultar_posicoes=lambda: {},
+            consultar_fills=lambda coid, exid="": [{"fill_id": "s-80", "quantity": Decimal("1"), "price": Decimal("80"), "fee": Decimal("0"), "side": "sell"}],)
         assert coord.perda_do_dia == Decimal("20"), (
             "prejuízo descoberto na reconciliação não alimentou o freio diário")
 
@@ -330,7 +337,8 @@ class TestVendaReconciliadaFechaPosicao:
         coord.reconciliar(
             lambda coid: {"id": "ex", "status": "filled", "filled": "1",
                           "average": "110", "fee": "0"},
-            consultar_posicoes=lambda: {})
+            consultar_posicoes=lambda: {},
+            consultar_fills=lambda coid, exid="": [{"fill_id": "s-110", "quantity": Decimal("1"), "price": Decimal("110"), "fee": Decimal("0"), "side": "sell"}],)
         assert "BTC/USDT" not in livro.open_positions_detail()
 
 

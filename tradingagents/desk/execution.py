@@ -245,7 +245,7 @@ class ExecutionCoordinator:
         self.motivo_bloqueio = motivo
 
     def reconciliar(self, consultar_corretora=None, *,
-                    consultar_posicoes=None) -> dict:
+                    consultar_posicoes=None, consultar_fills=None) -> dict:
         """Confere o estado local com a CORRETORA. Exchange-first.
 
         A auditoria encontrou três buracos na versão anterior, todos capazes
@@ -265,6 +265,7 @@ class ExecutionCoordinator:
             "em": utcnow().isoformat(),
             "ordens_conferidas": 0, "ordens_status": "UNKNOWN",
             "posicoes_status": "UNKNOWN", "livro_status": "UNKNOWN",
+            "fills_status": "UNKNOWN",
             "divergencias": [], "seguro": False,
         }
         if consultar_corretora is None:
@@ -284,7 +285,8 @@ class ExecutionCoordinator:
                     f"{rec.order_id}: consulta falhou ({type(exc).__name__})")
                 continue
             relatorio["ordens_conferidas"] += 1
-            self._aplicar_ordem_remota(rec, remota, relatorio)
+            self._aplicar_ordem_remota(rec, remota, relatorio,
+                                       consultar_fills=consultar_fills)
 
         restantes = [r.order_id for r in self.orders.values() if r.nao_terminal]
         if restantes:
@@ -296,6 +298,9 @@ class ExecutionCoordinator:
         relatorio.update(self._conferir_posicoes(consultar_posicoes, relatorio))
 
         # --- LIVRO: invariante interno (necessário, não suficiente) ---
+        if relatorio["fills_status"] == "UNKNOWN" and not relatorio.get("_fills_exigidos"):
+            relatorio["fills_status"] = "NAO_APLICAVEL"
+        relatorio.pop("_fills_exigidos", None)
         balanceado = self.ledger.is_balanced()
         relatorio["livro_status"] = "BALANCED" if balanceado else "IMBALANCED"
         if not balanceado:
@@ -306,6 +311,7 @@ class ExecutionCoordinator:
         seguro = (not relatorio["divergencias"]
                   and relatorio["ordens_status"] == "MATCHED"
                   and relatorio["posicoes_status"] == "MATCHED"
+                  and relatorio["fills_status"] in ("MATCHED", "NAO_APLICAVEL")
                   and relatorio["livro_status"] == "BALANCED")
         relatorio["seguro"] = seguro
         relatorio["oms_version"] = self.oms_version
@@ -365,14 +371,14 @@ class ExecutionCoordinator:
             self.posicoes_restauradas = {}     # só agora, após comparar
         return {"posicoes_status": status}
 
-    def _aplicar_ordem_remota(self, rec, remota, relatorio: dict) -> None:
+    def _aplicar_ordem_remota(self, rec, remota, relatorio: dict,
+                              consultar_fills=None) -> None:
         """Traz o que a corretora diz para dentro do OMS, do livro e do risco.
 
-        Passa pelo MESMO caminho de fill do fluxo normal — duplicar a lógica
-        contábil aqui seria criar uma segunda verdade.
+        Os efeitos econômicos vêm dos FILLS, nunca do acumulado: `filled` não
+        tem identidade e usá-lo como quantidade cria uma execução que não
+        existe na corretora. O acumulado serve só de INVARIANTE.
         """
-        # Contrato de três respostas. Devolver capital exige CONFIRMAÇÃO de
-        # ausência — "não achei na janela que consultei" não é confirmação.
         if isinstance(remota, dict) and "resultado" in remota:
             resultado = remota.get("resultado")
             if resultado == "UNKNOWN":
@@ -388,37 +394,17 @@ class ExecutionCoordinator:
                 return
             remota = remota.get("ordem")
         if remota is None:
-            # Contrato antigo (dublês de teste): sem confirmação explícita,
-            # trata-se como desconhecido — fail-closed.
             relatorio["divergencias"].append(
                 f"{rec.order_id}: consulta sem confirmação de ausência — "
                 "reserva mantida")
             return
+
         estado = str(remota.get("status", "")).lower()
-        if estado in ("closed", "filled"):
-            qtd = remota.get("filled")
-            preco = remota.get("average") or remota.get("price")
-            if qtd is None or preco is None:
-                # Corretora diz "fechada" mas não dá os números: não se
-                # inventa preço nem taxa. Fica incompleto e o portão fecha.
-                relatorio["divergencias"].append(
-                    f"{rec.order_id}: corretora reporta preenchida sem "
-                    "quantidade/preço — RECONCILIACAO_INCOMPLETA")
-                return
-            # fill_id REAL: o id da ORDEM não serve — uma ordem tem vários
-            # fills, e deduplicar por ela esconderia execuções parciais.
-            fid = (remota.get("fill_id") or remota.get("trade_id")
-                   or (f"{remota.get('id') or rec.order_id}:{qtd}@{preco}"))
-            self.aplicar_fill(rec, side=rec.lado or "buy",
-                              quantidade=Decimal(str(qtd)),
-                              preco=Decimal(str(preco)),
-                              taxa=Decimal(str(remota.get("fee") or 0)),
-                              fill_id=str(fid))
+        if estado in ("closed", "filled", "open", "partially_filled",
+                      "partial", "new"):
+            self._aplicar_fills_remotos(rec, remota, relatorio, consultar_fills)
             rec.external_id = remota.get("id") or rec.external_id
-            rec.note = "reconciliada: preenchida na corretora"
         elif estado == "absent":
-            # Afirmação explícita de ausência (contrato do agendador): a
-            # corretora não tem a ordem. Equivale a CONFIRMED_NOT_FOUND.
             rec.state = OrderState.CANCELLED
             rec.note = "reconciliada: ausente na corretora"
             self._liberar_reserva_de(rec)
@@ -426,11 +412,62 @@ class ExecutionCoordinator:
         elif estado in ("canceled", "cancelled", "rejected", "expired"):
             rec.state = OrderState.REJECTED
             rec.note = f"reconciliada: {estado} na corretora"
-            self._liberar_reserva_de(rec)   # capital preso é estado incoerente
+            self._liberar_reserva_de(rec)
             self.oms_version += 1
         else:
             relatorio["divergencias"].append(
                 f"{rec.order_id}: corretora reporta {estado!r} — ainda aberta")
+
+    def _aplicar_fills_remotos(self, rec, remota: dict, relatorio: dict,
+                               consultar_fills) -> None:
+        """Aplica as EXECUÇÕES reais e confere o acumulado como invariante."""
+        acumulado = remota.get("filled")
+        acumulado = Decimal(str(acumulado)) if acumulado is not None else None
+        relatorio["_fills_exigidos"] = True
+
+        if consultar_fills is None:
+            relatorio["divergencias"].append(
+                f"{rec.order_id}: execuções não consultadas — não se cria "
+                "posição sem execução comprovada (RECONCILIACAO_INCOMPLETA)")
+            relatorio["fills_status"] = "UNKNOWN"
+            return
+        try:
+            fills = consultar_fills(rec.client_order_id or rec.order_id,
+                                    rec.external_id or "")
+        except Exception as exc:
+            relatorio["divergencias"].append(
+                f"{rec.order_id}: consulta de execuções falhou "
+                f"({type(exc).__name__})")
+            relatorio["fills_status"] = "UNKNOWN"
+            return
+
+        aplicados = Decimal("0")
+        for fill in fills or []:
+            fid = str(fill.get("fill_id") or "")
+            qtd = Decimal(str(fill.get("quantity") or 0))
+            if not fid or qtd <= 0:
+                relatorio["divergencias"].append(
+                    f"{rec.order_id}: execução sem identificador ou quantidade")
+                relatorio["fills_status"] = "UNKNOWN"
+                return
+            aplicados += qtd
+            self.aplicar_fill(
+                rec, side=(fill.get("side") or rec.lado or "buy"),
+                quantidade=qtd, preco=Decimal(str(fill.get("price") or 0)),
+                taxa=Decimal(str(fill.get("fee") or 0)), fill_id=fid)
+
+        if acumulado is not None and aplicados != acumulado:
+            # O acumulado é INVARIANTE, não fonte: divergir significa que a
+            # visão local está incompleta — e incompleta não é segura.
+            relatorio["divergencias"].append(
+                f"FILLS_DIVERGEM {rec.order_id}: execuções somam {aplicados} "
+                f"e a corretora reporta {acumulado} acumulado")
+            relatorio["fills_status"] = "MISMATCH"
+            return
+        if relatorio["fills_status"] != "MISMATCH":
+            relatorio["fills_status"] = "MATCHED"
+        if acumulado is not None and rec.filled_qty >= (rec.quantidade or 0):
+            rec.note = "reconciliada: execuções aplicadas"
 
     def aplicar_fill(self, rec, *, side: str, quantidade: Decimal,
                      preco: Decimal, taxa: Decimal, fill_id: str) -> bool:
@@ -873,7 +910,8 @@ class ExecutionCoordinator:
         return rec
 
     # -- reconciliação (MA-07) -----------------------------------------
-    def reconcile(self, order_id: str, exchange_view: dict | None) -> OrderRecord:
+    def reconcile(self, order_id: str, exchange_view: dict | None,
+                  consultar_fills=None) -> OrderRecord:
         """INVÓLUCRO FINO de `_aplicar_ordem_remota`. Sem lógica própria.
 
         Era um segundo reconciliador: usava `exchange_view["id"]` como
@@ -885,8 +923,9 @@ class ExecutionCoordinator:
         if exchange_view is None:
             rec.note = "corretora indisponível — segue incerto, reserva mantida"
             return rec
-        relatorio = {"divergencias": []}
-        self._aplicar_ordem_remota(rec, exchange_view, relatorio)
+        relatorio = {"divergencias": [], "fills_status": "UNKNOWN"}
+        self._aplicar_ordem_remota(rec, exchange_view, relatorio,
+                                   consultar_fills=consultar_fills)
         if relatorio["divergencias"]:
             rec.note = "; ".join(relatorio["divergencias"])[:200]
         return rec

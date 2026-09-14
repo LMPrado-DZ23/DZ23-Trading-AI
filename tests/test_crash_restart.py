@@ -158,10 +158,16 @@ class TestCrashDepoisDeEnviarComRespostaAmbigua:
             return {"id": "ex-1", "status": "closed", "filled": Decimal("1.5"),
                     "average": Decimal("100")}
 
+        def consultar_fills(coid, exid=""):
+            return [{"fill_id": "t-1", "quantity": Decimal("1.5"),
+                     "price": Decimal("100"), "fee": Decimal("0"),
+                     "side": "buy"}]
+
         # A posição também é conferida: a corretora informa 1.5 BTC, que é
         # exatamente o que o fill reconciliado cria no livro.
         relatorio = coord2.reconciliar(
-            consultar, consultar_posicoes=lambda: {"BTC/USDT": Decimal("1.5")})
+            consultar, consultar_posicoes=lambda: {"BTC/USDT": Decimal("1.5")},
+            consultar_fills=consultar_fills)
         assert relatorio["ordens_conferidas"] == 1
         assert relatorio["seguro"] is True, relatorio["divergencias"]
         # 5. e SÓ agora o portão libera
@@ -414,7 +420,8 @@ class TestSaidaPassaPeloOms:
             lambda coid: {"resultado": "FOUND", "ordem": {
                 "id": "ex-sell", "status": "filled", "filled": "1",
                 "average": "110", "fee": "0"}},
-            consultar_posicoes=lambda: {})
+            consultar_posicoes=lambda: {},
+            consultar_fills=lambda coid, exid="": [{"fill_id": "s-crash", "quantity": Decimal("1"), "price": Decimal("110"), "fee": Decimal("0"), "side": "sell"}],)
         # o restore substitui o livro pelo reconstruído dos lançamentos
         assert coord2.ledger.position_quantity("BTC/USDT") == Decimal("0"), (
             "a venda encontrada não fechou a posição")
@@ -531,7 +538,8 @@ class TestCustoDeReferenciaSobreviveAoRestart:
             lambda coid: {"resultado": "FOUND", "ordem": {
                 "id": "ex", "status": "filled", "filled": "1",
                 "average": "90", "fee": "0"}},
-            consultar_posicoes=lambda: {})
+            consultar_posicoes=lambda: {},
+            consultar_fills=lambda coid, exid="": [{"fill_id": "s-90", "quantity": Decimal("1"), "price": Decimal("90"), "fee": Decimal("0"), "side": "sell"}],)
         # vendeu a 90 o que custou 100 => prejuízo de 10, nunca lucro de 90
         assert coord2.perda_do_dia == Decimal("10"), (
             f"resultado errado após reinício: perda={coord2.perda_do_dia}")

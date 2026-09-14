@@ -108,9 +108,15 @@ class TestCenario09TimeoutIncerto:
     def test_reconcile_finds_order_executed(self):
         _, risk, ledger, coord, intent = setup(broker=self.TimeoutBroker())
         rec = coord.submit(intent)
-        coord.reconcile(rec.order_id, {"status": "filled", "id": "ext-9",
-                                       "filled": str(intent.reservation.quantity),
-                                       "average": "100", "fee": "0.1"})
+        # a execução REAL vem da corretora; o acumulado é só invariante
+        qtd = intent.reservation.quantity
+        coord.reconcile(rec.order_id,
+                        {"status": "filled", "id": "ext-9", "filled": str(qtd),
+                         "average": "100", "fee": "0.1"},
+                        consultar_fills=lambda coid, exid="": [
+                            {"fill_id": "trade-9", "quantity": qtd,
+                             "price": Decimal("100"), "fee": Decimal("0.1"),
+                             "side": "buy"}])
         assert rec.state is OrderState.FILLED
         assert risk.reserved_total == Decimal("0")   # só agora libera
         assert ledger.is_balanced()
