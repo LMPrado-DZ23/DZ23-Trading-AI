@@ -86,6 +86,56 @@ class OrderRecord:
     def needs_reconciliation(self) -> bool:
         return self.state is OrderState.UNKNOWN_RECONCILIATION_REQUIRED
 
+    # Registro restaurado do disco não tem `intent` (a intenção é de outro
+    # processo). Estas propriedades dão a MESMA leitura nos dois casos — sem
+    # elas o painel quebrava ao listar uma ordem recuperada.
+    @property
+    def instrumento(self) -> str:
+        if self.intent is not None:
+            return self.intent.reservation.instrument
+        return getattr(self, "instrument", "")
+
+    @property
+    def lado(self) -> str:
+        if self.intent is not None:
+            from .models import Action as _A
+            return "buy" if self.intent.action is _A.BUY else "sell"
+        return getattr(self, "side", "")
+
+    @property
+    def quantidade(self):
+        if self.intent is not None:
+            return self.intent.reservation.quantity
+        return getattr(self, "quantity", Decimal("0"))
+
+    @property
+    def client_order_id(self) -> str:
+        if self.intent is not None:
+            return self.intent.idempotency_key
+        return getattr(self, "_client_order_id", "")
+
+    @client_order_id.setter
+    def client_order_id(self, valor: str) -> None:
+        self._client_order_id = valor
+
+    @property
+    def agente(self) -> str:
+        if self.intent is not None:
+            return self.intent.reservation.agent_id
+        return getattr(self, "agent_id", "")
+
+    @property
+    def reserva_id(self) -> str:
+        if self.intent is not None:
+            return self.intent.reservation.reservation_id
+        return getattr(self, "reservation_id", "")
+
+    @property
+    def procedencia(self):
+        if self.intent is not None:
+            return self.intent.provenance
+        return getattr(self, "provenance", None)
+
 
 class PaperBroker:
     """Corretora simulada — dinheiro fictício, comportamento honesto.
@@ -153,10 +203,72 @@ class ExecutionCoordinator:
         self.reconciliacao_pendente = True
         self.motivo_bloqueio = motivo
 
+    def reconciliar(self, consultar_corretora=None) -> dict:
+        """Confere o estado local com a CORRETORA e só então libera o portão.
+
+        `consultar_corretora(client_order_id)` devolve o que a corretora diz
+        sobre a ordem, ou None se ela não existe lá. Sem essa função não há
+        reconciliação — e o portão permanece fechado, porque "não perguntei"
+        nunca pode virar "está tudo certo".
+        """
+        if consultar_corretora is None:
+            return {"seguro": False, "conferidas": 0,
+                    "motivo": "sem acesso à corretora: nada foi conferido",
+                    "divergencias": ["consulta à corretora indisponível"]}
+        divergencias, conferidas = [], 0
+        for rec in list(self.orders.values()):
+            if not rec.needs_reconciliation:
+                continue
+            chave = rec.client_order_id or rec.order_id
+            try:
+                remota = consultar_corretora(chave)
+            except Exception as exc:
+                divergencias.append(
+                    f"{rec.order_id}: consulta falhou ({type(exc).__name__})")
+                continue
+            conferidas += 1
+            if remota is None:
+                # A corretora não conhece a ordem: ela nunca existiu lá.
+                rec.state = OrderState.REJECTED
+                rec.note = "reconciliada: inexistente na corretora"
+                # Ordem RESTAURADA não tem `intent` (é de outro processo).
+                # Sem este caminho, o capital ficava preso para sempre depois
+                # de um reinício — o oposto do bug original, e igualmente ruim.
+                self._liberar_reserva_de(rec)
+                continue
+            estado = str(remota.get("status", "")).lower()
+            if estado in ("closed", "filled"):
+                rec.state = OrderState.FILLED
+                rec.filled_qty = Decimal(str(remota.get("filled") or rec.filled_qty))
+                rec.avg_price = Decimal(str(remota.get("average") or rec.avg_price))
+                rec.external_id = remota.get("id") or rec.external_id
+                rec.note = "reconciliada: preenchida na corretora"
+            elif estado in ("canceled", "cancelled", "rejected", "expired"):
+                rec.state = OrderState.REJECTED
+                rec.note = f"reconciliada: {estado} na corretora"
+            else:
+                divergencias.append(
+                    f"{rec.order_id}: corretora reporta {estado!r} — ainda aberta")
+        restantes = [r.order_id for r in self.orders.values()
+                     if r.needs_reconciliation]
+        seguro = not divergencias and not restantes and self.ledger.is_balanced()
+        if seguro:
+            self.reconciliacao_concluida("conferido com a corretora")
+            self.posicoes_restauradas = {}
+        return {"seguro": seguro, "conferidas": conferidas,
+                "divergencias": divergencias, "ordens_pendentes": restantes,
+                "livro_balanceado": self.ledger.is_balanced()}
+
     def reconciliacao_concluida(self, resultado: str = "conferido") -> None:
-        """Só quem comparou com a corretora pode liberar."""
+        """Só quem comparou com a corretora pode liberar.
+
+        Limpa também as posições restauradas: enquanto elas constarem como
+        'não conferidas', o servidor mantém a parada — e era isso que criava
+        um impasse depois de uma reconciliação legítima.
+        """
         self.reconciliacao_pendente = False
         self.motivo_bloqueio = ""
+        self.posicoes_restauradas = {}
 
     def submit(self, intent: OrderIntent) -> OrderRecord:
         if self.reconciliacao_pendente:
@@ -232,7 +344,8 @@ class ExecutionCoordinator:
             self.ledger.fill_buy(rec.intent.reservation.instrument, rec.filled_qty,
                                  rec.avg_price, rec.fees,
                                  reserved=rec.intent.reservation.amount,
-                                 ref=rec.order_id)
+                                 ref=rec.order_id,
+                                 agent_id=rec.intent.reservation.agent_id)
             self.risk.release(rec.intent.reservation.reservation_id)
         return rec
 
@@ -348,53 +461,84 @@ class ExecutionCoordinator:
     # com posição aberta. O sistema então se achava livre para comprar de
     # novo. Aqui o estado vira documento persistível e restaurável.
     def snapshot_estado(self) -> dict:
-        """Tudo o que precisa sobreviver a um reinício."""
+        """Tudo o que precisa sobreviver a um reinício.
+
+        Auditoria encontrou que este método chamava `open_positions_detail` e
+        `active_reservations` que NÃO EXISTIAM: os `hasattr` devolviam falso
+        e o documento saía com posições {} e reservas [] — silenciosamente.
+        Agora os contratos existem e são exercitados; e o livro é persistido
+        pelos LANÇAMENTOS, não por um resumo de saldos, para não destruir a
+        auditabilidade.
+        """
         return {
-            "schema": "dz23.oms/1",
+            "schema": "dz23.oms/2",
             "worker_id": self.worker_id,
             "dia": self.dia_corrente,
             "perda_do_dia": str(self.perda_do_dia),
             "ordens": [self._ordem_para_doc(r) for r in self.orders.values()],
-            "posicoes": {i: {"quantidade": str(p.quantity),
-                             "custo": str(p.cost_basis),
-                             "preco_medio": str(p.entry_price),
-                             "agente": p.agent_id}
-                         for i, p in self.ledger.open_positions_detail().items()}
-            if hasattr(self.ledger, "open_positions_detail") else {},
-            "caixa": str(self.ledger.balances().get("CASH", Decimal("0"))),
-            "reservas": [{"id": r.reservation_id, "instrumento": r.instrument,
-                          "valor": str(r.amount), "agente": r.agent_id}
-                         for r in self.risk.active_reservations()]
-            if hasattr(self.risk, "active_reservations") else [],
+            "posicoes": self.ledger.open_positions_detail(),
+            "caixa": str(self.ledger.cash()),
+            "moeda": self.ledger.quote_currency(),
+            "lancamentos": self.ledger.export_transactions(),
+            "reservas": self.risk.active_reservations(),
         }
 
     @staticmethod
     def _ordem_para_doc(r: OrderRecord) -> dict:
+        """Documento COMPLETO da ordem, funcione ela com ou sem `intent`.
+
+        Antes isto lia `r.intent.reservation` direto: uma ordem restaurada
+        (que não tem intenção, por ser de outro processo) explodia ao ser
+        salva de novo. Ou seja, o estado sobrevivia a UM reinício e se
+        perdia no segundo — o pior tipo de defeito, porque só aparece tarde.
+        """
         return {"order_id": r.order_id, "estado": r.state.value,
                 "fingerprint": r.fingerprint, "filled": str(r.filled_qty),
                 "preco_medio": str(r.avg_price), "fees": str(r.fees),
                 "fills_vistos": sorted(str(f) for f in r.seen_fills),
                 "external_id": r.external_id, "nota": r.note,
-                "instrumento": r.intent.reservation.instrument,
-                "quantidade": str(r.intent.reservation.quantity),
-                "lado": "buy" if r.intent.action is Action.BUY else "sell",
-                "client_order_id": r.intent.idempotency_key,
-                "agente": r.intent.reservation.agent_id,
-                "reserva_id": r.intent.reservation.reservation_id,
-                "procedencia": r.intent.provenance}
+                "instrumento": r.instrumento,
+                "quantidade": str(r.quantidade),
+                "lado": r.lado,
+                "client_order_id": r.client_order_id,
+                "agente": r.agente,
+                "reserva_id": r.reserva_id,
+                "procedencia": r.procedencia}
 
     def restaurar_estado(self, doc: dict | None) -> dict:
-        """Reconstrói o que dá para reconstruir e DIZ o que ficou pendente.
+        """REIDRATA o estado financeiro e diz o que ficou pendente.
 
-        Não tenta adivinhar: ordem que estava incerta continua incerta, e
-        quem chama é obrigado a reconciliar antes de liberar risco novo.
+        Antes isto só copiava documentos para listas auxiliares e ligava o
+        portão: bloqueava operar (bom) mas NÃO reconstruía ordens, livro nem
+        reservas — o sistema voltava sem saber quanto tinha e de quem era.
+
+        O que NÃO se reconstrói aqui: qualquer coisa que dependa da
+        corretora. Ordem incerta continua incerta; quem decide é a
+        reconciliação, não este método.
         """
-        if not doc or doc.get("schema") != "dz23.oms/1":
+        if not doc or str(doc.get("schema", "")).startswith("dz23.oms") is False:
             return {"restaurado": False, "motivo": "sem estado anterior",
                     "pendencias": [], "exige_reconciliacao": False}
         self.restaurar_estado_do_dia(doc)
+
+        # 1) LIVRO: reconstruído dos lançamentos (mantém a auditabilidade).
+        lancamentos = doc.get("lancamentos")
+        if lancamentos:
+            from .ledger import Ledger as _L
+            self.ledger = _L.from_transactions(
+                lancamentos, currency=doc.get("moeda") or "USDT")
+
+        # 2) RESERVAS: capital reservado não pode virar disponível.
+        reservas_restauradas = self.risk.restore_reservations(doc.get("reservas", []))
+
+        # 3) ORDENS: reconstruídas com estado, fills e idempotência.
         pendentes, abertas = [], []
         for od in doc.get("ordens", []):
+            rec = self._ordem_de_doc(od)
+            if rec is not None:
+                self.orders[rec.order_id] = rec
+                if rec.fingerprint:
+                    self._by_key[rec.fingerprint] = rec.order_id
             estado = od.get("estado")
             if estado == OrderState.UNKNOWN_RECONCILIATION_REQUIRED.value:
                 pendentes.append(od)
@@ -403,20 +547,74 @@ class ExecutionCoordinator:
                             OrderState.PARTIALLY_FILLED.value,
                             OrderState.CANCEL_PENDING.value):
                 abertas.append(od)
+
         self.ordens_restauradas = doc.get("ordens", [])
         self.posicoes_restauradas = doc.get("posicoes", {})
-        exige = bool(pendentes or abertas or doc.get("posicoes"))
+        posicoes = doc.get("posicoes", {})
+        exige = bool(pendentes or abertas or posicoes)
         if exige:
             self.exigir_reconciliacao(
                 f"{len(pendentes)} ordem(ns) incerta(s), {len(abertas)} aberta(s) "
-                f"e {len(doc.get('posicoes', {}))} posição(ões) restauradas do "
-                "estado anterior")
+                f"e {len(posicoes)} posição(ões) restauradas do estado anterior")
         return {"restaurado": True,
-                "ordens": len(doc.get("ordens", [])),
+                "ordens": len(self.orders),
+                "lancamentos": len(lancamentos or []),
+                "reservas": reservas_restauradas,
+                "caixa": str(self.ledger.cash()),
                 "pendencias": [o["order_id"] for o in pendentes],
                 "abertas": [o["order_id"] for o in abertas],
-                "posicoes": list(doc.get("posicoes", {})),
+                "posicoes": list(posicoes),
                 "exige_reconciliacao": exige}
+
+    def _liberar_reserva_de(self, rec) -> bool:
+        """Libera a reserva de uma ordem, com ou sem a intenção em memória."""
+        if rec.intent is not None:
+            self.ledger.release(rec.intent.reservation.amount, ref=rec.order_id)
+            self.risk.release(rec.intent.reservation.reservation_id)
+            return True
+        res_id = rec.reserva_id
+        if not res_id:
+            return False
+        valor = None
+        for doc in self.risk.active_reservations():
+            if doc["reservation_id"] == res_id:
+                valor = Decimal(str(doc["amount"]))
+                break
+        if valor is None:
+            return False
+        self.ledger.release(valor, ref=rec.order_id)
+        self.risk.release(res_id)
+        return True
+
+    def _ordem_de_doc(self, od: dict):
+        """Reconstrói um OrderRecord do documento persistido.
+
+        Documento inválido é DESCARTADO com o portão já ligado — inventar
+        uma ordem seria pior que não tê-la.
+        """
+        try:
+            estado = OrderState(od["estado"])
+        except (KeyError, ValueError):
+            return None
+        rec = OrderRecord.__new__(OrderRecord)
+        rec.order_id = od.get("order_id", "")
+        rec.intent = None
+        rec.state = estado
+        rec.filled_qty = Decimal(str(od.get("filled") or 0))
+        rec.avg_price = Decimal(str(od.get("preco_medio") or 0))
+        rec.fees = Decimal(str(od.get("fees") or 0))
+        rec.external_id = od.get("external_id", "")
+        rec.fingerprint = od.get("fingerprint", "")
+        rec.note = od.get("nota", "")
+        rec._client_order_id = od.get("client_order_id", "")
+        rec.agent_id = od.get("agente", "")
+        rec.reservation_id = od.get("reserva_id", "")
+        rec.seen_fills = set(od.get("fills_vistos") or [])
+        rec.instrument = od.get("instrumento", "")
+        rec.side = od.get("lado", "")
+        rec.quantity = Decimal(str(od.get("quantidade") or 0))
+        rec.provenance = od.get("procedencia")
+        return rec
 
     def pending_reconciliation(self) -> list[OrderRecord]:
         return [r for r in self.orders.values() if r.needs_reconciliation]

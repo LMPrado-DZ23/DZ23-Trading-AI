@@ -21,19 +21,25 @@ class ExitPolicy:
     alvo: Decimal
     stop: Decimal                       # valor NEGATIVO
     max_velas_na_posicao: int = 48
+    exigir_payoff_minimo: bool = True
 
     def __post_init__(self):
         if self.alvo <= 0:
             raise ValueError("alvo precisa ser positivo")
         if self.stop >= 0:
             raise ValueError("stop precisa ser negativo")
-        if abs(self.stop) >= self.alvo:
-            # Não é regra de mercado, é aritmética: com stop maior que o
-            # alvo, a estratégia precisa de taxa de acerto alta só para
-            # empatar — e a conta piora com os custos.
+        if self.exigir_payoff_minimo and abs(self.stop) >= self.alvo:
+            # DECISÃO DE PRODUTO da DZ23, não impossibilidade matemática:
+            # payoff 1:2 PODE ser lucrativo com acerto suficiente (~67% sem
+            # custos). O que a casa exige é payoff >= 1 para não depender de
+            # taxa de acerto alta — que é frágil e cara de sustentar.
+            # Quem quiser assumir esse perfil, declara exigir_payoff_minimo
+            # = False e assume o acerto necessário, que fica no relatório.
             raise ValueError(
-                f"stop ({self.stop:.2%}) não pode ser maior ou igual ao alvo "
-                f"({self.alvo:.2%}): exigiria acerto alto só para empatar")
+                f"política da casa exige payoff >= 1 (alvo {self.alvo:.2%} vs "
+                f"stop {self.stop:.2%}); acerto necessário seria "
+                f"{self.acerto_minimo():.0%}. Para assumir esse perfil, use "
+                "exigir_payoff_minimo=False conscientemente")
 
     def avaliar(self, retorno: Decimal, velas_na_posicao: int = 0
                 ) -> tuple[bool, str]:
@@ -50,9 +56,20 @@ class ExitPolicy:
         return (self.alvo / abs(self.stop)).quantize(Decimal("0.01"))
 
     def acerto_minimo(self, custo_ida_e_volta: Decimal = Decimal("0")) -> Decimal:
-        """Taxa de acerto necessária para empatar, com custos incluídos."""
+        """Taxa de acerto necessária para empatar, com custos incluídos.
+
+        É este número — e não uma proibição — que diz se a configuração é
+        sustentável. Payoff 1:2 exige ~67%; payoff 2:1 exige ~33%.
+        """
         denominador = self.alvo + abs(self.stop)
         return ((abs(self.stop) + custo_ida_e_volta) / denominador)
+
+    def expectativa(self, taxa_acerto: Decimal,
+                    custo_ida_e_volta: Decimal = Decimal("0")) -> Decimal:
+        """Resultado esperado por operação, já com custos."""
+        return (taxa_acerto * self.alvo
+                - (Decimal("1") - taxa_acerto) * abs(self.stop)
+                - custo_ida_e_volta)
 
 
 # Política padrão por estratégia. Ligada ao alvo que a estratégia declara —

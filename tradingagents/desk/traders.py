@@ -65,7 +65,11 @@ class BaseTrader:
         # MESMA política do backtest — antes a produção usava -5%/+8% fixos
         # enquanto o backtest simulava o alvo da estratégia: dois sistemas
         # diferentes, e o relatório media o que não operava.
-        sair, motivo = self.exit_policy.avaliar(pnl_pct)
+        # IDADE REAL da posição: o backtest passava as velas decorridas e a
+        # produção não passava nada, então a regra de tempo NUNCA disparava
+        # em operação. Mesma política exige mesmo significado temporal.
+        velas = self._velas_na_posicao(snap, position)
+        sair, motivo = self.exit_policy.avaliar(pnl_pct, velas)
         if sair and motivo == "stop":
             return self._exit(snap, f"stop: {pnl_pct:.2%} desde a entrada")
         if sair and motivo == "alvo":
@@ -75,6 +79,21 @@ class BaseTrader:
             return self._exit(snap, f"tese invalidada: {reason}")
         return self._no(snap, f"tese de pé ({pnl_pct:+.2%}) — mantendo",
                         action=Action.HOLD)
+
+    @staticmethod
+    def _velas_na_posicao(snap: MarketSnapshot, position) -> int:
+        """Quantas velas se passaram desde a entrada, no timeframe do snapshot.
+
+        Sem horário de entrada não se inventa idade: devolve 0, e a regra de
+        tempo simplesmente não dispara (em vez de disparar errado).
+        """
+        abertura = getattr(position, "opened_at", None)
+        if abertura is None or snap.cutoff is None:
+            return 0
+        minutos = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60,
+                   "4h": 240, "1d": 1440}.get(snap.timeframe, 60)
+        segundos = (snap.cutoff - abertura).total_seconds()
+        return max(0, int(segundos // (minutos * 60)))
 
     def _thesis_dead(self, snap: MarketSnapshot) -> str:
         return ""

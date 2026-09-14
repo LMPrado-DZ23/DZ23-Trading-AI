@@ -12,6 +12,7 @@ Limites codificados:
 from __future__ import annotations
 
 from dataclasses import dataclass, dataclass as _dataclass, field
+from datetime import datetime
 from decimal import Decimal
 
 from .models import Action, DeskMandate, MandateError, OrderIntent, utcnow
@@ -27,6 +28,9 @@ class Position:
     entry_price: Decimal
     agent_id: str
     cost_basis: Decimal
+    # Momento da entrada: sem ele a regra de tempo da política de saída
+    # nunca dispara em produção, e o backtest passa a medir outra coisa.
+    opened_at: datetime | None = None
 
 
 @dataclass
@@ -187,7 +191,7 @@ class DeskOrchestrator:
                       cost_basis) -> None:
         """Chamado quando uma compra executa: a posição entra no livro."""
         self.book[instrument] = Position(instrument, quantity, price, agent_id,
-                                         cost_basis)
+                                         cost_basis, opened_at=utcnow())
 
     def close_position(self, instrument: str, preco_saida=None) -> Position | None:
         """Posição encerrada sai do livro, o instrumento fica livre — e o

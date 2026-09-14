@@ -392,15 +392,40 @@ class TestDinheiroRealNoServico:
                       json={"frase": "qualquer"}).status_code == 422
         # Liberar exige DUAS condições: a frase E a reconciliação. Só a frase
         # não basta — pode haver ordem ou posição que o sistema desconhece.
-        sem_reconciliar = c.post(
+        # Mesa LIMPA: a frase basta, porque não há nada desconhecido.
+        limpa = c.post("/v1/live/liberar", headers=h,
+                       json={"frase": "EU AUTORIZO OPERAR COM DINHEIRO REAL"})
+        assert limpa.status_code == 200
+
+        # Com ordem INCERTA, a liberação é recusada — e nenhuma afirmação do
+        # cliente ("reconciliado": true) pode destravar isso.
+        c.get("/v1/desk/status", headers=h)          # carrega a mesa
+        coord = m._DESKS["legacy"]["coordinator"]
+        coord.exigir_reconciliacao("ordem incerta de teste")
+        c.post("/v1/live/parada-emergencia", headers=h)
+        recusado = c.post(
             "/v1/live/liberar", headers=h,
-            json={"frase": "EU AUTORIZO OPERAR COM DINHEIRO REAL"})
-        assert sem_reconciliar.status_code == 409
-        assert "reconcilie" in sem_reconciliar.json()["detail"]
+            json={"frase": "EU AUTORIZO OPERAR COM DINHEIRO REAL",
+                  "reconciliado": True})
+        assert recusado.status_code == 409
+        sem_reconciliar = recusado
+        detalhe = sem_reconciliar.json()["detail"]
+        assert "reconcilie" in detalhe["acao"]
+        assert detalhe["pendencias"], "a recusa precisa DIZER o que está pendente"
+        # Repetir o pedido com a mesma afirmação do cliente continua sendo
+        # recusado: só o SERVIDOR pode atestar a reconciliação.
+        de_novo = c.post("/v1/live/liberar", headers=h,
+                         json={"frase": "EU AUTORIZO OPERAR COM DINHEIRO REAL",
+                               "reconciliado": True})
+        assert de_novo.status_code == 409
+
+        # Só após a reconciliação concluída no servidor a liberação passa.
+        atual = m._DESKS.get("legacy") or m._desk_boot("legacy")
+        m._DESKS["legacy"] = atual
+        atual["coordinator"].reconciliacao_concluida("conferido no teste")
         ok = c.post("/v1/live/liberar", headers=h,
-                    json={"frase": "EU AUTORIZO OPERAR COM DINHEIRO REAL",
-                          "reconciliado": True})
-        assert ok.status_code == 200
+                    json={"frase": "EU AUTORIZO OPERAR COM DINHEIRO REAL"})
+        assert ok.status_code == 200, ok.text
         assert c.get("/v1/desk/status", headers=h).status_code == 200
 
     def test_panel_has_the_panic_button(self):

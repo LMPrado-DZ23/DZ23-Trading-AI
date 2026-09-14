@@ -230,11 +230,12 @@ class TestProcedenciaRealChegaNaCorretora:
         from tradingagents.desk.orchestrator import DeskOrchestrator
         from tradingagents.desk.traders import default_desk
         m = mandato()
+        risco = RiskEngine(m)
         traders = default_desk(("BTC/USDT",))
         for t in traders:
             for st in (AgentStage.VALIDATED, AgentStage.SHADOW, AgentStage.PAPER_ENABLED):
                 t.spec.move_to(st)
-        orch = DeskOrchestrator(m, traders, worker_id="w", risk=RiskEngine(m))
+        orch = DeskOrchestrator(m, traders, worker_id="w", risk=risco)
         serie = tuple(Decimal(str(round(100 * (1.01 ** i), 6))) for i in range(60))
         rep = orch.run_cycle([MarketSnapshot("BTC/USDT", "1h", utcnow(), serie)],
                              {"BTC/USDT": Decimal("150")})
@@ -401,7 +402,6 @@ class TestEstadoFinanceiroSobreviveAoReinicio:
             "posicoes": {}, "caixa": "1000", "reservas": []})
         assert info["exige_reconciliacao"] is True
         assert "ord-7" in info["pendencias"]
-        _, risco = self._coord(), None
         with pytest.raises(ExecutionRefused, match="reconciliação pendente"):
             coord.submit(object())
 
@@ -502,12 +502,31 @@ class TestBacktestMedeOQueOperaDeVerdade:
         assert '"-0.05"' not in fonte and '"0.08"' not in fonte, (
             "número de saída fixo na produção é o que divergia do backtest")
 
-    def test_policy_refuses_a_stop_bigger_than_the_target(self):
-        """Aritmética, não opinião: stop maior que alvo exige acerto alto só
-        para empatar — e os custos pioram a conta."""
+    def test_payoff_below_one_is_a_house_policy_not_a_math_law(self):
+        """Correção de um exagero MEU: payoff 1:2 não é matematicamente
+        inválido — é lucrativo com acerto suficiente (~67% sem custos). A
+        recusa é decisão de produto, e quem quiser assumir o perfil declara."""
         from tradingagents.desk.policy import ExitPolicy
-        with pytest.raises(ValueError, match="empatar"):
+        with pytest.raises(ValueError, match="política da casa"):
             ExitPolicy(alvo=Decimal("0.02"), stop=Decimal("-0.05"))
+
+        # alvo 2% / stop 5% => payoff 0,4 => empate em 0,05/0,07 = 71,4%
+        arriscada = ExitPolicy(alvo=Decimal("0.02"), stop=Decimal("-0.05"),
+                               exigir_payoff_minimo=False)
+        acerto = arriscada.acerto_minimo()
+        assert abs(acerto - Decimal("5") / Decimal("7")) < Decimal("0.0001"), acerto
+        assert arriscada.expectativa(Decimal("0.80")) > 0   # acima do empate
+        assert arriscada.expectativa(Decimal("0.60")) < 0   # abaixo do empate
+
+        # payoff 1:2 clássico => empate em 2/3
+        meio_a_meio = ExitPolicy(alvo=Decimal("0.01"), stop=Decimal("-0.02"),
+                                 exigir_payoff_minimo=False)
+        assert abs(meio_a_meio.acerto_minimo() - Decimal("2") / Decimal("3")) \
+            < Decimal("0.0001")
+
+        # e o custo SOBE o acerto necessário — é o que mata robôs
+        assert (meio_a_meio.acerto_minimo(Decimal("0.003")) >
+                meio_a_meio.acerto_minimo())
 
     def test_policy_reports_the_break_even_hit_rate(self):
         from tradingagents.desk.policy import policy_for

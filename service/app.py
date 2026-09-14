@@ -1324,7 +1324,7 @@ def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
         "risk": {"reservado": str(orch.risk.reserved_total),
                  "disponivel": str(orch.risk.available),
                  "instrumentos_abertos": sorted(orch.risk.open_instruments())},
-        "orders": [{"id": r.order_id, "instrumento": r.intent.reservation.instrument,
+        "orders": [{"id": r.order_id, "instrumento": r.instrumento,
                     "estado": r.state.value, "qtd": str(r.filled_qty),
                     "preco": str(r.avg_price), "nota": r.note}
                    for r in coord.orders.values()],
@@ -1526,6 +1526,43 @@ from tradingagents.brokers.ccxt_bridge import LIVE_CONFIRM_PHRASE  # noqa: E402
 from tradingagents.desk.killswitch import KillSwitch, KillSwitchError  # noqa: E402
 
 
+def _relatorio_de_reconciliacao(tenant_id: str) -> dict:
+    """Relatório do SERVIDOR sobre o estado financeiro do inquilino.
+
+    É esta função — e não o corpo da requisição — que decide se é seguro
+    liberar a parada. Sem mesa carregada, o resultado é 'não seguro':
+    desconhecido nunca vira permissão.
+    """
+    d = _DESKS.get(tenant_id)
+    if d is None:
+        # Carrega o estado SEM passar pelo portão da parada: examinar é
+        # justamente o que precisa ser possível enquanto está parado. Se nem
+        # isso funcionar, o resultado é 'não seguro' — nunca otimista.
+        try:
+            d = _desk_boot(tenant_id)
+            _DESKS[tenant_id] = d
+        except Exception as exc:
+            return {"seguro": False,
+                    "pendencias": [f"estado financeiro não pôde ser lido "
+                                   f"({type(exc).__name__}): liberar seria "
+                                   "apostar que não há nada em aberto"]}
+    coord = d["coordinator"]
+    pendencias = []
+    incertas = [r.order_id for r in coord.pending_reconciliation()]
+    if incertas:
+        pendencias.append(f"{len(incertas)} ordem(ns) em estado incerto: "
+                          + ", ".join(incertas[:5]))
+    restauradas = getattr(coord, "posicoes_restauradas", {}) or {}
+    if restauradas:
+        pendencias.append(f"{len(restauradas)} posição(ões) restauradas ainda "
+                          "não conferidas com a corretora")
+    if getattr(coord, "reconciliacao_pendente", False):
+        pendencias.append("portão de reconciliação ligado pelo restore")
+    if not coord.ledger.is_balanced():
+        pendencias.append("livro-razão desbalanceado")
+    return {"seguro": not pendencias, "pendencias": pendencias}
+
+
 def _parada(tenant_id: str) -> KillSwitch:
     from tradingagents.desk.storage import ArmazemDeEstado
     d = _DESKS.get(tenant_id)
@@ -1604,10 +1641,22 @@ async def live_resume(req: Request, _=Depends(auth)):
         raise HTTPException(422, f"repita exatamente: {LIVE_CONFIRM_PHRASE}")
     tid = request_tenant(req)
     parada = _parada(tid)
-    reconciliado = bool(body.get("reconciliado")) or \
-        parada.estado.estado == "aguardando_reconciliacao"
+    # A EVIDÊNCIA DE RECONCILIAÇÃO É DO SERVIDOR, NUNCA DO PEDIDO.
+    # Antes, um "reconciliado": true no corpo bastava para destravar dinheiro
+    # real — o próprio cliente afirmando que conferiu. Agora o servidor
+    # verifica o estado do coordenador: ordem incerta, ordem aberta ou
+    # posição restaurada mantêm a parada.
+    relatorio = _relatorio_de_reconciliacao(tid)
+    if not relatorio["seguro"]:
+        raise HTTPException(409, {
+            "erro": "reconciliação pendente — liberar agora arriscaria operar "
+                    "sobre posição ou ordem desconhecida",
+            "pendencias": relatorio["pendencias"],
+            "acao": "Confira as ordens e posições na corretora e reconcilie "
+                    "em Mesa de Agentes antes de liberar",
+        })
     try:
-        parada.liberar(frase_correta=True, reconciliado=reconciliado, por=tid)
+        parada.liberar(frase_correta=True, reconciliado=True, por=tid)
     except KillSwitchError as exc:
         raise HTTPException(409, str(exc)) from None
     _DESKS.pop(tid, None)          # reconstrói limpo no próximo uso
@@ -1841,3 +1890,25 @@ async def importar_tudo(req: Request, _=Depends(auth)):
     _desk_reset(tid)          # recarrega já com o que foi restaurado
     return {"ok": True, "restaurado": restaurado,
             "proxima_acao": "Abra a Mesa de Agentes e confira o aprendizado"}
+
+
+@app.post("/v1/desk/reconciliar")
+def desk_reconciliar(request: Request, _=Depends(auth)):
+    """Confere ordens incertas COM A CORRETORA e libera o portão se estiver
+    tudo certo. Sem acesso à corretora, o portão permanece fechado."""
+    d = _DESKS.get(request_tenant(request))
+    if d is None:
+        raise HTTPException(409, "mesa não carregada")
+    coord = d["coordinator"]
+    corretora = coord.broker
+    ponte = getattr(corretora, "bridge", None)
+
+    def consultar(client_order_id: str):
+        if ponte is None or not hasattr(ponte, "fetch_order_by_client_id"):
+            raise RuntimeError("corretora não expõe consulta por ordem")
+        return ponte.fetch_order_by_client_id(client_order_id)
+
+    resultado = coord.reconciliar(consultar if ponte is not None else None)
+    return {**resultado,
+            "acao": ("portão liberado: pode operar" if resultado["seguro"] else
+                     "confira as divergências na corretora antes de operar")}

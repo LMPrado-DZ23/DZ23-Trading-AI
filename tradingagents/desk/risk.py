@@ -125,6 +125,50 @@ class RiskEngine:
             self._reservations[res.reservation_id] = res
             return res
 
+    def active_reservations(self) -> list[dict]:
+        """Reservas vivas, para persistência.
+
+        O snapshot chamava este método sem ele existir: `getattr` devolvia
+        nada e a lista persistida era SEMPRE vazia. Depois de um reinício, o
+        capital reservado de uma ordem incerta voltava a parecer disponível.
+        """
+        with self._lock:
+            return [{"reservation_id": res.reservation_id,
+                     "account": res.account,
+                     "agent_id": res.agent_id,
+                     "instrument": res.instrument,
+                     "amount": str(res.amount),
+                     "quantity": str(res.quantity),
+                     "mandate_version": res.mandate_version,
+                     "expires_at": res.expires_at.isoformat()
+                     if res.expires_at else None}
+                    for res in self._reservations.values()]
+
+    def restore_reservations(self, docs: list[dict]) -> int:
+        """Reidrata reservas. Capital reservado não pode ressuscitar como
+        disponível só porque o processo reiniciou."""
+        from .models import RiskReservation
+        restauradas = 0
+        with self._lock:
+            for doc in docs or []:
+                try:
+                    from datetime import datetime as _dt
+                    expira = doc.get("expires_at")
+                    res = RiskReservation(
+                        reservation_id=doc["reservation_id"],
+                        account=doc.get("account", ""),
+                        instrument=doc["instrument"],
+                        amount=Decimal(str(doc["amount"])),
+                        quantity=Decimal(str(doc.get("quantity") or 0)),
+                        mandate_version=doc.get("mandate_version", 1),
+                        expires_at=_dt.fromisoformat(expira) if expira else None,
+                        agent_id=doc.get("agent_id", ""))
+                except (KeyError, ValueError, TypeError):
+                    continue
+                self._reservations[res.reservation_id] = res
+                restauradas += 1
+        return restauradas
+
     def release(self, reservation_id: str) -> bool:
         """Libera capital. Só deve ser chamada quando nenhum efeito externo
         pode mais existir (cenário 09: timeout NÃO libera)."""

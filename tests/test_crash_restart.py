@@ -1,0 +1,302 @@
+"""Crash → restart → reconcile, com estado financeiro NÃO VAZIO.
+
+A auditoria mostrou por que isto é indispensável: os testes anteriores
+verificavam se o documento tinha as CHAVES certas, e passavam com
+`posicoes: {}`, `reservas: []`, `caixa: "0"`. Verde e inútil.
+
+Aqui cada asserção compara VALORES, e o processo é destruído de verdade
+(objetos novos, nada compartilhado).
+"""
+from __future__ import annotations
+
+from decimal import Decimal
+
+import pytest
+
+from tradingagents.desk.execution import ExecutionCoordinator, OrderState
+from tradingagents.desk.ledger import Ledger
+from tradingagents.desk.models import Action, DeskMandate, Mode, TradeProposal, utcnow
+from tradingagents.desk.risk import RiskEngine
+
+
+def mandato():
+    return DeskMandate(mandate_id="m", owner="p", account="a", mode=Mode.PAPER,
+                       instruments=("BTC/USDT",), capital=Decimal("1000"))
+
+
+class CorretoraQueAceita:
+    mode = "testnet"
+
+    def __init__(self):
+        self.enviadas = []
+
+    def submit(self, coid, instrument, side, quantity, final_state=None):
+        self.enviadas.append(coid)
+        return {"id": f"ex-{coid}", "status": "filled", "filled": quantity,
+                "average": Decimal("100"), "fee": Decimal("0.1")}
+
+
+def sistema(broker=None):
+    m = mandato()
+    risco = RiskEngine(m)
+    livro = Ledger(opening_cash=m.capital)
+    coord = ExecutionCoordinator(m, livro, risco, worker_id="w",
+                                 broker=broker or CorretoraQueAceita())
+    return m, risco, livro, coord
+
+
+def proposta(exposicao="0.15"):
+    from datetime import timedelta
+    return TradeProposal(agent_id="trader-trend", strategy="trend_following",
+                         instrument="BTC/USDT", action=Action.BUY, reason="t",
+                         desired_exposure_pct=Decimal(exposicao),
+                         confidence=Decimal("0.8"),
+                         valid_until=utcnow() + timedelta(minutes=5))
+
+
+def intencao(risco, provenance=None):
+    res = risco.reserve(proposta(), Decimal("100"), agent_id="trader-trend")
+    return risco.intent(res, Action.BUY, Mode.PAPER, "w",
+                        provenance=provenance or {"x": 1})
+
+
+class TestEstadoFinanceiroNaoVaiVazio:
+    """O bug que o auditor achou: o snapshot chamava métodos inexistentes e
+    persistia posições e reservas VAZIAS, sem ninguém notar."""
+
+    def test_snapshot_carries_real_cash_not_zero(self):
+        _, risco, livro, coord = sistema()
+        doc = coord.snapshot_estado()
+        assert Decimal(doc["caixa"]) == Decimal("1000"), (
+            "caixa persistido como zero: a chave da conta estava errada")
+
+    def test_snapshot_carries_the_actual_reservation(self):
+        _, risco, _, coord = sistema()
+        intencao(risco)
+        doc = coord.snapshot_estado()
+        assert doc["reservas"], "reservas persistidas vazias"
+        assert Decimal(doc["reservas"][0]["amount"]) == Decimal("150.00")
+        assert doc["reservas"][0]["instrument"] == "BTC/USDT"
+
+    def test_snapshot_carries_the_open_position_with_cost_and_owner(self):
+        _, risco, livro, coord = sistema()
+        coord.submit(intencao(risco))
+        doc = coord.snapshot_estado()
+        assert doc["posicoes"], "posições persistidas vazias"
+        pos = doc["posicoes"]["BTC/USDT"]
+        assert Decimal(pos["quantidade"]) > 0
+        assert Decimal(pos["custo_total"]) > 0
+        assert pos["agente"] == "trader-trend", "sem dono não há atribuição"
+
+    def test_snapshot_carries_the_ledger_transactions(self):
+        _, risco, _, coord = sistema()
+        coord.submit(intencao(risco))
+        doc = coord.snapshot_estado()
+        assert len(doc["lancamentos"]) >= 2, (
+            "persistir só saldos destruiria a auditabilidade")
+
+
+class TestCrashDepoisDeEnviarComRespostaAmbigua:
+    """Cenário exigido pela auditoria, com valores conferidos."""
+
+    def test_full_cycle_crash_restart_reconcile(self):
+        # --- processo A ---
+        m, risco, livro, coord = sistema()
+        intent = intencao(risco)
+        assert risco.available == Decimal("850.00")
+
+        from tradingagents.desk.execution import BrokerTimeout
+
+        class Ambigua:
+            mode = "testnet"
+
+            def submit(self, *a, **k):
+                raise BrokerTimeout("resposta perdida")
+
+        coord.broker = Ambigua()
+        rec = coord.submit(intent)
+        assert rec.state is OrderState.UNKNOWN_RECONCILIATION_REQUIRED
+        doc = coord.snapshot_estado()
+
+        # --- processo A morre; processo B nasce do zero ---
+        del m, risco, livro, coord, intent, rec
+        m2, risco2, livro2, coord2 = sistema()
+        assert risco2.available == Decimal("1000")     # instância virgem
+        resultado = coord2.restaurar_estado(doc)
+
+        # 1. a ordem existe de novo
+        assert resultado["ordens"] >= 1 and coord2.orders
+        # 2. UMA reserva de 150 sobre capital de 1000 => 850 disponíveis.
+        #    A equação é verificável: available == capital - reservas ativas.
+        assert risco2.reserved_total == Decimal("150.00")
+        assert len(risco2.active_reservations()) == 1
+        assert risco2.available == m2.capital - risco2.reserved_total
+        assert risco2.available == Decimal("850.00"), (
+            "capital reservado voltou a parecer disponível após o reinício")
+        # 3. o portão está ligado
+        assert resultado["exige_reconciliacao"] is True
+        # 4. e uma ordem nova é RECUSADA antes da reconciliação. A intenção
+        #    é construída ANTES do restore para que a recusa venha do portão,
+        #    não de um veto de reserva duplicada.
+        from tradingagents.desk.execution import ExecutionRefused
+        restaurada = list(coord2.orders.values())[0]
+        with pytest.raises(ExecutionRefused, match="reconcilia"):
+            coord2.submit(restaurada)
+
+        # --- reconciliação: a corretora diz que a ordem existe e preencheu ---
+        def consultar(client_order_id):
+            return {"id": "ex-1", "status": "closed", "filled": Decimal("1.5"),
+                    "average": Decimal("100")}
+
+        relatorio = coord2.reconciliar(consultar)
+        assert relatorio["conferidas"] == 1
+        assert relatorio["seguro"] is True
+        # 5. e SÓ agora o portão libera
+        assert coord2.reconciliacao_pendente is False
+
+    def test_order_the_exchange_never_saw_frees_the_capital(self):
+        m, risco, _, coord = sistema()
+        from tradingagents.desk.execution import BrokerTimeout
+
+        class Ambigua:
+            mode = "testnet"
+
+            def submit(self, *a, **k):
+                raise BrokerTimeout("resposta perdida")
+
+        coord.broker = Ambigua()
+        coord.submit(intencao(risco))
+        doc = coord.snapshot_estado()
+
+        m2, risco2, _, coord2 = sistema()
+        coord2.restaurar_estado(doc)
+        assert risco2.available == Decimal("850.00")
+
+        relatorio = coord2.reconciliar(lambda coid: None)   # não existe lá
+        assert relatorio["seguro"] is True
+        assert risco2.available == Decimal("1000"), (
+            "ordem inexistente na corretora deve devolver o capital")
+
+    def test_without_broker_access_the_gate_stays_closed(self):
+        """'Não perguntei' nunca pode virar 'está tudo certo'."""
+        m, risco, _, coord = sistema()
+        coord.exigir_reconciliacao("teste")
+        relatorio = coord.reconciliar(None)
+        assert relatorio["seguro"] is False
+        assert coord.reconciliacao_pendente is True
+
+
+class TestCrashDepoisDoFill:
+    def test_position_and_cash_survive_a_restart(self):
+        m, risco, livro, coord = sistema()
+        coord.submit(intencao(risco))
+        caixa_antes = livro.cash()
+        posicoes_antes = livro.open_positions_detail()
+        assert posicoes_antes, "o cenário precisa ter posição de verdade"
+        doc = coord.snapshot_estado()
+
+        m2, risco2, livro2, coord2 = sistema()
+        coord2.restaurar_estado(doc)
+
+        assert coord2.ledger.cash() == caixa_antes, "o caixa mudou no restore"
+        assert coord2.ledger.open_positions_detail() == posicoes_antes, (
+            "a posição desapareceu ou mudou ao reiniciar")
+        assert coord2.ledger.is_balanced(), "o livro não fecha depois do restore"
+
+    def test_daily_loss_survives_the_restart(self):
+        m, risco, livro, coord = sistema()
+        coord.submit(intencao(risco))
+        coord.close_position(instrument="BTC/USDT", quantity=Decimal("1.5"),
+                             price=Decimal("80"), cost_basis=Decimal("150"),
+                             agent_id="trader-trend")
+        perda = coord.perda_do_dia
+        assert perda > 0, "o cenário precisa ter prejuízo real"
+        doc = coord.snapshot_estado()
+
+        m2, risco2, _, coord2 = sistema()
+        coord2.restaurar_estado(doc)
+        assert coord2.perda_do_dia == perda, (
+            "reiniciar zerava a perda do dia e destravava o freio")
+
+
+class TestEquacaoDeCapital:
+    """O auditor pegou uma inconsistência no meu relato (1000-150 descrito
+    como 700). A equação precisa ser verificável e única."""
+
+    def test_single_reservation_leaves_exactly_capital_minus_reservation(self):
+        m, risco, livro, coord = sistema()
+        intencao(risco)
+        assert len(risco.active_reservations()) == 1
+        assert risco.reserved_total == Decimal("150.00")
+        assert risco.available == m.capital - risco.reserved_total == Decimal("850.00")
+
+    def test_the_equation_holds_after_restart(self):
+        m, risco, _, coord = sistema()
+        intencao(risco)
+        doc = coord.snapshot_estado()
+        m2, risco2, _, coord2 = sistema()
+        coord2.restaurar_estado(doc)
+        assert len(risco2.active_reservations()) == 1, "reserva duplicada no restore"
+        assert risco2.available == m2.capital - risco2.reserved_total
+        assert risco2.available == Decimal("850.00")
+
+    def test_restore_is_idempotent(self):
+        """restore(doc) três vezes não pode triplicar nada."""
+        m, risco, _, coord = sistema()
+        coord.submit(intencao(risco))
+        doc = coord.snapshot_estado()
+        m2, risco2, _, coord2 = sistema()
+        for _ in range(3):
+            coord2.restaurar_estado(doc)
+        assert len(coord2.orders) == len(doc["ordens"]), "ordens multiplicadas"
+        assert len(risco2.active_reservations()) == len(doc["reservas"]), (
+            "reservas multiplicadas")
+        assert len(coord2.ledger.export_transactions()) == len(doc["lancamentos"]), (
+            "lançamentos contábeis multiplicados: o livro passaria a mentir")
+        assert coord2.ledger.cash() == Decimal(doc["caixa"])
+        assert coord2.ledger.is_balanced()
+
+    def test_snapshot_restore_snapshot_is_stable(self):
+        m, risco, _, coord = sistema()
+        coord.submit(intencao(risco))
+        antes = coord.snapshot_estado()
+        m2, risco2, _, coord2 = sistema()
+        coord2.restaurar_estado(antes)
+        depois = coord2.snapshot_estado()
+        for campo in ("caixa", "moeda", "posicoes", "perda_do_dia"):
+            assert antes[campo] == depois[campo], f"{campo} mudou no ciclo"
+        assert len(antes["lancamentos"]) == len(depois["lancamentos"])
+        assert [t["tx_id"] for t in antes["lancamentos"]] == \
+               [t["tx_id"] for t in depois["lancamentos"]], (
+                   "restore recriou lançamentos com IDs novos: a auditoria "
+                   "deixaria de bater com o histórico original")
+
+
+class TestQuantidadeNaoEntraNaContabilidade:
+    """Quantidade é unidade do ativo; amount é valor monetário. Misturar as
+    duas quebraria as partidas dobradas silenciosamente."""
+
+    def test_quantity_does_not_participate_in_the_double_entry_sum(self):
+        livro = Ledger(opening_cash=Decimal("1000"))
+        livro.reserve(Decimal("150"), ref="r1")
+        tx = livro.fill_buy("BTC/USDT", Decimal("1"), Decimal("100"),
+                            Decimal("1"), reserved=Decimal("150"), ref="o1",
+                            agent_id="t")
+        assert sum(e.amount for e in tx.entries) == 0, "partidas não fecham"
+        assert tx.quantity == Decimal("1")
+        assert tx.instrument == "BTC/USDT"
+        assert livro.is_balanced()
+
+    def test_partial_sell_keeps_the_book_balanced_and_the_position_right(self):
+        livro = Ledger(opening_cash=Decimal("1000"))
+        livro.reserve(Decimal("150"), ref="r1")
+        livro.fill_buy("BTC/USDT", Decimal("1"), Decimal("100"), Decimal("1"),
+                       reserved=Decimal("150"), ref="o1", agent_id="t")
+        livro.fill_sell("BTC/USDT", Decimal("0.4"), Decimal("110"),
+                        Decimal("0.5"), cost_basis=Decimal("40"), agent_id="t",
+                        ref="s1")
+        assert livro.position_quantity("BTC/USDT") == Decimal("0.6")
+        assert livro.is_balanced()
+        detalhe = livro.open_positions_detail()["BTC/USDT"]
+        assert Decimal(detalhe["quantidade"]) == Decimal("0.6")
+        assert Decimal(detalhe["custo_total"]) == Decimal("60.00000000")
