@@ -1153,6 +1153,15 @@ def _desk_boot(tenant_id: str) -> dict:
     # Identidade e destino do relatório de reconciliação.
     coord.tenant_id = tenant_id
     coord.armazem = armazem
+    # A mesa passa a saber o que a corretora PODE provar; sem corretora real,
+    # a matriz fica DESCONHECIDA — e desconhecida não vira confiança.
+    if broker is not None and hasattr(broker, "capacidades"):
+        try:
+            coord.capacidades = broker.capacidades()
+        except Exception as exc:
+            # Falha na detecção NÃO vira confiança: a matriz continua
+            # DESCONHECIDA e o motivo fica registrado, em vez de sumir.
+            coord.capacidades_erro = f"{type(exc).__name__}: {exc}"[:200]
     # IA de contexto: usa o MESMO provedor que o cliente já configurou.
     # Sem provedor, a mesa opera sem verificação — e o ciclo registra isso.
     analista = None

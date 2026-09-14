@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import Enum
 
+from .capabilities import DESCONHECIDA as CAPACIDADES_DESCONHECIDAS
 from .ledger import Ledger
 from .models import DeskMandate, MandateError, Mode, OrderIntent, utcnow
 
@@ -230,6 +231,8 @@ class ExecutionCoordinator:
         # versão em que foi emitido (freshness).
         self.oms_version = 0
         self.ultimo_relatorio: dict | None = None
+        # Preenchida pelo serviço/adaptador quando há corretora real.
+        self.capacidades = CAPACIDADES_DESCONHECIDAS
         self.ordens_restauradas: list = []
         self.posicoes_restauradas: dict = {}
         # PORTÃO DE RECONCILIAÇÃO. Enquanto ligado, nenhum risco novo sai.
@@ -274,7 +277,14 @@ class ExecutionCoordinator:
             "ordens_conferidas": 0, "ordens_status": "UNKNOWN",
             "posicoes_status": "UNKNOWN", "livro_status": "UNKNOWN",
             "fills_status": "UNKNOWN",
-            "divergencias": [], "seguro": False,
+            "divergencias": [],
+            # LIMITAÇÕES são estruturais (a corretora não oferece a
+            # verificação); DIVERGÊNCIAS são problemas a resolver. Misturar
+            # as duas faz o dono tentar consertar o inconsertável — ou
+            # ignorar divergências reais por excesso de ruído.
+            "limitacoes": list(self.capacidades.limitacoes()),
+            "capacidades": self.capacidades.detalhes(),
+            "seguro": False,
         }
         if consultar_corretora is None:
             relatorio["divergencias"].append(

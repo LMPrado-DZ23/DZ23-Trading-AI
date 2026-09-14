@@ -187,6 +187,11 @@ class CCXTDeskBroker:
                             info.get("clOrdId"), o.get("id"),
                             info.get("origClientOrderId")) if c}
 
+    def capacidades(self):
+        """Matriz de capacidades desta corretora, detectada por comportamento."""
+        from .capabilities import detectar_capacidades
+        return detectar_capacidades(self.bridge._ex)
+
     def fetch_positions(self) -> dict:
         """Posições por instrumento, em Decimal. Zero é omitido."""
         ex = self.bridge._ex
