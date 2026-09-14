@@ -415,3 +415,113 @@ class TestSaidaPassaPeloOms:
             "a venda encontrada não fechou a posição")
         assert not enviadas, "uma SEGUNDA venda foi enviada"
         assert rel["seguro"] is True, rel["divergencias"]
+
+
+class TestSegurancaDaSaida:
+    """A saída ficou durável, mas ainda não tinha as travas da entrada."""
+
+    def _com_posicao(self, qtd="1"):
+        m, risco, livro, coord = sistema()
+        livro.reserve(Decimal("100"), ref="r0")
+        livro.fill_buy("BTC/USDT", Decimal(qtd), Decimal("100"), Decimal("0"),
+                       reserved=Decimal("100"), ref="o0", agent_id="trader-trend")
+        enviadas = []
+
+        class Conta(CorretoraQueAceita):
+            def submit(self, coid, instrument, side, quantity, final_state=None):
+                enviadas.append(coid)
+                return super().submit(coid, instrument, side, quantity, final_state)
+
+        coord.broker = Conta()
+        return m, risco, livro, coord, enviadas
+
+    def test_selling_more_than_owned_is_refused_before_the_network(self):
+        """Em spot isso viraria venda a descoberto: exposição na direção
+        oposta, sem ninguém autorizar."""
+        from tradingagents.desk.execution import ExecutionRefused
+        m, risco, livro, coord, enviadas = self._com_posicao("1")
+        with pytest.raises(ExecutionRefused, match="maior que a posição"):
+            coord.close_position(instrument="BTC/USDT", quantity=Decimal("2"),
+                                 price=Decimal("110"), cost_basis=Decimal("100"),
+                                 agent_id="t")
+        assert not enviadas, "a ordem chegou à corretora mesmo assim"
+
+    def test_zero_or_negative_quantity_is_refused(self):
+        from tradingagents.desk.execution import ExecutionRefused
+        m, risco, livro, coord, enviadas = self._com_posicao()
+        for q in (Decimal("0"), Decimal("-1")):
+            with pytest.raises(ExecutionRefused):
+                coord.close_position(instrument="BTC/USDT", quantity=q,
+                                     price=Decimal("110"),
+                                     cost_basis=Decimal("100"), agent_id="t")
+        assert not enviadas
+
+    def test_exit_is_blocked_while_reconciliation_is_pending(self):
+        """Posição real desconhecida: vender no escuro pode virar posição
+        vendida sem querer."""
+        from tradingagents.desk.execution import ExecutionRefused
+        m, risco, livro, coord, enviadas = self._com_posicao()
+        coord.exigir_reconciliacao("ordem incerta")
+        with pytest.raises(ExecutionRefused, match="reconciliação pendente"):
+            coord.close_position(instrument="BTC/USDT", quantity=Decimal("1"),
+                                 price=Decimal("110"), cost_basis=Decimal("100"),
+                                 agent_id="t")
+        assert not enviadas
+
+    def test_same_coid_with_different_content_is_a_conflict(self):
+        from tradingagents.desk.execution import IdempotencyConflict
+        m, risco, livro, coord, enviadas = self._com_posicao()
+        coord.close_position(instrument="BTC/USDT", quantity=Decimal("0.5"),
+                             price=Decimal("110"), cost_basis=Decimal("50"),
+                             agent_id="t", client_order_id="X")
+        with pytest.raises(IdempotencyConflict, match="conteúdo diferente"):
+            coord.close_position(instrument="BTC/USDT", quantity=Decimal("0.4"),
+                                 price=Decimal("110"), cost_basis=Decimal("40"),
+                                 agent_id="t", client_order_id="X")
+        assert len(enviadas) == 1
+
+    def test_identical_retry_is_still_idempotent(self):
+        m, risco, livro, coord, enviadas = self._com_posicao()
+        a = coord.close_position(instrument="BTC/USDT", quantity=Decimal("0.5"),
+                                 price=Decimal("110"), cost_basis=Decimal("50"),
+                                 agent_id="t", client_order_id="Y")
+        b = coord.close_position(instrument="BTC/USDT", quantity=Decimal("0.5"),
+                                 price=Decimal("110"), cost_basis=Decimal("50"),
+                                 agent_id="t", client_order_id="Y")
+        assert len(enviadas) == 1 and b["reaproveitada"] is True
+        assert a["order_id"] == b["order_id"]
+
+
+class TestCustoDeReferenciaSobreviveAoRestart:
+    """Sem persistir o custo, um prejuízo de 10 viraria 'lucro' do valor
+    inteiro da venda depois de um reinício."""
+
+    def test_loss_is_still_a_loss_after_restart(self):
+        m, risco, livro, coord = sistema()
+        from tradingagents.desk.execution import BrokerTimeout
+
+        class Timeout:
+            mode = "testnet"
+
+            def submit(self, *a, **k):
+                raise BrokerTimeout("perdida")
+
+        coord.broker = Timeout()
+        # livro NÃO conhece a posição: é o caso que exercita o fallback
+        coord.close_position(instrument="BTC/USDT", quantity=Decimal("1"),
+                             price=Decimal("90"), cost_basis=Decimal("100"),
+                             agent_id="trader-trend", client_order_id="exit-9")
+        doc = coord.snapshot_estado()
+        assert doc["ordens"][-1]["custo_referencia"] == "100", (
+            "custo de referência não foi persistido")
+
+        m2, risco2, livro2, coord2 = sistema()
+        coord2.restaurar_estado(doc)
+        coord2.reconciliar(
+            lambda coid: {"resultado": "FOUND", "ordem": {
+                "id": "ex", "status": "filled", "filled": "1",
+                "average": "90", "fee": "0"}},
+            consultar_posicoes=lambda: {})
+        # vendeu a 90 o que custou 100 => prejuízo de 10, nunca lucro de 90
+        assert coord2.perda_do_dia == Decimal("10"), (
+            f"resultado errado após reinício: perda={coord2.perda_do_dia}")

@@ -411,6 +411,13 @@ class ExecutionCoordinator:
                               fill_id=str(fid))
             rec.external_id = remota.get("id") or rec.external_id
             rec.note = "reconciliada: preenchida na corretora"
+        elif estado == "absent":
+            # Afirmação explícita de ausência (contrato do agendador): a
+            # corretora não tem a ordem. Equivale a CONFIRMED_NOT_FOUND.
+            rec.state = OrderState.CANCELLED
+            rec.note = "reconciliada: ausente na corretora"
+            self._liberar_reserva_de(rec)
+            self.oms_version += 1
         elif estado in ("canceled", "cancelled", "rejected", "expired"):
             rec.state = OrderState.REJECTED
             rec.note = f"reconciliada: {estado} na corretora"
@@ -627,11 +634,37 @@ class ExecutionCoordinator:
         sistema, e a auditoria cobrou quatro vezes.
         """
         coid = client_order_id or f"exit-{instrument}-{len(self.orders) + 1}"
+        if quantity <= 0:
+            raise ExecutionRefused("quantidade de saída precisa ser positiva")
 
-        # IDEMPOTÊNCIA: mesma saída pedida de novo devolve a MESMA ordem.
+        # PORTÃO: com reconciliação pendente não se sabe qual é a posição
+        # real. Vender no escuro pode virar posição VENDIDA sem querer.
+        if self.reconciliacao_pendente:
+            raise ExecutionRefused(
+                "reconciliação pendente: a posição real é desconhecida, então "
+                "nenhuma saída automática é enviada. Reconcilie primeiro "
+                f"({self.motivo_bloqueio})")
+
+        # TAMANHO: não se vende mais do que se tem. Em spot isso viraria
+        # venda a descoberto — exposição na direção oposta, sem autorização.
+        conhecida = self.ledger.position_quantity(instrument)
+        if conhecida > 0 and quantity > conhecida:
+            raise ExecutionRefused(
+                f"saída de {quantity} maior que a posição conhecida "
+                f"({conhecida}) em {instrument}")
+
+        # Impressão digital do PEDIDO: o mesmo identificador com conteúdo
+        # diferente é conflito, não reaproveitamento.
+        fingerprint = (f"exit|{instrument}|{quantity}|{cost_basis}|{agent_id}|"
+                       f"{self.mandate.account}")
         existente = self._by_key.get(coid)
         if existente:
             rec = self.orders[existente]
+            if rec.fingerprint and rec.fingerprint != fingerprint:
+                raise IdempotencyConflict(
+                    f"client_order_id {coid} já existe com conteúdo diferente: "
+                    "reaproveitar silenciosamente enviaria uma ordem que você "
+                    "não pediu")
             return {"estado": rec.state.value, "client_order_id": coid,
                     "order_id": rec.order_id, "reaproveitada": True}
 
@@ -643,7 +676,7 @@ class ExecutionCoordinator:
         rec.avg_price = Decimal("0")
         rec.fees = Decimal("0")
         rec.external_id = ""
-        rec.fingerprint = f"exit|{instrument}|{quantity}|{cost_basis}"
+        rec.fingerprint = fingerprint
         rec.note = ""
         rec.seen_fills = set()
         rec.instrument = instrument
@@ -708,24 +741,21 @@ class ExecutionCoordinator:
 
     # -- reconciliação (MA-07) -----------------------------------------
     def reconcile(self, order_id: str, exchange_view: dict | None) -> OrderRecord:
-        """Consulta o estado real na corretora antes de qualquer decisão.
-        `exchange_view=None` significa 'ainda não sei' — permanece incerto."""
+        """INVÓLUCRO FINO de `_aplicar_ordem_remota`. Sem lógica própria.
+
+        Era um segundo reconciliador: usava `exchange_view["id"]` como
+        identidade de execução e `filled` cumulativo como delta — exatamente
+        o que a arquitetura corrigida proíbe. Mantido apenas porque o
+        agendador o chama; toda a decisão econômica é do caminho único.
+        """
         rec = self.orders[order_id]
         if exchange_view is None:
             rec.note = "corretora indisponível — segue incerto, reserva mantida"
             return rec
-        status = exchange_view.get("status")
-        if status in ("filled", "closed"):
-            self.apply_fill(order_id, fill_id=exchange_view.get("id", "recon"),
-                            quantity=Decimal(str(exchange_view.get("filled", 0))),
-                            price=Decimal(str(exchange_view.get("average", 0))),
-                            fee=Decimal(str(exchange_view.get("fee", 0))))
-            rec.note = "reconciliado: ordem existia e executou"
-        elif status in ("canceled", "cancelled", "rejected", "absent"):
-            rec.state = OrderState.CANCELLED if status != "rejected" else OrderState.REJECTED
-            self.ledger.release(rec.intent.reservation.amount, ref=rec.order_id)
-            self.risk.release(rec.intent.reservation.reservation_id)
-            rec.note = f"reconciliado: {status} — reserva liberada com segurança"
+        relatorio = {"divergencias": []}
+        self._aplicar_ordem_remota(rec, exchange_view, relatorio)
+        if relatorio["divergencias"]:
+            rec.note = "; ".join(relatorio["divergencias"])[:200]
         return rec
 
     def registrar_resultado_realizado(self, resultado: Decimal) -> Decimal:
@@ -817,7 +847,11 @@ class ExecutionCoordinator:
                 "client_order_id": r.client_order_id,
                 "agente": r.agente,
                 "reserva_id": r.reserva_id,
-                "procedencia": r.procedencia}
+                "procedencia": r.procedencia,
+                # Sem isto, uma saída cujo custo não está no livro perderia a
+                # referência no reinício: prejuízo de 10 viraria "lucro" do
+                # valor inteiro da venda.
+                "custo_referencia": str(getattr(r, "cost_basis_ref", "") or "")}
 
     def restaurar_estado(self, doc: dict | None) -> dict:
         """REIDRATA o estado financeiro e diz o que ficou pendente.
@@ -937,6 +971,8 @@ class ExecutionCoordinator:
         rec.side = od.get("lado", "")
         rec.quantity = Decimal(str(od.get("quantidade") or 0))
         rec.provenance = od.get("procedencia")
+        ref = od.get("custo_referencia")
+        rec.cost_basis_ref = Decimal(str(ref)) if ref else Decimal("0")
         return rec
 
     def pending_reconciliation(self) -> list[OrderRecord]:
