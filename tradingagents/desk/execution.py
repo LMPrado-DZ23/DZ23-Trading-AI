@@ -260,9 +260,17 @@ class ExecutionCoordinator:
         `ledger.is_balanced()` continua sendo exigido, mas NÃO é prova de
         igualdade com a corretora — só prova que a aritmética interna fecha.
         """
+        import uuid as _uuid
         relatorio = {
-            "schema": "dz23.reconciliacao/1",
+            "schema": "dz23.reconciliacao/2",
+            "report_id": "rec_" + _uuid.uuid4().hex[:16],
             "em": utcnow().isoformat(),
+            # IDENTIDADE: um SAFE sem dono poderia ser confundido com o de
+            # outro inquilino ou outra conta — e autorizaria dinheiro alheio.
+            "tenant_id": getattr(self, "tenant_id", ""),
+            "account": self.mandate.account,
+            "mandate_id": self.mandate.mandate_id,
+            "worker_id": self.worker_id,
             "ordens_conferidas": 0, "ordens_status": "UNKNOWN",
             "posicoes_status": "UNKNOWN", "livro_status": "UNKNOWN",
             "fills_status": "UNKNOWN",
@@ -307,6 +315,32 @@ class ExecutionCoordinator:
             relatorio["divergencias"].append("livro-razão desbalanceado")
         return self._selar(relatorio)
 
+    def relatorio_valido(self) -> tuple[bool, str]:
+        """O último relatório ainda autoriza operar?
+
+        Quatro condições, todas necessárias: existe, é SAFE, é da versão
+        ATUAL do estado financeiro, e é DESTE inquilino/conta. Qualquer
+        delas ausente é recusa — um relatório de outro contexto autorizaria
+        dinheiro que não é o dele.
+        """
+        rel = self.ultimo_relatorio
+        if not rel:
+            return False, "nenhuma reconciliação executada neste estado"
+        if not rel.get("seguro"):
+            return False, "a última reconciliação não resultou em SAFE"
+        if rel.get("oms_version") != self.oms_version:
+            return False, (f"relatório é da versão {rel.get('oms_version')} e o "
+                           f"estado já está na {self.oms_version}: reconcilie "
+                           "de novo")
+        esperado_tenant = getattr(self, "tenant_id", "")
+        if rel.get("tenant_id", "") != esperado_tenant:
+            return False, (f"relatório é do inquilino {rel.get('tenant_id')!r} "
+                           f"e esta mesa é do {esperado_tenant!r}")
+        if rel.get("account") != self.mandate.account:
+            return False, (f"relatório é da conta {rel.get('account')!r} e esta "
+                           f"mesa opera a conta {self.mandate.account!r}")
+        return True, "relatório válido para o estado atual"
+
     def _selar(self, relatorio: dict) -> dict:
         seguro = (not relatorio["divergencias"]
                   and relatorio["ordens_status"] == "MATCHED"
@@ -317,12 +351,32 @@ class ExecutionCoordinator:
         relatorio["oms_version"] = self.oms_version
         if seguro:
             self.reconciliacao_concluida("conferido com a corretora")
-            self.ultimo_relatorio = relatorio
         else:
             self.exigir_reconciliacao(
-                "; ".join(relatorio["divergencias"])[:300] or "reconciliação incompleta")
-            self.ultimo_relatorio = relatorio
+                "; ".join(relatorio["divergencias"])[:300]
+                or "reconciliação incompleta")
+        self.ultimo_relatorio = relatorio
+        self._persistir_relatorio(relatorio)
         return relatorio
+
+    def _persistir_relatorio(self, relatorio: dict) -> None:
+        """Grava o relatório fora do processo, quando há armazém.
+
+        Em memória ele morre no primeiro deploy — e o sistema voltaria sem
+        saber se alguém já conferiu o estado com a corretora.
+        """
+        armazem = getattr(self, "armazem", None)
+        if armazem is None:
+            return
+        try:
+            armazem.salvar(getattr(self, "tenant_id", "legacy"),
+                           "reconciliacao", relatorio)
+        except Exception:
+            # Falha de persistência não invalida a conferência já feita, mas
+            # também não pode passar em silêncio para quem lê o relatório.
+            relatorio["persistido"] = False
+        else:
+            relatorio["persistido"] = True
 
     def _conferir_posicoes(self, consultar_posicoes, relatorio: dict) -> dict:
         """Compara posição local com a da corretora. Sem a consulta, o

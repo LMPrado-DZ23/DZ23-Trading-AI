@@ -1148,8 +1148,11 @@ def _desk_boot(tenant_id: str) -> dict:
     broker, broker_mode = build_desk_broker(
         cfg, final_state={}, journal_path=str(data_dir / "broker.jsonl"),
         paper_price=Decimal("100"))
-    coord = ExecutionCoordinator(mandate, ledger, risk, worker_id=f"worker-{tenant_id}",
-                                 broker=broker)
+    coord = ExecutionCoordinator(mandate, ledger, risk,
+                                 worker_id=f"worker-{tenant_id}", broker=broker)
+    # Identidade e destino do relatório de reconciliação.
+    coord.tenant_id = tenant_id
+    coord.armazem = armazem
     # IA de contexto: usa o MESMO provedor que o cliente já configurou.
     # Sem provedor, a mesa opera sem verificação — e o ciclo registra isso.
     analista = None
@@ -1560,15 +1563,11 @@ def _relatorio_de_reconciliacao(tenant_id: str) -> dict:
         pendencias.append("portão de reconciliação ligado pelo restore")
     # FRESHNESS: um relatório SAFE antigo não autoriza para sempre. Se o
     # estado financeiro mudou depois dele, ele deixa de valer.
-    relatorio = getattr(coord, "ultimo_relatorio", None)
-    if relatorio is None:
-        pendencias.append("nenhuma reconciliação foi executada neste estado")
-    elif not relatorio.get("seguro"):
-        pendencias.append("última reconciliação não resultou em SAFE")
-    elif relatorio.get("oms_version") != getattr(coord, "oms_version", 0):
-        pendencias.append(
-            f"relatório é da versão {relatorio.get('oms_version')} e o estado "
-            f"já está na {getattr(coord, 'oms_version', 0)}: reconcilie de novo")
+    # A validade do relatório é decidida no coordenador, que conhece a
+    # versão do estado e a identidade da mesa — o serviço não reimplementa.
+    valido, motivo = coord.relatorio_valido()
+    if not valido:
+        pendencias.append(motivo)
     if not coord.ledger.is_balanced():
         pendencias.append("livro-razão desbalanceado")
     return {"seguro": not pendencias, "pendencias": pendencias}
