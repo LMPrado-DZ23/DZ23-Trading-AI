@@ -170,7 +170,6 @@ class TestEndToEndFinalDecision:
         from tradingagents.agents.risk_mgmt.aggressive_debator import (
             create_aggressive_debator,
         )
-        from tradingagents.agents.trader.trader import create_trader
 
         state = {
             "company_of_interest": "NVDA",

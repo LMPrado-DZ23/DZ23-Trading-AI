@@ -22,7 +22,6 @@ from tradingagents.llm_clients.backend_policy import (
     validate_backend_url,
 )
 
-
 # ---------------------------------------------------------------- memory ----
 
 def _log(tmp_path):

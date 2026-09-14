@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 REQUIRED = ("README.md", "DEPLOY.md", "docs/OPERATIONS-USER-READY.md", "docs/progress.md", ".env.agency.example", "docker-compose.yml")
 

@@ -11,7 +11,6 @@ from unittest import mock
 
 import pytest
 
-
 # --------------------------------------------------------------- F1 ----
 
 class TestAzureHardenedTransport:

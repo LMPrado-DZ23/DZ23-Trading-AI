@@ -183,15 +183,6 @@ const vars={};for(const k of ['TRADINGAGENTS_EXCHANGE','TRADINGAGENTS_BROKER_MOD
 if(Object.keys(vars).length){const sv=await fetch('/v1/config',{method:'POST',headers:H(),body:JSON.stringify({vars})});if(!sv.ok){m.innerHTML='<span class="bad">✘ não consegui salvar — digitou a senha lá em cima e clicou Entrar?</span>';return}loadStatus()}
 const r=await fetch('/v1/broker/status',{headers:H()});const d=await r.json();
  m.innerHTML=d.ready?'<span class="ok">✔ '+d.exchange+' pronta — TESTNET/sandbox, chaves '+(d.keys_set?'ok':'faltando')+'</span>':'<span class="bad">✘ '+String(d.erro||'inválida').replace(/^[A-Za-z]+Error: /,'')+'</span>'}
-/* Execução financeira é deliberadamente removida desta interface nesta branch. */
-async function execOrder(jid,side){const m=$('om_'+jid);
-const sym=$('sym_'+jid).value.trim(),amt=parseFloat($('amt_'+jid).value);
-if(!sym){m.innerHTML='<span class="bad">preenche o símbolo (ex.: BTC/USDT)</span>';return}
-if(!(amt>0)){m.innerHTML='<span class="bad">preenche a quantidade (ex.: 0.001)</span>';return}
-m.innerHTML=' enviando…';
-const r=await fetch('/v1/broker/order',{method:'POST',headers:H(),body:JSON.stringify({job_id:jid,side,symbol:sym,amount:amt})});
-const d=await r.json();
-m.innerHTML=r.ok?'<span class="ok">✔ ordem '+(d.mode==='live'?'REAL':'de treino')+' enviada ('+(d.order_id||d.client_order_id)+')</span>':'<span class="bad">✘ '+String(d.detail||JSON.stringify(d)).replace(/^[A-Za-z]+Error: /,'').slice(0,200)+'</span>'}
 function refreshAll(){store.k.forEach(j=>poll(j.id))}
 async function syncFromServer(){const r=await tapi('v1/jobs');
 if(r.status<300&&r.body&&r.body.jobs){const js=r.body.jobs.map(j=>({id:j.id,ticker:j.ticker,date:j.trade_date}));store.k=js;js.forEach(j=>{if(!states[j.id])poll(j.id)});render()}}

@@ -344,3 +344,23 @@ smoke_agency_api.py: passou
 ### Riscos restantes
 
 Ainda falta integrar um provider remoto real ao worker e acionar bloqueio/alerta operacional de forma configurável, completar persistência distribuída, RBAC/TLS/container hardening, acessibilidade/escape do Floor e repetir a auditoria independente.
+
+## Ciclo 17 — fechamento dos quatro achados HIGH da reauditoria
+
+### Implementado
+
+O ExecutionRouter agora possui guard obrigatório de reconciliação quando configurado; o serviço bloqueia Paper se o relatório não estiver `MATCHED` e seguro. O Paper Ledger agora atualiza cash, balance, equity derivada, margem, exposição e PnL realizado, persiste esses campos e rejeita over-close quando short não está habilitado. O Router compara identidade, venue, tipo, preço, níveis, quantidade e demais campos vinculantes entre OrderRequest e TradeDecision. Código morto de ordem legado foi removido da UI e do servidor, e referências Live obsoletas foram removidas dos módulos CCXT/serviço.
+
+### Evidências
+
+```text
+28 testes focados passaram
+smoke_agency_api.py passou
+compileall passou
+Ruff seletivo passou
+scanner de referências Live em brokers/service não encontrou resultados
+```
+
+### Pendências reais
+
+A reauditoria final ainda precisa confirmar o lote. Permanecem limitações externas: provider remoto/MT5 Demo, Docker/host de deployment e permissão de workflow no GitHub. UX de erro/loading, acessibilidade, RBAC e lint histórico continuam melhorias antes de um release público amplo.

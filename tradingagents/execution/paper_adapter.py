@@ -15,6 +15,7 @@ class PaperAdapter:
         self.account_id = account_id
         self.equity = starting_equity
         self.starting_equity = starting_equity
+        self.cash = starting_equity
         self.realized_pnl = Decimal("0")
         self.slippage_bps = slippage_bps
         self.state_path = Path(state_path) if state_path else None
@@ -37,8 +38,8 @@ class PaperAdapter:
         gross = sum((position.average_price * position.quantity for position in self.positions.values()), Decimal("0"))
         return PortfolioSnapshot(
             snapshot_id=f"portfolio-{uuid4().hex}", account_id=self.account_id,
-            equity=self.equity, balance=self.equity, used_margin=gross,
-            available_margin=max(self.equity - gross, Decimal("0")), daily_pnl=self.realized_pnl, drawdown_pct=max((self.starting_equity - self.equity) / self.starting_equity * Decimal("100"), Decimal("0")),
+            equity=self.cash + gross, balance=self.cash, used_margin=gross,
+            available_margin=max(self.cash, Decimal("0")), daily_pnl=self.realized_pnl, drawdown_pct=max((self.starting_equity - (self.cash + gross)) / self.starting_equity * Decimal("100"), Decimal("0")),
             gross_exposure=gross, net_exposure=sum((position.average_price * position.quantity * (Decimal("1") if position.side is Side.BUY else Decimal("-1") ) for position in self.positions.values()), Decimal("0")),
             positions=tuple(self.positions.values()), captured_at=datetime.now(timezone.utc),
         )
@@ -65,11 +66,15 @@ class PaperAdapter:
         self.orders[request.client_order_id] = ack
         position = self.positions.get(request.instrument_id)
         signed_qty = direction * request.quantity
+        self.cash -= fill_price * signed_qty
         if position and position.side is request.side:
             qty = position.quantity + request.quantity
             avg = ((position.average_price * position.quantity) + (fill_price * request.quantity)) / qty
             self.positions[request.instrument_id] = Position(position.position_id, self.account_id, request.instrument_id, position.side, qty, avg)
         elif position:
+            if request.quantity > position.quantity:
+                self.cash += fill_price * signed_qty
+                raise ValueError("PaperAdapter não permite fechar além da posição; short não habilitado")
             closed = min(position.quantity, request.quantity)
             self.realized_pnl += (fill_price - position.average_price) * closed * (Decimal("1") if position.side is Side.BUY else Decimal("-1"))
             remaining = position.quantity - request.quantity
@@ -120,6 +125,7 @@ class PaperAdapter:
             "account_id": self.account_id,
             "equity": str(self.equity),
             "starting_equity": str(self.starting_equity),
+            "cash": str(self.cash),
             "realized_pnl": str(self.realized_pnl),
             "slippage_bps": str(self.slippage_bps),
             "orders": {key: {**value.__dict__} if hasattr(value, "__dict__") else {"order_id": value.order_id, "client_order_id": value.client_order_id, "status": value.status.value, "accepted_quantity": str(value.accepted_quantity), "filled_quantity": str(value.filled_quantity), "average_price": str(value.average_price) if value.average_price is not None else None, "created_at": value.created_at.isoformat(), "message": value.message} for key, value in self.orders.items()},
@@ -138,6 +144,7 @@ class PaperAdapter:
             raise ValueError("estado Paper pertence a outra conta")
         self.equity = Decimal(data.get("equity", str(self.equity)))
         self.starting_equity = Decimal(data.get("starting_equity", str(self.starting_equity)))
+        self.cash = Decimal(data.get("cash", str(self.equity)))
         self.realized_pnl = Decimal(data.get("realized_pnl", "0"))
         self.slippage_bps = Decimal(data.get("slippage_bps", str(self.slippage_bps)))
         self.orders = {key: OrderAck(item["order_id"], item["client_order_id"], OrderStatus(item["status"]), Decimal(item["accepted_quantity"]), Decimal(item["filled_quantity"]), Decimal(item["average_price"]) if item.get("average_price") is not None else None, datetime.fromisoformat(item["created_at"]), item.get("message", "")) for key, item in data.get("orders", {}).items()}

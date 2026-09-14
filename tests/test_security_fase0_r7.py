@@ -17,7 +17,6 @@ import pytest
 
 from tradingagents.llm_clients.backend_policy import UntrustedBackendError
 
-
 # --------------------------------------------------------------- F1 ----
 
 class TestOpenAIEnvEndpointResolution:
@@ -242,7 +241,6 @@ class TestMemorySectionForgery:
 
 class TestMarkPersistence:
     def test_logged_json_projection_includes_mark(self):
-        from tradingagents.graph.trading_graph import TradingAgentsGraph
 
         src = open("tradingagents/graph/trading_graph.py").read()
         assert '"transport_security": final_state.get("transport_security")' in src

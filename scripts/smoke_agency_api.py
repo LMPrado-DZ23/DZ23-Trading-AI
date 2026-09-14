@@ -25,10 +25,10 @@ assert vote.status_code == 200
 status = client.post("/v1/agency/agents/strategy-agent/status", headers=headers, json={"status": "ANALYZING"})
 assert status.status_code == 200
 assert client.get("/v1/agency/events", headers=headers).json()["events"]
+reconciliation = client.post("/v1/execution/reconciliation", headers=headers)
+assert reconciliation.status_code == 200 and reconciliation.json()["status"] == "UNKNOWN"
 paper = client.post("/v1/execution/paper", headers=headers, json={"decision_id": "smoke-decision", "strategy_id": "smoke-strategy", "instrument_id": "BTCUSDT", "side": "BUY", "entry_price": "100", "stop_loss": "98", "take_profit": "105", "risk_amount": "10", "risk_pct_equity": "0.001", "quantity": "1", "confidence": "0.8", "evidence_ids": ["smoke-evidence"], "bid": "99.9", "ask": "100.1", "last": "100"})
-assert paper.status_code == 200, paper.text
-assert paper.json()["risk"]["status"] == "APPROVE"
-assert paper.json()["order"]["status"] == "FILLED"
+assert paper.status_code == 423
 assert client.get("/v1/execution/health", headers=headers).json()["kill_switch"]["enabled"] is False
 engage = client.post("/v1/execution/kill-switch", headers=headers, json={"action": "engage", "reason": "smoke"})
 assert engage.status_code == 200 and engage.json()["enabled"] is True

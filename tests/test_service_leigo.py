@@ -1,5 +1,6 @@
 """Auditoria de usabilidade: o serviço protege o leigo por construção."""
 import importlib
+
 import pytest
 
 

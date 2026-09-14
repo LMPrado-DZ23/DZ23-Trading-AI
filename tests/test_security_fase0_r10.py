@@ -11,7 +11,6 @@ import pytest
 
 from tradingagents.dataflows.redact import redact_secrets
 
-
 SECRET = "SUPERSECRETVAL123"
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -32,19 +33,23 @@ class ExecutionResult:
 class ExecutionRouter:
     """Única porta de execução: risco aprovado, auditoria e adapter."""
 
-    def __init__(self, *, risk_engine: RiskEngine, audit_log: AuditLog, event_bus: EventBus, kill_switch: KillSwitch | None = None, metrics: MetricsRegistry | None = None):
+    def __init__(self, *, risk_engine: RiskEngine, audit_log: AuditLog, event_bus: EventBus, kill_switch: KillSwitch | None = None, metrics: MetricsRegistry | None = None, reconciliation_guard: Callable[[], bool] | None = None):
         self.risk_engine = risk_engine
         self.audit_log = audit_log
         self.event_bus = event_bus
         self.kill_switch = kill_switch or KillSwitch()
         self.metrics = metrics or MetricsRegistry()
+        self.reconciliation_guard = reconciliation_guard
         self._client_orders: dict[str, OrderAck] = {}
 
     def submit(self, decision: TradeDecision, portfolio: PortfolioSnapshot, snapshot: MarketSnapshot, adapter: BrokerAdapter, *, request: OrderRequest, now: datetime | None = None) -> ExecutionResult:
         current = now or datetime.now(timezone.utc)
         self.kill_switch.assert_allowed()
+        if self.reconciliation_guard is not None and not self.reconciliation_guard():
+            self.metrics.inc("execution.reconciliation_blocked")
+            raise PermissionError("execução bloqueada: reconciliação não está MATCHED")
         self.metrics.inc("execution.attempts")
-        if (request.instrument_id != decision.instrument_id or request.account_id != decision.account_id or request.side is not decision.side or request.quantity != decision.quantity or request.stop_loss != decision.stop_loss or request.take_profit != decision.take_profit):
+        if (request.decision_id != decision.decision_id or request.run_id != decision.run_id or request.strategy_id != decision.strategy_id or request.instrument_id != decision.instrument_id or request.venue != decision.venue or request.account_id != decision.account_id or request.side is not decision.side or request.order_type != decision.order_type or request.quantity != decision.quantity or request.price != decision.entry_price_reference or request.stop_loss != decision.stop_loss or request.take_profit != decision.take_profit):
             self.metrics.inc("execution.request_mismatch")
             raise PermissionError("request não corresponde à decisão aprovada")
         risk = self.risk_engine.evaluate(decision, portfolio, snapshot, now=current)

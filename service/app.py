@@ -47,7 +47,6 @@ PAPER_ADAPTER = PaperAdapter(state_path=DATA / "paper-state.json")
 SHADOW_ADAPTER = ShadowAdapter(state_path=DATA / "shadow-state.json")
 KILL_SWITCH = KillSwitch(DATA / "kill-switch.json")
 METRICS = MetricsRegistry()
-EXECUTION_ROUTER = ExecutionRouter(risk_engine=RiskEngine(), audit_log=AUDIT_LOG, event_bus=EVENT_BUS, kill_switch=KILL_SWITCH, metrics=METRICS)
 
 
 def remote_reconciliation_snapshot() -> dict:
@@ -55,6 +54,7 @@ def remote_reconciliation_snapshot() -> dict:
 
 
 PAPER_RECONCILIATION = ReconciliationMonitor(PAPER_ADAPTER.reconciliation_snapshot, remote_reconciliation_snapshot)
+EXECUTION_ROUTER = ExecutionRouter(risk_engine=RiskEngine(), audit_log=AUDIT_LOG, event_bus=EVENT_BUS, kill_switch=KILL_SWITCH, metrics=METRICS, reconciliation_guard=lambda: bool(PAPER_RECONCILIATION.last_report and PAPER_RECONCILIATION.last_report.is_safe))
 SUPERVISOR = WorkerSupervisor()
 SUPERVISOR.add("paper-reconciliation", PAPER_RECONCILIATION.run_once, interval_seconds=60)
 for _agent_id, _desk, _role in (
@@ -80,7 +80,7 @@ ALLOWED_KEYS = [
     "TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
     "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET",
 ]
-SECRETish = tuple(k for k in ALLOWED_KEYS if k.endswith(("_KEY", "_SECRET")) or k == "LIVE_TRADING_CONFIRM")
+SECRETish = tuple(k for k in ALLOWED_KEYS if k.endswith(("_KEY", "_SECRET")))
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 bearer = HTTPBearer(auto_error=False)
@@ -328,8 +328,7 @@ def broker_status(_=Depends(auth)):
     cfg = load_cfg()
     env = {k: cfg.get(k, "") for k in
            ("TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
-            "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET",
-            "LIVE_TRADING_CONFIRM")}
+            "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET")}
     try:
         from tradingagents.brokers.ccxt_bridge import CCXTBridge
         b = CCXTBridge(env=env, journal_path=str(DATA / "broker-journal.jsonl"))
@@ -340,39 +339,8 @@ def broker_status(_=Depends(auth)):
 
 @app.post("/v1/broker/order")
 async def broker_order(req: Request, _=Depends(auth)):
-    """EXECUTA uma ordem (testnet ou live conforme configuração) amarrada a
-    um job concluído — a decisão analisada é o que se opera."""
+    """Endpoint removido: nenhuma ordem sai por esta rota legada."""
     raise HTTPException(410, "endpoint legado permanentemente removido: use /v1/execution/paper ou o ExecutionRouter governado")
-    b = await req.json()
-    jid = str(b.get("job_id", "")).strip()
-    symbol = str(b.get("symbol", "")).strip().upper()
-    side = str(b.get("side", "")).strip().lower()
-    try:
-        amount = float(b.get("amount", 0))
-    except (TypeError, ValueError):
-        amount = 0
-    with db() as c:
-        r = c.execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()
-    if not r or r["status"] != "completed":
-        raise HTTPException(422, "job_id inexistente ou não concluído — executa-se a decisão de uma análise")
-    stored = json.loads(r["result"] or "{}")
-    ident = stored.get("_identity") or {}
-    final_state = {**ident, "transport_security": stored.get("_transport_mark")}
-    cfg = load_cfg()
-    env = {k: cfg.get(k, "") for k in ("TRADINGAGENTS_EXCHANGE",
-           "TRADINGAGENTS_BROKER_MODE", "EXCHANGE_API_KEY",
-           "EXCHANGE_API_SECRET", "LIVE_TRADING_CONFIRM")}
-    try:
-        from tradingagents.brokers.ccxt_bridge import CCXTBridge
-        bridge = CCXTBridge(env=env, journal_path=str(DATA / "broker-journal.jsonl"))
-        out = bridge.submit_order(final_state, job_id=jid,
-                                  symbol=symbol or ident.get("company_of_interest", ""),
-                                  side=side, amount=amount)
-        return {"ok": True, "mode": bridge.mode,
-                "client_order_id": out["client_order_id"],
-                "order_id": (out.get("order") or {}).get("id")}
-    except Exception as e:
-        raise HTTPException(422, f"{type(e).__name__}: {e}"[:400])
 
 
 @app.get("/floor")
