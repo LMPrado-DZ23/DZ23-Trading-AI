@@ -17,6 +17,14 @@ from tradingagents.desk.models import Action, DeskMandate, Mode, OrderIntent, ut
 from tradingagents.desk.risk import RiskEngine
 
 
+def _traduzir_como_o_adaptador(exc: Exception):
+    """Reproduz a tradução que CCXTDeskBroker.submit faz, sem exigir ccxt
+    instalado: é a mesma decisão, tomada pela mesma função do produto."""
+    if _pode_ter_chegado(exc):
+        return BrokerTimeout(f"envio ambíguo ({type(exc).__name__})")
+    return BrokerAdapterError(f"{type(exc).__name__}: {exc}")
+
+
 def mandato(capital="1000"):
     return DeskMandate(mandate_id="m", owner="p", account="a", mode=Mode.PAPER,
                        instruments=("BTC/USDT",), capital=Decimal(capital))
@@ -80,8 +88,11 @@ class TestTimeoutAmbiguoNaoLiberaCapital:
         "RequestTimeout", "ReadTimeout", "ConnectionResetError",
         "NetworkError", "ExchangeNotAvailable", "ErroQueAindaNaoExiste"])
     def test_ambiguous_errors_keep_the_reservation(self, nome):
-        excecao = type(nome, (Exception,), {})("falha")
-        broker = CorretoraQueExplode(BrokerTimeout(f"ambíguo: {nome}"))
+        """Exercita a CLASSIFICAÇÃO real: a exceção crua da biblioteca passa
+        pelo adaptador, que decide se é ambígua. Injetar BrokerTimeout
+        diretamente provaria apenas que o executor trata BrokerTimeout."""
+        excecao = type(nome, (Exception,), {})("falha de rede")
+        broker = CorretoraQueExplode(_traduzir_como_o_adaptador(excecao))
         coord, risco = coordenador(broker)
         intent = intencao(risco)
         reservado_antes = risco.reserved_total      # já com a reserva feita
@@ -107,7 +118,9 @@ class TestTimeoutAmbiguoNaoLiberaCapital:
         assert _pode_ter_chegado(InsufficientFunds()) is False
 
     def test_rejection_releases_capital_as_it_should(self):
-        broker = CorretoraQueExplode(BrokerAdapterError("InvalidOrder: símbolo"))
+        class InvalidOrder(Exception):
+            pass
+        broker = CorretoraQueExplode(_traduzir_como_o_adaptador(InvalidOrder("símbolo")))
         coord, risco = coordenador(broker)
         rec = coord.submit(intencao(risco))
         assert rec.state is OrderState.REJECTED
