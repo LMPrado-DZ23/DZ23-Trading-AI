@@ -1086,7 +1086,9 @@ def _desk_boot(tenant_id: str) -> dict:
                           instruments=universe, capital=capital)
     from tradingagents.desk.learning import MemoriaDeDesempenho
     memoria = MemoriaDeDesempenho(DATA / "desks" / tenant_id / "aprendizado.json")
-    traders = default_desk(universe, memoria=memoria)
+    exchange_cfg = (cfg.get("TRADINGAGENTS_EXCHANGE") or "binance").lower()
+    traders = default_desk(universe, memoria=memoria, exchange=exchange_cfg,
+                           capital=capital)
     for t in traders:
         for stage in (AgentStage.VALIDATED, AgentStage.SHADOW, AgentStage.PAPER_ENABLED):
             t.spec.move_to(stage)
@@ -1101,7 +1103,7 @@ def _desk_boot(tenant_id: str) -> dict:
                                  broker=broker)
     orch = DeskOrchestrator(mandate, traders, worker_id=f"worker-{tenant_id}",
                             risk=risk, positions_provider=ledger.open_positions,
-                            memoria=memoria)
+                            memoria=memoria, exchange=exchange_cfg)
 
     feed_kind = (cfg.get("TRADINGAGENTS_DESK_FEED") or "fixture").strip().lower()
     if feed_kind == "real":
@@ -1480,3 +1482,43 @@ def desk_learning(request: Request, _=Depends(auth)):
                               "exposição; histórico bom NÃO aumenta além do "
                               "teto do seu mandato."),
             "aviso": "desempenho passado não prevê o futuro"}
+
+
+@app.get("/v1/desk/viabilidade")
+def desk_viability(request: Request, _=Depends(auth)):
+    """A conta que decide tudo: depois de taxa, spread e slippage, esta mesa
+    ganha dinheiro? Usa o histórico REAL quando existe; senão, mostra o que
+    seria preciso para empatar."""
+    from decimal import Decimal as D
+
+    from tradingagents.desk.costs import custo_de_operar, viabilidade
+    d = _desk_of(request)
+    mem, orch = d.get("memoria"), d["orchestrator"]
+    exchange = d.get("broker_mode") and (load_cfg(request_tenant(request))
+                                         .get("TRADINGAGENTS_EXCHANGE") or "binance")
+    linhas = []
+    for trader in orch.traders:
+        st = mem.estatistica(trader.strategy) if mem else None
+        instrumento = orch.mandate.instruments[0] if orch.mandate.instruments else "BTC/USDT"
+        custo = custo_de_operar(instrumento, exchange or "binance",
+                                orch.mandate.capital * D("0.15"))
+        if st and st.maduro:
+            acerto = D(str(round(st.taxa_acerto, 4)))
+            ganho = D(str(abs(round(st.retorno_medio, 6)))) or D("0.01")
+            perda = ganho
+            origem = f"histórico real ({st.amostras} operações)"
+        else:
+            acerto, ganho, perda = D("0.5"), trader.movimento_alvo, trader.movimento_alvo / 2
+            origem = "estimativa do alvo da estratégia (sem histórico maduro)"
+        v = viabilidade(acerto, ganho, perda, custo)
+        linhas.append({"estrategia": trader.strategy, "origem": origem,
+                       "custo_por_operacao": f"{v['custo_por_operacao']:.2%}",
+                       "esperanca_liquida": f"{v['esperanca_liquida']:.2%}",
+                       "acerto_minimo": f"{v['acerto_minimo_para_empatar']:.0%}",
+                       "viavel": v["viavel"], "veredito": v["veredito"]})
+    return {"exchange": exchange or "binance", "estrategias": linhas,
+            "como_ler": ("Se a esperança líquida é negativa, a estratégia perde "
+                         "dinheiro NA MÉDIA mesmo acertando — o custo come o "
+                         "resultado. Reduza custo (exchange mais barata), "
+                         "aumente o alvo, ou não opere."),
+            "aviso": "expectativa calculada; não é previsão"}

@@ -50,6 +50,7 @@
 <button class="btn secondary" onclick="feedTest()">Testar dados de mercado</button>
 <button class="btn secondary" onclick="avaliar()">Avaliar equipe</button>
 <button class="btn secondary" onclick="aprendizado()">O que aprenderam</button>
+<button class="btn secondary" onclick="viabilidade()">Isso dá lucro?</button>
 <button class="btn secondary" onclick="doBackup()">Gerar backup</button>
 <button class="btn secondary" onclick="liveStatus()">Dinheiro real: posso?</button>
 <button class="btn danger" onclick="paradaEmergencia()" style="background:#c0392b;color:#fff">PARADA DE EMERGÊNCIA</button>
@@ -141,5 +142,9 @@ $('deskMsg').innerHTML=(d.estrategias.length?`<table class="table"><thead><tr><t
 d.estrategias.map(e=>`<tr><td>${escapeHtml(e.estrategia)}</td><td>${e.operacoes}</td><td>${(e.taxa_acerto*100).toFixed(0)}%</td><td class="${e.retorno_medio>=0?'ok':'bad'}">${(e.retorno_medio*100).toFixed(2)}%</td><td>${escapeHtml(e.melhor_regime||'—')}</td><td>${e.rebaixar?'<b class="bad">rebaixada</b>':(e.maduro?'ativa':'aprendendo')}</td></tr>`).join('')+'</tbody></table>'
 :'<div class="muted">Ainda sem operações fechadas. Os agentes aprendem de desfecho realizado — não de expectativa.</div>')
 +`<div class="muted">${escapeHtml(d.como_funciona)}</div><div class="warn">${escapeHtml(d.aviso)}</div>`}
+async function viabilidade(){const r=await api('/v1/desk/viabilidade');if(!r.ok)return toast('falhou','bad');const d=r.data;
+$('deskMsg').innerHTML=`<div class="muted">Corretora: <b>${escapeHtml(d.exchange)}</b></div><table class="table"><thead><tr><th>Estratégia</th><th>Custo/op</th><th>Sobra por op</th><th>Acerto mínimo</th><th>Veredito</th></tr></thead><tbody>`+
+d.estrategias.map(e=>`<tr><td>${escapeHtml(e.estrategia)}</td><td>${escapeHtml(e.custo_por_operacao)}</td><td class="${e.viavel?'ok':'bad'}">${escapeHtml(e.esperanca_liquida)}</td><td>${escapeHtml(e.acerto_minimo)}</td><td>${e.viavel?'<b class="ok">viável</b>':'<b class="bad">inviável</b>'}<br><small class="muted">${escapeHtml(e.origem)}</small></td></tr>`).join('')+
+`</tbody></table><div class="muted">${escapeHtml(d.como_ler)}</div><div class="warn">${escapeHtml(d.aviso)}</div>`}
 function escapeHtml(value){return String(value??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}boot();verSignup();
 </script></body></html>

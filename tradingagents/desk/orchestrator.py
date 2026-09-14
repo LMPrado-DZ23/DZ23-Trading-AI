@@ -59,7 +59,7 @@ class DeskOrchestrator:
 
     def __init__(self, mandate: DeskMandate, traders, *, worker_id: str,
                  risk: RiskEngine | None = None, positions_provider=None,
-                 memoria=None):
+                 memoria=None, exchange: str = "binance"):
         self.mandate = mandate
         self.traders = list(traders)
         self.worker_id = worker_id
@@ -71,6 +71,7 @@ class DeskOrchestrator:
         # recompraria o mesmo ativo no ciclo seguinte (achado em teste vivo).
         self.positions_provider = positions_provider or (lambda: set())
         self.memoria = memoria
+        self.exchange = exchange
         # Livro da mesa: quem abriu o quê, a que preço. É daqui que sai a
         # gestão de saída — sem isso a mesa só compra e nunca realiza.
         self.book: dict[str, Position] = {}
@@ -157,7 +158,13 @@ class DeskOrchestrator:
             from decimal import Decimal as _D
 
             from .learning import Desfecho
-            retorno = (_D(str(preco_saida)) - pos.entry_price) / pos.entry_price
+            bruto = (_D(str(preco_saida)) - pos.entry_price) / pos.entry_price
+            # Aprender com retorno BRUTO ensinaria a estratégia errada: o que
+            # importa é o que sobra depois de taxa, spread e slippage.
+            from .costs import custo_de_operar, retorno_liquido
+            custo = custo_de_operar(instrument, getattr(self, "exchange", "binance"),
+                                    pos.cost_basis)
+            retorno = retorno_liquido(bruto, custo)
             trader = next((t for t in self.traders
                            if t.spec.agent_id == pos.agent_id), None)
             leitura = getattr(trader, "ultima_leitura", None)

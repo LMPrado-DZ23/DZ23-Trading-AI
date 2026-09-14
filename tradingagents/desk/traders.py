@@ -9,6 +9,7 @@ from __future__ import annotations
 from decimal import Decimal
 from statistics import fmean, pstdev
 
+from .costs import custo_de_operar, vale_a_pena
 from .learning import MemoriaDeDesempenho
 from .models import Action, AgentSpec, AgentStage, MarketSnapshot, TradeProposal, default_expiry
 from .signals import Leitura, Regime, interpretar
@@ -23,9 +24,15 @@ class BaseTrader:
     needs = 20
 
     regimes_favoraveis: tuple[Regime, ...] = ()
+    # Movimento que a estratégia espera capturar (alvo). Sem isto não há como
+    # saber se o sinal paga o custo — e o robô opera no vermelho sem notar.
+    movimento_alvo = Decimal("0.02")
 
     def __init__(self, agent_id: str, universe: tuple[str, ...], version: str = "1",
-                 memoria: MemoriaDeDesempenho | None = None):
+                 memoria: MemoriaDeDesempenho | None = None,
+                 exchange: str = "binance", capital: Decimal = Decimal("1000")):
+        self.exchange = exchange
+        self.capital = capital
         # A memória é COMPARTILHADA pela mesa: o que um trader aprende sobre
         # um regime não fica preso nele.
         self.memoria = memoria
@@ -112,9 +119,40 @@ class BaseTrader:
                              f"acerto em {st.amostras} operações")
         # a força do sinal modula a confiança: sinal fraco, convicção menor
         conf = (conf * Decimal(str(0.6 + 0.4 * leitura.forca))).quantize(Decimal("0.001"))
+
+        # GATE DE CUSTO: o movimento esperado precisa pagar ida e volta, com
+        # margem. É o filtro que separa robô que opera de robô que lucra.
+        esperado = self.movimento_esperado(leitura)
+        custo = custo_de_operar(p.instrument, self.exchange,
+                                self.capital * expo, leitura.volatilidade)
+        paga, motivo_custo = vale_a_pena(esperado, custo)
+        if not paga:
+            return self._no_com_leitura(p, leitura, f"custo não compensa: {motivo_custo}")
+        notas.append(motivo_custo)
+
         from dataclasses import replace
         return replace(p, confidence=conf, desired_exposure_pct=expo,
                        reason=p.reason + " | " + " | ".join(notas))
+
+    def movimento_esperado(self, leitura: Leitura) -> Decimal:
+        """Quanto esta estratégia espera capturar nesta leitura.
+
+        Ancorado na volatilidade observada: em mercado parado o alvo encolhe,
+        e é justamente aí que o custo engole o resultado.
+        """
+        alvo = self.movimento_alvo
+        if leitura.volatilidade:
+            # alvo realista: no máximo ~3 velas de amplitude típica
+            alvo = min(alvo, Decimal(str(round(leitura.volatilidade * 3, 6))))
+        return (alvo * Decimal(str(0.5 + 0.5 * leitura.forca))).quantize(
+            Decimal("0.000001"))
+
+    def _no_com_leitura(self, p: TradeProposal, leitura: Leitura,
+                        motivo: str) -> TradeProposal:
+        from dataclasses import replace
+        return replace(p, action=Action.NO_TRADE,
+                       desired_exposure_pct=Decimal("0"),
+                       reason=f"{motivo} | leitura: {leitura.resumo()}")
 
     def _evaluate(self, snap: MarketSnapshot) -> TradeProposal:  # pragma: no cover
         raise NotImplementedError
@@ -133,6 +171,7 @@ class TrendTrader(BaseTrader):
     strategy = "trend_following"
     needs = 30
     regimes_favoraveis = (Regime.ALTA,)
+    movimento_alvo = Decimal("0.04")     # tendência: alvo maior, menos trades
 
     def _thesis_dead(self, snap):
         fast, slow = _sma(snap.closes, 10), _sma(snap.closes, 30)
@@ -152,6 +191,7 @@ class MeanReversionTrader(BaseTrader):
     strategy = "mean_reversion"
     needs = 20
     regimes_favoraveis = (Regime.LATERAL, Regime.BAIXA, Regime.VOLATIL)
+    movimento_alvo = Decimal("0.025")    # volta à média: alvo curto
 
     def _thesis_dead(self, snap):
         window = [float(c) for c in snap.closes[-20:]]
@@ -176,6 +216,7 @@ class BreakoutTrader(BaseTrader):
     strategy = "breakout"
     needs = 25
     regimes_favoraveis = (Regime.ALTA, Regime.VOLATIL)
+    movimento_alvo = Decimal("0.035")
 
     def _evaluate(self, snap):
         prior = snap.closes[-25:-1]
@@ -188,9 +229,14 @@ class BreakoutTrader(BaseTrader):
 
 
 def default_desk(universe: tuple[str, ...],
-                 memoria: MemoriaDeDesempenho | None = None) -> list[BaseTrader]:
+                 memoria: MemoriaDeDesempenho | None = None,
+                 exchange: str = "binance",
+                 capital: Decimal = Decimal("1000")) -> list[BaseTrader]:
     """Mesa padrão: três estratégias distintas, cada uma com seu terreno, e
     todas compartilhando a mesma memória de desempenho."""
-    return [TrendTrader("trader-trend", universe, memoria=memoria),
-            MeanReversionTrader("trader-reversion", universe, memoria=memoria),
-            BreakoutTrader("trader-breakout", universe, memoria=memoria)]
+    return [TrendTrader("trader-trend", universe, memoria=memoria,
+                        exchange=exchange, capital=capital),
+            MeanReversionTrader("trader-reversion", universe, memoria=memoria,
+                                exchange=exchange, capital=capital),
+            BreakoutTrader("trader-breakout", universe, memoria=memoria,
+                           exchange=exchange, capital=capital)]

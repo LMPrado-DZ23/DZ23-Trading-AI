@@ -118,7 +118,8 @@ class Comparison:
         if len(self.results) < 2:
             reasons.append("sem comparação: apenas um candidato")
         if all(r.costs == 0 for r in self.results):
-            reasons.append("custos não foram descontados")
+            reasons.append(
+                "custos não foram descontados — resultado bruto não é resultado")
         return {"ranking": rank, "lider": rank[0][0],
                 "conclusivo": not reasons,
                 "ressalvas": reasons,
