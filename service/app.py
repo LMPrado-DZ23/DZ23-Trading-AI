@@ -1101,9 +1101,36 @@ def _desk_boot(tenant_id: str) -> dict:
         paper_price=Decimal("100"))
     coord = ExecutionCoordinator(mandate, ledger, risk, worker_id=f"worker-{tenant_id}",
                                  broker=broker)
+    # IA de contexto: usa o MESMO provedor que o cliente já configurou.
+    # Sem provedor, a mesa opera sem verificação — e o ciclo registra isso.
+    analista = None
+    if cfg.get("TRADINGAGENTS_LLM_PROVIDER"):
+        from tradingagents.desk.context import AnalistaDeContexto
+
+        def _consultar(prompt: str) -> str:
+            from tradingagents.default_config import DEFAULT_CONFIG
+            from tradingagents.llm_clients.factory import create_llm_client
+            llm_conf, llm_env = resolve_llm(cfg)
+            conf = {**DEFAULT_CONFIG, **llm_conf}
+            anterior = {k: os.environ.get(k) for k in llm_env}
+            os.environ.update(llm_env)
+            try:
+                cliente = create_llm_client(conf.get("llm_provider"), conf)
+                return cliente.complete(prompt) if hasattr(cliente, "complete") \
+                    else str(cliente.invoke(prompt))
+            finally:
+                for k, antes in anterior.items():
+                    if antes is None:
+                        os.environ.pop(k, None)
+                    else:
+                        os.environ[k] = antes
+
+        analista = AnalistaDeContexto(_consultar)
+
     orch = DeskOrchestrator(mandate, traders, worker_id=f"worker-{tenant_id}",
                             risk=risk, positions_provider=ledger.open_positions,
-                            memoria=memoria, exchange=exchange_cfg)
+                            memoria=memoria, exchange=exchange_cfg,
+                            analista=analista)
 
     feed_kind = (cfg.get("TRADINGAGENTS_DESK_FEED") or "fixture").strip().lower()
     if feed_kind == "real":

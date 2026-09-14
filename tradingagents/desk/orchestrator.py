@@ -59,7 +59,7 @@ class DeskOrchestrator:
 
     def __init__(self, mandate: DeskMandate, traders, *, worker_id: str,
                  risk: RiskEngine | None = None, positions_provider=None,
-                 memoria=None, exchange: str = "binance"):
+                 memoria=None, exchange: str = "binance", analista=None):
         self.mandate = mandate
         self.traders = list(traders)
         self.worker_id = worker_id
@@ -72,6 +72,8 @@ class DeskOrchestrator:
         self.positions_provider = positions_provider or (lambda: set())
         self.memoria = memoria
         self.exchange = exchange
+        # IA de contexto: só veta ou reduz, nunca aumenta nem autoriza.
+        self.analista = analista
         # Livro da mesa: quem abriu o quê, a que preço. É daqui que sai a
         # gestão de saída — sem isso a mesa só compra e nunca realiza.
         self.book: dict[str, Position] = {}
@@ -128,6 +130,22 @@ class DeskOrchestrator:
         report.vetoed = [(p.agent_id, why) for p, why in decision.vetoed]
 
         for proposal in decision.admitted:
+            if self.analista is not None:
+                from .context import aplicar_parecer
+                parecer = self.analista.avaliar(
+                    instrumento=proposal.instrument, acao=proposal.action.value,
+                    exposicao=proposal.desired_exposure_pct,
+                    leitura=proposal.reason[:400], quando=utcnow().isoformat())
+                nova, nota = aplicar_parecer(proposal.desired_exposure_pct, parecer)
+                if nova <= 0:
+                    report.vetoed.append((proposal.agent_id, f"IA vetou — {nota}"))
+                    continue
+                if nova < proposal.desired_exposure_pct:
+                    from dataclasses import replace
+                    proposal = replace(proposal, desired_exposure_pct=nova,
+                                       reason=proposal.reason + f" | {nota}")
+                elif not parecer.disponivel:
+                    report.errors.append(nota)
             price = prices.get(proposal.instrument)
             if price is None:
                 report.vetoed.append((proposal.agent_id, "sem preço de execução"))
