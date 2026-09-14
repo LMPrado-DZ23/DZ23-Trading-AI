@@ -44,9 +44,17 @@ docker compose up -d
 docker compose ps
 curl http://127.0.0.1:8080/healthz
 curl http://127.0.0.1:8080/readyz
+
+# validação de reinício dos serviços e healthchecks
+./scripts/validate_docker_runtime.sh
+
+# carga somente de leitura; ajuste token e limites ao seu host
+python3 scripts/load_test.py --base-url http://127.0.0.1:8080 --requests 100 --workers 10
 ```
 
 Não exponha PostgreSQL, Redis ou Qdrant publicamente. Coloque o serviço atrás de TLS/reverse proxy, configure backup dos volumes e mantenha os secrets fora do Git.
+
+Para um proxy Caddy de referência, consulte [ops/Caddyfile.example](ops/Caddyfile.example). O domínio, DNS, portas 80/443, certificado e política de backup devem ser configurados pelo operador do ambiente.
 
 ## 5. Healthchecks
 

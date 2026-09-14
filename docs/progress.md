@@ -435,3 +435,9 @@ A visibilidade do repositório permanece privada até confirmação explícita d
 O ledger de jobs passou a usar `JobStore`, com PostgreSQL selecionado automaticamente por `DATABASE_URL` e SQLite mantido apenas para desenvolvimento local. A migração do schema SQLite legado remove a unicidade global de idempotência e a substitui por unicidade `(tenant_id, idem)`. O healthcheck do ledger foi exposto em `/v1/jobs/health`.
 
 Foi criado o documento de gates Classe A, distinguindo evidências locais de validações externas. A suíte completa após a alteração passou com `930 passed, 2 skipped, 71 subtests passed, 18 warnings`. Os smoke tests da API e multi-tenant passaram.
+
+## Ciclo 25 — ferramentas de validação operacional
+
+Foram adicionados `scripts/validate_docker_runtime.sh`, que sobe, verifica, reinicia e verifica novamente os serviços, `scripts/load_test.py` para carga read-only e `ops/Caddyfile.example` para referência de proxy TLS. O runbook e a tabela de gates Classe A foram atualizados.
+
+Validação local: `bash -n`, `py_compile`, release check, lint focalizado, compileall, 27 testes focados, smoke da API e smoke multi-tenant passaram. A execução real do script Docker, carga em ambiente implantado, TLS, backup/restore, Redis/Qdrant e MT5 Demo continua dependente do host autorizado.

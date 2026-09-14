@@ -13,10 +13,10 @@ Este documento separa claramente o que foi verificado no repositório do que dep
 | PostgreSQL persistente | EXTERNO | Reiniciar container, verificar dados e restaurar backup |
 | Redis persistente | EXTERNO | Validar AOF, reinício e comportamento de fila/cache |
 | Qdrant persistente | EXTERNO | Inserir, reiniciar e recuperar coleção vetorial |
-| Docker Compose | ESTRUTURALMENTE VALIDADO | Executar `docker compose config`, `build` e `up` no host autorizado |
+| Docker Compose | ESTRUTURALMENTE VALIDADO | Executar `scripts/validate_docker_runtime.sh` no host autorizado |
 | TLS e domínio | EXTERNO | Configurar proxy reverso, certificado, HSTS e DNS |
 | Backups | IMPLEMENTADO / EXTERNO | Scripts existem; testar restauração em host separado |
-| Teste de carga | PENDENTE | Executar com limites de CPU, memória e conexões definidos |
+| Teste de carga | SCRIPT DISPONÍVEL / PENDENTE | Executar `scripts/load_test.py` com limites de CPU, memória e conexões definidos |
 | Segurança multi-tenant | PARCIAL | Testes de isolamento e RBAC locais; falta teste dinâmico autenticado no deployment |
 | MT5 Demo | PENDENTE EXTERNO | Terminal, conta Demo, `order_check`, `order_send`, fill e reconciliação |
 | Painel administrativo | PARCIAL | Endpoints Admin existem; UI completa de gestão ainda requer validação de produto |
