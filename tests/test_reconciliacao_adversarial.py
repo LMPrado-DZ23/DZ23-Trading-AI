@@ -78,7 +78,7 @@ class TestTodasAsOrdensNaoTerminaisSaoConferidas:
             consultas.append(coid)
             return {"status": "canceled"}
 
-        coord.reconciliar(consultar, consultar_posicoes=lambda: {})
+        coord.reconciliar(consultar, consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
         assert consultas == ["coid-1"], (
             f"ordem em {estado.value} NÃO foi conferida na corretora")
 
@@ -92,7 +92,7 @@ class TestTodasAsOrdensNaoTerminaisSaoConferidas:
         res = reserva(risco)
         coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
         rel = coord.reconciliar(lambda coid: {"status": "open"},
-                                consultar_posicoes=lambda: {})
+                                consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
         assert rel["seguro"] is False
         assert coord.reconciliacao_pendente is True
 
@@ -104,7 +104,7 @@ class TestPosicoesSaoComparadasComACorretora:
         """Local não sabe da posição; a corretora tem 0.5 BTC."""
         m, risco, _, coord = sistema()
         rel = coord.reconciliar(_confirma_ausencia,
-                                consultar_posicoes=lambda: {"BTC/USDT": "0.5"})
+                                consultar_posicoes=lambda: {"BTC/USDT": "0.5"}, consultar_ordens_abertas=lambda: [])
         assert rel["seguro"] is False
         assert any("POSICAO_ORFA_REMOTA" in d for d in rel["divergencias"])
 
@@ -113,7 +113,7 @@ class TestPosicoesSaoComparadasComACorretora:
         livro.reserve(Decimal("150"), ref="r")
         livro.fill_buy("BTC/USDT", Decimal("1.5"), Decimal("100"), Decimal("0"),
                        reserved=Decimal("150"), ref="o", agent_id="t")
-        rel = coord.reconciliar(_confirma_ausencia, consultar_posicoes=lambda: {})
+        rel = coord.reconciliar(_confirma_ausencia, consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
         assert rel["seguro"] is False
         assert any("POSICAO_AUSENTE_REMOTA" in d for d in rel["divergencias"])
         assert livro.open_positions_detail(), "posição apagada silenciosamente"
@@ -124,7 +124,7 @@ class TestPosicoesSaoComparadasComACorretora:
         livro.fill_buy("BTC/USDT", Decimal("0.5"), Decimal("100"), Decimal("0"),
                        reserved=Decimal("150"), ref="o", agent_id="t")
         rel = coord.reconciliar(_confirma_ausencia,
-                                consultar_posicoes=lambda: {"BTC/USDT": "0.7"})
+                                consultar_posicoes=lambda: {"BTC/USDT": "0.7"}, consultar_ordens_abertas=lambda: [])
         assert rel["seguro"] is False
         assert any("QUANTIDADE_DIVERGENTE" in d for d in rel["divergencias"])
 
@@ -150,7 +150,7 @@ class TestFillRemotoEntraNoLivro:
         rel = coord.reconciliar(
             lambda coid: {"id": "ex-9", "status": "filled",
                           "filled": "1.5", "average": "100", "fee": "0.15"},
-            consultar_posicoes=lambda: {"BTC/USDT": "1.5"},
+            consultar_posicoes=lambda: {"BTC/USDT": "1.5"}, consultar_ordens_abertas=lambda: [],
             consultar_fills=lambda coid, exid="": [{"fill_id": "t-ex9", "quantity": Decimal("1.5"), "price": Decimal("100"), "fee": Decimal("0"), "side": "buy"}],)
 
         assert rel["seguro"] is True, rel["divergencias"]
@@ -172,11 +172,11 @@ class TestFillRemotoEntraNoLivro:
         fills = [{"fill_id": "t-ex9", "quantity": Decimal("1.5"),
                   "price": Decimal("100"), "fee": Decimal("0"), "side": "buy"}]
         coord.reconciliar(lambda coid: remota,
-                          consultar_posicoes=lambda: {"BTC/USDT": "1.5"},
+                          consultar_posicoes=lambda: {"BTC/USDT": "1.5"}, consultar_ordens_abertas=lambda: [],
                           consultar_fills=lambda coid, exid="": fills)
         qtd = coord.ledger.position_quantity("BTC/USDT")
         coord.reconciliar(lambda coid: remota,
-                          consultar_posicoes=lambda: {"BTC/USDT": "1.5"},
+                          consultar_posicoes=lambda: {"BTC/USDT": "1.5"}, consultar_ordens_abertas=lambda: [],
                           consultar_fills=lambda coid, exid="": fills)
         assert coord.ledger.position_quantity("BTC/USDT") == qtd, (
             "reconciliar duas vezes dobrou a posição")
@@ -187,7 +187,7 @@ class TestFillRemotoEntraNoLivro:
         res = reserva(risco)
         coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
         rel = coord.reconciliar(lambda coid: {"status": "closed"},
-                                consultar_posicoes=lambda: {})
+                                consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
         assert rel["seguro"] is False
         assert any("RECONCILIACAO_INCOMPLETA" in d for d in rel["divergencias"])
 
@@ -203,7 +203,7 @@ class TestTerminalRemotoLiberaCapital:
         coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
         assert risco.reserved_total == Decimal("150.00")
         coord.reconciliar(lambda coid: {"status": estado},
-                          consultar_posicoes=lambda: {})
+                          consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
         assert risco.reserved_total == Decimal("0"), (
             f"status {estado} deixou capital preso")
         assert risco.available == Decimal("1000")
@@ -215,14 +215,14 @@ class TestLivroBalanceadoNaoEProvaDeIgualdade:
         m, risco, livro, coord = sistema()
         assert livro.is_balanced()
         rel = coord.reconciliar(_confirma_ausencia,
-                                consultar_posicoes=lambda: {"BTC/USDT": "0.5"})
+                                consultar_posicoes=lambda: {"BTC/USDT": "0.5"}, consultar_ordens_abertas=lambda: [])
         assert rel["livro_status"] == "BALANCED"
         assert rel["seguro"] is False, (
             "livro balanceado não pode bastar para declarar SAFE")
 
     def test_report_separates_each_dimension(self):
         m, risco, _, coord = sistema()
-        rel = coord.reconciliar(_confirma_ausencia, consultar_posicoes=lambda: {})
+        rel = coord.reconciliar(_confirma_ausencia, consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
         for campo in ("ordens_status", "posicoes_status", "livro_status",
                       "oms_version", "em"):
             assert campo in rel, f"relatório sem {campo}"
@@ -236,13 +236,13 @@ class TestFrescorDoRelatorio:
         res = reserva(risco)
         coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
         rel = coord.reconciliar(lambda coid: {"status": "canceled"},
-                                consultar_posicoes=lambda: {})
+                                consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
         versao_no_relatorio = rel["oms_version"]
         # nova mutação financeira
         res2 = reserva(risco)
         coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res2))
         coord.reconciliar(lambda coid: {"status": "canceled"},
-                          consultar_posicoes=lambda: {})
+                          consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
         assert coord.oms_version > versao_no_relatorio, (
             "a versão do OMS não avançou: um relatório antigo continuaria "
             "valendo depois de o estado mudar")
@@ -265,7 +265,7 @@ class TestSemConsultaRemotaNuncaEMatched:
         def explode():
             raise RuntimeError("exchange fora do ar")
 
-        rel = coord.reconciliar(_confirma_ausencia, consultar_posicoes=explode)
+        rel = coord.reconciliar(_confirma_ausencia, consultar_posicoes=explode, consultar_ordens_abertas=lambda: [])
         assert rel["posicoes_status"] == "UNKNOWN" and rel["seguro"] is False
 
 
@@ -310,7 +310,7 @@ class TestVendaReconciliadaFechaPosicao:
         rel = coord.reconciliar(
             lambda coid: {"id": "ex-sell", "status": "filled", "filled": "1",
                           "average": "110", "fee": "0.5"},
-            consultar_posicoes=lambda: {},
+            consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [],
             consultar_fills=lambda coid, exid="": [{"fill_id": "s-110", "quantity": Decimal("1"), "price": Decimal("110"), "fee": Decimal("0"), "side": "sell"}],)
 
         assert livro.position_quantity("BTC/USDT") == Decimal("0"), (
@@ -326,7 +326,7 @@ class TestVendaReconciliadaFechaPosicao:
         coord.reconciliar(
             lambda coid: {"id": "ex", "status": "filled", "filled": "1",
                           "average": "80", "fee": "0"},
-            consultar_posicoes=lambda: {},
+            consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [],
             consultar_fills=lambda coid, exid="": [{"fill_id": "s-80", "quantity": Decimal("1"), "price": Decimal("80"), "fee": Decimal("0"), "side": "sell"}],)
         assert coord.perda_do_dia == Decimal("20"), (
             "prejuízo descoberto na reconciliação não alimentou o freio diário")
@@ -337,7 +337,7 @@ class TestVendaReconciliadaFechaPosicao:
         coord.reconciliar(
             lambda coid: {"id": "ex", "status": "filled", "filled": "1",
                           "average": "110", "fee": "0"},
-            consultar_posicoes=lambda: {},
+            consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [],
             consultar_fills=lambda coid, exid="": [{"fill_id": "s-110", "quantity": Decimal("1"), "price": Decimal("110"), "fee": Decimal("0"), "side": "sell"}],)
         assert "BTC/USDT" not in livro.open_positions_detail()
 
@@ -423,7 +423,7 @@ class TestVersaoDoOmsSobreviveAoRestart:
         m, risco, _, coord = sistema()
         res = reserva(risco)
         coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
-        coord.reconciliar(_confirma_ausencia, consultar_posicoes=lambda: {})
+        coord.reconciliar(_confirma_ausencia, consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
         versao = coord.oms_version
         assert versao > 0
         doc = coord.snapshot_estado()
@@ -437,14 +437,14 @@ class TestVersaoDoOmsSobreviveAoRestart:
         m, risco, _, coord = sistema()
         res = reserva(risco)
         coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
-        coord.reconciliar(_confirma_ausencia, consultar_posicoes=lambda: {})
+        coord.reconciliar(_confirma_ausencia, consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
         doc = coord.snapshot_estado()
         m2, risco2, _, coord2 = sistema()
         coord2.restaurar_estado(doc)
         antes = coord2.oms_version
         res2 = reserva(risco2)
         coord2.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res2))
-        coord2.reconciliar(_confirma_ausencia, consultar_posicoes=lambda: {})
+        coord2.reconciliar(_confirma_ausencia, consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
         assert coord2.oms_version > antes
 
 
@@ -459,7 +459,7 @@ class TestOrdemForaDaJanelaMantemReserva:
         rel = coord.reconciliar(
             lambda coid: {"resultado": "UNKNOWN", "ordem": None,
                           "motivo": "fora da janela consultada"},
-            consultar_posicoes=lambda: {})
+            consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
         assert rel["seguro"] is False
         assert risco.reserved_total == Decimal("150.00"), (
             "capital devolvido sobre ordem de destino desconhecido")
@@ -569,7 +569,7 @@ class TestInvalidOrderNaoProvaAusencia:
         coord.reconciliar(
             lambda coid: {"resultado": "UNKNOWN", "ordem": None,
                           "motivo": "InvalidOrder na consulta"},
-            consultar_posicoes=lambda: {})
+            consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
         assert risco.reserved_total == Decimal("150.00")
 
 

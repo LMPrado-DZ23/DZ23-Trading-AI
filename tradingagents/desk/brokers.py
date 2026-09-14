@@ -192,6 +192,19 @@ class CCXTDeskBroker:
         from .capabilities import detectar_capacidades
         return detectar_capacidades(self.bridge._ex)
 
+    def fetch_open_orders(self) -> list:
+        """Ordens ABERTAS da conta — inclusive as que este sistema não criou."""
+        ex = self.bridge._ex
+        if not hasattr(ex, "fetch_open_orders"):
+            raise BrokerConsultaIndisponivel(
+                "corretora não expõe consulta de ordens abertas")
+        try:
+            return ex.fetch_open_orders() or []
+        except Exception as exc:
+            raise BrokerConsultaIndisponivel(
+                f"consulta de ordens abertas falhou ({type(exc).__name__})"
+            ) from exc
+
     def fetch_positions(self) -> dict:
         """Posições por instrumento, em Decimal. Zero é omitido."""
         ex = self.bridge._ex

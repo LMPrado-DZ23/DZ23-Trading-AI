@@ -248,7 +248,8 @@ class ExecutionCoordinator:
         self.motivo_bloqueio = motivo
 
     def reconciliar(self, consultar_corretora=None, *,
-                    consultar_posicoes=None, consultar_fills=None) -> dict:
+                    consultar_posicoes=None, consultar_fills=None,
+                    consultar_ordens_abertas=None) -> dict:
         """Confere o estado local com a CORRETORA. Exchange-first.
 
         A auditoria encontrou três buracos na versão anterior, todos capazes
@@ -310,7 +311,18 @@ class ExecutionCoordinator:
         if restantes:
             relatorio["divergencias"].append(
                 f"ordens ainda abertas na corretora: {', '.join(restantes[:5])}")
-        relatorio["ordens_status"] = "MATCHED" if not restantes else "MISMATCH"
+
+        # ORDENS ÓRFÃS: o que existe na CORRETORA e o sistema desconhece.
+        # Sem esta consulta, "não tenho ordens" não prova "não há ordens" — e
+        # uma ordem viva sem posição e sem execução não deixa outro rastro.
+        orfas_status = self._conferir_ordens_remotas(consultar_ordens_abertas,
+                                                     relatorio)
+        if restantes or orfas_status == "MISMATCH":
+            relatorio["ordens_status"] = "MISMATCH"
+        elif orfas_status == "UNKNOWN":
+            relatorio["ordens_status"] = "UNKNOWN"
+        else:
+            relatorio["ordens_status"] = "MATCHED"
 
         # --- POSIÇÕES: comparação real, não limpeza otimista ---
         relatorio.update(self._conferir_posicoes(consultar_posicoes, relatorio))
@@ -387,6 +399,44 @@ class ExecutionCoordinator:
             relatorio["persistido"] = False
         else:
             relatorio["persistido"] = True
+
+    def _conferir_ordens_remotas(self, consultar_ordens_abertas,
+                                 relatorio: dict) -> str:
+        """Compara o conjunto de ordens ABERTAS da corretora com o local."""
+        if consultar_ordens_abertas is None:
+            relatorio["divergencias"].append(
+                "ordens abertas na corretora não foram consultadas: pode "
+                "existir ordem viva que este sistema desconhece")
+            return "UNKNOWN"
+        try:
+            remotas = consultar_ordens_abertas() or []
+        except Exception as exc:
+            relatorio["divergencias"].append(
+                f"consulta de ordens abertas falhou ({type(exc).__name__})")
+            return "UNKNOWN"
+
+        conhecidas = set()
+        for r in self.orders.values():
+            for chave in (r.external_id, r.client_order_id, r.order_id):
+                if chave:
+                    conhecidas.add(str(chave))
+
+        orfas = []
+        for o in remotas:
+            identidades = {str(v) for v in (
+                o.get("id"), o.get("clientOrderId"),
+                (o.get("info") or {}).get("clientOrderId")) if v}
+            if identidades & conhecidas:
+                continue
+            orfas.append(o)
+
+        for o in orfas:
+            relatorio["divergencias"].append(
+                f"ORDEM_ORFA_REMOTA {o.get('id') or '?'}: ordem viva em "
+                f"{o.get('symbol') or '?'} ({o.get('side') or '?'} "
+                f"{o.get('amount') or '?'}) que este sistema não conhece — "
+                "NÃO foi adotada nem cancelada automaticamente")
+        return "MISMATCH" if orfas else "MATCHED"
 
     def _conferir_posicoes(self, consultar_posicoes, relatorio: dict) -> dict:
         """Compara posição local com a da corretora. Sem a consulta, o

@@ -27,7 +27,7 @@ def sistema(conta="conta-1", tenant="tenant-A"):
 def reconciliar_limpo(coord):
     return coord.reconciliar(
         lambda coid: {"resultado": "CONFIRMED_NOT_FOUND", "ordem": None},
-        consultar_posicoes=lambda: {},
+        consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [],
         consultar_fills=lambda coid, exid="": [])
 
 

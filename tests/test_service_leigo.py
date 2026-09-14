@@ -356,7 +356,7 @@ def _reconciliar_com_corretora_que_confirma(coord):
     from decimal import Decimal as _D
     posicoes = {i: _D(str(d["quantidade"]))
                 for i, d in coord.ledger.open_positions_detail().items()}
-    return coord.reconciliar(lambda coid: None, consultar_posicoes=lambda: posicoes)
+    return coord.reconciliar(lambda coid: None, consultar_posicoes=lambda: posicoes, consultar_ordens_abertas=lambda: [])
 
 
 class TestDinheiroRealNoServico:

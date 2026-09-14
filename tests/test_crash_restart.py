@@ -166,7 +166,9 @@ class TestCrashDepoisDeEnviarComRespostaAmbigua:
         # A posição também é conferida: a corretora informa 1.5 BTC, que é
         # exatamente o que o fill reconciliado cria no livro.
         relatorio = coord2.reconciliar(
-            consultar, consultar_posicoes=lambda: {"BTC/USDT": Decimal("1.5")},
+            consultar,
+            consultar_posicoes=lambda: {"BTC/USDT": Decimal("1.5")},
+            consultar_ordens_abertas=lambda: [],
             consultar_fills=consultar_fills)
         assert relatorio["ordens_conferidas"] == 1
         assert relatorio["seguro"] is True, relatorio["divergencias"]
@@ -193,7 +195,7 @@ class TestCrashDepoisDeEnviarComRespostaAmbigua:
 
         relatorio = coord2.reconciliar(
             lambda coid: {"resultado": "CONFIRMED_NOT_FOUND", "ordem": None},
-            consultar_posicoes=lambda: {})
+            consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
         assert relatorio["seguro"] is True, relatorio["divergencias"]
         assert risco2.available == Decimal("1000"), (
             "ordem inexistente na corretora deve devolver o capital")
@@ -420,7 +422,7 @@ class TestSaidaPassaPeloOms:
             lambda coid: {"resultado": "FOUND", "ordem": {
                 "id": "ex-sell", "status": "filled", "filled": "1",
                 "average": "110", "fee": "0"}},
-            consultar_posicoes=lambda: {},
+            consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [],
             consultar_fills=lambda coid, exid="": [{"fill_id": "s-crash", "quantity": Decimal("1"), "price": Decimal("110"), "fee": Decimal("0"), "side": "sell"}],)
         # o restore substitui o livro pelo reconstruído dos lançamentos
         assert coord2.ledger.position_quantity("BTC/USDT") == Decimal("0"), (
@@ -538,7 +540,7 @@ class TestCustoDeReferenciaSobreviveAoRestart:
             lambda coid: {"resultado": "FOUND", "ordem": {
                 "id": "ex", "status": "filled", "filled": "1",
                 "average": "90", "fee": "0"}},
-            consultar_posicoes=lambda: {},
+            consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [],
             consultar_fills=lambda coid, exid="": [{"fill_id": "s-90", "quantity": Decimal("1"), "price": Decimal("90"), "fee": Decimal("0"), "side": "sell"}],)
         # vendeu a 90 o que custou 100 => prejuízo de 10, nunca lucro de 90
         assert coord2.perda_do_dia == Decimal("10"), (

@@ -16,6 +16,9 @@ class ExchangeCompleta:
     id = "binance"
     urls = {"test": "https://testnet"}
 
+    def fetch_open_orders(self, *a, **k):
+        return []
+
     def fetch_order(self, oid, symbol=None):
         return {}
 
@@ -92,7 +95,7 @@ class TestRelatorioDeclaraOLimite:
         coord = self._coord(ExchangeCompleta())
         rel = coord.reconciliar(
             lambda coid: {"resultado": "CONFIRMED_NOT_FOUND", "ordem": None},
-            consultar_posicoes=lambda: {},
+            consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [],
             consultar_fills=lambda coid, exid="": [])
         assert "capacidades" in rel, "relatório não declara o que pôde verificar"
         assert rel["capacidades"]["exchange"] == "binance"
@@ -101,7 +104,7 @@ class TestRelatorioDeclaraOLimite:
         coord = self._coord(ExchangeSemTrades())
         rel = coord.reconciliar(
             lambda coid: {"resultado": "CONFIRMED_NOT_FOUND", "ordem": None},
-            consultar_posicoes=lambda: {})
+            consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
         assert any("CAPACIDADE_AUSENTE" in d for d in rel["limitacoes"]), (
             "limitação estrutural apareceu como divergência comum")
 
@@ -109,7 +112,7 @@ class TestRelatorioDeclaraOLimite:
         coord = self._coord(ExchangeSemTrades())
         rel = coord.reconciliar(
             lambda coid: {"resultado": "CONFIRMED_NOT_FOUND", "ordem": None},
-            consultar_posicoes=lambda: {})
+            consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
         assert "limitacoes" in rel and "divergencias" in rel
         assert rel["limitacoes"] != rel["divergencias"]
 
@@ -128,14 +131,14 @@ class TestRelatorioDeclaraOLimite:
             client_order_id="coid-1", agent_id="A")
         rel = coord.reconciliar(
             lambda coid: {"resultado": "UNKNOWN", "ordem": None, "motivo": "x"},
-            consultar_posicoes=lambda: {})
+            consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
         assert rel["seguro"] is False
 
     def test_nothing_to_verify_can_still_be_safe(self):
         coord = self._coord(ExchangeSemBuscaDireta())
         rel = coord.reconciliar(
             lambda coid: {"resultado": "UNKNOWN", "ordem": None, "motivo": "x"},
-            consultar_posicoes=lambda: {})
+            consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
         assert rel["seguro"] is True
         assert rel["limitacoes"], "a limitação precisa aparecer mesmo no SAFE"
 

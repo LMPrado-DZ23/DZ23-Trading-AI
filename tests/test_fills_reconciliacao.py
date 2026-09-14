@@ -74,6 +74,7 @@ class TestFillsIndividualizados:
         ]
         rel = coord.reconciliar(lambda coid: ordem_remota(),
                                 consultar_posicoes=lambda: {"BTC/USDT": Decimal("1.5")},
+            consultar_ordens_abertas=lambda: [],
                                 consultar_fills=lambda coid, exid="": fills)
         rec = coord.orders["ord-1"]
         assert rec.seen_fills == {"t-1", "t-2", "t-3"}, (
@@ -92,6 +93,7 @@ class TestFillsIndividualizados:
         for _ in range(3):
             coord.reconciliar(lambda coid: ordem_remota(),
                               consultar_posicoes=lambda: {"BTC/USDT": Decimal("1.5")},
+            consultar_ordens_abertas=lambda: [],
                               consultar_fills=lambda coid, exid="": fills)
         assert coord.ledger.position_quantity("BTC/USDT") == Decimal("1.5"), (
             "reconciliar de novo duplicou a posição")
@@ -112,7 +114,7 @@ class TestAcumuladoEApenasInvariante:
         fills = [{"fill_id": "t-1", "quantity": Decimal("1.0"),
                   "price": Decimal("100"), "fee": Decimal("0"), "side": "buy"}]
         rel = coord.reconciliar(lambda coid: ordem_remota(filled="1.5"),
-                                consultar_posicoes=lambda: {"BTC/USDT": Decimal("1.0")},
+                                consultar_posicoes=lambda: {"BTC/USDT": Decimal("1.0", consultar_ordens_abertas=lambda: [])},
                                 consultar_fills=lambda coid, exid="": fills)
         assert rel["seguro"] is False
         assert any("FILLS_DIVERGEM" in d for d in rel["divergencias"])
@@ -125,6 +127,7 @@ class TestAcumuladoEApenasInvariante:
                   "price": Decimal("100"), "fee": Decimal("0"), "side": "buy"}]
         rel = coord.reconciliar(lambda coid: ordem_remota(),
                                 consultar_posicoes=lambda: {"BTC/USDT": Decimal("1.5")},
+            consultar_ordens_abertas=lambda: [],
                                 consultar_fills=lambda coid, exid="": fills)
         assert rel["fills_status"] == "MATCHED"
 
@@ -135,7 +138,7 @@ class TestSemFillsNaoSeInventa:
         res = reserva(risco)
         coord.restaurar_estado(doc(res))
         rel = coord.reconciliar(lambda coid: ordem_remota(),
-                                consultar_posicoes=lambda: {})
+                                consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
         assert rel["fills_status"] == "UNKNOWN"
         assert rel["seguro"] is False
         assert coord.ledger.position_quantity("BTC/USDT") == Decimal("0"), (
@@ -150,7 +153,7 @@ class TestSemFillsNaoSeInventa:
             raise RuntimeError("exchange fora do ar")
 
         rel = coord.reconciliar(lambda coid: ordem_remota(),
-                                consultar_posicoes=lambda: {},
+                                consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [],
                                 consultar_fills=explode)
         assert rel["fills_status"] == "UNKNOWN" and rel["seguro"] is False
 
@@ -160,7 +163,7 @@ class TestSemFillsNaoSeInventa:
         res = reserva(risco)
         coord.restaurar_estado(doc(res))
         rel = coord.reconciliar(lambda coid: ordem_remota(filled="1.5"),
-                                consultar_posicoes=lambda: {},
+                                consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [],
                                 consultar_fills=lambda coid, exid="": [])
         assert rel["seguro"] is False
         assert any("FILLS_DIVERGEM" in d or "sem execuções" in d
@@ -180,7 +183,7 @@ class TestLadoDoFillVemDaExecucao:
         fills = [{"fill_id": "s-1", "quantity": Decimal("1"),
                   "price": Decimal("110"), "fee": Decimal("0"), "side": "sell"}]
         coord.reconciliar(lambda coid: ordem_remota(filled="1"),
-                          consultar_posicoes=lambda: {},
+                          consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [],
                           consultar_fills=lambda coid, exid="": fills)
         assert coord.ledger.position_quantity("BTC/USDT") == Decimal("0")
 
@@ -196,7 +199,7 @@ class TestFillsStatusEntraNoVeredito:
         # ordens e posições batendo; só as execuções não foram consultadas
         rel = coord.reconciliar(
             lambda coid: ordem_remota(filled="0", status="closed"),
-            consultar_posicoes=lambda: {})
+            consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
         assert rel["posicoes_status"] == "MATCHED"
         assert rel["livro_status"] == "BALANCED"
         assert rel["fills_status"] == "UNKNOWN"
@@ -211,7 +214,7 @@ class TestFillsStatusEntraNoVeredito:
                   "price": Decimal("100"), "fee": Decimal("0"), "side": "buy"}]
         rel = coord.reconciliar(
             lambda coid: ordem_remota(filled="1.5"),
-            consultar_posicoes=lambda: {"BTC/USDT": Decimal("0.5")},
+            consultar_posicoes=lambda: {"BTC/USDT": Decimal("0.5", consultar_ordens_abertas=lambda: [])},
             consultar_fills=lambda coid, exid="": fills)
         assert rel["fills_status"] == "MISMATCH" and rel["seguro"] is False
 
