@@ -442,7 +442,7 @@ class TestSegurancaDaSaida:
         oposta, sem ninguém autorizar."""
         from tradingagents.desk.execution import ExecutionRefused
         m, risco, livro, coord, enviadas = self._com_posicao("1")
-        with pytest.raises(ExecutionRefused, match="maior que a posição"):
+        with pytest.raises(ExecutionRefused, match="maior que o lote"):
             coord.close_position(instrument="BTC/USDT", quantity=Decimal("2"),
                                  price=Decimal("110"), cost_basis=Decimal("100"),
                                  agent_id="t")
@@ -771,3 +771,92 @@ class TestPosseDaPosicao:
                              price=Decimal("110"), cost_basis=Decimal("100"),
                              agent_id="position-guardian")
         assert enviadas, "o guardião precisa conseguir encerrar posição órfã"
+
+
+class TestLotesPorAgente:
+    """BLOCKER: position_owner devolvia o agente da COMPRA MAIS RECENTE. Com
+    dois agentes no mesmo instrumento, o último a comprar podia fechar o lote
+    do outro — destruindo a atribuição e deixando o primeiro achando que
+    ainda está exposto."""
+
+    def _dois_agentes(self):
+        m, risco, livro, coord = sistema("10000")
+        livro.reserve(Decimal("100"), ref="rA")
+        livro.fill_buy("BTC/USDT", Decimal("1"), Decimal("100"), Decimal("0"),
+                       reserved=Decimal("100"), ref="oA", agent_id="agente-A")
+        livro.reserve(Decimal("110"), ref="rB")
+        livro.fill_buy("BTC/USDT", Decimal("1"), Decimal("110"), Decimal("0"),
+                       reserved=Decimal("110"), ref="oB", agent_id="agente-B")
+        enviadas = []
+
+        class Conta(CorretoraQueAceita):
+            """Executa ao preço configurado — o preço vem da CORRETORA."""
+            preco = Decimal("120")
+
+            def submit(self, coid, instrument, side, quantity, final_state=None):
+                enviadas.append((coid, quantity))
+                return {"id": f"ex-{coid}", "status": "filled",
+                        "filled": quantity, "average": self.preco,
+                        "fee": Decimal("0"),
+                        "trades": [{"id": f"t-{coid}", "amount": quantity,
+                                    "price": self.preco,
+                                    "fee": {"cost": Decimal("0")}}]}
+
+        coord.broker = Conta()
+        return coord, livro, enviadas
+
+    def test_each_agent_has_its_own_lot(self):
+        coord, livro, _ = self._dois_agentes()
+        lotes = livro.position_lots("BTC/USDT")
+        por_agente = {lote["agente"]: Decimal(lote["quantidade"]) for lote in lotes}
+        assert por_agente == {"agente-A": Decimal("1"), "agente-B": Decimal("1")}
+        assert livro.position_quantity("BTC/USDT") == Decimal("2")
+
+    def test_an_agent_cannot_sell_more_than_its_own_lot(self):
+        from tradingagents.desk.execution import ExecutionRefused
+        coord, livro, enviadas = self._dois_agentes()
+        with pytest.raises(ExecutionRefused):
+            coord.close_position(instrument="BTC/USDT", quantity=Decimal("2"),
+                                 price=Decimal("120"), cost_basis=Decimal("210"),
+                                 agent_id="agente-B")
+        assert not enviadas, "B vendeu o lote de A"
+
+    def test_selling_own_lot_leaves_the_other_intact(self):
+        coord, livro, enviadas = self._dois_agentes()
+        coord.close_position(instrument="BTC/USDT", quantity=Decimal("1"),
+                             price=Decimal("120"), cost_basis=Decimal("110"),
+                             agent_id="agente-B")
+        restantes = {lote["agente"]: Decimal(lote["quantidade"])
+                     for lote in coord.ledger.position_lots("BTC/USDT")}
+        assert restantes.get("agente-A") == Decimal("1"), "o lote de A sumiu"
+        assert restantes.get("agente-B", Decimal("0")) == Decimal("0")
+
+    def test_pnl_goes_to_the_selling_agent(self):
+        coord, livro, _ = self._dois_agentes()
+        coord.close_position(instrument="BTC/USDT", quantity=Decimal("1"),
+                             price=Decimal("120"), cost_basis=Decimal("110"),
+                             agent_id="agente-B")
+        atrib = coord.ledger.attribution()
+        # B comprou a 110 e vendeu a 120: resultado EXATO de +10.
+        # Se o custo viesse da posição agregada (105 por unidade), daria +15 —
+        # é assim que o custo de quem comprou barato contamina quem comprou
+        # caro, e o valor exato é o que pega isso.
+        assert atrib.get("agente-B") == Decimal("10.00000000"), atrib
+        assert "agente-A" not in atrib or atrib["agente-A"] == Decimal("0")
+
+    def test_partial_close_reduces_only_that_lot(self):
+        coord, livro, _ = self._dois_agentes()
+        coord.close_position(instrument="BTC/USDT", quantity=Decimal("0.4"),
+                             price=Decimal("120"), cost_basis=Decimal("44"),
+                             agent_id="agente-B")
+        lotes = {lote["agente"]: Decimal(lote["quantidade"])
+                 for lote in coord.ledger.position_lots("BTC/USDT")}
+        assert lotes["agente-B"] == Decimal("0.6")
+        assert lotes["agente-A"] == Decimal("1")
+
+    def test_lots_sum_to_the_aggregate_position(self):
+        """Invariante: soma dos lotes == posição agregada do livro."""
+        coord, livro, _ = self._dois_agentes()
+        soma = sum(Decimal(lote["quantidade"])
+                   for lote in livro.position_lots("BTC/USDT"))
+        assert soma == livro.position_quantity("BTC/USDT")

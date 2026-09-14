@@ -187,6 +187,61 @@ class Ledger:
             }
         return detalhe
 
+    def position_lots(self, instrument: str) -> list[dict]:
+        """Lotes vivos POR AGENTE, derivados dos lançamentos.
+
+        O dono da posição era o agente da COMPRA MAIS RECENTE: com dois
+        agentes no mesmo instrumento, o último a comprar podia fechar o lote
+        do outro. Aqui cada agente tem seu lote, e a soma dos lotes é
+        exatamente a posição agregada — não existe segunda verdade, tudo sai
+        do mesmo histórico append-only.
+
+        Saídas consomem FIFO dentro do lote do próprio agente.
+        """
+        compras: dict[str, list[dict]] = {}
+        for tx in self._txs:
+            if tx.instrument != instrument or tx.quantity <= ZERO:
+                continue
+            agente = tx.agent_id or "desconhecido"
+            if tx.kind == "fill_buy":
+                custo = sum((e.amount for e in tx.entries
+                             if e.account.startswith("POSITION:")), ZERO)
+                compras.setdefault(agente, []).append(
+                    {"quantidade": tx.quantity, "custo": custo,
+                     "origem": tx.ref, "em": tx.at})
+            elif tx.kind == "fill_sell":
+                restante = tx.quantity
+                for lote in compras.get(agente, []):
+                    if restante <= ZERO:
+                        break
+                    consome = min(lote["quantidade"], restante)
+                    if lote["quantidade"] > 0:
+                        lote["custo"] -= (lote["custo"] * consome
+                                          / lote["quantidade"])
+                    lote["quantidade"] -= consome
+                    restante -= consome
+        saida = []
+        for agente, lotes in compras.items():
+            viva = sum((lote["quantidade"] for lote in lotes), ZERO)
+            custo = sum((lote["custo"] for lote in lotes), ZERO)
+            saida.append({"agente": agente, "instrumento": instrument,
+                          "quantidade": str(viva), "custo_restante": str(custo),
+                          "origem": "DZ23"})
+        return saida
+
+    def lot_quantity(self, instrument: str, agent_id: str) -> Decimal:
+        """Quanto ESTE agente ainda tem — a base para autorizar uma saída."""
+        for lote in self.position_lots(instrument):
+            if lote["agente"] == agent_id:
+                return Decimal(lote["quantidade"])
+        return ZERO
+
+    def lot_cost(self, instrument: str, agent_id: str) -> Decimal:
+        for lote in self.position_lots(instrument):
+            if lote["agente"] == agent_id:
+                return Decimal(lote["custo_restante"])
+        return ZERO
+
     def position_quantity(self, instrument: str) -> Decimal:
         """Quantidade viva do instrumento, somada dos fills registrados."""
         qtd = ZERO

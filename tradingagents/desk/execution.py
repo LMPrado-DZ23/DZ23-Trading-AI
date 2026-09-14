@@ -469,7 +469,8 @@ class ExecutionCoordinator:
                     self.risk.release(reserva["reservation_id"])
         else:
             # SAÍDA: reduz a posição, realiza o resultado e alimenta o freio.
-            custo = self._custo_proporcional(instrumento, quantidade)
+            custo = self._custo_proporcional(instrumento, quantidade,
+                                             rec.agente)
             if custo <= 0:
                 # Livro sem a posição (ex.: posição aberta fora deste livro).
                 # Usa o custo declarado pela saída, proporcional à fatia — e
@@ -496,8 +497,20 @@ class ExecutionCoordinator:
         self.oms_version += 1
         return True
 
-    def _custo_proporcional(self, instrumento: str, quantidade: Decimal) -> Decimal:
-        """Custo de aquisição da fatia vendida, proporcional à posição."""
+    def _custo_proporcional(self, instrumento: str, quantidade: Decimal,
+                            agent_id: str = "") -> Decimal:
+        """Custo de aquisição da fatia vendida.
+
+        Proporcional ao LOTE DO AGENTE quando ele tem lote — usar a posição
+        agregada misturava o custo de quem comprou mais caro com o de quem
+        comprou mais barato, e o resultado ia para o agente errado.
+        """
+        if agent_id:
+            qtd_lote = self.ledger.lot_quantity(instrumento, agent_id)
+            if qtd_lote > 0:
+                custo_lote = self.ledger.lot_cost(instrumento, agent_id)
+                return (custo_lote * quantidade / qtd_lote).quantize(
+                    Decimal("0.00000001"))
         detalhe = self.ledger.open_positions_detail().get(instrumento)
         if not detalhe:
             return Decimal("0")
@@ -688,29 +701,31 @@ class ExecutionCoordinator:
         # NÃO autoriza venda: em spot isso viraria venda a descoberto —
         # exposição na direção oposta, sem ninguém autorizar. E cost_basis é
         # informação contábil, não prova de que existe ativo na corretora.
-        conhecida = self.ledger.position_quantity(instrument)
+        # O que autoriza a saída é o LOTE DO PRÓPRIO AGENTE, não a posição
+        # agregada: com dois agentes no mesmo instrumento, usar o agregado
+        # deixava um fechar o lote do outro.
+        proprio = self.ledger.lot_quantity(instrument, agent_id)
+        privilegiado = agent_id in self.PODEM_FECHAR_DE_TERCEIROS
+        conhecida = (self.ledger.position_quantity(instrument) if privilegiado
+                     else proprio)
         # Posição zero e venda maior que a posição são recusas distintas com
         # mensagens distintas — a segunda também cobriria o caso zero, mas a
         # primeira explica ao operador o que realmente aconteceu.
         if conhecida <= 0:
+            agregada = self.ledger.position_quantity(instrument)
+            if agregada > 0 and not privilegiado:
+                raise ExecutionRefused(
+                    f"{agent_id} não tem lote aberto em {instrument} (a "
+                    f"posição de {agregada} pertence a outro agente)")
             raise ExecutionRefused(
                 f"nenhuma posição conhecida em {instrument}: saída automática "
                 "recusada. Posição aberta fora do sistema precisa ser adotada "
                 "por reconciliação antes de ser encerrada")
         if quantity > conhecida:
             raise ExecutionRefused(
-                f"saída de {quantity} maior que a posição conhecida "
-                f"({conhecida}) em {instrument}")
+                f"saída de {quantity} maior que o lote disponível "
+                f"({conhecida}) em {instrument} para {agent_id}")
 
-        # POSSE: a posição tem dono. Outro agente fechando em silêncio
-        # destruiria a atribuição de resultado e, pior, deixaria o dono
-        # achando que ainda está exposto. Guardião e risco têm passe.
-        dono = self.ledger.position_owner(instrument)
-        if dono and agent_id != dono and agent_id not in self.PODEM_FECHAR_DE_TERCEIROS:
-            raise ExecutionRefused(
-                f"posição em {instrument} pertence a {dono}: {agent_id} não "
-                "pode encerrá-la. Guardião ou gestão de risco têm essa "
-                "prerrogativa, com registro")
 
 
         rec = OrderRecord.__new__(OrderRecord)
