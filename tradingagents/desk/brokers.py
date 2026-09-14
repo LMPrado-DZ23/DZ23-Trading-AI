@@ -9,9 +9,51 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from .execution import BrokerTimeout
+
 
 class BrokerAdapterError(RuntimeError):
-    """Falha na fronteira da corretora — propaga sem inventar resultado."""
+    """Falha ANTES de a requisição poder ter chegado à corretora.
+
+    Só use esta classe quando for possível afirmar que a exchange NÃO
+    recebeu a ordem. Na dúvida, use BrokerTimeout.
+    """
+
+
+# Erros que indicam que a requisição pode ter sido entregue e a resposta se
+# perdeu. Nomes de classe do ccxt e da pilha HTTP, comparados por nome para
+# não exigir o pacote instalado.
+_AMBIGUOS = {
+    "RequestTimeout", "ReadTimeout", "ReadTimeoutError", "Timeout",
+    "ConnectionResetError", "RemoteDisconnected", "ProtocolError",
+    "IncompleteRead", "ChunkedEncodingError", "ConnectionClosed",
+    "NetworkError", "ExchangeNotAvailable", "OperationFailed",
+    "InvalidNonce", "RequestException",
+}
+# Erros que provam que a ordem NÃO foi criada.
+_NAO_CHEGOU = {
+    "AuthenticationError", "PermissionDenied", "InsufficientFunds",
+    "InvalidOrder", "BadSymbol", "ArgumentsRequired", "BadRequest",
+    "NotSupported", "InsecureTransportError", "BrokerSecurityError",
+    "ValueError", "TypeError", "DNSError", "NameResolutionError",
+    "ConnectionRefusedError",
+}
+
+
+def _pode_ter_chegado(exc: BaseException) -> bool:
+    """Fail-closed: o desconhecido é tratado como AMBÍGUO.
+
+    Um erro novo de biblioteca não pode ser silenciosamente classificado
+    como "não chegou" — esse é exatamente o erro que libera capital sobre
+    uma ordem que existe na exchange.
+    """
+    for classe in type(exc).__mro__:
+        nome = classe.__name__
+        if nome in _NAO_CHEGOU:
+            return False
+        if nome in _AMBIGUOS:
+            return True
+    return True                      # desconhecido => ambíguo => reconciliar
 
 
 class CCXTDeskBroker:
@@ -29,14 +71,30 @@ class CCXTDeskBroker:
         self.submitted: dict[str, dict] = {}
 
     def submit(self, client_order_id: str, instrument: str, side: str,
-               quantity: Decimal) -> dict:
+               quantity: Decimal, final_state: dict | None = None) -> dict:
         if client_order_id in self.submitted:
             return self.submitted[client_order_id]   # retry não duplica
+        # Procedência POR ORDEM. O estado fixo do construtor era `{}` em
+        # produção, e o gate recusava tudo: o caminho real nunca chegava à
+        # corretora. Cada ordem agora carrega a prova da própria decisão.
+        estado = final_state if final_state is not None else self.final_state
         try:
             out = self.bridge.submit_order(
-                self.final_state, job_id=client_order_id, symbol=instrument,
+                estado, job_id=client_order_id, symbol=instrument,
                 side=side, amount=float(quantity))
         except Exception as exc:
+            # CLASSIFICAÇÃO OBRIGATÓRIA. Antes, TODA exceção virava
+            # BrokerAdapterError e o executor a interpretava como REJEITADA,
+            # liberando a reserva. Se a exchange tiver recebido a ordem, isso
+            # cria posição órfã e capital prometido duas vezes.
+            #
+            # A pergunta que decide: a requisição PODE ter chegado à
+            # exchange? Se sim, o resultado é AMBÍGUO, nunca "rejeitado".
+            if _pode_ter_chegado(exc):
+                raise BrokerTimeout(
+                    f"envio ambíguo ({type(exc).__name__}): a corretora pode "
+                    "ter recebido a ordem — reconciliar antes de qualquer "
+                    "nova exposição") from exc
             raise BrokerAdapterError(f"{type(exc).__name__}: {exc}"[:300]) from exc
         order = out.get("order") or {}
         result = {

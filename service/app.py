@@ -141,7 +141,24 @@ ALLOWED_KEYS = [
     "ALERTA_TELEGRAM_TOKEN", "ALERTA_TELEGRAM_CHAT", "ALERTA_WEBHOOK_URL",
     "TRANSPARENCIA_PUBLICA", "TRANSPARENCIA_NOME",
 ]
-SECRETish = tuple(k for k in ALLOWED_KEYS if k.endswith(("_KEY", "_SECRET")))
+# Segredo é declarado, NÃO inferido pelo sufixo do nome. A heurística
+# anterior (_KEY/_SECRET) deixava o token do Telegram e a URL de webhook —
+# que costuma embutir credencial — voltarem em TEXTO CLARO pela API para
+# qualquer usuário com permissão de leitura.
+SEGREDOS_DECLARADOS = {
+    "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "GOOGLE_API_KEY",
+    "GROQ_API_KEY", "MISTRAL_API_KEY", "OPENROUTER_API_KEY",
+    "OPENAI_COMPATIBLE_API_KEY", "FRED_API_KEY", "ALPHA_VANTAGE_API_KEY",
+    "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET",
+    "ALERTA_TELEGRAM_TOKEN", "ALERTA_TELEGRAM_CHAT", "ALERTA_WEBHOOK_URL",
+    "LIVE_TRADING_CONFIRM",
+}
+# Rede de segurança: qualquer chave futura com cara de credencial também
+# entra, mesmo que alguém esqueça de declará-la.
+SECRETish = tuple(sorted(
+    {k for k in ALLOWED_KEYS
+     if k in SEGREDOS_DECLARADOS
+     or k.endswith(("_KEY", "_SECRET", "_TOKEN", "_PASSWORD", "_WEBHOOK_URL"))}))
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 bearer = HTTPBearer(auto_error=False)

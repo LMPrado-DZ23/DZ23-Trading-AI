@@ -198,6 +198,9 @@ class OrderIntent:
     owner_worker: str
     expires_at: datetime
     idempotency_key: str = ""
+    # Prova de origem da decisão, exigida pelo gate de capital. Ausente =>
+    # a corretora recusa (fail-closed), e é assim que deve ser.
+    provenance: dict | None = None
 
     def assert_sendable(self, *, worker_id: str, mandate: DeskMandate,
                         now: datetime | None = None) -> None:

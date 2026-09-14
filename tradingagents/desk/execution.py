@@ -21,7 +21,7 @@ from decimal import Decimal
 from enum import Enum
 
 from .ledger import Ledger
-from .models import Action, DeskMandate, MandateError, Mode, OrderIntent
+from .models import Action, DeskMandate, MandateError, Mode, OrderIntent, utcnow
 
 
 class OrderState(str, Enum):
@@ -111,7 +111,11 @@ class PaperBroker:
         return self.price
 
     def submit(self, client_order_id: str, instrument: str, side: str,
-               quantity: Decimal) -> dict:
+               quantity: Decimal, final_state: dict | None = None) -> dict:
+        # `final_state` é a procedência exigida pela corretora real. O paper
+        # não a valida (não há capital em risco), mas aceita o mesmo contrato:
+        # interface diferente entre paper e real é como o caminho de produção
+        # deixa de ser exercitado pelos testes.
         if client_order_id in self.submitted:
             return self.submitted[client_order_id]  # idempotente do lado da corretora
         price = self.price_for(instrument)
@@ -133,6 +137,8 @@ class ExecutionCoordinator:
         self.worker_id = worker_id
         self.broker = broker
         self.orders: dict[str, OrderRecord] = {}
+        self.perda_do_dia = Decimal("0")
+        self.dia_corrente = ""
         self._by_key: dict[str, str] = {}     # idempotency_key -> order_id
 
     # -- envio ---------------------------------------------------------
@@ -164,7 +170,9 @@ class ExecutionCoordinator:
         try:
             result = self.broker.submit(intent.idempotency_key,
                                         intent.reservation.instrument, side,
-                                        intent.reservation.quantity)
+                                        intent.reservation.quantity,
+                                        **({"final_state": intent.provenance}
+                                           if intent.provenance else {}))
         except BrokerTimeout:
             # Ambíguo: pode ter chegado. Nada de retry cego, nada de liberar.
             rec.state = OrderState.UNKNOWN_RECONCILIATION_REQUIRED
@@ -210,13 +218,15 @@ class ExecutionCoordinator:
 
     def close_position(self, *, instrument: str, quantity: Decimal,
                        price: Decimal, cost_basis: Decimal, agent_id: str,
-                       fee: Decimal = Decimal("0"), client_order_id: str = ""
-                       ) -> dict:
+                       fee: Decimal = Decimal("0"), client_order_id: str = "",
+                       provenance: dict | None = None) -> dict:
         """Encerra posição: vende na corretora e REALIZA o resultado no livro.
         Sem isto a mesa acumula compras e nunca mostra lucro ou prejuízo."""
         coid = client_order_id or f"exit-{instrument}-{len(self.orders) + 1}"
         try:
-            result = self.broker.submit(coid, instrument, "sell", quantity)
+            result = self.broker.submit(coid, instrument, "sell", quantity,
+                                        **({"final_state": provenance}
+                                           if provenance else {}))
         except BrokerTimeout:
             return {"estado": "incerto", "motivo": "timeout na saída — reconciliar",
                     "client_order_id": coid}
@@ -225,6 +235,12 @@ class ExecutionCoordinator:
         tx = self.ledger.fill_sell(instrument, quantity, exec_price, exec_fee,
                                    cost_basis=cost_basis, agent_id=agent_id,
                                    ref=coid)
+        # FREIO DIÁRIO ALIMENTADO PELO RESULTADO REALIZADO.
+        # Antes, o contador de perda do dia só era movido por chamada manual
+        # em teste: existia um limite configurável que a operação real nunca
+        # atualizava — o freio não freava nada.
+        realizado = (exec_price * quantity) - cost_basis - exec_fee
+        self.registrar_resultado_realizado(realizado)
         return {"estado": "encerrada", "client_order_id": coid,
                 "preco": str(exec_price), "tx": tx.tx_id,
                 "resultado": str(self.ledger.attribution().get(agent_id, Decimal("0")))}
@@ -266,6 +282,43 @@ class ExecutionCoordinator:
             self.risk.release(rec.intent.reservation.reservation_id)
             rec.note = f"reconciliado: {status} — reserva liberada com segurança"
         return rec
+
+    def registrar_resultado_realizado(self, resultado: Decimal) -> Decimal:
+        """Soma o resultado realizado ao acumulado do dia e propaga à ponte.
+
+        Prejuízo entra como número positivo no contador de perda; lucro
+        abate. A fronteira do dia é UTC explícita — usar hora local faria o
+        limite "reiniciar" em horário arbitrário.
+        """
+        from datetime import timezone as _tz
+        hoje = utcnow().astimezone(_tz.utc).date().isoformat()
+        if self.dia_corrente != hoje:
+            self.dia_corrente = hoje
+            self.perda_do_dia = Decimal("0")
+        if resultado < 0:
+            self.perda_do_dia += -resultado
+        else:
+            self.perda_do_dia = max(Decimal("0"), self.perda_do_dia - resultado)
+        ponte = getattr(self.broker, "bridge", None)
+        if ponte is not None and hasattr(ponte, "set_daily_loss"):
+            ponte.set_daily_loss(self.perda_do_dia)
+        return self.perda_do_dia
+
+    def estado_do_dia(self) -> dict:
+        """Estado durável do freio: precisa sobreviver a reinício."""
+        return {"dia": self.dia_corrente, "perda_do_dia": str(self.perda_do_dia)}
+
+    def restaurar_estado_do_dia(self, doc: dict | None) -> None:
+        if not doc:
+            return
+        from datetime import timezone as _tz
+        hoje = utcnow().astimezone(_tz.utc).date().isoformat()
+        if doc.get("dia") == hoje:          # dia anterior não contamina hoje
+            self.dia_corrente = hoje
+            self.perda_do_dia = Decimal(str(doc.get("perda_do_dia") or "0"))
+            ponte = getattr(self.broker, "bridge", None)
+            if ponte is not None and hasattr(ponte, "set_daily_loss"):
+                ponte.set_daily_loss(self.perda_do_dia)
 
     def pending_reconciliation(self) -> list[OrderRecord]:
         return [r for r in self.orders.values() if r.needs_reconciliation]

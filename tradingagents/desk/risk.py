@@ -133,7 +133,8 @@ class RiskEngine:
 
     # -- intenção ------------------------------------------------------
     def intent(self, reservation: RiskReservation, action: Action, mode,
-               worker_id: str, *, idempotency_key: str = "") -> OrderIntent:
+               worker_id: str, *, idempotency_key: str = "",
+               provenance: dict | None = None) -> OrderIntent:
         if reservation.reservation_id not in self._reservations:
             raise RiskVeto("reserva inexistente ou já liberada")
         if utcnow() >= reservation.expires_at:
@@ -142,7 +143,8 @@ class RiskEngine:
         return OrderIntent(intent_id=uuid.uuid4().hex[:16], reservation=reservation,
                            action=action, mode=mode, owner_worker=worker_id,
                            expires_at=default_expiry(5),
-                           idempotency_key=idempotency_key or uuid.uuid4().hex)
+                           idempotency_key=idempotency_key or uuid.uuid4().hex,
+                           provenance=provenance)
 
 
 __all__ = ["PortfolioAllocator", "RiskEngine", "RiskVeto", "MandateError"]
