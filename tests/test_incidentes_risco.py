@@ -132,13 +132,20 @@ class TestIncidenteSobreviveAoRestart:
         assert ok is False
 
 
+class _AtorAutorizado:
+    """Ator com capacidade real: o nome sozinho não concede poder."""
+    actor_id = "risk-manager-1"
+    capabilities = frozenset({"RESOLVE_RISK_INCIDENT"})
+
+
 class TestResolucaoExigeEvidencia:
     def test_resolving_without_evidence_is_refused(self):
         m, risco, livro, coord = sistema()
         divergencia(coord, risco, livro)
         inc = risco.incidentes_abertos()[0]
         with pytest.raises(ValueError, match="evid"):
-            risco.resolve_risk_incident(inc["incident_id"], actor="operador",
+            risco.resolve_risk_incident(inc["incident_id"],
+                                        actor=_AtorAutorizado(),
                                         evidence="", reason="")
 
     def test_resolving_with_evidence_closes_it(self):
@@ -146,7 +153,7 @@ class TestResolucaoExigeEvidencia:
         divergencia(coord, risco, livro)
         inc = risco.incidentes_abertos()[0]
         risco.resolve_risk_incident(
-            inc["incident_id"], actor="operador",
+            inc["incident_id"], actor=_AtorAutorizado(),
             evidence="extrato da corretora 2026-09-14 confere",
             reason="ajuste manual conferido")
         assert not risco.incidentes_abertos()
@@ -157,13 +164,13 @@ class TestResolucaoExigeEvidencia:
         m, risco, livro, coord = sistema()
         divergencia(coord, risco, livro)
         inc = risco.incidentes_abertos()[0]
-        risco.resolve_risk_incident(inc["incident_id"], actor="op",
+        risco.resolve_risk_incident(inc["incident_id"], actor=_AtorAutorizado(),
                                     evidence="conferido", reason="ok")
         todos = risco.incidentes()
         registro = next(i for i in todos
                         if i["incident_id"] == inc["incident_id"])
         assert registro["status"] == "RESOLVED"
-        assert registro["resolved_by"] == "op"
+        assert registro["resolved_by"] == "risk-manager-1"
         assert registro["resolution_evidence"]
         assert registro["opened_at"], "a abertura precisa continuar visível"
 

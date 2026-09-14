@@ -352,6 +352,18 @@ class RiskEngine:
             self._deficits[k] = Decimal(str(v))
         self._concluidas.update(doc.get("conclusoes") or {})
         self._incidentes.update(doc.get("incidentes") or {})
+        # MIGRAÇÃO: snapshot antigo guardava déficit em `deficits`, sem
+        # incidente. Ignorar significaria perder a violação no reinício —
+        # justamente o tipo de esquecimento que esta rodada veio corrigir.
+        for rid, valor in (doc.get("deficits") or {}).items():
+            chave = f"RESERVATION_DEFICIT:{rid}"
+            if chave in self._incidentes:
+                continue        # já convertido: não duplica
+            self.abrir_incidente(
+                "RESERVATION_DEFICIT", amount=Decimal(str(valor)),
+                reservation_id=rid,
+                evidence="déficit migrado de snapshot anterior ao modelo de "
+                         "incidentes")
 
     def terminalizar(self, reservation_id: str, *, motivo: str) -> Decimal:
         """Encerra a reserva e devolve QUANTO deve voltar ao caixa.
@@ -414,29 +426,53 @@ class RiskEngine:
     def incidentes_abertos(self) -> list[dict]:
         return [i for i in self._incidentes.values() if i["status"] == "OPEN"]
 
-    def resolve_risk_incident(self, incident_id: str, *, actor: str,
-                              evidence: str, reason: str = "") -> dict:
-        """Fecha um incidente COM evidência e autor.
+    CAPACIDADE_RESOLVER = "RESOLVE_RISK_INCIDENT"
 
-        Saldos voltarem a bater sozinhos não resolve nada: o defeito
-        aconteceu, e esquecer porque os números coincidiram depois é como
-        apagar o registro do acidente porque o carro foi consertado.
+    def resolve_risk_incident(self, incident_id: str, *, actor,
+                              evidence: str, reason: str = "") -> dict:
+        """Fecha um incidente: autorização real + evidência + estado corrigido.
+
+        Saldos voltarem a bater sozinhos não resolve nada, e evidência
+        textual é trilha de auditoria — não prova de conserto. A ordem é:
+        corrigir o estado, verificar invariantes, registrar evidência,
+        resolver.
         """
-        if not actor:
-            raise ValueError("resolução exige um responsável identificado")
+        # AUTORIZAÇÃO: o NOME do ator não concede poder. Quem pode encerrar
+        # uma violação financeira precisa portar a capacidade.
+        capacidades = getattr(actor, "capabilities", None)
+        actor_id = getattr(actor, "actor_id", None)
+        if capacidades is None or not actor_id:
+            raise PermissionError(
+                "resolução exige um ator autenticado com capacidades — uma "
+                "string de nome não identifica ninguém")
+        if self.CAPACIDADE_RESOLVER not in capacidades:
+            raise PermissionError(
+                f"{actor_id} não possui {self.CAPACIDADE_RESOLVER}")
         if not evidence or not evidence.strip():
             raise ValueError(
                 "resolução exige evidência: sem ela não há como auditar por "
                 "que a violação deixou de valer")
+
+        # ESTADO ECONÔMICO: se as invariantes ligadas ao incidente ainda
+        # estão quebradas, resolver seria apagar o alarme com o fogo aceso.
+        alvo = next((i for i in self._incidentes.values()
+                     if i["incident_id"] == incident_id), None)
+        if alvo is not None and alvo["status"] == "OPEN":
+            ok, motivo = self._invariantes_de_saldo()
+            if not ok:
+                raise ValueError(
+                    f"estado econômico ainda inconsistente ({motivo}): "
+                    "corrija primeiro, depois resolva o incidente")
         for inc in self._incidentes.values():
             if inc["incident_id"] != incident_id:
                 continue
             if inc["status"] != "OPEN":
                 return inc
+            actor = actor_id
             # O histórico NUNCA é apagado: o registro muda de status.
             inc["status"] = "RESOLVED"
             inc["resolved_at"] = utcnow().isoformat()
-            inc["resolved_by"] = actor
+            inc["resolved_by"] = actor_id
             inc["resolution_evidence"] = f"{evidence.strip()} | {reason}".strip(" |")
             return inc
         raise ValueError(f"incidente {incident_id} não encontrado")
@@ -458,8 +494,24 @@ class RiskEngine:
         return self._concluidas.get(reservation_id)
 
     def deficit_total(self) -> Decimal:
-        """Quanto foi executado ALÉM da cobertura reservada."""
-        return sum(self._deficits.values(), Decimal("0"))
+        """Déficit ATIVO — o que ainda bloqueia a mesa.
+
+        Vinha de `_deficits`, uma segunda máquina de estado paralela ao
+        incidente: resolver o incidente não zerava esta, e o déficit
+        resolvido travava a mesa para sempre, sem caminho de saída. Agora a
+        única fonte é o incidente aberto.
+        """
+        return sum((Decimal(i["amount"]) for i in self.incidentes_abertos()
+                    if i["type"] == "RESERVATION_DEFICIT"), Decimal("0"))
+
+    def historical_deficit_total(self) -> Decimal:
+        """Tudo que já foi executado além da cobertura, resolvido ou não.
+
+        'Aconteceu' e 'continua não resolvido' são perguntas diferentes:
+        misturar as duas ou esconde o histórico, ou bloqueia para sempre.
+        """
+        return sum((Decimal(i["amount"]) for i in self._incidentes.values()
+                    if i["type"] == "RESERVATION_DEFICIT"), Decimal("0"))
 
     def capital_state_consistent(self) -> tuple[bool, str]:
         """O estado de capital fecha com a política?
@@ -475,10 +527,15 @@ class RiskEngine:
                 f"incidente financeiro em aberto: {i['type']} "
                 f"incident_id={i['incident_id']} valor={i['amount']} "
                 f"reserva={i['reservation_id'] or '-'}")
-        deficit = self.deficit_total()
-        if deficit > 0:
-            return False, (f"déficit de cobertura de {deficit}: houve execução "
-                           "mais cara que o capital reservado")
+        return self._invariantes_de_saldo()
+
+    def _invariantes_de_saldo(self) -> tuple[bool, str]:
+        """Conjuntos e valores — sem olhar incidentes.
+
+        Separado porque a RESOLUÇÃO precisa exatamente disto: saber se o
+        estado econômico foi corrigido, sem cair no incidente que está
+        justamente sendo resolvido.
+        """
         if self.carteira is not None:
             reservado_livro = self.carteira.reserved_cash()
             if reservado_livro < 0:
