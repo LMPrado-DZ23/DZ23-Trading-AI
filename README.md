@@ -6,9 +6,10 @@ disputam capital sob um risco determinístico, executam, reconciliam e
 prestam contas — enquanto o dono acompanha tudo numa mesa visual.
 
 > **Aviso:** software experimental de pesquisa e engenharia. Não é
-> recomendação de investimento, não garante lucro e pode causar perdas. A
-> configuração publicada mantém `LIVE_TRADING=false` e
-> `REAL_MONEY_EXECUTION=false`: a mesa opera em **paper/testnet**.
+> recomendação de investimento, não garante lucro e pode causar perdas.
+> O padrão é **paper/testnet**. Operar com **dinheiro real** é possível e
+> exige quatro fechaduras explícitas do dono — leia
+> [LIVE-DINHEIRO-REAL.md](LIVE-DINHEIRO-REAL.md) antes de ligar.
 
 ## O que o sistema faz
 

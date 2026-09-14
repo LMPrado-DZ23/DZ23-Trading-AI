@@ -53,26 +53,36 @@ class TestFailClosed:
             CCXTBridge(env=_env(TRADINGAGENTS_EXCHANGE=ex),
                        journal_path=tmp_path / "j.jsonl")
 
-    def test_live_mode_is_refused_under_platform_policy(self, tmp_path):
-        """Invariante da plataforma nesta árvore: LIVE_TRADING=false. O modo
-        live foi removido da ponte. DECISÃO PENDENTE DO DONO: ele havia
-        autorizado live por frase antes da unificação — enquanto não decidir,
-        recusar é o comportamento correto."""
-        with pytest.raises(BrokerSecurityError, match="testnet"):
+    def test_live_without_the_owner_phrase_is_refused(self, tmp_path):
+        with pytest.raises(BrokerSecurityError, match="LIVE_TRADING_CONFIRM"):
             CCXTBridge(env=_env(TRADINGAGENTS_BROKER_MODE="live"),
                        journal_path=tmp_path / "j.jsonl")
         with pytest.raises(BrokerSecurityError):
             CCXTBridge(env=_env(TRADINGAGENTS_BROKER_MODE="live",
-                                LIVE_TRADING_CONFIRM="EU AUTORIZO OPERAR COM DINHEIRO REAL"),
+                                LIVE_TRADING_CONFIRM="autorizo"),
                        journal_path=tmp_path / "j.jsonl")
 
-    def test_no_hidden_live_path_in_the_bridge(self):
-        import inspect
+    def test_live_requires_explicit_money_limits(self, tmp_path):
+        """Sem teto, um erro de cálculo vira ordem do tamanho da conta."""
+        from tradingagents.brokers.ccxt_bridge import LIVE_CONFIRM_PHRASE
+        base = _env(TRADINGAGENTS_BROKER_MODE="live",
+                    LIVE_TRADING_CONFIRM=LIVE_CONFIRM_PHRASE)
+        with pytest.raises(BrokerSecurityError, match="LIVE_MAX_ORDER_VALUE"):
+            CCXTBridge(env=base, journal_path=tmp_path / "j.jsonl")
+        with pytest.raises(BrokerSecurityError, match="LIVE_MAX_DAILY_LOSS"):
+            CCXTBridge(env={**base, "LIVE_MAX_ORDER_VALUE": "100"},
+                       journal_path=tmp_path / "j.jsonl")
 
-        from tradingagents.brokers import ccxt_bridge
-        fonte = inspect.getsource(ccxt_bridge)
-        assert "set_sandbox_mode(True)" in fonte
-        assert "LIVE_CONFIRM_PHRASE" not in fonte
+    def test_live_boots_with_phrase_and_limits(self, tmp_path):
+        from tradingagents.brokers.ccxt_bridge import LIVE_CONFIRM_PHRASE
+        b = CCXTBridge(env=_env(TRADINGAGENTS_BROKER_MODE="live",
+                                LIVE_TRADING_CONFIRM=LIVE_CONFIRM_PHRASE,
+                                LIVE_MAX_ORDER_VALUE="250",
+                                LIVE_MAX_DAILY_LOSS="500"),
+                       journal_path=tmp_path / "j.jsonl")
+        st = b.status()
+        assert st["mode"] == "live" and st["sandbox"] is False
+        assert st["teto_por_ordem"] == "250" and st["parada_emergencia"] is False
 
 
 class TestGateIsMandatory:
@@ -142,3 +152,92 @@ class TestAliasesMatchDecision:
         assert set(EXCHANGE_ALIASES) == {"binance", "bybit", "okx", "coinbase",
                                          "kraken", "gateio", "kucoin",
                                          "mercadobitcoin", "bitget"}
+
+
+class TestDinheiroRealTemFreios:
+    """Live existe por decisão do dono — e vem com freios que ele controla."""
+
+    def _live(self, tmp_path, **extra):
+        from tradingagents.brokers.ccxt_bridge import LIVE_CONFIRM_PHRASE
+        env = _env(TRADINGAGENTS_BROKER_MODE="live",
+                   LIVE_TRADING_CONFIRM=LIVE_CONFIRM_PHRASE,
+                   LIVE_MAX_ORDER_VALUE="1000", LIVE_MAX_DAILY_LOSS="300")
+        env.update(extra)
+        b = CCXTBridge(env=env, journal_path=tmp_path / "j.jsonl")
+        b._ex.fetch_ticker = lambda s: {"last": 100}
+        b._ex.create_order = lambda *a, **k: {"id": "ord-real", "status": "closed",
+                                              "filled": a[3], "average": 100}
+        return b
+
+    def test_order_within_limit_goes_through(self, tmp_path):
+        b = self._live(tmp_path)
+        out = b.submit_order(SECURE_STATE, job_id="j1", symbol="BTC/USDT",
+                             side="buy", amount=1)          # 1 x 100 = 100
+        assert out["order"]["id"] == "ord-real"
+
+    def test_order_above_the_cap_is_refused_before_the_network(self, tmp_path):
+        b = self._live(tmp_path)
+        chamou = {"n": 0}
+        b._ex.create_order = lambda *a, **k: chamou.__setitem__("n", 1)
+        with pytest.raises(BrokerSecurityError, match="teto por ordem"):
+            b.submit_order(SECURE_STATE, job_id="j2", symbol="BTC/USDT",
+                           side="buy", amount=50)            # 50 x 100 = 5000
+        assert chamou["n"] == 0
+
+    def test_no_price_means_no_order(self, tmp_path):
+        b = self._live(tmp_path)
+
+        def sem_preco(_):
+            raise RuntimeError("exchange fora do ar")
+
+        b._ex.fetch_ticker = sem_preco
+        with pytest.raises(BrokerSecurityError, match="sem preço"):
+            b.submit_order(SECURE_STATE, job_id="j3", symbol="BTC/USDT",
+                           side="buy", amount=1)
+
+    def test_daily_loss_limit_stops_real_money(self, tmp_path):
+        b = self._live(tmp_path)
+        from decimal import Decimal
+        b.register_loss(Decimal("300"))
+        with pytest.raises(BrokerSecurityError, match="perda do dia"):
+            b.submit_order(SECURE_STATE, job_id="j4", symbol="BTC/USDT",
+                           side="buy", amount=1)
+
+    def test_emergency_stop_blocks_and_resume_needs_the_phrase(self, tmp_path):
+        from tradingagents.brokers.ccxt_bridge import LIVE_CONFIRM_PHRASE
+        b = self._live(tmp_path)
+        b.emergency_stop("teste")
+        with pytest.raises(BrokerSecurityError, match="PARADA DE EMERGÊNCIA"):
+            b.submit_order(SECURE_STATE, job_id="j5", symbol="BTC/USDT",
+                           side="buy", amount=1)
+        with pytest.raises(BrokerSecurityError, match="repita a frase"):
+            b.resume("qualquer coisa")
+        b.resume(LIVE_CONFIRM_PHRASE)
+        assert b.submit_order(SECURE_STATE, job_id="j6", symbol="BTC/USDT",
+                              side="buy", amount=1)["order"]["id"]
+
+    def test_capital_gate_still_mandatory_in_live(self, tmp_path):
+        b = self._live(tmp_path)
+        chamou = {"n": 0}
+        b._ex.create_order = lambda *a, **k: chamou.__setitem__("n", 1)
+        with pytest.raises(InsecureTransportError):
+            b.submit_order({}, job_id="j7", symbol="BTC/USDT", side="buy", amount=1)
+        assert chamou["n"] == 0
+
+    def test_live_decisions_are_journaled(self, tmp_path):
+        b = self._live(tmp_path)
+        b.submit_order(SECURE_STATE, job_id="j8", symbol="BTC/USDT",
+                       side="buy", amount=1)
+        linhas = (tmp_path / "j.jsonl").read_text()
+        assert "live_limits_ok" in linhas and "submit_ok" in linhas
+        assert "s-test-000000" not in linhas          # segredo continua fora
+
+
+class TestDocumentacaoDeRiscoExiste:
+    def test_live_guide_states_the_four_locks(self):
+        from pathlib import Path
+        doc = Path("LIVE-DINHEIRO-REAL.md").read_text(encoding="utf-8")
+        for item in ("EU AUTORIZO OPERAR COM DINHEIRO REAL", "LIVE_MAX_ORDER_VALUE",
+                     "LIVE_MAX_DAILY_LOSS", "PARADA DE EMERGÊNCIA",
+                     "não fecha posições sozinho", "irreversíveis"):
+            assert item in doc, f"faltou no guia: {item}"

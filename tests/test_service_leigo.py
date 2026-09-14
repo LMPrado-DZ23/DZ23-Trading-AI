@@ -347,3 +347,55 @@ class TestDominioOficial:
             assert not re.search(r"GOCSPX-[A-Za-z0-9_-]{10,}", texto)
             assert "sb_publishable_" not in texto
             assert "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" not in texto
+
+
+class TestDinheiroRealNoServico:
+    """O caminho de dinheiro real existe e é honesto sobre o que falta."""
+
+    def _c(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = _load_app(tmp_path, monkeypatch)
+        m._FAILS.clear()
+        m._DESKS.clear()
+        return m, TestClient(m.app), {"Authorization": "Bearer s3nh4"}
+
+    def test_checklist_starts_blocked_and_lists_what_is_missing(self, tmp_path, monkeypatch):
+        m, c, h = self._c(tmp_path, monkeypatch)
+        d = c.get("/v1/live/status", headers=h).json()
+        assert d["pode_operar_real"] is False and d["pendencias"] >= 5
+        assert all(i["acao"] for i in d["checklist"] if not i["pronto"])
+        assert "perdas são suas" in d["aviso"]
+
+    def test_checklist_advances_with_the_owner_phrase(self, tmp_path, monkeypatch):
+        m, c, h = self._c(tmp_path, monkeypatch)
+        antes = c.get("/v1/live/status", headers=h).json()["pendencias"]
+        c.post("/v1/config", headers=h, json={"vars": {
+            "LIVE_TRADING_CONFIRM": "EU AUTORIZO OPERAR COM DINHEIRO REAL"}})
+        depois = c.get("/v1/live/status", headers=h).json()
+        assert depois["pendencias"] == antes - 1
+        assert depois["checklist"][0]["pronto"] is True
+
+    def test_wrong_phrase_does_not_unlock(self, tmp_path, monkeypatch):
+        m, c, h = self._c(tmp_path, monkeypatch)
+        c.post("/v1/config", headers=h,
+               json={"vars": {"LIVE_TRADING_CONFIRM": "eu autorizo"}})
+        assert c.get("/v1/live/status", headers=h).json()["checklist"][0]["pronto"] is False
+
+    def test_emergency_stop_halts_everything(self, tmp_path, monkeypatch):
+        m, c, h = self._c(tmp_path, monkeypatch)
+        c.post("/v1/desk/scheduler/start", headers=h)
+        r = c.post("/v1/live/parada-emergencia", headers=h)
+        assert r.status_code == 200 and r.json()["parado"] is True
+        # com a parada acionada, a mesa fica trancada (423) até liberar
+        assert c.get("/v1/desk/status", headers=h).status_code == 423
+        assert c.post("/v1/live/liberar", headers=h,
+                      json={"frase": "qualquer"}).status_code == 422
+        ok = c.post("/v1/live/liberar", headers=h,
+                    json={"frase": "EU AUTORIZO OPERAR COM DINHEIRO REAL"})
+        assert ok.status_code == 200
+        assert c.get("/v1/desk/status", headers=h).status_code == 200
+
+    def test_panel_has_the_panic_button(self):
+        html = Path("service/static/index.html").read_text(encoding="utf-8")
+        assert "PARADA DE EMERGÊNCIA" in html and "paradaEmergencia()" in html
+        assert "liveStatus()" in html

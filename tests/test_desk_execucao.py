@@ -75,7 +75,7 @@ class TestCenario08Idempotencia:
         assert fingerprint(intent) == fingerprint(intent)
         assert len(fingerprint(intent)) == 64
 
-    def test_live_mode_never_reaches_the_broker(self):
+    def test_live_without_mandate_authorization_never_reaches_the_broker(self):
         m, risk, ledger, coord, intent = setup()
         live = type(intent)(intent_id=intent.intent_id, reservation=intent.reservation,
                             action=intent.action, mode=Mode.LIVE,
@@ -83,7 +83,7 @@ class TestCenario08Idempotencia:
                             idempotency_key="k-live-0001")
         with pytest.raises(ExecutionRefused, match="LIVE"):
             coord.submit(live)
-        assert not coord.broker.submitted
+        assert not coord.broker.submitted        # nada chegou à corretora
 
 
 class TestCenario09TimeoutIncerto:

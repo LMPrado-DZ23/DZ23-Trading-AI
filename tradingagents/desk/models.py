@@ -79,6 +79,7 @@ class DeskMandate:
     version: int = 1
     valid_until: datetime | None = None
     revoked_at: datetime | None = None
+    live_authorized: bool = False      # só verdadeiro com a frase do dono
     schema: str = SCHEMA
 
     def assert_active(self, *, instrument: str | None = None,
@@ -90,9 +91,13 @@ class DeskMandate:
             raise MandateError(f"mandato {self.mandate_id} expirado")
         if instrument is not None and instrument not in self.instruments:
             raise MandateError(f"{instrument} fora do mandato {self.mandate_id}")
-        if self.mode is Mode.LIVE:
+        # Modo LIVE é permitido por decisão explícita do dono. A proteção não
+        # é proibir: é exigir que a autorização esteja viva no mandato, com
+        # validade e limites — e que a ponte cobre a frase e os tetos.
+        if self.mode is Mode.LIVE and not self.live_authorized:
             raise MandateError(
-                "modo LIVE não é autorizado nesta missão — use paper/shadow/testnet")
+                "mandato em LIVE sem autorização ativa: confirme em "
+                "'Plano e risco' antes de operar com dinheiro real")
 
 
 @dataclass

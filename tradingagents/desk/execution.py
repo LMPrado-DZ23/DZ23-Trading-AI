@@ -137,8 +137,9 @@ class ExecutionCoordinator:
 
     # -- envio ---------------------------------------------------------
     def submit(self, intent: OrderIntent) -> OrderRecord:
-        if intent.mode is Mode.LIVE:
-            raise ExecutionRefused("LIVE fora da autorização desta missão")
+        if intent.mode is Mode.LIVE and not self.mandate.live_authorized:
+            raise ExecutionRefused(
+                "ordem em LIVE sem autorização ativa no mandato")
         fp = fingerprint(intent)
         known = self._by_key.get(intent.idempotency_key)
         if known:

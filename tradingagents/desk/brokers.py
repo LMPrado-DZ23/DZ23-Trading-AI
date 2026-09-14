@@ -65,7 +65,8 @@ def build_desk_broker(cfg: dict, *, final_state: dict, journal_path: str | None 
         return PaperBroker(paper_price), "paper"
     env = {k: cfg.get(k, "") for k in
            ("TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
-            "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET", "LIVE_TRADING_CONFIRM")}
+            "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET", "LIVE_TRADING_CONFIRM",
+            "LIVE_MAX_ORDER_VALUE", "LIVE_MAX_DAILY_LOSS")}
     broker = CCXTDeskBroker(env, final_state=final_state, journal_path=journal_path)
     return broker, broker.mode
 

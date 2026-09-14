@@ -19,6 +19,7 @@ import hashlib
 import json
 import os
 import time
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from tradingagents.dataflows.redact import redact_secrets
@@ -38,6 +39,16 @@ EXCHANGE_ALIASES = {
 }
 
 
+LIVE_CONFIRM_PHRASE = "EU AUTORIZO OPERAR COM DINHEIRO REAL"
+
+
+def _decimal_env(env, chave: str, padrao: str) -> Decimal:
+    try:
+        return Decimal(str(env.get(chave) or padrao))
+    except (InvalidOperation, ValueError):
+        return Decimal("0")
+
+
 class BrokerSecurityError(RuntimeError):
     """Refusal by construction — live nunca acontece por acidente."""
 
@@ -53,11 +64,38 @@ class CCXTBridge:
             "TRADINGAGENTS_BROKER_JOURNAL", "/data/broker-journal.jsonl"))
 
         # --- fail-closed ANTES de qualquer objeto de rede existir ---
-        if mode != "testnet":
+        if mode not in ("testnet", "live"):
             raise BrokerSecurityError(
-                "TRADINGAGENTS_BROKER_MODE deve ser 'testnet'; modo live removido "
+                "TRADINGAGENTS_BROKER_MODE deve ser 'testnet' ou 'live' "
                 f"(recebido: {mode!r}).")
         self.mode = mode
+        if mode == "live":
+            # DINHEIRO REAL. Três fechaduras independentes, todas do dono:
+            # 1) a frase exata, 2) o teto por ordem, 3) o teto diário.
+            confirm = (env.get("LIVE_TRADING_CONFIRM") or "").strip()
+            if confirm != LIVE_CONFIRM_PHRASE:
+                raise BrokerSecurityError(
+                    "Modo LIVE exige a frase exata do dono em "
+                    f"LIVE_TRADING_CONFIRM: '{LIVE_CONFIRM_PHRASE}'.")
+            if not (self.api_key and self.api_secret):
+                raise BrokerSecurityError(
+                    "Modo LIVE exige EXCHANGE_API_KEY e EXCHANGE_API_SECRET.")
+            self.max_order_value = _decimal_env(
+                env, "LIVE_MAX_ORDER_VALUE", "0")
+            self.max_daily_loss = _decimal_env(env, "LIVE_MAX_DAILY_LOSS", "0")
+            if self.max_order_value <= 0:
+                raise BrokerSecurityError(
+                    "Modo LIVE exige LIVE_MAX_ORDER_VALUE (teto por ordem, na "
+                    "moeda de cotação). Sem teto, um erro de cálculo vira "
+                    "ordem do tamanho da conta.")
+            if self.max_daily_loss <= 0:
+                raise BrokerSecurityError(
+                    "Modo LIVE exige LIVE_MAX_DAILY_LOSS (perda máxima no dia).")
+        else:
+            self.max_order_value = Decimal("0")
+            self.max_daily_loss = Decimal("0")
+        self.kill_switch = False
+        self.realized_loss_today = Decimal("0")
         if self.exchange_name not in EXCHANGE_ALIASES:
             raise BrokerSecurityError(
                 f"exchange {self.exchange_name!r} fora da linha DZ23 "
@@ -99,12 +137,72 @@ class CCXTBridge:
         with open(self.journal_path, "a", encoding="utf-8") as fh:
             fh.write(line + "\n")
 
+    # ---------------------- travas de dinheiro real -------------------
+    def _preco_de_referencia(self, symbol: str) -> Decimal:
+        """Preço para medir o tamanho da ordem. Sem preço confiável, NÃO
+        envia: ordem sem tamanho conhecido é ordem sem teto."""
+        try:
+            ticker = self._ex.fetch_ticker(symbol)
+            preco = ticker.get("last") or ticker.get("close") or ticker.get("bid")
+            if preco:
+                return Decimal(str(preco))
+        except Exception as exc:
+            raise BrokerSecurityError(
+                f"sem preço para medir a ordem em {symbol} "
+                f"({type(exc).__name__}) — envio recusado em modo LIVE") from exc
+        raise BrokerSecurityError(
+            f"sem preço para medir a ordem em {symbol} — envio recusado")
+
+    def _assert_live_limits(self, symbol: str, side: str, amount: Decimal) -> None:
+        if self.kill_switch:
+            raise BrokerSecurityError(
+                "PARADA DE EMERGÊNCIA ativa: nenhum envio em dinheiro real")
+        valor = amount * self._preco_de_referencia(symbol)
+        if valor > self.max_order_value:
+            raise BrokerSecurityError(
+                f"ordem de {valor:.2f} excede o teto por ordem "
+                f"({self.max_order_value}). Aumente LIVE_MAX_ORDER_VALUE "
+                "conscientemente ou reduza a quantidade.")
+        if self.realized_loss_today >= self.max_daily_loss:
+            raise BrokerSecurityError(
+                f"perda do dia ({self.realized_loss_today}) atingiu o limite "
+                f"({self.max_daily_loss}); operações em dinheiro real param "
+                "até você revisar e liberar")
+        self._journal({"ts": time.time(), "event": "live_limits_ok",
+                       "symbol": symbol, "side": side, "valor_estimado": str(valor),
+                       "teto_ordem": str(self.max_order_value)})
+
+    def register_loss(self, valor: Decimal) -> Decimal:
+        """Registra prejuízo realizado do dia — alimenta o freio diário."""
+        if valor > 0:
+            self.realized_loss_today += valor
+        return self.realized_loss_today
+
+    def emergency_stop(self, motivo: str = "acionado pelo dono") -> None:
+        """Botão de pânico: bloqueia envios até reiniciar deliberadamente."""
+        self.kill_switch = True
+        self._journal({"ts": time.time(), "event": "emergency_stop",
+                       "motivo": motivo, "mode": self.mode})
+
+    def resume(self, frase: str) -> None:
+        """Retomar exige a MESMA frase do dono — não é um clique distraído."""
+        if frase.strip() != LIVE_CONFIRM_PHRASE:
+            raise BrokerSecurityError(
+                "para retomar após a parada de emergência, repita a frase de "
+                "autorização")
+        self.kill_switch = False
+        self._journal({"ts": time.time(), "event": "resume", "mode": self.mode})
+
     def status(self) -> dict:
         return {
             "exchange": self.exchange_name,
             "ccxt_id": self._ex.id,
             "mode": self.mode,
             "sandbox": self.mode == "testnet",
+            "teto_por_ordem": str(self.max_order_value),
+            "perda_maxima_dia": str(self.max_daily_loss),
+            "perda_hoje": str(self.realized_loss_today),
+            "parada_emergencia": self.kill_switch,
             "keys_set": bool(self.api_key and self.api_secret),
             "aviso": ("DINHEIRO REAL — autorizado pela frase do dono"
                       if self.mode == "live" else
@@ -119,6 +217,8 @@ class CCXTBridge:
             raise ValueError("side deve ser buy|sell")
         if not (isinstance(amount, (int, float)) and amount > 0):
             raise ValueError("amount deve ser > 0")
+        if self.mode == "live":
+            self._assert_live_limits(symbol, side, Decimal(str(amount)))
         coid = self.client_order_id(job_id, symbol, side)
         params = {"clientOrderId": coid}
         if self._ex.id == "okx":

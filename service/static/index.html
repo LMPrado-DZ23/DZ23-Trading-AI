@@ -50,6 +50,8 @@
 <button class="btn secondary" onclick="feedTest()">Testar dados de mercado</button>
 <button class="btn secondary" onclick="avaliar()">Avaliar equipe</button>
 <button class="btn secondary" onclick="doBackup()">Gerar backup</button>
+<button class="btn secondary" onclick="liveStatus()">Dinheiro real: posso?</button>
+<button class="btn danger" onclick="paradaEmergencia()" style="background:#c0392b;color:#fff">PARADA DE EMERGÊNCIA</button>
 </div><div id="deskMsg" class="message"></div></div>
 <div class="card span-12" id="deskOut"><div class="muted">Carregando...</div></div></div></section>
 <section id="page-floor" class="page"><div class="page-head"><div><h2>Trading Floor</h2><p>Read model oficial de agentes, desks, reuniões e eventos.</p></div><a class="btn secondary" href="/floor" target="_blank" style="text-decoration:none">Abrir tela cheia</a></div><iframe class="floor-frame" src="/floor" title="DZ23 Trading Floor"></iframe></section>
@@ -126,5 +128,12 @@ sessionStorage.setItem('dz23_token',d.access_token);localStorage.setItem('dz23_t
 const me=await api('/v1/auth/me');if(me.ok)enterApp(me.data)}
 async function verSignup(){try{const st=await fetch('/v1/auth/signup-status').then(r=>r.json());
 if(st.habilitado){$('btnCriarConta').classList.remove('hide');$('suInfo').textContent=st.dias_de_teste+' dias grátis; depois a partir de '+(st.planos[0]?st.planos[0].preco:'')+'/mês.'}}catch(e){}}
+async function liveStatus(){const r=await api('/v1/live/status');if(!r.ok)return toast('falhou','bad');const d=r.data;
+$('deskMsg').innerHTML=`<div class="${d.pode_operar_real?'ok':'warn'}"><b>${d.pode_operar_real?'Pronto para operar com dinheiro real':'Faltam '+d.pendencias+' item(ns) para dinheiro real'}</b></div>`+
+d.checklist.map(i=>`<div class="metric-line"><span>${i.pronto?'✔':'○'} ${escapeHtml(i.item)}</span>${i.pronto?'':'<small class="muted">'+escapeHtml(i.acao)+'</small>'}</div>`).join('')+
+`<div class="muted">${escapeHtml(d.aviso)}</div>`}
+async function paradaEmergencia(){if(!confirm('PARAR TUDO agora? Entradas param e envios de ordem são bloqueados.'))return;
+const r=await api('/v1/live/parada-emergencia',{method:'POST'});
+toast(r.ok?'PARADO: envios bloqueados; posições seguem com o guardião':'falhou',r.ok?'ok':'bad');deskLoad()}
 function escapeHtml(value){return String(value??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}boot();verSignup();
 </script></body></html>

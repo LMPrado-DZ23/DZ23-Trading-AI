@@ -133,6 +133,8 @@ ALLOWED_KEYS = [
     "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET",
     "TRADINGAGENTS_DESK_FEED", "TRADINGAGENTS_DESK_BROKER",
     "TRADINGAGENTS_DESK_INSTRUMENTS", "TRADINGAGENTS_DESK_CAPITAL",
+    "LIVE_MAX_ORDER_VALUE", "LIVE_MAX_DAILY_LOSS",
+    "LIVE_TRADING_CONFIRM",
 ]
 SECRETish = tuple(k for k in ALLOWED_KEYS if k.endswith(("_KEY", "_SECRET")))
 
@@ -542,11 +544,14 @@ def broker_status(request: Request, _=Depends(auth)):
     cfg = load_cfg(request_tenant(request))
     env = {k: cfg.get(k, "") for k in
            ("TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
-            "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET")}
+            "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET", "LIVE_TRADING_CONFIRM",
+            "LIVE_MAX_ORDER_VALUE", "LIVE_MAX_DAILY_LOSS")}
     try:
         from tradingagents.brokers.ccxt_bridge import CCXTBridge
         b = CCXTBridge(env=env, journal_path=str(DATA / "broker-journal.jsonl"))
-        return {"ready": True, **b.status(), "nota": "ordens de teste (testnet); modo live removido"}
+        nota = ("DINHEIRO REAL: ordens valem de verdade, respeitando os tetos"
+                if b.mode == "live" else "testnet: ordens de treino")
+        return {"ready": True, **b.status(), "nota": nota}
     except Exception as e:
         return {"ready": False, "erro": f"{type(e).__name__}: {e}"[:400]}
 
@@ -1134,6 +1139,10 @@ def _desk_boot(tenant_id: str) -> dict:
 
 def _desk_of(request: Request) -> dict:
     tid = request_tenant(request)
+    if tid in _LIVE_HALTED:
+        raise HTTPException(
+            423, "parada de emergência acionada: libere em Plano e risco "
+                 "antes de operar novamente")
     desk = _DESKS.get(tid)
     if desk is None:
         desk = _desk_boot(tid)
@@ -1152,6 +1161,8 @@ def _desk_reset(tenant_id: str) -> None:
 def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
     try:
         d = _desk_of(request)
+    except HTTPException:
+        raise                     # 423 da parada de emergência precisa chegar íntegro
     except Exception as exc:
         raise HTTPException(503, f"mesa indisponível: {type(exc).__name__}: {exc}"[:300]) from exc
     orch, led, coord = d["orchestrator"], d["ledger"], d["coordinator"]
@@ -1354,3 +1365,86 @@ def database_health(_=Depends(auth)):
     out["supabase"] = {"configurado": True, "projeto": cfg.project_ref,
                        **check_rest(cfg, chave)}
     return out
+
+
+# ============================================================ DINHEIRO REAL
+# Autorizado pelo dono. Três fechaduras independentes: a frase exata, o teto
+# por ordem e o teto de perda diária — mais a parada de emergência.
+from tradingagents.brokers.ccxt_bridge import LIVE_CONFIRM_PHRASE  # noqa: E402
+
+# Inquilinos com parada de emergência acionada — trava independente da mesa.
+_LIVE_HALTED: set = set()
+
+
+@app.get("/v1/live/status")
+def live_status(request: Request, _=Depends(auth)):
+    """Diz, sem rodeio, se este inquilino pode operar dinheiro real e o que
+    falta para poder."""
+    cfg = load_cfg(request_tenant(request))
+    d = _DESKS.get(request_tenant(request))
+    frase_ok = (cfg.get("LIVE_TRADING_CONFIRM") or "").strip() == LIVE_CONFIRM_PHRASE
+    checklist = [
+        {"item": "Frase de autorização digitada", "pronto": frase_ok,
+         "acao": f"Digite exatamente: {LIVE_CONFIRM_PHRASE}"},
+        {"item": "Chaves da corretora configuradas",
+         "pronto": bool(cfg.get("EXCHANGE_API_KEY") and cfg.get("EXCHANGE_API_SECRET")),
+         "acao": "Cole a chave e o segredo da sua corretora"},
+        {"item": "Teto por ordem definido",
+         "pronto": bool(cfg.get("LIVE_MAX_ORDER_VALUE")),
+         "acao": "Defina LIVE_MAX_ORDER_VALUE (valor máximo de UMA ordem)"},
+        {"item": "Perda máxima diária definida",
+         "pronto": bool(cfg.get("LIVE_MAX_DAILY_LOSS")),
+         "acao": "Defina LIVE_MAX_DAILY_LOSS (quando parar no vermelho)"},
+        {"item": "Modo da corretora em LIVE",
+         "pronto": (cfg.get("TRADINGAGENTS_BROKER_MODE") or "") == "live",
+         "acao": "Troque o modo da corretora para LIVE"},
+        {"item": "Já operou em testnet",
+         "pronto": bool(d and any(r.state.value == "filled"
+                                  for r in d["coordinator"].orders.values())),
+         "acao": "Rode a mesa em testnet e veja uma ordem preenchida antes"},
+    ]
+    faltam = [i for i in checklist if not i["pronto"]]
+    return {"pode_operar_real": not faltam, "checklist": checklist,
+            "pendencias": len(faltam),
+            "aviso": ("Dinheiro real: perdas são suas e irreversíveis. O "
+                      "sistema não promete lucro.")}
+
+
+@app.post("/v1/live/parada-emergencia")
+def live_emergency(request: Request, _=Depends(auth)):
+    """Botão de pânico: bloqueia envio de ordens reais na hora.
+
+    Esta rota NUNCA pode falhar: se a mesa nem inicia (por exemplo, a
+    corretora está mal configurada), parar é trivialmente verdade — e ainda
+    assim marcamos a parada, porque o dono clicou para parar."""
+    tid = request_tenant(request)
+    _LIVE_HALTED.add(tid)
+    d = _DESKS.get(tid)
+    if d is None:
+        return {"ok": True, "parado": True, "a_encerrar": [],
+                "aviso": "nenhuma mesa ativa; envios bloqueados para este "
+                         "inquilino até você liberar"}
+    corretora = d["coordinator"].broker
+    if hasattr(corretora, "bridge"):
+        corretora.bridge.emergency_stop("painel")
+    d["orchestrator"].pause_entries()
+    sched = d["scheduler"]
+    if sched.running:
+        sched.stop()
+    return {"ok": True, "parado": True,
+            "a_encerrar": d["orchestrator"].drain(),
+            "aviso": "entradas paradas e envios bloqueados; posições abertas "
+                     "seguem sob o guardião — encerre-as conscientemente"}
+
+
+@app.post("/v1/live/liberar")
+async def live_resume(req: Request, _=Depends(auth)):
+    """Sair da parada de emergência exige a frase — não é clique distraído."""
+    body = await _json_body(req)
+    if str(body.get("frase", "")).strip() != LIVE_CONFIRM_PHRASE:
+        raise HTTPException(422, f"repita exatamente: {LIVE_CONFIRM_PHRASE}")
+    tid = request_tenant(req)
+    _LIVE_HALTED.discard(tid)
+    _DESKS.pop(tid, None)          # reconstrói limpo no próximo uso
+    return {"ok": True, "liberado": True,
+            "aviso": "envios liberados; confira os tetos antes de retomar"}
