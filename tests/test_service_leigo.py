@@ -335,7 +335,7 @@ class TestDominioOficial:
 
     def test_domain_checklist_exists_with_every_registration(self):
         doc = Path("DOMINIO-E-CADASTROS.md").read_text(encoding="utf-8")
-        for item in ("150.230.85.211", "/v1/webhooks/woovi",
+        for item in ("<IP-DO-SERVIDOR>", "/v1/webhooks/woovi",
                      "/v1/auth/oauth/google/callback",
                      "/v1/auth/oauth/microsoft/callback", "SUPABASE_PROJECT_REF"):
             assert item in doc, f"faltou no checklist: {item}"

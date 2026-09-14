@@ -8,7 +8,7 @@ O domínio ainda não resolve — este é o primeiro passo.
 
 | Tipo  | Nome | Valor                    |
 |-------|------|--------------------------|
-| A     | `@`  | `150.230.85.211`         |
+| A     | `@`  | `<IP-DO-SERVIDOR>` (IP público do servidor onde roda o Coolify) |
 | CNAME | `www`| `dz23trading.com.br`     |
 
 Propagação leva de minutos a algumas horas. Confira com:

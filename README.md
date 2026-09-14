@@ -1,96 +1,89 @@
-# TradingAgents DZ23
+# DZ23 Trading Agency
 
-Framework open source de agência multiagente para pesquisa, debate estruturado, gestão de risco, Paper Trading, Shadow Trading e preparação controlada para MetaTrader 5 Demo.
+Agência autônoma de agentes de trading, operável pelo navegador e vendável
+como serviço: vários traders com estratégias distintas trabalham em ciclos,
+disputam capital sob um risco determinístico, executam, reconciliam e
+prestam contas — enquanto o dono acompanha tudo numa mesa visual.
 
-> **Aviso importante:** este projeto é software experimental para pesquisa e engenharia. Não é recomendação de investimento, não garante lucro e pode causar perdas financeiras. A configuração publicada mantém `LIVE_TRADING=false` e `REAL_MONEY_EXECUTION=false`.
+> **Aviso:** software experimental de pesquisa e engenharia. Não é
+> recomendação de investimento, não garante lucro e pode causar perdas. A
+> configuração publicada mantém `LIVE_TRADING=false` e
+> `REAL_MONEY_EXECUTION=false`: a mesa opera em **paper/testnet**.
 
-## O que existe hoje
+## O que o sistema faz
 
-- Agentes de pesquisa, análise técnica, sentimento, estratégia, risco, portfólio e execução.
-- Contratos tipados entre decisão, risco, ordem, fill, posição, PnL e auditoria.
-- Risk Engine determinístico e `ExecutionRouter` fail-closed.
-- KillSwitch persistente e reconciliação explícita.
-- Paper Ledger persistente.
-- Shadow Trading sem envio de ordens.
-- Backtest e walk-forward.
-- Event Bus, auditoria encadeada, métricas e workers.
-- Agência multi-tenant com usuários, memberships, papéis e sessões assinadas.
-- Backend PostgreSQL opcional para identidade; SQLite para desenvolvimento local.
-- Docker Compose com aplicação, PostgreSQL, Redis, Qdrant e Ollama opcional.
-- Adapter MetaTrader 5 restrito ao modo Demo; validação de conta real depende de ambiente externo.
+**Mesa autônoma (multiagente)**
+- Três traders com estratégias realmente distintas — tendência, reversão à
+  média e rompimento —, cada um com regime de elegibilidade, invalidação da
+  tese e razão explícita quando decide **não** operar.
+- Árbitro de carteira: veta direção oposta no mesmo ativo e resolve disputa
+  por instrumento; um dono operacional por conta/instrumento.
+- Risco determinístico com poder de veto e **reserva atômica** — o mesmo
+  capital nunca é prometido duas vezes.
+- Executor único até a corretora, com máquina de 11 estados, chave
+  idempotente presa ao conteúdo do comando e **reconciliação** pós-timeout
+  (sem reenvio cego, sem liberar reserva enquanto houver efeito possível).
+- Contabilidade em partidas dobradas, com resultado atribuído por trader e
+  correção só por compensação.
+- Agendador persistente: roda sozinho, sobrevive a reinício e **reconcilia
+  antes de retomar**; sinal vencido nunca vira ordem atrasada.
 
-## Estado de segurança
+**Plataforma**
+- Multi-tenant com papéis (viewer, analyst, operator, risk manager, admin,
+  auditor) e isolamento testado entre inquilinos.
+- Cadastro self-service com período de teste; login por e-mail/senha ou
+  social (Google e Microsoft, OAuth com PKCE).
+- Cobrança por **PIX (Woovi)**: webhook verificado por assinatura RSA sobre
+  o corpo bruto — corpo adulterado ou sem assinatura não ativa nada.
+- Painel em português: Command Center, Configuração, Análises, **Mesa de
+  Agentes**, **Trading Floor** isométrica, Risco, Plano e pagamento, Admin.
+- Backup e restauração com verificação SHA-256 por arquivo.
 
-| Modo | Ordens enviadas | Estado |
-| --- | ---: | --- |
-| Paper | Não | Disponível |
-| Shadow | Não | Disponível |
-| MT5 Demo | Sim, somente conta virtual | Requer terminal e conta Demo externos |
-| Live | Não | Bloqueado nesta versão |
+**Segurança herdada de auditoria adversarial**
+- Núcleo aprovado em 12 rodadas de auditoria independente (redação de
+  segredos fail-closed, política de transporte, gate de capital).
+- Segredos nunca voltam pela API, não entram em log, journal ou backup
+  comum; arranque resiliente (banco fora do ar **degrada**, não derruba).
 
-Nenhum agente ou componente de frontend pode enviar ordens diretamente à corretora. A cadeia obrigatória é:
-
-```text
-agentes → decisão tipada → Risk Engine → ExecutionRouter → adapter → auditoria → reconciliação
-```
-
-## Execução local rápida
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-cp .env.example .env
-python3 -m pytest -q
-python3 scripts/smoke_agency_api.py
-```
-
-Para iniciar a API localmente:
-
-```bash
-ACCESS_PASSWORD='use-uma-senha-local-forte' \
-uvicorn service.app:app --host 127.0.0.1 --port 8080
-```
-
-## Deployment multi-tenant com Docker
-
-Para o deployment Enterprise:
+## Começar em 2 minutos (local)
 
 ```bash
-cp .env.enterprise.example .env
-# preencha os secrets sem colocá-los no Git
-docker compose config
-docker compose build
-docker compose up -d
-docker compose ps
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[desk,dev]"
+ACCESS_PASSWORD=uma-senha-de-teste DATA_DIR=./data \
+  uvicorn service.app:app --port 8080
 ```
 
-O primeiro administrador é criado uma única vez por `/v1/auth/bootstrap`. Depois, use `/v1/auth/login`. Consulte o [runbook de deployment](DEPLOY.md) e a [documentação operacional](docs/OPERATIONS-USER-READY.md).
+Abra `http://localhost:8080`, use a senha definida e siga o quadro
+**Seu progresso**. Com Docker:
 
-## Desenvolvimento e contribuição
+```bash
+ACCESS_PASSWORD=uma-senha-de-teste docker compose up --build
+```
 
-Leia [CONTRIBUTING.md](CONTRIBUTING.md) antes de abrir um pull request. Mudanças de execução, risco, autenticação ou persistência exigem testes de regressão e documentação. Nunca inclua credenciais, dumps de contas, logs privados ou dados de usuários em issues, commits ou pull requests.
+## Colocar no ar e vender
+- **[INSTALAR.md](INSTALAR.md)** — Supabase, deploy, webhook, primeira venda.
+- **[DOMINIO-E-CADASTROS.md](DOMINIO-E-CADASTROS.md)** — DNS, OAuth, Woovi.
+- **[RUNBOOK.md](RUNBOOK.md)** — operação, incidentes, backup/restauração.
+- **[COMECE-AQUI.md](COMECE-AQUI.md)** — guia do usuário final.
 
-## Segurança e disclosure
+## Qualidade
 
-Para relatar uma vulnerabilidade, siga [SECURITY.md](SECURITY.md). Não publique vulnerabilidades não corrigidas em issue pública.
+```bash
+pytest -q          # suíte completa
+ruff check .
+```
 
-## Licença e atribuições
+A suíte cobre os cenários de aceite da mesa (concorrência, disputa de
+capital, mandato revogado, timeout incerto, fills fora de ordem, kill
+switch, contabilidade que confere na mão) e o produto (isolamento entre
+inquilinos, cobrança, cadastro, painel sem botão morto).
 
-O projeto é distribuído sob [Apache License 2.0](LICENSE). Consulte [NOTICE](NOTICE) para atribuições de componentes derivados e upstream.
-
-## Documentação
-
-- [Resumo executivo para apresentação](docs/RESUMO-EXECUTIVO-OPEN-SOURCE.md)
-- [Deployment](DEPLOY.md)
-- [Operação para usuário](docs/OPERATIONS-USER-READY.md)
-- [Progresso verificado](docs/progress.md)
-- [Gates de release Classe A](docs/CLASS-A-RELEASE-GATES.md)
-- [Plano de implementação](docs/implementation-plan.md)
-- [Contribuição](CONTRIBUTING.md)
-- [Segurança](SECURITY.md)
-- [Código de conduta](CODE_OF_CONDUCT.md)
-
-## Disclaimer financeiro
-
-Este software não substitui aconselhamento financeiro, jurídico, tributário ou de gestão de risco. Use contas Demo ou Paper até concluir sua própria validação técnica, operacional e regulatória.
+## Créditos e licença
+Fork endurecido de
+[TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents)
+(Apache-2.0). A Trading Floor é código original DZ23, inspirada visualmente
+em [Claw3D](https://github.com/iamlukethedev/Claw3D) e
+[openclaw-office](https://github.com/wickedapp/openclaw-office) (MIT) — ver
+[NOTICE](NOTICE). Corretoras via [ccxt](https://github.com/ccxt/ccxt) (MIT).
+Licença deste projeto: ver [LICENSE](LICENSE).

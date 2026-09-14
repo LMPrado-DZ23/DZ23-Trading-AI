@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, "feat/**"]
+    branches: [main, unificacao, "feat/**"]
   pull_request:
 
 concurrency:
@@ -25,7 +25,7 @@ jobs:
       - name: Install (with dev extras)
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e ".[desk,dev]"
       - name: Run test suite
         run: pytest -q
       - name: Compile application modules
@@ -73,7 +73,7 @@ jobs:
       - name: Install project
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e ".[desk,dev]"
           pip install pyyaml
       - name: Run API and multi-tenant smoke tests
         run: |
