@@ -413,3 +413,13 @@ O sandbox desta sessão não possui o binário Docker, portanto `docker compose 
 ## Ciclo 20 — regressão da fundação multi-tenant
 
 A suíte completa em ambiente sanitizado passou com `928 passed, 2 skipped, 71 subtests passed, 18 warnings`. Os testes focados, `smoke_multitenant.py`, `smoke_agency_api.py`, compileall e validação YAML do Compose também passaram. Docker runtime não foi executado porque o binário não está disponível neste sandbox; o Compose Enterprise deve ser validado no PC/host do usuário.
+
+## Ciclo 21 — backend PostgreSQL de identidade
+
+Foi adicionado `PostgresTenantStore` usando `psycopg[binary]`. Com `DATABASE_URL`, tenants, usuários, memberships e sessões são persistidos em PostgreSQL; sem a variável, o backend SQLite local continua disponível. A API exige chave de assinatura forte no modo multi-tenant. O armazenamento de jobs permanece SQLite por enquanto, explicitamente documentado como gate para escala horizontal.
+
+Validação: `compileall` passou; `ruff` focalizado passou; 19 testes focados passaram. Não foi possível conectar a um servidor PostgreSQL neste sandbox, portanto o teste de integração real permanece pendente no Docker do usuário.
+
+## Ciclo 22 — regressão pós-PostgreSQL
+
+A suíte completa em ambiente sem `DATABASE_URL` passou novamente com `928 passed, 2 skipped, 71 subtests passed, 18 warnings` em 3m25s. Isso comprova que o fallback local não regrediu. A conexão real PostgreSQL depende do serviço Docker do host autorizado e permanece não declarada como validada.

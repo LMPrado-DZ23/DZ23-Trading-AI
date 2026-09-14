@@ -32,14 +32,22 @@ from tradingagents.execution import ExecutionRouter, KillSwitch, PaperAdapter, S
 from tradingagents.reconciliation_worker import ReconciliationMonitor
 from tradingagents.risk import RiskEngine
 from tradingagents.telemetry import AuditLog, EventBus, MetricsRegistry
-from tradingagents.tenancy import AuthError, Principal, TenantStore
+from tradingagents.tenancy import AuthError, PostgresTenantStore, Principal, TenantStore
 from tradingagents.workers import WorkerSupervisor
 
 DATA = Path(os.environ.get("DATA_DIR", "/data")); DATA.mkdir(parents=True, exist_ok=True)
 CFG_PATH = DATA / "config.json"; DB = DATA / "jobs.db"
 PASSWORD = os.environ.get("ACCESS_PASSWORD", "")
 MULTI_TENANT_ENABLED = os.environ.get("MULTI_TENANT_ENABLED", "false").lower() == "true"
-TENANT_STORE = TenantStore(DATA / "identity.db", signing_key=os.environ.get("TENANT_TOKEN_SIGNING_KEY")) if MULTI_TENANT_ENABLED else None
+_TENANT_SIGNING_KEY = os.environ.get("TENANT_TOKEN_SIGNING_KEY")
+if MULTI_TENANT_ENABLED and not _TENANT_SIGNING_KEY:
+    raise RuntimeError("TENANT_TOKEN_SIGNING_KEY é obrigatório no modo multi-tenant")
+if MULTI_TENANT_ENABLED and os.environ.get("DATABASE_URL"):
+    TENANT_STORE = PostgresTenantStore(os.environ["DATABASE_URL"], signing_key=_TENANT_SIGNING_KEY)
+elif MULTI_TENANT_ENABLED:
+    TENANT_STORE = TenantStore(DATA / "identity.db", signing_key=_TENANT_SIGNING_KEY)
+else:
+    TENANT_STORE = None
 TENANT_BOOTSTRAP_TOKEN = os.environ.get("TENANT_BOOTSTRAP_TOKEN", "")
 STATIC = Path(__file__).parent / "static"
 AGENCY_AUDIT = AuditLog(DATA / "agency-events.jsonl")

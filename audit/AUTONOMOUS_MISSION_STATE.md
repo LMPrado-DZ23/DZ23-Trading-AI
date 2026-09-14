@@ -4,17 +4,17 @@
 | --- | --- |
 | mission_id | `DZ23-FINAL-26-20260913` |
 | objective | Executar a instrução final da seção 26 e deixar o TradingAgents DZ23 funcional para Paper e Demo, seguro por padrão, observável, auditável, documentado e publicado na branch autorizada. |
-| state | `EXECUTING` |
-| iteration | `19` |
+| state | `TESTING` |
+| iteration | `21` |
 | started_at | `2026-09-13T20:45:00-03:00` |
 | heartbeat_at | `2026-09-14T01:10:05-03:00` |
 | last_progress_at | `2026-09-14T01:10:05-03:00` |
-| current_task | Integrar e validar a fundação multi-tenant Enterprise. |
+| current_task | Validar backend PostgreSQL opcional e regressão após publicação multi-tenant. |
 | attempt_count | `1` |
 | same_failure_count | `0` |
 | current_failure | `none` |
 | current_strategy | Auditoria independente por Engenharia, Segurança/DevSecOps e Produto/QA; corrigir achados internos; regressão completa; publicar e validar release. |
-| next_action | Executar regressão completa, revisar diff, publicar e validar no Docker do usuário quando conectado. |
+| next_action | Executar regressão completa, publicar backend PostgreSQL e validar conexão no host Docker autorizado. |
 
 ## Acceptance criteria
 
