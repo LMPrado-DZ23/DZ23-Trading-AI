@@ -81,6 +81,7 @@ O projeto é distribuído sob [Apache License 2.0](LICENSE). Consulte [NOTICE](N
 
 ## Documentação
 
+- [Resumo executivo para apresentação](docs/RESUMO-EXECUTIVO-OPEN-SOURCE.md)
 - [Deployment](DEPLOY.md)
 - [Operação para usuário](docs/OPERATIONS-USER-READY.md)
 - [Progresso verificado](docs/progress.md)
