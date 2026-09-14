@@ -7,12 +7,79 @@
 :root{--bg:#07111f;--panel:#0d1b2d;--line:#1d3550;--text:#e9f2ff;--muted:#8ba3bd;--cyan:#39d5ff;--green:#42e6a4;--amber:#ffc857;--red:#ff6b7a}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 75% 0,#173555 0,#07111f 42%);color:var(--text);font:14px Inter,system-ui,sans-serif}header{display:flex;justify-content:space-between;align-items:center;padding:22px 30px;border-bottom:1px solid var(--line);background:#07111fcc;backdrop-filter:blur(10px)}h1{margin:0;font-size:22px;letter-spacing:.04em}h1 span{color:var(--cyan)}.mode{display:flex;gap:8px;align-items:center;color:var(--muted)}.pill{padding:6px 10px;border:1px solid #2c5a79;border-radius:999px;color:var(--green);font-size:11px;font-weight:700}.layout{display:grid;grid-template-columns:1fr 360px;gap:18px;padding:22px;max-width:1500px;margin:auto}.floor{min-height:620px;background:linear-gradient(145deg,#102843,#0b1728);border:1px solid var(--line);border-radius:18px;padding:20px;position:relative;overflow:hidden}.floor:before{content:"";position:absolute;inset:0;background-image:linear-gradient(#ffffff05 1px,transparent 1px),linear-gradient(90deg,#ffffff05 1px,transparent 1px);background-size:48px 48px;transform:perspective(500px) rotateX(52deg) scale(1.4);transform-origin:bottom;opacity:.6}.floor>*{position:relative}.floor-title{display:flex;justify-content:space-between;color:var(--muted);margin-bottom:16px}.desks{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding-top:80px}.desk{min-height:160px;background:#11263d;border:1px solid #244866;border-radius:14px;padding:14px;box-shadow:0 18px 30px #02071155}.desk h3{margin:0 0 12px;font-size:14px;color:var(--cyan)}.agent{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid #ffffff0d}.avatar{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#37cfff,#635bff);display:grid;place-items:center;font-weight:800;font-size:11px}.agent small{display:block;color:var(--muted);font-size:11px}.status{margin-left:auto;font-size:10px;color:var(--green)}.panel{background:#0d1b2d;border:1px solid var(--line);border-radius:18px;padding:18px;margin-bottom:18px}.panel h2{font-size:14px;margin:0 0 13px}.metric{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #ffffff0d;color:var(--muted)}.metric b{color:var(--text)}.event{padding:9px 0;border-bottom:1px solid #ffffff0d}.event b{color:var(--cyan);font-size:11px}.event small{display:block;color:var(--muted);margin-top:3px}.empty{color:var(--muted);padding:14px 0}@media(max-width:900px){.layout{grid-template-columns:1fr}.desks{grid-template-columns:repeat(2,1fr)}}@media(max-width:560px){.desks{grid-template-columns:1fr}.layout{padding:12px}}
 </style></head>
 <body><header><h1><span>DZ23</span> AUTONOMOUS TRADING FLOOR</h1><div class="mode"><span class="pill">PAPER MODE</span><span id="connection">CONNECTING</span></div></header>
-<main class="layout"><section class="floor"><div class="floor-title"><b>AGENCY OFFICE / LIVE READ MODEL</b><span id="seq">sequence 0</span></div><div class="desks" id="desks"><div class="empty">Aguardando agentes...</div></div></section><aside><div class="panel"><h2>AGENCY STATUS</h2><div class="metric"><span>Runtime</span><b id="runtime">READY</b></div><div class="metric"><span>Execution</span><b>PAPER ONLY</b></div><div class="metric"><span>Risk gate</span><b>DETERMINISTIC</b></div><div class="metric"><span>Live trading</span><b style="color:var(--red)">BLOCKED</b></div></div><div class="panel"><h2>COMMITTEE ROOM</h2><div id="meetings" class="empty">Nenhuma reunião ativa.</div></div><div class="panel"><h2>AUDIT TIMELINE</h2><div id="events" class="empty">Nenhum evento recebido.</div></div></aside></main>
+<main class="layout"><section class="floor"><div class="floor-title"><b>AGENCY OFFICE / LIVE READ MODEL</b><span id="seq">sequence 0</span></div><canvas id="iso" width="1100" height="560" style="width:100%;max-width:100%;display:block;cursor:pointer"></canvas>
+<div id="isoLegend" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--muted)"></div>
+<div class="desks" id="desks" style="margin-top:14px"><div class="empty">Aguardando agentes...</div></div></section><aside><div class="panel"><h2>AGENCY STATUS</h2><div class="metric"><span>Runtime</span><b id="runtime">READY</b></div><div class="metric"><span>Execution</span><b>PAPER ONLY</b></div><div class="metric"><span>Risk gate</span><b>DETERMINISTIC</b></div><div class="metric"><span>Live trading</span><b style="color:var(--red)">BLOCKED</b></div></div><div class="panel"><h2>COMMITTEE ROOM</h2><div id="meetings" class="empty">Nenhuma reunião ativa.</div></div><div class="panel"><h2>AUDIT TIMELINE</h2><div id="events" class="empty">Nenhum evento recebido.</div></div></aside></main>
 <script>
 const $=id=>document.getElementById(id);let last=0;
 function auth(){return {'Authorization':'Bearer '+(sessionStorage.getItem('dz23_token')||sessionStorage.getItem('pw')||''),'Content-Type':'application/json'}}
 async function refresh(){try{let r=await fetch('/v1/agency/snapshot',{headers:auth()});if(!r.ok)throw Error('auth');let d=await r.json();$('connection').textContent='CONNECTED';$('connection').style.color='var(--green)';$('seq').textContent='sequence '+d.sequence;render(d);let e=await fetch('/v1/agency/events?after='+last,{headers:auth()});if(e.ok){let x=await e.json();if(x.events.length){last=x.events[x.events.length-1].sequence;renderEvents(x.events)}}}catch(e){$('connection').textContent='DISCONNECTED';$('connection').style.color='var(--red)'}}
-function render(d){let grouped={};(d.desks||[]).forEach(x=>grouped[x.desk_id]=x);$('desks').innerHTML=Object.values(grouped).map(d=>`<article class="desk"><h3>${d.desk_id.toUpperCase()} DESK</h3>${(d.agents||[]).map(id=>{let a=(d.agents_data||[]).find(x=>x.agent_id===id)||(d.agents_all||[]).find(x=>x.agent_id===id);return `<div class="agent"><span class="avatar">AI</span><span>${id}<small>autonomous agent</small></span><span class="status">${a?.status||'WAITING'}</span></div>`}).join('')||'<div class="empty">No agents</div>'}</article>`).join('')||'<div class="empty">Aguardando agentes...</div>'; $('meetings').innerHTML=(d.meetings||[]).map(m=>`<div class="event"><b>${m.meeting_type}</b><small>${m.desk_id} · ${m.status} · ${m.votes.length}/${m.quorum} votes</small></div>`).join('')||'Nenhuma reunião ativa.'}
+function render(d){
+  const agentes=(d.agents||d.agents_all||[]).length?(d.agents||d.agents_all)
+    :(d.desks||[]).flatMap(x=>(x.agents||[]).map(id=>({agent_id:id,desk_id:x.desk_id,status:x.status})));
+  desenharSala(agentes);
+  let grouped={};(d.desks||[]).forEach(x=>grouped[x.desk_id]=x);$('desks').innerHTML=Object.values(grouped).map(d=>`<article class="desk"><h3>${d.desk_id.toUpperCase()} DESK</h3>${(d.agents||[]).map(id=>{let a=(d.agents_data||[]).find(x=>x.agent_id===id)||(d.agents_all||[]).find(x=>x.agent_id===id);return `<div class="agent"><span class="avatar">AI</span><span>${id}<small>autonomous agent</small></span><span class="status">${a?.status||'WAITING'}</span></div>`}).join('')||'<div class="empty">No agents</div>'}</article>`).join('')||'<div class="empty">Aguardando agentes...</div>'; $('meetings').innerHTML=(d.meetings||[]).map(m=>`<div class="event"><b>${m.meeting_type}</b><small>${m.desk_id} · ${m.status} · ${m.votes.length}/${m.quorum} votes</small></div>`).join('')||'Nenhuma reunião ativa.'}
 function renderEvents(es){let html=es.reverse().map(e=>`<div class="event"><b>${e.event_type}</b><small>${e.event?.aggregate_id||'agency'} · seq ${e.sequence}</small></div>`).join('');$('events').innerHTML=html+($('events').textContent.includes('Nenhum')?'':'')}
+
+/* ---- Trading Floor isométrica (canvas 2D original DZ23) ------------------
+   Cada estação é um agente REAL do read model. A cor vem do status oficial:
+   nada é animado sem evento correspondente. Inspiração visual: Claw3D e
+   openclaw-office (MIT) — ver NOTICE; o código aqui é próprio.            */
+const CORES={OPERATING:'#42e6a4',PAPER_TRADING:'#42e6a4',ANALYZING:'#39d5ff',
+  WAITING_SETUP:'#8ba3bd',BACKTEST:'#b48cff',PAUSED:'#ffc857',
+  RISK_LOCKED:'#ff6b7a',ERROR:'#ff6b7a',READY:'#39d5ff'};
+let ESTACOES=[],hover=null;
+const TW=76,TH=38;
+function iso(x,y){const c=document.getElementById('iso');
+  return {x:c.width/2+(x-y)*TW/2, y:110+(x+y)*TH/2};}
+function losango(ctx,p,cor,alt){
+  ctx.beginPath();ctx.moveTo(p.x,p.y-alt);ctx.lineTo(p.x+TW/2,p.y+TH/2-alt);
+  ctx.lineTo(p.x,p.y+TH-alt);ctx.lineTo(p.x-TW/2,p.y+TH/2-alt);ctx.closePath();
+  ctx.fillStyle=cor;ctx.fill();}
+function estacao(ctx,p,cor,rotulo,status){
+  const h=26;
+  losango(ctx,p,'#16304c',0);                       // piso
+  ctx.fillStyle='#0e2138';                          // laterais da mesa
+  ctx.beginPath();ctx.moveTo(p.x-TW/2,p.y+TH/2);ctx.lineTo(p.x,p.y+TH);
+  ctx.lineTo(p.x,p.y+TH-h);ctx.lineTo(p.x-TW/2,p.y+TH/2-h);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#123049';
+  ctx.beginPath();ctx.moveTo(p.x+TW/2,p.y+TH/2);ctx.lineTo(p.x,p.y+TH);
+  ctx.lineTo(p.x,p.y+TH-h);ctx.lineTo(p.x+TW/2,p.y+TH/2-h);ctx.closePath();ctx.fill();
+  losango(ctx,p,'#1b3a5c',h);                       // tampo
+  ctx.fillStyle=cor;                                 // monitor: cor do status
+  ctx.fillRect(p.x-13,p.y+TH/2-h-22,26,16);
+  ctx.fillStyle='#07111f';ctx.fillRect(p.x-11,p.y+TH/2-h-20,22,12);
+  ctx.fillStyle=cor;ctx.globalAlpha=.75;
+  ctx.fillRect(p.x-11,p.y+TH/2-h-20,22*Math.min(1,(status||'').length/14),12);
+  ctx.globalAlpha=1;
+  ctx.fillStyle='#e9f2ff';ctx.font='600 10px Inter,system-ui';ctx.textAlign='center';
+  ctx.fillText(rotulo.slice(0,16),p.x,p.y+TH+12);
+  ctx.fillStyle=cor;ctx.font='9px Inter,system-ui';
+  ctx.fillText((status||'').slice(0,18),p.x,p.y+TH+24);}
+function desenharSala(agentes){
+  const c=document.getElementById('iso');if(!c)return;const ctx=c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+  for(let x=0;x<6;x++)for(let y=0;y<6;y++){
+    const p=iso(x,y);losango(ctx,p,(x+y)%2?'#0d2135':'#0b1c2e',0);}
+  ESTACOES=[];
+  agentes.forEach((a,i)=>{const x=i%4,y=Math.floor(i/4);const p=iso(x+1,y+1);
+    const cor=CORES[(a.status||'').toUpperCase()]||'#8ba3bd';
+    estacao(ctx,p,cor,a.agent_id||a.id||('agente '+i),a.status||'WAITING');
+    ESTACOES.push({p,dados:a});});
+  document.getElementById('isoLegend').innerHTML=Object.entries(CORES)
+    .filter(([k])=>agentes.some(a=>(a.status||'').toUpperCase()===k))
+    .map(([k,v])=>`<span><i style="display:inline-block;width:9px;height:9px;background:${v};border-radius:2px;margin-right:5px"></i>${k}</span>`).join('');}
+function estacaoEm(mx,my){
+  return ESTACOES.find(e=>Math.abs(mx-e.p.x)<TW/2 && Math.abs(my-(e.p.y+TH/2))<TH+20);}
+document.addEventListener('click',ev=>{
+  const c=document.getElementById('iso');if(!c||ev.target!==c)return;
+  const r=c.getBoundingClientRect();
+  const mx=(ev.clientX-r.left)*c.width/r.width, my=(ev.clientY-r.top)*c.height/r.height;
+  const e=estacaoEm(mx,my);if(!e)return;
+  const d=e.dados;
+  document.getElementById('meetings').innerHTML=
+    `<div class="event"><b>${(d.agent_id||'agente')}</b><small>status: ${d.status||'—'}${d.desk_id?' · desk '+d.desk_id:''}</small>
+     <small>Este quadro reflete o read model oficial; nenhuma posição ou PnL é inferido da animação.</small></div>`;});
+
 setInterval(refresh,3000);refresh();
 </script></body></html>

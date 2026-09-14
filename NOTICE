@@ -5,3 +5,16 @@ This project includes original work and modifications by its contributors and bu
 - TauricResearch/TradingAgents — Apache License 2.0. See LICENSE and the upstream repository for attribution and license terms.
 
 Third-party dependencies retain their own licenses. Consult package metadata and lock/build artifacts for the complete dependency attribution set.
+
+--------------------------------------------------------------------------
+Trading Floor (service/static/floor.html)
+--------------------------------------------------------------------------
+A cena isométrica da Trading Floor é código original DZ23 (canvas 2D, sem
+dependências). A direção visual — sala de operações isométrica, estações
+representando agentes e indicadores de estado por posto — foi inspirada em:
+
+  * iamlukethedev/Claw3D            (MIT)
+  * wickedapp/openclaw-office       (MIT)
+
+Nenhum código desses projetos foi copiado. A atribuição fica registrada por
+respeito ao trabalho que inspirou a interface.

@@ -8,6 +8,7 @@ import asyncio
 import hmac
 import json
 import os
+import secrets
 import threading
 import time
 import traceback
@@ -28,6 +29,7 @@ from tradingagents.domain import (
     TradeDecision,
 )
 from tradingagents.execution import ExecutionRouter, KillSwitch, PaperAdapter, ShadowAdapter
+from tradingagents.infra.supabase import resolve_database_url
 from tradingagents.job_store import JobStore
 from tradingagents.reconciliation_worker import ReconciliationMonitor
 from tradingagents.risk import RiskEngine
@@ -57,6 +59,11 @@ def _build_job_store():
     HEALTH["armazenamento"] = "sqlite" if not dsn else "sqlite (fallback)"
     return store
 
+
+DATABASE_URL, DATABASE_ORIGEM = resolve_database_url()
+if DATABASE_URL and not os.environ.get("DATABASE_URL"):
+    # o resto do código (tenancy, assinaturas) lê do ambiente
+    os.environ["DATABASE_URL"] = DATABASE_URL
 
 JOB_STORE = _build_job_store()
 PASSWORD = os.environ.get("ACCESS_PASSWORD", "")
@@ -444,6 +451,7 @@ def hz():
     return {"status": "degraded" if HEALTH["avisos"] else "ok",
             "app": "tradingagents-agency/1",
             "armazenamento": HEALTH["armazenamento"],
+            "banco": DATABASE_ORIGEM,
             "avisos": HEALTH["avisos"]}
 
 
@@ -962,6 +970,76 @@ async def tenant_signup(request: Request):
             "proximo_passo": "Configure a IA (Groq é grátis) e rode a primeira análise"}
 
 
+# ============================================================ LOGIN SOCIAL
+# OAuth só PROVA identidade; quem concede acesso continua sendo o tenant
+# store. Conta nova pelo social entra com teste grátis, igual ao cadastro.
+from tradingagents.identity.oauth import (  # noqa: E402
+    PROVIDERS,
+    OAuthError,
+    StateStore,
+    authorize_url,
+    email_of,
+    exchange_code,
+)
+
+_OAUTH_STATES = StateStore()
+_OAUTH_TRANSPORT = None          # injetável em teste; None = rede real
+
+
+@app.get("/v1/auth/oauth/providers")
+def oauth_providers():
+    """Público: o painel só mostra o botão do provedor configurado."""
+    return {"provedores": [{"nome": p.name, "disponivel": p.configured()}
+                           for p in PROVIDERS.values()]}
+
+
+@app.get("/v1/auth/oauth/{provider}/start")
+def oauth_start(provider: str):
+    p = PROVIDERS.get(provider)
+    if p is None:
+        raise HTTPException(404, "provedor desconhecido")
+    if not p.configured():
+        raise HTTPException(503, f"login com {provider} não configurado no servidor")
+    state, verifier = _OAUTH_STATES.new(provider)
+    return {"url": authorize_url(p, state, verifier), "state": state}
+
+
+@app.get("/v1/auth/oauth/{provider}/callback")
+def oauth_callback(provider: str, code: str = "", state: str = ""):
+    """Retorno do provedor. Sem state válido (uso único) nada acontece."""
+    p = PROVIDERS.get(provider)
+    if p is None:
+        raise HTTPException(404, "provedor desconhecido")
+    if not (MULTI_TENANT_ENABLED and TENANT_STORE):
+        raise HTTPException(503, "contas multi-tenant desabilitadas neste servidor")
+    if not code:
+        raise HTTPException(422, "código de autorização ausente")
+    try:
+        pend = _OAUTH_STATES.consume(state, provider)
+        perfil = exchange_code(p, code, pend.verifier, transport=_OAUTH_TRANSPORT)
+        email = email_of(perfil)
+    except OAuthError as exc:
+        raise HTTPException(401, str(exc)) from None
+
+    nome = (perfil.get("name") or email.split("@")[0]).strip()
+    senha_interna = secrets.token_urlsafe(32)      # conta social não usa senha
+    tenant_id, user_id = TENANT_STORE.find_membership_by_email(email)
+    if tenant_id is None:
+        if not SIGNUP_ENABLED:
+            raise HTTPException(403, "cadastro fechado neste servidor")
+        tenant_id = TENANT_STORE.create_tenant(f"Agência de {nome}")
+        user_id = TENANT_STORE.create_user(email, senha_interna)
+        TENANT_STORE.add_member(tenant_id, user_id, "admin")
+        SUBS.ensure(tenant_id)
+        token = TENANT_STORE.login(email, senha_interna, tenant_id)
+        novo = True
+    else:
+        token = TENANT_STORE.issue_token_for_user(user_id, tenant_id)
+        novo = False
+    return {"ok": True, "tenant_id": tenant_id, "access_token": token,
+            "email": email, "conta_nova": novo}
+
+
 # ===================================================================== MESA
 # Mesa autônoma multiagente. UMA POR INQUILINO: nenhum tenant enxerga
 # agentes, carteira, ordens ou ciclos de outro — isolamento é requisito do
@@ -1254,3 +1332,25 @@ def onboarding(request: Request, _=Depends(auth)):
                       "avisos": HEALTH["avisos"]}}
 
 
+@app.get("/v1/admin/database")
+def database_health(_=Depends(auth)):
+    """Diagnóstico do banco: origem, backend em uso e — se for Supabase —
+    se o projeto responde. Nenhuma chave aparece na resposta."""
+    from tradingagents.infra.supabase import check_rest, config_from_env
+    out = {"origem": DATABASE_ORIGEM, "backend": HEALTH["armazenamento"],
+           "avisos": HEALTH["avisos"]}
+    try:
+        cfg = config_from_env()
+    except Exception as exc:
+        out["supabase"] = {"ok": False, "detalhe": str(exc)}
+        return out
+    if cfg is None:
+        out["supabase"] = {"configurado": False,
+                           "proxima_acao": "defina SUPABASE_PROJECT_REF e "
+                                           "SUPABASE_DB_PASSWORD para usar o "
+                                           "banco gerenciado"}
+        return out
+    chave = os.environ.get("SUPABASE_SERVICE_KEY", "")
+    out["supabase"] = {"configurado": True, "projeto": cfg.project_ref,
+                       **check_rest(cfg, chave)}
+    return out

@@ -138,6 +138,43 @@ class TenantStore:
         sig = hmac.new(self.signing_key, body.encode(), hashlib.sha256).hexdigest()
         return body + "." + sig
 
+    def find_membership_by_email(self, email: str):
+        """Login social: descobre a qual agência o e-mail pertence."""
+        email = (email or "").strip().lower()
+        with self._connect() as c:
+            row = c.execute("SELECT id FROM users WHERE email=? AND status='active'",
+                            (email,)).fetchone()
+            if not row:
+                return None, None
+            member = c.execute(
+                "SELECT tenant_id FROM memberships WHERE user_id=? "
+                "ORDER BY created_at LIMIT 1", (row["id"],)).fetchone()
+        return (member["tenant_id"], row["id"]) if member else (None, None)
+
+    def issue_token_for_user(self, user_id: str, tenant_id: str, *,
+                             ttl_seconds: int = 3600) -> str:
+        """Emite sessão SEM senha — só para identidade já provada por OAuth.
+        Exige que o vínculo usuário↔agência exista."""
+        with self._connect() as c:
+            member = c.execute(
+                "SELECT role FROM memberships WHERE tenant_id=? AND user_id=?",
+                (tenant_id, user_id)).fetchone()
+            if not member:
+                raise AuthError("usuário não pertence ao tenant")
+            user = c.execute("SELECT status FROM users WHERE id=?", (user_id,)).fetchone()
+            if not user or user["status"] != "active":
+                raise AuthError("usuário inativo")
+        session_id = "ses_" + secrets.token_urlsafe(18)
+        expires = int(time.time()) + ttl_seconds
+        with self._connect() as c:
+            c.execute("INSERT INTO sessions(id,user_id,tenant_id,expires_at) "
+                      "VALUES(?,?,?,?)", (session_id, user_id, tenant_id, expires))
+        payload = {"sid": session_id, "uid": user_id, "tid": tenant_id, "exp": expires}
+        body = base64.urlsafe_b64encode(
+            json.dumps(payload, separators=(",", ":")).encode()).decode().rstrip("=")
+        sig = hmac.new(self.signing_key, body.encode(), hashlib.sha256).hexdigest()
+        return body + "." + sig
+
     def authenticate(self, token: str) -> Principal:
         try:
             body, signature = token.split(".", 1)
