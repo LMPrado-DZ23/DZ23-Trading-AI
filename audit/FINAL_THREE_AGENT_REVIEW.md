@@ -77,3 +77,28 @@
 - **Rationale:** A auditoria encontrou dois caminhos críticos de execução real/bypass e vários bloqueios HIGH. A missão não pode ser concluída enquanto esses pontos permanecerem.
 - **Residual external blockers:** terminal/conta MT5 Demo, Docker no host de deployment e permissão GitHub `workflows`.
 - **Next action:** Remover estruturalmente Live/endpoint legado, persistir KillSwitch fail-closed, separar reconciliação remota de local, corrigir dependências/inputs/UI e repetir auditorias.
+
+## Final closure review — HEAD 33a7e74
+
+A rodada final confirmou que o Router é fail-closed sem guard, o Paper Ledger rejeita over-close antes de ACK, usa cash/mark-to-market coerentes e o binding inclui TIF. A regressão sanitizada passou com 925 testes, 2 skips e 71 subtests; smoke, compileall e branch remota passaram.
+
+A decisão de release é **CONDITIONAL / BLOCKED_EXTERNAL**, não aprovação integral. O serviço não possui provider remoto de reconciliação configurado e, corretamente, permanece bloqueado para execução Paper via API até obter `MATCHED`. MT5 Demo real, Docker/Compose, RBAC multiusuário, UX/acessibilidade completa e lint integral não foram validados/concluídos nesta sandbox. Live permanece estruturalmente desativado e não deve ser habilitado.
+
+### Final gates
+
+| Gate | Status |
+| --- | --- |
+| Critical capital bypass | PASS — CCXT Live impossível; endpoint legado 410 |
+| KillSwitch persistence/reset | PASS — persistente e reset server-side |
+| Router/ledger integrity | PASS — hardening final testado |
+| Clean-environment regression | PASS — 925 passed, 2 skipped, 71 subtests |
+| Smoke/compileall | PASS |
+| Remote reconciliation | BLOCKED — provider não configurado; fail-closed |
+| MT5 Demo real | NOT VALIDATED — terminal/conta externos ausentes |
+| Docker deployment | NOT VALIDATED — Docker ausente |
+| Full lint | PENDING — erros históricos fora do escopo seletivo |
+| RBAC/UX/accessibility | PENDING |
+
+### Release decision
+
+O commit `33a7e74` está publicado em `feat/dz23-trading-agency`, alinhado com `origin`. O resultado entregue é um **release candidate seguro para desenvolvimento local e Paper/Shadow governados**, não um produto final autorizado para operar em corretora real ou declarado pronto para MT5 Demo sem validação externa.

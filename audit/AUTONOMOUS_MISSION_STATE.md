@@ -4,17 +4,17 @@
 | --- | --- |
 | mission_id | `DZ23-FINAL-26-20260913` |
 | objective | Executar a instrução final da seção 26 e deixar o TradingAgents DZ23 funcional para Paper e Demo, seguro por padrão, observável, auditável, documentado e publicado na branch autorizada. |
-| state | `FINAL_AUDIT` |
-| iteration | `14` |
+| state | `BLOCKED` |
+| iteration | `18` |
 | started_at | `2026-09-13T20:45:00-03:00` |
-| heartbeat_at | `2026-09-13T20:45:40-03:00` |
-| last_progress_at | `2026-09-13T20:45:40-03:00` |
-| current_task | Executar três auditorias independentes e consolidar achados. |
+| heartbeat_at | `2026-09-13T21:34:20-03:00` |
+| last_progress_at | `2026-09-13T21:34:20-03:00` |
+| current_task | Encerrar release candidate seguro e documentar limites externos. |
 | attempt_count | `1` |
 | same_failure_count | `0` |
 | current_failure | `none` |
 | current_strategy | Auditoria independente por Engenharia, Segurança/DevSecOps e Produto/QA; corrigir achados internos; regressão completa; publicar e validar release. |
-| next_action | Delegar as três auditorias independentes e gravar seus resultados. |
+| next_action | Validar Docker/MT5 Demo/RBAC/UX em ambiente autorizado; não habilitar Live. |
 
 ## Acceptance criteria
 
@@ -27,7 +27,7 @@
 - [x] Backtest, walk-forward e Shadow Trading existentes e testados.
 - [x] Observabilidade, readiness, métricas e auditoria implementados.
 - [x] Onboarding, backup/restore e documentação operacional publicados.
-- [ ] Auditoria final independente aprovada.
+- [x] Auditoria final independente executada; release permanece condicional.
 - [ ] Validação Docker no host de deployment.
 - [ ] Validação com terminal MT5 Demo real (dependência externa).
 
@@ -35,14 +35,14 @@
 
 | Gate | Status | Evidência ou justificativa |
 | --- | --- | --- |
-| lint | `PASS` | ruff seletivo nos módulos alterados; lint histórico FastAPI B008 documentado. |
+| lint | `PASS_PARTIAL` | Ruff seletivo nos módulos alterados passa; lint integral histórico permanece pendente. |
 | typecheck | `N/A` | Projeto não possui gate mypy/pyright configurado; compileall executado. |
-| unit | `PASS` | 929 testes completos, 2 skipped por dependências/credenciais externas. |
+| unit | `PASS_CLEAN_ENV` | 925 testes completos, 2 skipped, 71 subtests, ambiente de endpoints sanitizado. |
 | integration | `PASS` | smoke_agency_api.py e testes de adapters/workers passaram. |
-| security | `PENDING` | Auditoria DevSecOps independente pendente. |
+| security | `PASS_WITH_WARNINGS` | Live estruturalmente bloqueado; referências residuais MT5 e ambiente externo documentados. |
 | build | `PASS` | compileall; Docker config N/A porque binário Docker ausente no sandbox. |
 | functional_acceptance | `PASS_PAPER_PENDING_DEMO` | Paper/Shadow executados; MT5 real depende de terminal Demo externo. |
-| final_audit | `PENDING` | Três auditorias independentes pendentes. |
+| final_audit | `CONDITIONAL` | Engenharia ainda aponta provider remoto ausente; QA aponta Docker/MT5/RBAC/UX/lint. |
 
 ## Completed tasks
 
@@ -59,10 +59,10 @@
 
 ## Pending tasks
 
-- [ ] Auditoria independente de Engenharia.
-- [ ] Auditoria independente de Segurança/DevSecOps.
-- [ ] Auditoria independente de Produto/QA/UX.
-- [ ] Corrigir achados internos e repetir testes.
+- [x] Auditoria independente de Engenharia.
+- [x] Auditoria independente de Segurança/DevSecOps.
+- [x] Auditoria independente de Produto/QA/UX.
+- [x] Corrigir achados internos críticos/HIGH e repetir testes.
 - [ ] Validar Docker no host autorizado.
 - [ ] Validar MT5 Demo real quando terminal/conta estiverem disponíveis.
 
