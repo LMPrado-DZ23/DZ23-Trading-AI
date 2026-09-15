@@ -247,6 +247,36 @@ class Ledger:
         return sum((s for c, s in saldos.items()
                     if c == "RESERVED" or c.startswith("RESERVED:")), ZERO)
 
+    def capital_adjustment(self, amount: Decimal, *, reason: str, actor: str,
+                           external_reference: str = "") -> Transaction:
+        """Aporte ou retirada de capital EXTERNO, com partida dobrada.
+
+        Entra como CONTRIBUTED_CAPITAL, não como resultado: dinheiro que o
+        dono colocou não é lucro de trader, e misturar os dois faria a
+        atribuição de performance mentir na direção mais perigosa — a de
+        parecer que a estratégia ganhou.
+
+        O lançamento de abertura NUNCA é reescrito: reescrever história
+        apaga a evidência de que houve um ajuste.
+        """
+        if amount == ZERO:
+            raise ValueError("ajuste de capital não pode ser zero")
+        if not reason or not actor:
+            raise ValueError("ajuste de capital exige motivo e responsável")
+        memo = f"{reason} | por {actor}"
+        if external_reference:
+            memo += f" | ref {external_reference}"
+        return self._post("capital_adjustment",
+                          [Entry(f"CASH:{self.currency}", amount, memo),
+                           Entry("CONTRIBUTED_CAPITAL", -amount, memo)],
+                          external_reference or reason)
+
+    def find_transaction(self, tx_id: str) -> dict | None:
+        for tx in self.export_transactions():
+            if tx["tx_id"] == tx_id:
+                return tx
+        return None
+
     def reservation_balances(self) -> dict:
         """Saldo travado POR reserva — uma leitura só, sem parsing espalhado."""
         saldos = {}

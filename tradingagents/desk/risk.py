@@ -89,6 +89,7 @@ class RiskEngine:
         self._concluidas: dict[str, dict] = {}
         self._deficits: dict[str, Decimal] = {}
         self._incidentes: dict[str, dict] = {}
+        self._provas_usadas: dict[str, str] = {}
 
     # -- consultas -----------------------------------------------------
     @property
@@ -286,8 +287,6 @@ class RiskEngine:
             reserva = self._reservations.get(reservation_id)
             if reserva is None:
                 # Reserva já concluída: um custo extra aqui é déficit puro.
-                self._deficits[reservation_id] = (
-                    self._deficits.get(reservation_id, Decimal("0")) + custo)
                 self.abrir_incidente(
                     "RESERVATION_DEFICIT", amount=custo,
                     reservation_id=reservation_id,
@@ -308,8 +307,6 @@ class RiskEngine:
                 consumed_amount=reserva.consumed_amount + consumido,
                 filled_quantity=reserva.filled_quantity + quantidade)
             if deficit > 0:
-                self._deficits[reservation_id] = (
-                    self._deficits.get(reservation_id, Decimal("0")) + deficit)
                 self.abrir_incidente(
                     "RESERVATION_DEFICIT", amount=deficit,
                     reservation_id=reservation_id,
@@ -340,18 +337,20 @@ class RiskEngine:
 
     def incidentes_doc(self) -> dict:
         """Incidentes para persistência — reiniciar não resolve déficit."""
-        return {"deficits": {k: str(v) for k, v in self._deficits.items()},
-                "conclusoes": self._concluidas,
+        # `deficits` NÃO é mais escrito: o incidente é a única fonte. O
+        # leitor continua aceitando o campo antigo para migrar snapshots.
+        return {"conclusoes": self._concluidas,
+                "provas_usadas": self._provas_usadas,
                 # Reiniciar não é resolução.
                 "incidentes": self._incidentes}
 
     def restaurar_incidentes(self, doc: dict | None) -> None:
         if not doc:
             return
-        for k, v in (doc.get("deficits") or {}).items():
-            self._deficits[k] = Decimal(str(v))
+
         self._concluidas.update(doc.get("conclusoes") or {})
         self._incidentes.update(doc.get("incidentes") or {})
+        self._provas_usadas.update(doc.get("provas_usadas") or {})
         # MIGRAÇÃO: snapshot antigo guardava déficit em `deficits`, sem
         # incidente. Ignorar significaria perder a violação no reinício —
         # justamente o tipo de esquecimento que esta rodada veio corrigir.
@@ -416,6 +415,8 @@ class RiskEngine:
             "evidence": evidence,
             "status": "OPEN",
             "resolved_at": "", "resolved_by": "", "resolution_evidence": "",
+            "resolution_refs": {}, "validated_by_policy": False,
+            "policy_version": "",
         }
         self._incidentes[chave] = inc
         return inc["incident_id"]
@@ -428,8 +429,11 @@ class RiskEngine:
 
     CAPACIDADE_RESOLVER = "RESOLVE_RISK_INCIDENT"
 
+    POLICY_VERSION = "dz23.resolucao/1"
+
     def resolve_risk_incident(self, incident_id: str, *, actor,
-                              evidence: str, reason: str = "") -> dict:
+                              evidence: str, reason: str = "",
+                              resolution_refs: dict | None = None) -> dict:
         """Fecha um incidente: autorização real + evidência + estado corrigido.
 
         Saldos voltarem a bater sozinhos não resolve nada, e evidência
@@ -453,16 +457,15 @@ class RiskEngine:
                 "resolução exige evidência: sem ela não há como auditar por "
                 "que a violação deixou de valer")
 
-        # ESTADO ECONÔMICO: se as invariantes ligadas ao incidente ainda
-        # estão quebradas, resolver seria apagar o alarme com o fogo aceso.
+        # PROVA: cada tipo de incidente define o que aceita como conserto.
+        # As invariantes gerais de saldo não servem sozinhas — depois de um
+        # déficit elas já estão verdes (o dinheiro saiu do caixa e a
+        # aritmética fecha), então bastaria uma frase para destravar a mesa.
+        refs = dict(resolution_refs or {})
         alvo = next((i for i in self._incidentes.values()
                      if i["incident_id"] == incident_id), None)
         if alvo is not None and alvo["status"] == "OPEN":
-            ok, motivo = self._invariantes_de_saldo()
-            if not ok:
-                raise ValueError(
-                    f"estado econômico ainda inconsistente ({motivo}): "
-                    "corrija primeiro, depois resolva o incidente")
+            self.validate_incident_resolution(alvo, refs)
         for inc in self._incidentes.values():
             if inc["incident_id"] != incident_id:
                 continue
@@ -474,8 +477,65 @@ class RiskEngine:
             inc["resolved_at"] = utcnow().isoformat()
             inc["resolved_by"] = actor_id
             inc["resolution_evidence"] = f"{evidence.strip()} | {reason}".strip(" |")
+            inc["resolution_refs"] = refs
+            inc["validated_by_policy"] = True
+            inc["policy_version"] = self.POLICY_VERSION
+            # A prova econômica é consumida: uma compensação de 10 não paga
+            # duas dívidas de 10.
+            for tx_id in refs.get("ledger_tx_ids", []):
+                self._provas_usadas[tx_id] = incident_id
             return inc
         raise ValueError(f"incidente {incident_id} não encontrado")
+
+    def validate_incident_resolution(self, incidente: dict, refs: dict) -> None:
+        """Despacha por TIPO — cada violação tem seu próprio critério."""
+        tipo = incidente["type"]
+        if tipo == "RESERVATION_DEFICIT":
+            return self._validar_deficit(incidente, refs)
+        if tipo in ("COVERAGE_LEDGER_MISMATCH", "UNKNOWN_RESERVATION_OWNERSHIP"):
+            ok, motivo = self._invariantes_de_saldo()
+            if not ok:
+                raise ValueError(
+                    f"estado econômico ainda inconsistente ({motivo}): "
+                    "corrija primeiro, depois resolva o incidente")
+            return None
+        ok, motivo = self._invariantes_de_saldo()
+        if not ok:
+            raise ValueError(f"estado econômico ainda inconsistente ({motivo})")
+        return None
+
+    def _validar_deficit(self, incidente: dict, refs: dict) -> None:
+        """Déficit só se fecha com COMPENSAÇÃO registrada no livro."""
+        devido = Decimal(incidente["amount"])
+        tx_ids = list(refs.get("ledger_tx_ids") or [])
+        if not tx_ids:
+            raise ValueError(
+                f"déficit de {devido} exige prova de compensação: registre um "
+                "ajuste de capital no livro e informe o tx_id em "
+                "resolution_refs['ledger_tx_ids']")
+        if self.carteira is None:
+            raise ValueError("sem carteira não há como verificar a prova")
+        coberto = Decimal("0")
+        for tx_id in tx_ids:
+            if tx_id in self._provas_usadas:
+                raise ValueError(
+                    f"lançamento {tx_id} já foi usado para resolver o "
+                    f"incidente {self._provas_usadas[tx_id]}: uma compensação "
+                    "não paga duas dívidas")
+            tx = self.carteira.find_transaction(tx_id)
+            if tx is None:
+                raise ValueError(f"lançamento {tx_id} não encontrado no livro")
+            if tx.get("kind") != "capital_adjustment":
+                raise ValueError(
+                    f"lançamento {tx_id} não é um ajuste de capital "
+                    f"(é {tx.get('kind')}): só compensação explícita serve "
+                    "como prova")
+            for entrada in tx.get("entries", []):
+                if entrada["account"].startswith("CASH:"):
+                    coberto += Decimal(str(entrada["amount"]))
+        if coberto < devido:
+            raise ValueError(
+                f"compensação de {coberto} não cobre o déficit de {devido}")
 
     def registrar_divergencia_de_cobertura(self, reservation_id: str, *,
                                            faltante: Decimal) -> None:
