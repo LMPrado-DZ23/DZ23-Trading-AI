@@ -277,6 +277,19 @@ class Ledger:
                 if tx.get("kind") == "risk_incident_compensation"
                 and tx.get("incident_id") == incident_id]
 
+    def find_incident_compensation(self, incident_id: str,
+                                   settlement_id: str) -> dict | None:
+        """A compensação DESTA liquidação — exige os dois identificadores.
+
+        Buscar só pelo incidente fazia uma liquidação adotar a transação de
+        outra e reescrever a linhagem: o sistema seguia como se tivesse
+        pago, sem saber qual das duas identidades era a verdadeira.
+        """
+        for tx in self.find_incident_compensations(incident_id):
+            if tx.get("settlement_id") == settlement_id:
+                return tx
+        return None
+
     def risk_incident_compensation(self, *, incident_id: str, amount: Decimal,
                                    external_reference: str, actor: str,
                                    reason: str = "",

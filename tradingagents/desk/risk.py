@@ -41,6 +41,21 @@ def _instante_de(valor):
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
+# O armazenamento não oferece commit conjunto de Ledger e Risk: são duas
+# escritas separadas, e um crash pode cair entre elas. É exatamente por isso
+# que existe protocolo de recuperação — afirmar atomicidade de um banco que
+# não temos seria pior que admitir a limitação.
+ATOMIC_STORAGE_COMMIT = "NOT_AVAILABLE"
+
+
+class RecoveryConflict(RuntimeError):
+    """As duas visões discordam sobre qual liquidação pagou o incidente.
+
+    Escolher uma arbitrariamente pode pagar duas vezes ou dar por paga uma
+    dívida que não foi. Parar é a única saída segura.
+    """
+
+
 class IdempotencyConflict(RuntimeError):
     """Mesmo identificador de liquidação com conteúdo diferente."""
 
@@ -593,11 +608,22 @@ class RiskEngine:
             atual["status"] = "COMPENSATING"
             alvo["status"] = "COMPENSATING"
 
-            # RECUPERAÇÃO: se o dinheiro já saiu num processo anterior, a
-            # compensação existente é ADOTADA em vez de duplicada.
-            existentes = self.carteira.find_incident_compensations(incident_id)
-            if existentes:
-                tx_id = existentes[0]["tx_id"]
+            # RECUPERAÇÃO por incident_id E settlement_id.
+            minha = self.carteira.find_incident_compensation(incident_id, stl)
+            if minha is not None:
+                # Mesma liquidação: o dinheiro já saiu, adota-se.
+                tx_id = minha["tx_id"]
+            elif self.carteira.find_incident_compensations(incident_id):
+                # Existe pagamento para este incidente com OUTRA identidade.
+                # Nem adotar (renomearia a linhagem) nem lançar de novo
+                # (pagaria duas vezes): o portão fica fechado.
+                outras = [t.get("settlement_id") or "(sem id)"
+                          for t in self.carteira.find_incident_compensations(
+                              incident_id)]
+                raise RecoveryConflict(
+                    f"o incidente {incident_id} já tem compensação da "
+                    f"liquidação {', '.join(outras)}, e esta é {stl}: "
+                    "recupere a liquidação original em vez de criar outra")
             else:
                 tx_id = self.carteira.risk_incident_compensation(
                     incident_id=incident_id, amount=amount,
@@ -605,14 +631,35 @@ class RiskEngine:
                     reason=reason, settlement_id=stl).tx_id
             self._settlements[stl]["compensation_tx_id"] = tx_id
 
-            alvo["status"] = "OPEN"      # para a validação/resolução padrão
-            resolvido = self.resolve_risk_incident(
-                incident_id, actor=actor, evidence=evidence, reason=reason,
-                resolution_refs={"ledger_tx_ids": [tx_id],
-                                 "settlement_id": stl})
+            resolvido = self._finalize_compensating_incident(
+                alvo, actor_id=actor_id, evidence=evidence, reason=reason,
+                tx_id=tx_id, settlement_id=stl)
             self._settlements[stl]["status"] = "RESOLVED"
             self._settlements[stl]["completed_at"] = utcnow().isoformat()
             return resolvido
+
+    def _finalize_compensating_incident(self, alvo: dict, *, actor_id: str,
+                                        evidence: str, reason: str,
+                                        tx_id: str,
+                                        settlement_id: str) -> dict:
+        """Fecha um incidente que está COMPENSATING.
+
+        Antes o código voltava o estado para OPEN só para reaproveitar a
+        validação padrão. Isso quebrava o significado do estado: por um
+        instante o incidente parecia nunca ter entrado em compensação, e
+        qualquer leitor concorrente veria uma máquina andando para trás.
+        """
+        refs = {"ledger_tx_ids": [tx_id], "settlement_id": settlement_id}
+        self.validate_incident_resolution(alvo, refs)
+        alvo["status"] = "RESOLVED"
+        alvo["resolved_at"] = utcnow().isoformat()
+        alvo["resolved_by"] = actor_id
+        alvo["resolution_evidence"] = f"{evidence.strip()} | {reason}".strip(" |")
+        alvo["resolution_refs"] = refs
+        alvo["validated_by_policy"] = True
+        alvo["policy_version"] = self.POLICY_VERSION
+        self._provas_usadas[tx_id] = alvo["incident_id"]
+        return alvo
 
     def _marcar_compensando(self, incident_id: str, settlement_id: str) -> None:
         """Usado pela recuperação e pelos testes de crash."""
