@@ -513,14 +513,16 @@ class RiskEngine:
         refs = dict(resolution_refs or {})
         alvo = next((i for i in self._incidentes.values()
                      if i["incident_id"] == incident_id), None)
-        if alvo is not None and alvo["status"] == "OPEN":
+        if alvo is not None and alvo["status"] in ("OPEN",
+                                                   "ACKNOWLEDGED_BLOCKING"):
+            # Reconhecido TAMBÉM resolve depois de corrigido: sem isto, quem
+            # registrou a decisão ficava preso no estado para sempre.
             self.validate_incident_resolution(alvo, refs)
         for inc in self._incidentes.values():
             if inc["incident_id"] != incident_id:
                 continue
-            if inc["status"] != "OPEN":
+            if inc["status"] not in ("OPEN", "ACKNOWLEDGED_BLOCKING"):
                 return inc
-            actor = actor_id
             # O histórico NUNCA é apagado: o registro muda de status.
             inc["status"] = "RESOLVED"
             inc["resolved_at"] = utcnow().isoformat()
@@ -927,12 +929,22 @@ class RiskEngine:
                     continue
                 # Piorou depois da resolução: é um FATO NOVO, e ganha uma
                 # chave estável por GERAÇÃO. Usar o instante da varredura
-                # criaria um incidente a cada passada.
-                geracao = int(existente.get("geracao") or 0) + 1
+                # criaria um incidente a cada passada; usar geração+1 do
+                # registro base SOBRESCREVIA a geração anterior no terceiro
+                # ciclo. A geração vem do MAIOR já existente para a moeda.
+                existentes_da_moeda = [
+                    int(i.get("geracao") or 0) for k, i in self._incidentes.items()
+                    if i.get("type") == "UNCOVERED_ASSET_BALANCE"
+                    and (i.get("fee_currency") or i.get("currency")) == moeda]
+                geracao = (max(existentes_da_moeda) if existentes_da_moeda else 0) + 1
                 chave = f"UNCOVERED_ASSET_BALANCE:{moeda}#{geracao}"
-                ja = self._incidentes.get(chave)
-                if ja and ja["status"] in self.ESTADOS_BLOQUEANTES:
-                    ja["amount"] = str(faltante)
+                viva = next(
+                    (i for i in self._incidentes.values()
+                     if i.get("type") == "UNCOVERED_ASSET_BALANCE"
+                     and (i.get("fee_currency") or i.get("currency")) == moeda
+                     and i["status"] in self.ESTADOS_BLOQUEANTES), None)
+                if viva is not None:
+                    viva["amount"] = str(faltante)
                     continue
             import uuid as _uuid
             self._incidentes[chave] = {
@@ -952,6 +964,10 @@ class RiskEngine:
         return encontrados
 
     ESTADOS_BLOQUEANTES = ("OPEN", "COMPENSATING", "ACKNOWLEDGED_BLOCKING")
+    # Reconhecer é para violação que não tem conserto automático. Um
+    # FEE_VALUATION_UNKNOWN reconhecido travaria a valoração para sempre —
+    # ela é o conserto dele.
+    TIPOS_RECONHECIVEIS = ("UNCOVERED_ASSET_BALANCE",)
 
     def reconhecer_incidente(self, incident_id: str, *, actor,
                              evidence: str) -> dict:
@@ -974,11 +990,118 @@ class RiskEngine:
                      if i["incident_id"] == incident_id), None)
         if alvo is None:
             raise ValueError(f"incidente {incident_id} não encontrado")
+        if alvo["type"] not in self.TIPOS_RECONHECIVEIS:
+            raise ValueError(
+                f"tipo {alvo['type']} não é reconhecível nesta versão: para "
+                "ele existe caminho de conserto próprio")
+        if alvo["status"] == "RESOLVED":
+            raise ValueError(
+                "incidente RESOLVED é terminal: reconhecer aqui reabriria o "
+                "que alguém já consertou")
+        if alvo["status"] == "COMPENSATING":
+            raise ValueError(
+                "incidente em COMPENSATING está no meio de uma liquidação: "
+                "reconhecer agora perderia a transição")
+        if alvo["status"] == "ACKNOWLEDGED_BLOCKING":
+            return alvo          # idempotente: preserva a evidência original
         alvo["status"] = "ACKNOWLEDGED_BLOCKING"
         alvo["acknowledged_by"] = actor_id
         alvo["acknowledged_at"] = utcnow().isoformat()
         alvo["acknowledged_evidence"] = evidence.strip()
         return alvo
+
+    def can_execute(self, intent) -> dict:
+        """Decide POR INTENÇÃO: entrar é diferente de sair.
+
+        Aplicar o mesmo bloqueio aos dois prendia o dinheiro DENTRO do
+        risco — o oposto de proteger. Reduzir posição diminui exposição e
+        continua permitido; a exceção não pode virar porta para aumentar.
+        """
+        motivos = self.execution_blockers()
+        if not motivos:
+            return {"decisao": "ALLOW", "motivos": []}
+        kind = str(getattr(intent, "kind", "") or "")
+        side = str(getattr(intent, "side", "") or "")
+        reducao = ("EXIT" in kind.upper()) or ("SELL" in side.upper())
+        if not reducao:
+            return {"decisao": "BLOCK_ENTRY", "motivos": motivos}
+
+        # REDUCE-ONLY DE VERDADE: só passa o que comprovadamente diminui.
+        quantidade = Decimal(str(getattr(intent, "quantity", 0) or 0))
+        if quantidade <= 0:
+            return {"decisao": "BLOCK_ENTRY",
+                    "motivos": motivos + ["quantidade precisa ser positiva"]}
+        instrumento = getattr(intent, "instrument", "")
+        agente = getattr(intent, "agent_id", "")
+        lote = self._lote_do_agente(instrumento, agente)
+        if lote <= 0:
+            return {"decisao": "BLOCK_ENTRY",
+                    "motivos": motivos + [
+                        f"{agente} não tem lote aberto em {instrumento}: "
+                        "venda a descoberto não é redução"]}
+        if quantidade > lote:
+            return {"decisao": "BLOCK_ENTRY",
+                    "motivos": motivos + [
+                        f"quantidade {quantidade} maior que o lote {lote}: "
+                        "o excedente aumentaria risco"]}
+        return {"decisao": "ALLOW_REDUCE_ONLY", "motivos": motivos}
+
+    def _lote_do_agente(self, instrumento: str, agente: str) -> Decimal:
+        """Quanto ESTE agente tem aberto neste instrumento.
+
+        Usa lot_quantity do livro, que já é a autoridade sobre lotes por
+        dono — eu havia escrito três caminhos alternativos para algo que já
+        existia.
+        """
+        if self.carteira is None:
+            return Decimal("0")
+        try:
+            return Decimal(str(self.carteira.lot_quantity(instrumento, agente)))
+        except Exception:
+            return Decimal("0")
+
+    def preflight_de_consistencia(self, ignorar_reserva: str = "") -> list[str]:
+        """Divergências entre livro e risco, SEM efeito colateral.
+
+        A reserva da própria intenção ainda não foi travada — quem trava é o
+        passo seguinte do envio. Acusá-la impediria qualquer ordem; acusar
+        só ela é o que separa 'ainda não aconteceu' de 'está errado'.
+        """
+        problemas = []
+        if self.carteira is None:
+            return problemas
+        with self._lock:
+            vivas = dict(self._reservations)
+        no_livro = self.carteira.reservation_balances()
+        orfas = set(no_livro) - set(vivas)
+        if orfas:
+            problemas.append(
+                f"ORPHAN_LEDGER_RESERVATION: capital travado em "
+                f"{', '.join(sorted(orfas))} sem reserva viva no risco")
+        # Só é divergência a reserva JÁ VINCULADA a uma ordem sem lastro no
+        # livro. Uma reserva criada e ainda não enviada está legitimamente
+        # ausente — acusá-la impediria qualquer ciclo em que vários agentes
+        # reservam antes de enviar.
+        faltando = {
+            rid for rid in set(vivas) - set(no_livro)
+            if rid != ignorar_reserva
+            and getattr(vivas[rid], "bound_client_order_id", "")}
+        if faltando:
+            problemas.append(
+                f"MISSING_LEDGER_RESERVATION: risco tem "
+                f"{', '.join(sorted(faltando))} vinculada a ordem sem lastro "
+                "no livro")
+        for rid, reserva in vivas.items():
+            if rid == ignorar_reserva or rid not in no_livro:
+                continue
+            if no_livro[rid] != reserva.remaining_amount:
+                problemas.append(
+                    f"RESERVATION_LEDGER_MISMATCH reservation_id={rid}: "
+                    f"livro {no_livro[rid]} vs risco {reserva.remaining_amount}")
+        if self.carteira.cash_available() < 0:
+            problemas.append(
+                f"caixa negativo: {self.carteira.cash_available()}")
+        return problemas
 
     def execution_blockers(self) -> list[str]:
         """Tudo que impede assumir risco novo. SÓ LEITURA.

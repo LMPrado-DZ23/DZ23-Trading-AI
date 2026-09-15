@@ -822,12 +822,24 @@ class ExecutionCoordinator:
         # (quem trava é o passo 4b, logo abaixo), então exigir os saldos
         # casados neste ponto acusaria a própria ordem que está nascendo.
         # O guard vê o estado REAL do livro, não só o que já virou
-        # incidente: um ativo negativo sem varredura recente liberava ordem.
-        bloqueios = self.risk.execution_blockers()
-        if bloqueios:
+        # incidente — e decide POR INTENÇÃO: bloquear a saída junto prenderia
+        # o dinheiro dentro do risco, que é o oposto de proteger.
+        decisao = self.risk.can_execute(ei)
+        if decisao["decisao"] not in ("ALLOW", "ALLOW_REDUCE_ONLY"):
             raise ExecutionRefused(
                 "execução bloqueada por violação financeira: "
-                + "; ".join(bloqueios[:3]))
+                + "; ".join(decisao["motivos"][:3]))
+
+        # Divergência entre livro e risco impede assumir risco NOVO. A
+        # reserva desta intenção ainda não foi travada (quem trava é o passo
+        # 4b); só ela é dispensada.
+        if decisao["decisao"] != "ALLOW_REDUCE_ONLY":
+            divergencias = self.risk.preflight_de_consistencia(
+                ignorar_reserva=getattr(ei, "reservation_id", "") or "")
+            if divergencias:
+                raise ExecutionRefused(
+                    "estado de capital divergente: "
+                    + "; ".join(divergencias[:3]))
 
         # 4. AUTORIZAÇÃO POR LADO — o que muda entre comprar e vender está
         #    declarado aqui, não espalhado por dois caminhos.
