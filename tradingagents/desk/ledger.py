@@ -62,6 +62,7 @@ class Transaction:
     # Sem o vínculo, um aporte feito para o incidente A resolvia o B.
     purpose: str = ""
     incident_id: str = ""
+    settlement_id: str = ""
 
     def validate(self) -> None:
         total = sum((e.amount for e in self.entries), ZERO)
@@ -84,11 +85,12 @@ class Ledger:
     # -- núcleo --------------------------------------------------------
     def _post(self, kind: str, entries, ref: str = "", *, instrument: str = "",
               quantity: Decimal = ZERO, agent_id: str = "", purpose: str = "",
-              incident_id: str = "", at=None) -> Transaction:
+              incident_id: str = "", settlement_id: str = "",
+              at=None) -> Transaction:
         tx = Transaction(uuid.uuid4().hex[:16], tuple(entries), kind, ref=ref,
                          instrument=instrument, quantity=quantity,
                          agent_id=agent_id, purpose=purpose,
-                         incident_id=incident_id,
+                         incident_id=incident_id, settlement_id=settlement_id,
                          **({"at": at} if at is not None else {}))
         tx.validate()
         self._txs.append(tx)
@@ -265,9 +267,20 @@ class Ledger:
         return sum((s for c, s in saldos.items()
                     if c == "RESERVED" or c.startswith("RESERVED:")), ZERO)
 
+    def find_incident_compensations(self, incident_id: str) -> list[dict]:
+        """Compensações já lançadas para este incidente.
+
+        É o que permite ao retry pós-crash DESCOBRIR que o dinheiro já saiu,
+        em vez de lançar de novo.
+        """
+        return [tx for tx in self.export_transactions()
+                if tx.get("kind") == "risk_incident_compensation"
+                and tx.get("incident_id") == incident_id]
+
     def risk_incident_compensation(self, *, incident_id: str, amount: Decimal,
                                    external_reference: str, actor: str,
-                                   reason: str = "") -> Transaction:
+                                   reason: str = "",
+                                   settlement_id: str = "") -> Transaction:
         """Compensação de UM incidente específico.
 
         Um aporte genérico não serve de prova: ele pode ter sido feito por
@@ -285,7 +298,8 @@ class Ledger:
             amount, reason=reason or f"compensação do incidente {incident_id}",
             actor=actor, external_reference=external_reference,
             kind="risk_incident_compensation",
-            purpose="RISK_INCIDENT_COMPENSATION", incident_id=incident_id)
+            purpose="RISK_INCIDENT_COMPENSATION", incident_id=incident_id,
+            settlement_id=settlement_id)
 
     def capital_withdrawal(self, amount: Decimal, *, reason: str, actor: str,
                            external_reference: str = "") -> Transaction:
@@ -301,7 +315,8 @@ class Ledger:
                            external_reference: str = "",
                            kind: str = "capital_adjustment",
                            purpose: str = "",
-                           incident_id: str = "") -> Transaction:
+                           incident_id: str = "",
+                           settlement_id: str = "") -> Transaction:
         """Aporte ou retirada de capital EXTERNO, com partida dobrada.
 
         Entra como CONTRIBUTED_CAPITAL, não como resultado: dinheiro que o
@@ -326,7 +341,8 @@ class Ledger:
                           purpose=purpose or ("CAPITAL_CONTRIBUTION"
                                               if amount > 0
                                               else "CAPITAL_WITHDRAWAL"),
-                          incident_id=incident_id)
+                          incident_id=incident_id,
+                          settlement_id=settlement_id)
 
     def find_transaction(self, tx_id: str) -> dict | None:
         for tx in self.export_transactions():
@@ -445,6 +461,7 @@ class Ledger:
              # o que a auditoria precisa para saber o que veio antes.
              "at": tx.at.isoformat() if hasattr(tx.at, "isoformat") else str(tx.at),
              "incident_id": getattr(tx, "incident_id", ""),
+             "settlement_id": getattr(tx, "settlement_id", ""),
              "purpose": getattr(tx, "purpose", ""),
              "instrument": getattr(tx, "instrument", ""),
              "quantity": str(getattr(tx, "quantity", ZERO)),
@@ -475,6 +492,7 @@ class Ledger:
                 agent_id=doc.get("agent_id", ""),
                 purpose=doc.get("purpose", ""),
                 incident_id=doc.get("incident_id", ""),
+                settlement_id=doc.get("settlement_id", ""),
                 # O instante ORIGINAL, não o de agora: substituir por utcnow
                 # reescreveria a data de todo o histórico a cada reinício.
                 **({"at": _instante(doc["at"])} if doc.get("at") else {}))

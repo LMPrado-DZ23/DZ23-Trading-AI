@@ -135,7 +135,8 @@ class TestOperacaoAtomica:
         m, risco, livro, coord = sistema()
         inc = incidente(risco, "10")
         caixa = livro.cash_available()
-        with pytest.raises(ValueError, match="cobre|insuficiente"):
+        # a política virou EXATIDÃO: nem a menos, nem a mais
+        with pytest.raises(ValueError, match="exat"):
             risco.settle_risk_incident(inc["incident_id"], actor=Ator(),
                                        amount=Decimal("5"),
                                        external_reference="x", evidence="y")

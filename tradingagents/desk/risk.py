@@ -24,6 +24,27 @@ from .models import (
 from .sizing import limite_de_correlacao
 
 
+def _instante_de(valor):
+    """Converte para datetime com fuso — comparar strings ISO é enganoso.
+
+    "2026-09-14T20:00:00-03:00" e "2026-09-14T23:00:00+00:00" são o MESMO
+    instante, mas a ordem textual diz o contrário. Data inválida falha
+    fechado: melhor recusar que decidir sobre dinheiro com data inventada.
+    """
+    from datetime import datetime, timezone
+    if isinstance(valor, datetime):
+        return valor if valor.tzinfo else valor.replace(tzinfo=timezone.utc)
+    try:
+        dt = datetime.fromisoformat(str(valor))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"instante inválido: {valor!r}") from exc
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+class IdempotencyConflict(RuntimeError):
+    """Mesmo identificador de liquidação com conteúdo diferente."""
+
+
 class RiskVeto(RuntimeError):
     """Recusa determinística — não negociável por agente algum."""
 
@@ -90,6 +111,8 @@ class RiskEngine:
         self._deficits: dict[str, Decimal] = {}
         self._incidentes: dict[str, dict] = {}
         self._provas_usadas: dict[str, str] = {}
+        self._settlements: dict[str, dict] = {}
+        self._lock_settlement = threading.RLock()
 
     # -- consultas -----------------------------------------------------
     @property
@@ -341,6 +364,7 @@ class RiskEngine:
         # leitor continua aceitando o campo antigo para migrar snapshots.
         return {"conclusoes": self._concluidas,
                 "provas_usadas": self._provas_usadas,
+                "settlements": self._settlements,
                 # Reiniciar não é resolução.
                 "incidentes": self._incidentes}
 
@@ -351,6 +375,7 @@ class RiskEngine:
         self._concluidas.update(doc.get("conclusoes") or {})
         self._incidentes.update(doc.get("incidentes") or {})
         self._provas_usadas.update(doc.get("provas_usadas") or {})
+        self._settlements.update(doc.get("settlements") or {})
         # MIGRAÇÃO: snapshot antigo guardava déficit em `deficits`, sem
         # incidente. Ignorar significaria perder a violação no reinício —
         # justamente o tipo de esquecimento que esta rodada veio corrigir.
@@ -431,7 +456,9 @@ class RiskEngine:
         return list(self._incidentes.values())
 
     def incidentes_abertos(self) -> list[dict]:
-        return [i for i in self._incidentes.values() if i["status"] == "OPEN"]
+        # COMPENSATING ainda é violação viva: só RESOLVED deixa de bloquear.
+        return [i for i in self._incidentes.values()
+                if i["status"] in ("OPEN", "COMPENSATING")]
 
     CAPACIDADE_RESOLVER = "RESOLVE_RISK_INCIDENT"
 
@@ -495,16 +522,21 @@ class RiskEngine:
 
     def settle_risk_incident(self, incident_id: str, *, actor,
                              amount: Decimal, external_reference: str,
-                             evidence: str, reason: str = "") -> dict:
-        """Compensa e resolve em UMA operação.
+                             evidence: str, reason: str = "",
+                             settlement_id: str = "") -> dict:
+        """Compensa e resolve como UMA transição serializada.
 
-        Em duas etapas — aporte genérico agora, prova depois — abre-se a
-        janela para usar um lançamento feito para outra finalidade. Aqui a
-        compensação nasce amarrada ao incidente e é consumida na hora.
+        Antes a sequência era: ler OPEN, lançar no livro, marcar RESOLVED —
+        sem nada serializando. Duas chamadas simultâneas criavam DUAS
+        compensações para a mesma dívida, e um crash entre o lançamento e a
+        resolução fazia o retry lançar de novo.
 
-        Autorização é verificada ANTES de mover dinheiro: recusar depois do
-        lançamento deixaria caixa alterado sem resolução.
+        Máquina de estados: OPEN -> COMPENSATING -> RESOLVED, tudo sob o
+        mesmo lock, com idempotência DURÁVEL por settlement_id — lock só
+        resolve concorrência dentro do processo; crash exige identidade que
+        sobreviva ao reinício.
         """
+        import uuid as _uuid
         capacidades = getattr(actor, "capabilities", None)
         actor_id = getattr(actor, "actor_id", None)
         if capacidades is None or not actor_id:
@@ -513,26 +545,86 @@ class RiskEngine:
         if self.CAPACIDADE_RESOLVER not in capacidades:
             raise PermissionError(
                 f"{actor_id} não possui {self.CAPACIDADE_RESOLVER}")
-        alvo = next((i for i in self._incidentes.values()
-                     if i["incident_id"] == incident_id), None)
-        if alvo is None:
-            raise ValueError(f"incidente {incident_id} não encontrado")
-        if alvo["status"] != "OPEN":
-            return alvo
-        devido = Decimal(alvo["amount"])
-        if amount < devido:
-            raise ValueError(
-                f"compensação de {amount} não cobre o incidente de {devido}")
         if self.carteira is None:
             raise ValueError("sem carteira não há como registrar a compensação")
 
-        tx = self.carteira.risk_incident_compensation(
-            incident_id=incident_id, amount=amount,
-            external_reference=external_reference, actor=actor_id,
-            reason=reason)
-        return self.resolve_risk_incident(
-            incident_id, actor=actor, evidence=evidence, reason=reason,
-            resolution_refs={"ledger_tx_ids": [tx.tx_id]})
+        stl = settlement_id or f"stl_{_uuid.uuid4().hex[:12]}"
+
+        with self._lock_settlement:
+            alvo = next((i for i in self._incidentes.values()
+                         if i["incident_id"] == incident_id), None)
+            if alvo is None:
+                raise ValueError(f"incidente {incident_id} não encontrado")
+
+            registro = self._settlements.get(stl)
+            if registro:
+                # Registro sem valor veio da marcação de recuperação (crash
+                # antes do lançamento): ele não conflita, é o mesmo trabalho
+                # sendo retomado.
+                pendente = Decimal(registro["amount"]) == 0
+                if registro["incident_id"] != incident_id or (
+                        not pendente and Decimal(registro["amount"]) != amount):
+                    raise IdempotencyConflict(
+                        f"liquidação {stl} já existe com outro conteúdo "
+                        f"(incidente {registro['incident_id']}, valor "
+                        f"{registro['amount']})")
+                if registro["status"] == "RESOLVED":
+                    return alvo          # retry idempotente: nada se move
+
+            if alvo["status"] == "RESOLVED":
+                return alvo
+
+            devido = Decimal(alvo["amount"])
+            if amount != devido:
+                # Aporte a mais é outra coisa: CAPITAL_CONTRIBUTION separado.
+                # Misturar os dois faria a compensação parecer maior do que a
+                # dívida que ela quita.
+                raise ValueError(
+                    f"a liquidação compensa exatamente o devido ({devido}); "
+                    f"recebido {amount}. Para aportar a mais, registre uma "
+                    "contribuição de capital separada")
+
+            atual = self._settlements.setdefault(stl, {
+                "settlement_id": stl, "incident_id": incident_id,
+                "amount": str(amount), "status": "COMPENSATING",
+                "compensation_tx_id": "",
+                "started_at": utcnow().isoformat(), "completed_at": ""})
+            atual["amount"] = str(amount)     # retomada fixa o valor real
+            atual["status"] = "COMPENSATING"
+            alvo["status"] = "COMPENSATING"
+
+            # RECUPERAÇÃO: se o dinheiro já saiu num processo anterior, a
+            # compensação existente é ADOTADA em vez de duplicada.
+            existentes = self.carteira.find_incident_compensations(incident_id)
+            if existentes:
+                tx_id = existentes[0]["tx_id"]
+            else:
+                tx_id = self.carteira.risk_incident_compensation(
+                    incident_id=incident_id, amount=amount,
+                    external_reference=external_reference, actor=actor_id,
+                    reason=reason, settlement_id=stl).tx_id
+            self._settlements[stl]["compensation_tx_id"] = tx_id
+
+            alvo["status"] = "OPEN"      # para a validação/resolução padrão
+            resolvido = self.resolve_risk_incident(
+                incident_id, actor=actor, evidence=evidence, reason=reason,
+                resolution_refs={"ledger_tx_ids": [tx_id],
+                                 "settlement_id": stl})
+            self._settlements[stl]["status"] = "RESOLVED"
+            self._settlements[stl]["completed_at"] = utcnow().isoformat()
+            return resolvido
+
+    def _marcar_compensando(self, incident_id: str, settlement_id: str) -> None:
+        """Usado pela recuperação e pelos testes de crash."""
+        with self._lock_settlement:
+            for inc in self._incidentes.values():
+                if inc["incident_id"] == incident_id:
+                    inc["status"] = "COMPENSATING"
+            self._settlements.setdefault(settlement_id, {
+                "settlement_id": settlement_id, "incident_id": incident_id,
+                "amount": "0", "status": "COMPENSATING",
+                "compensation_tx_id": "",
+                "started_at": utcnow().isoformat(), "completed_at": ""})
 
     def validate_incident_resolution(self, incidente: dict, refs: dict) -> None:
         """Despacha por TIPO — cada violação tem seu próprio critério."""
@@ -585,8 +677,9 @@ class RiskEngine:
                     "incidente não resolve outro")
             # ORDEM DOS FATOS: compensar antes de a violação existir é
             # coincidência, não conserto.
-            quando = str(tx.get("at") or "")
-            if quando and quando < str(incidente.get("opened_at") or ""):
+            if (tx.get("at") and incidente.get("opened_at")
+                    and _instante_de(tx["at"])
+                    < _instante_de(incidente["opened_at"])):
                 raise ValueError(
                     f"lançamento {tx_id} é anterior à abertura do incidente: "
                     "não pode ser a compensação dele")
