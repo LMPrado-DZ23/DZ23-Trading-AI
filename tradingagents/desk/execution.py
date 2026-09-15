@@ -821,13 +821,13 @@ class ExecutionCoordinator:
         # completa: a reserva desta ordem ainda não foi travada no livro
         # (quem trava é o passo 4b, logo abaixo), então exigir os saldos
         # casados neste ponto acusaria a própria ordem que está nascendo.
-        abertos = self.risk.incidentes_abertos()
-        if abertos:
-            i = abertos[0]
+        # O guard vê o estado REAL do livro, não só o que já virou
+        # incidente: um ativo negativo sem varredura recente liberava ordem.
+        bloqueios = self.risk.execution_blockers()
+        if bloqueios:
             raise ExecutionRefused(
-                f"incidente financeiro em aberto ({i['type']}, "
-                f"incident_id={i['incident_id']}): resolva com evidência "
-                "antes de assumir risco novo")
+                "execução bloqueada por violação financeira: "
+                + "; ".join(bloqueios[:3]))
 
         # 4. AUTORIZAÇÃO POR LADO — o que muda entre comprar e vender está
         #    declarado aqui, não espalhado por dois caminhos.

@@ -211,36 +211,46 @@ class TestContaDeConversao:
             "a diferença de conversão entrou como resultado de trader")
 
 
-class TestResolvidoComDescobertoVivo:
-    """Alguém pode resolver declarando que a diferença foi aceita. A
-    detecção não pode desfazer essa decisão a cada varredura."""
+class TestReconhecidoComDescobertoVivo:
+    """Um descoberto VIVO não se resolve: ele se RECONHECE.
+
+    Resolver com o ativo ainda faltando encerrava o alarme com o problema
+    de pé — e a mesa voltava a operar devendo o que não tem. O
+    reconhecimento preserva a evidência e continua bloqueando.
+    """
 
     def test_the_check_does_not_reopen_it(self):
         m, risco, livro = sistema()
         taxa_em(livro, "BNB", "0.5", "a")
         risco.conferir_ativos_descobertos()
         inc = descobertos(risco)[0]
-        risco.resolve_risk_incident(
+        risco.reconhecer_incidente(
             inc["incident_id"], actor=Ator(),
-            evidence="diferença aceita e registrada", reason="política")
+            evidence="diferença aceita e registrada")
         assert livro.balance("ASSET:BNB") == Decimal("-0.5"), (
             "o cenário precisa manter o descoberto vivo")
+        assert risco.execution_blockers(), "reconhecer não pode liberar"
 
         risco.conferir_ativos_descobertos()
         risco.conferir_ativos_descobertos()
-        assert not descobertos(risco), (
-            "a varredura reabriu o que alguém tinha resolvido")
+        reconhecidos = [i for i in risco.incidentes()
+                        if i["type"] == "UNCOVERED_ASSET_BALANCE"]
+        assert len(reconhecidos) == 1, (
+            "a varredura abriu outro incidente para o mesmo descoberto")
+        assert reconhecidos[0]["status"] == "ACKNOWLEDGED_BLOCKING"
 
-    def test_but_a_worse_shortfall_opens_a_new_one(self):
+    def test_a_worse_shortfall_updates_the_acknowledged_amount(self):
         m, risco, livro = sistema()
         taxa_em(livro, "BNB", "0.5", "a")
         risco.conferir_ativos_descobertos()
         inc = descobertos(risco)[0]
-        risco.resolve_risk_incident(inc["incident_id"], actor=Ator(),
-                                    evidence="aceita", reason="")
+        risco.reconhecer_incidente(inc["incident_id"], actor=Ator(),
+                                   evidence="aceita")
         taxa_em(livro, "BNB", "0.3", "b")      # descoberto piorou
         risco.conferir_ativos_descobertos()
-        novos = descobertos(risco)
-        assert novos, "piora do descoberto não foi detectada"
-        assert novos[0]["incident_id"] != inc["incident_id"]
-        assert Decimal(novos[0]["amount"]) == Decimal("0.8")
+        vivos = [i for i in risco.incidentes()
+                 if i["type"] == "UNCOVERED_ASSET_BALANCE"
+                 and i["status"] in risco.ESTADOS_BLOQUEANTES]
+        assert len(vivos) == 1, "a piora virou um segundo incidente"
+        assert Decimal(vivos[0]["amount"]) == Decimal("0.8"), (
+            "o valor não acompanhou a piora")

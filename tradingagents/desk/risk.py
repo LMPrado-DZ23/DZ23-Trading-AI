@@ -471,9 +471,10 @@ class RiskEngine:
         return list(self._incidentes.values())
 
     def incidentes_abertos(self) -> list[dict]:
-        # COMPENSATING ainda é violação viva: só RESOLVED deixa de bloquear.
+        # COMPENSATING e ACKNOWLEDGED_BLOCKING ainda são violação viva: só
+        # RESOLVED deixa de bloquear.
         return [i for i in self._incidentes.values()
-                if i["status"] in ("OPEN", "COMPENSATING")]
+                if i["status"] in self.ESTADOS_BLOQUEANTES]
 
     CAPACIDADE_RESOLVER = "RESOLVE_RISK_INCIDENT"
 
@@ -686,6 +687,19 @@ class RiskEngine:
         tipo = incidente["type"]
         if tipo == "RESERVATION_DEFICIT":
             return self._validar_deficit(incidente, refs)
+        if tipo == "UNCOVERED_ASSET_BALANCE":
+            # Aceitar uma frase aqui encerraria o alarme com o ativo ainda
+            # faltando — e a mesa voltaria a operar devendo o que não tem.
+            moeda = incidente.get("fee_currency") or incidente.get("currency")
+            saldo = (self.carteira.balances().get(f"ASSET:{moeda}", Decimal("0"))
+                     if self.carteira is not None else Decimal("0"))
+            if saldo < 0:
+                raise ValueError(
+                    f"ASSET:{moeda} ainda está em {saldo}: cubra o ativo "
+                    "(aporte ou compra) antes de resolver. Para registrar que "
+                    "a diferença foi aceita sem cobri-la, use "
+                    "reconhecer_incidente — que NÃO libera execução")
+            return None
         if tipo in ("COVERAGE_LEDGER_MISMATCH", "UNKNOWN_RESERVATION_OWNERSHIP"):
             ok, motivo = self._invariantes_de_saldo()
             if not ok:
@@ -897,8 +911,10 @@ class RiskEngine:
             encontrados.append(moeda)
             chave = f"UNCOVERED_ASSET_BALANCE:{moeda}"
             existente = self._incidentes.get(chave)
-            if existente and existente["status"] == "OPEN":
-                # SINCRONIZA com a realidade em vez de acumular.
+            if existente and existente["status"] in self.ESTADOS_BLOQUEANTES:
+                # SINCRONIZA o valor com a realidade em vez de acumular — e
+                # NÃO mexe no status: rebaixar um ACKNOWLEDGED_BLOCKING para
+                # OPEN apagaria a decisão de quem já analisou o caso.
                 existente["amount"] = str(faltante)
                 existente["evidence"] = (
                     f"saldo de {saldo} em {conta}: taxa paga em {moeda} sem o "
@@ -909,8 +925,15 @@ class RiskEngine:
                     # Já resolvido e o descoberto não piorou: reabrir aqui
                     # apagaria o trabalho de quem consertou.
                     continue
-                # Piorou depois da resolução: é um FATO NOVO, incidente novo.
-                chave = f"{chave}:{utcnow().isoformat()}"
+                # Piorou depois da resolução: é um FATO NOVO, e ganha uma
+                # chave estável por GERAÇÃO. Usar o instante da varredura
+                # criaria um incidente a cada passada.
+                geracao = int(existente.get("geracao") or 0) + 1
+                chave = f"UNCOVERED_ASSET_BALANCE:{moeda}#{geracao}"
+                ja = self._incidentes.get(chave)
+                if ja and ja["status"] in self.ESTADOS_BLOQUEANTES:
+                    ja["amount"] = str(faltante)
+                    continue
             import uuid as _uuid
             self._incidentes[chave] = {
                 "incident_id": "inc_" + _uuid.uuid4().hex[:12],
@@ -924,8 +947,59 @@ class RiskEngine:
                 "resolved_at": "", "resolved_by": "", "resolution_evidence": "",
                 "resolution_refs": {}, "validated_by_policy": False,
                 "policy_version": "", "occurrences": [],
+                "geracao": int(chave.split("#")[1]) if "#" in chave else 0,
             }
         return encontrados
+
+    ESTADOS_BLOQUEANTES = ("OPEN", "COMPENSATING", "ACKNOWLEDGED_BLOCKING")
+
+    def reconhecer_incidente(self, incident_id: str, *, actor,
+                             evidence: str) -> dict:
+        """Registra que a diferença foi vista e aceita — sem liberar nada.
+
+        Existe porque "resolvido" e "conhecido" são coisas diferentes:
+        forçar os dois no mesmo estado empurra quem precisa registrar a
+        decisão a marcar como resolvido algo que continua valendo.
+        """
+        capacidades = getattr(actor, "capabilities", None)
+        actor_id = getattr(actor, "actor_id", None)
+        if capacidades is None or not actor_id:
+            raise PermissionError("reconhecer exige ator autenticado")
+        if self.CAPACIDADE_RESOLVER not in capacidades:
+            raise PermissionError(
+                f"{actor_id} não possui {self.CAPACIDADE_RESOLVER}")
+        if not evidence or not evidence.strip():
+            raise ValueError("reconhecer exige evidência")
+        alvo = next((i for i in self._incidentes.values()
+                     if i["incident_id"] == incident_id), None)
+        if alvo is None:
+            raise ValueError(f"incidente {incident_id} não encontrado")
+        alvo["status"] = "ACKNOWLEDGED_BLOCKING"
+        alvo["acknowledged_by"] = actor_id
+        alvo["acknowledged_at"] = utcnow().isoformat()
+        alvo["acknowledged_evidence"] = evidence.strip()
+        return alvo
+
+    def execution_blockers(self) -> list[str]:
+        """Tudo que impede assumir risco novo. SÓ LEITURA.
+
+        Consultar apenas incidentes abertos deixava passar o que ninguém
+        tinha registrado ainda — um ativo negativo sem varredura recente
+        liberava ordem. Aqui o estado REAL do livro entra junto.
+        """
+        motivos = []
+        for inc in self._incidentes.values():
+            if inc["status"] in self.ESTADOS_BLOQUEANTES:
+                motivos.append(
+                    f"{inc['type']} incident_id={inc['incident_id']} "
+                    f"status={inc['status']} valor={inc.get('amount')}")
+        for moeda, falta in sorted(self.ativos_descobertos().items()):
+            motivos.append(
+                f"ativo descoberto ASSET:{moeda} em -{falta}")
+        deficit = self.deficit_total()
+        if deficit > 0:
+            motivos.append(f"déficit ativo de {deficit}")
+        return motivos
 
     def conversao_acumulada(self) -> Decimal:
         """Diferença de unidade acumulada nas valorações de taxa.
