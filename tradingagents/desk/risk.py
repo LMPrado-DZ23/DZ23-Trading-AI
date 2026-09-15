@@ -806,12 +806,92 @@ class RiskEngine:
         cotacao = Decimal(str(rate))
         quantidade = Decimal(alvo["fee_amount"])
         alvo["valuation"] = {
+            # PROPOSTA: anotar a cotação não move dinheiro nem encerra nada.
+            # Sem essa distinção, o incidente parecia resolvido e o livro
+            # continuava sem saber quanto a operação custou.
+            "status": "PROPOSTA",
             "rate": str(cotacao), "fonte": str(fonte).strip(),
             "em": str(em), "moeda": alvo["fee_currency"],
             "quote_currency": alvo["quote_currency"],
             "valor_em_cotacao": str(quantidade * cotacao),
         }
         return alvo
+
+    CAPACIDADE_VALORAR = "VALUE_FEE_INCIDENT"
+
+    def aplicar_valoracao(self, incident_id: str, *, actor,
+                          evidence: str) -> dict:
+        """APLICA a cotação proposta: lança no livro e resolve o incidente.
+
+        Separado de `valorar_taxa` porque são atos diferentes: propor uma
+        cotação é análise; aplicá-la move a contabilidade e libera a mesa.
+        Juntar os dois deixaria quem só queria simular um número alterando o
+        livro sem perceber.
+        """
+        capacidades = getattr(actor, "capabilities", None)
+        actor_id = getattr(actor, "actor_id", None)
+        if capacidades is None or not actor_id:
+            raise PermissionError("aplicação exige ator autenticado")
+        if self.CAPACIDADE_VALORAR not in capacidades:
+            raise PermissionError(
+                f"{actor_id} não possui {self.CAPACIDADE_VALORAR}")
+        alvo = next((i for i in self._incidentes.values()
+                     if i["incident_id"] == incident_id), None)
+        if alvo is None:
+            raise ValueError(f"incidente {incident_id} não encontrado")
+        if alvo["status"] != "OPEN":
+            return alvo                  # idempotente: não move dinheiro de novo
+        v = alvo.get("valuation") or {}
+        if not v or v.get("status") != "PROPOSTA":
+            raise ValueError(
+                "não há cotação proposta para aplicar: chame valorar_taxa "
+                "antes, com cotação, fonte e instante")
+        if self.carteira is None:
+            raise ValueError("sem carteira não há onde lançar a valoração")
+
+        tx = self.carteira.fee_valuation(
+            moeda=alvo["fee_currency"], quantidade=Decimal(alvo["fee_amount"]),
+            rate=Decimal(v["rate"]), fonte=v["fonte"], em=v["em"],
+            incident_id=incident_id)
+        alvo["valuation"] = {**v, "status": "APLICADA",
+                             "ledger_tx_id": tx.tx_id,
+                             "aplicada_por": actor_id,
+                             "aplicada_em": utcnow().isoformat()}
+        alvo["status"] = "RESOLVED"
+        alvo["resolved_at"] = utcnow().isoformat()
+        alvo["resolved_by"] = actor_id
+        alvo["resolution_evidence"] = evidence
+        alvo["resolution_refs"] = {"ledger_tx_ids": [tx.tx_id]}
+        alvo["validated_by_policy"] = True
+        alvo["policy_version"] = self.POLICY_VERSION
+        return alvo
+
+    def conferir_ativos_descobertos(self) -> list[str]:
+        """Saldo negativo em ASSET:<moeda> é ativo que a mesa NÃO tem.
+
+        Acontece quando a corretora cobra taxa numa moeda que a conta não
+        possui. O livro fecha — a contrapartida existe — mas a posição real
+        está a descoberto, e isso precisa aparecer.
+        """
+        if self.carteira is None:
+            return []
+        abertos = []
+        for conta, saldo in self.carteira.balances().items():
+            if conta.startswith("ASSET:") and saldo < 0:
+                moeda = conta.split(":", 1)[1]
+                self.abrir_incidente(
+                    "UNCOVERED_ASSET_BALANCE", amount=abs(saldo),
+                    evidence=f"saldo negativo de {saldo} em {conta}: taxa paga "
+                             f"em {moeda} sem o ativo em conta")
+                # fee_currency mantém a leitura uniforme com o incidente de
+                # valoração: quem lê não precisa saber de qual tipo veio.
+                for inc in self._incidentes.values():
+                    if (inc["type"] == "UNCOVERED_ASSET_BALANCE"
+                            and inc["status"] == "OPEN"):
+                        inc["fee_currency"] = moeda
+                        inc["currency"] = moeda
+                abertos.append(moeda)
+        return abertos
 
     def registrar_divergencia_de_cobertura(self, reservation_id: str, *,
                                            faltante: Decimal) -> None:
@@ -856,6 +936,7 @@ class RiskEngine:
         """
         # 1) Incidente financeiro em aberto bloqueia, ponto. Só resolução
         #    explícita com evidência tira o bloqueio.
+        self.conferir_ativos_descobertos()
         abertos = self.incidentes_abertos()
         if abertos:
             i = abertos[0]

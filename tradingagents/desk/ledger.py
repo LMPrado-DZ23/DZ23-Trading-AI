@@ -197,7 +197,8 @@ class Ledger:
 
     def fill_sell(self, instrument: str, quantity: Decimal, price: Decimal,
                   fee: Decimal, *, cost_basis: Decimal, agent_id: str,
-                  ref: str = "") -> Transaction:
+                  ref: str = "",
+                  fee_in_other_currency: tuple | None = None) -> Transaction:
         """Venda executada: baixa a posição pelo custo e atribui o resultado.
 
         A conta PNL:<agente> carrega o resultado BRUTO (venda − custo); a
@@ -211,6 +212,19 @@ class Ledger:
                    Entry(f"FEES:{self.currency}", fee, "corretagem da saída"),
                    Entry(f"POSITION:{instrument}", -cost_basis, "baixa ao custo"),
                    Entry(f"PNL:{agent_id}", -bruto, "resultado bruto atribuído")]
+        if fee_in_other_currency:
+            valor, moeda = fee_in_other_currency
+            valor = Decimal(str(valor))
+            if moeda == self.currency:
+                raise ValueError(
+                    "fee_in_other_currency é para moeda DIFERENTE da cotação")
+            if valor != ZERO:
+                # Fora do PnL em cotação: descontar 5 BNB de um resultado em
+                # USDT misturaria unidades.
+                entries.append(Entry(f"FEES:{moeda}", valor,
+                                     "corretagem da saída em outra moeda"))
+                entries.append(Entry(f"ASSET:{moeda}", -valor,
+                                     "ativo usado para pagar a corretagem"))
         return self._post("fill_sell", entries, ref, instrument=instrument,
                           quantity=quantity, agent_id=agent_id)
 
@@ -295,6 +309,34 @@ class Ledger:
         return [tx for tx in self.export_transactions()
                 if tx.get("kind") == "risk_incident_compensation"
                 and tx.get("incident_id") == incident_id]
+
+    def fee_valuation(self, *, moeda: str, quantidade: Decimal,
+                      rate: Decimal, fonte: str, em: str,
+                      incident_id: str = "") -> Transaction:
+        """Converte a taxa registrada em outra moeda para a de cotação.
+
+        Enquanto isto não acontece, a taxa existe no livro na moeda original
+        e o custo real em cotação é desconhecido. A procedência da cotação
+        vai no memo: sem ela, ninguém audita de onde saiu o número.
+        """
+        if quantidade <= ZERO or rate <= ZERO:
+            raise ValueError("valoração exige quantidade e cotação positivas")
+        memo = (f"taxa {quantidade} {moeda} valorada a {rate} "
+                f"{self.currency}/{moeda} | fonte {fonte} | em {em}")
+        valor = (quantidade * rate).quantize(Decimal("0.00000001"))
+        # Baixa apenas o que REALMENTE está registrado naquela moeda: zerar
+        # mais do que existe criaria saldo negativo — o oposto do conserto.
+        registrado = self.balances().get(f"FEES:{moeda}", ZERO)
+        baixa = min(quantidade, registrado) if registrado > ZERO else ZERO
+        entradas = [Entry(f"FEES:{self.currency}", valor, memo)]
+        if baixa > ZERO:
+            entradas.append(Entry(f"FEES:{moeda}", -baixa, memo))
+        # A diferença de unidade fica explícita numa conta de conversão, em
+        # vez de sumir dentro do custo.
+        entradas.append(Entry("FX:CONVERSION", baixa - valor, memo))
+        return self._post("fee_valuation", entradas,
+                          incident_id or f"valoracao:{moeda}",
+                          incident_id=incident_id)
 
     def find_incident_compensation(self, incident_id: str,
                                    settlement_id: str) -> dict | None:
