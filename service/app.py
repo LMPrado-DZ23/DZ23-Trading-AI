@@ -1073,9 +1073,31 @@ _OAUTH_STATES = StateStore()
 _OAUTH_TRANSPORT = None          # injetável em teste; None = rede real
 
 
+# Valores aceitos como "ligado". Qualquer outra coisa — inclusive "talvez",
+# "enable" ou um erro de digitação — é NÃO. Num campo que decide se ordens
+# chegam a uma corretora, o erro precisa cair do lado seguro.
+_SIM = frozenset({"1", "true", "yes", "sim", "on"})
+_NAO = frozenset({"", "0", "false", "no", "nao", "não", "off"})
+
+
+def flag_ligada(nome: str, env=None) -> bool:
+    """Parser estrito de flag booleana de ambiente.
+
+    `bool(os.environ.get(...))` liga a flag com QUALQUER texto — "false" e
+    "0" incluídos, porque string não vazia é verdadeira em Python. Aqui só
+    um conjunto declarado liga; desconhecido fica desligado.
+    """
+    bruto = (env or os.environ).get(nome)
+    if bruto is None:
+        return False
+    # Só o conjunto declarado liga. `_NAO` existe para documentar os
+    # negativos esperados; qualquer valor fora dos dois cai aqui como NÃO.
+    return str(bruto).strip().lower() in _SIM
+
+
 @app.get("/v1/status/operacao")
 def status_operacao():
-    """Estado operacional REAL da plataforma.
+    """Status PÚBLICO de capacidade e rollout da plataforma.
 
     Texto fixo na tela mente com o tempo: alguém libera um gate e a interface
     continua dizendo o contrário, ou o gate fecha e a tela segue convidando a
@@ -1084,13 +1106,22 @@ def status_operacao():
     LIVE não é removido do produto — é uma capacidade PREVISTA e hoje
     indisponível. Some da tela seria esconder o roteiro; dizer que está
     pronta seria mentir.
+
+    O QUE ISTO NÃO É: prova de prontidão operacional. Aqui se responde o que
+    a PLATAFORMA oferece — sem nada de inquilino, conta, posição ou saldo,
+    porque a rota é pública. O estado real de um inquilino depende de kill
+    switch, reconciliação, incidentes de risco, consistência de capital,
+    capacidade da corretora, mandato, autorização e frescor do SAFE; isso
+    vive em /v1/operational-readiness, autenticado e por inquilino, ainda
+    não implementado. Responder aqui o que é de lá vazaria estado de cliente
+    para quem nem fez login.
     """
     ambiente = {
         "PAPER": {"habilitado": True,
                   "descricao": "simulação completa, sem ordem na corretora"},
         "SHADOW": {"habilitado": True,
                    "descricao": "decisões com dados reais, sem envio"},
-        "DEMO": {"habilitado": bool(os.environ.get("DEMO_TRADING")),
+        "DEMO": {"habilitado": flag_ligada("DEMO_TRADING"),
                  "descricao": "conta de demonstração da corretora"},
         "LIVE": {"habilitado": False,
                  "descricao": "execução com dinheiro real"},
@@ -1105,7 +1136,16 @@ def status_operacao():
     ]
     bloqueado = not ambiente["LIVE"]["habilitado"]
     return {
+        "escopo": "PLATAFORMA",
+        "nao_e": ("prova de prontidão operacional (operational readiness); "
+                  "o estado por inquilino virá autenticado em "
+                  "/v1/operational-readiness"),
+        # PAPER é POLÍTICA ATUAL, não detecção: enquanto só ele estiver
+        # autorizado, o valor é fixo de propósito. Quando o modo passar a
+        # vir do mandato do inquilino, esta origem muda junto — e quem lê
+        # precisa saber distinguir as duas coisas.
         "modo_atual": "PAPER",
+        "modo_atual_origem": "POLITICA_ATUAL",
         "modos": ambiente,
         "operacao_real": {
             "disponivel": not bloqueado,
