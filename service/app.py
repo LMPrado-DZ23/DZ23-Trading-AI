@@ -503,7 +503,17 @@ def metrics(_=Depends(auth)):
     return METRICS.snapshot()
 
 @app.get("/")
-def index(): return FileResponse(STATIC / "index.html")
+def index():
+    """Raiz é a página PÚBLICA: quem chega pelo domínio precisa entender o
+    produto antes de ver um formulário de login."""
+    return FileResponse(STATIC / "site.html")
+
+
+@app.get("/app", include_in_schema=False)
+@app.get("/app/", include_in_schema=False)
+def aplicacao():
+    """A plataforma em si — login e painel."""
+    return FileResponse(STATIC / "index.html")
 
 
 @app.get("/static/marca/{arquivo}", include_in_schema=False)

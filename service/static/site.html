@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DZ23 Trading Platform — mesa de trading com risco governado</title>
+<meta name="description" content="Agência multiagente de trading com contabilidade auditável, reconciliação com a corretora e travas de risco. Paper e Shadow Trading hoje; dinheiro real só depois de auditoria independente.">
+<link rel="icon" href="/static/marca/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/marca/favicon-32.png">
+<link rel="apple-touch-icon" href="/static/marca/dz23-logo-192.png">
+<meta name="theme-color" content="#1447c8">
+<meta property="og:title" content="DZ23 Trading Platform">
+<meta property="og:description" content="Mesa multiagente com risco governado e contabilidade auditável.">
+<meta property="og:image" content="/static/marca/dz23-logo-512.png">
+<meta property="og:type" content="website">
+<style>
+:root{--bg:#07101b;--surface:#0d1826;--line:#20344a;--text:#edf5ff;--muted:#8ba0b8;--green:#4be6a2;--cyan:#44c7f4;--red:#ff7185;--azul:#1447c8}
+*{box-sizing:border-box}html{color-scheme:dark;scroll-behavior:smooth}
+body{margin:0;background:radial-gradient(circle at 75% -10%,#173a57 0,transparent 42%),var(--bg);color:var(--text);font:16px/1.65 Inter,ui-sans-serif,system-ui,sans-serif}
+a{color:var(--cyan)}img{max-width:100%}
+.wrap{width:min(1120px,92vw);margin:auto}
+header{position:sticky;top:0;z-index:20;background:#07101bd9;backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.nav{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0}
+.logo{display:flex;align-items:center;gap:11px;font-weight:850;letter-spacing:.06em}
+.logo img{width:36px;height:36px;border-radius:10px;display:block}
+.nav-links{display:flex;gap:22px;align-items:center}
+.nav-links a{color:var(--muted);text-decoration:none;font-size:14px}
+.nav-links a:hover{color:var(--text)}
+.btn{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:11px;padding:12px 20px;font-weight:800;cursor:pointer;text-decoration:none;font-size:15px}
+.btn.primary{background:var(--green);color:#062418}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--text)}
+.hero{padding:88px 0 64px}
+.hero h1{font-size:clamp(34px,6vw,62px);line-height:1.04;margin:0 0 22px;letter-spacing:-.02em}
+.hero p.lead{font-size:clamp(17px,2.2vw,21px);color:#b7cadd;max-width:640px;margin:0 0 30px}
+.hero-cta{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:26px}
+.badges{display:flex;gap:9px;flex-wrap:wrap}
+.badge{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border:1px solid var(--line);border-radius:999px;font-size:11.5px;font-weight:800;letter-spacing:.05em}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 12px currentColor}
+section{padding:66px 0;border-top:1px solid var(--line)}
+h2.sec{font-size:clamp(26px,4vw,38px);margin:0 0 12px;letter-spacing:-.01em}
+p.sub{color:var(--muted);max-width:680px;margin:0 0 34px}
+.grid{display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(270px,1fr))}
+.card{background:linear-gradient(150deg,var(--surface),#0a1623);border:1px solid var(--line);border-radius:16px;padding:24px}
+.card h3{margin:0 0 9px;font-size:18px}
+.card p{margin:0;color:var(--muted);font-size:14.5px}
+.card .ico{font-size:22px;margin-bottom:12px;display:block}
+.passos{counter-reset:p}
+.passo{display:flex;gap:18px;padding:20px 0;border-bottom:1px solid var(--line)}
+.passo:last-child{border:0}
+.passo b{flex:0 0 40px;height:40px;border-radius:12px;background:#12263a;color:var(--cyan);display:grid;place-items:center;font-size:15px}
+.passo h4{margin:2px 0 5px;font-size:17px}
+.passo p{margin:0;color:var(--muted);font-size:14.5px}
+.honesto{background:#140f14;border:1px solid #4a2333;border-radius:16px;padding:26px}
+.honesto h3{margin:0 0 10px;color:#ffb5c0;font-size:18px}
+.honesto ul{margin:0;padding-left:20px;color:#e3c7cf}
+.honesto li{margin:7px 0}
+.planos{display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.plano{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:26px;display:flex;flex-direction:column}
+.plano.destaque{border-color:var(--green);box-shadow:0 0 0 1px var(--green) inset}
+.plano .preco{font-size:34px;font-weight:850;margin:10px 0 4px}
+.plano .preco small{font-size:14px;color:var(--muted);font-weight:600}
+.plano ul{list-style:none;padding:0;margin:16px 0 22px;flex:1}
+.plano li{padding:7px 0;color:var(--muted);font-size:14.5px;border-bottom:1px solid #ffffff08}
+.faq details{border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:10px;background:#0a1623}
+.faq summary{cursor:pointer;font-weight:700;list-style:none}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary:after{content:"+";float:right;color:var(--cyan)}
+.faq details[open] summary:after{content:"–"}
+.faq p{color:var(--muted);margin:12px 0 0;font-size:14.5px}
+.final{text-align:center;padding:76px 0}
+footer{border-top:1px solid var(--line);padding:30px 0;color:var(--muted);font-size:13px}
+.foot{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
+@media(max-width:760px){.nav-links{display:none}.hero{padding:56px 0 44px}}
+@media(prefers-reduced-motion:no-preference){.card,.btn,.plano{transition:.18s ease}.card:hover{border-color:#2d4b68;transform:translateY(-2px)}}
+</style></head>
+<body>
+
+<header><div class="wrap nav">
+  <div class="logo"><img src="/static/marca/dz23-logo-192.png" alt="DZ23 Trading Platform">DZ23</div>
+  <nav class="nav-links">
+    <a href="#como">Como funciona</a>
+    <a href="#seguranca">Segurança</a>
+    <a href="#planos">Planos</a>
+    <a href="#faq">Dúvidas</a>
+  </nav>
+  <a class="btn primary" href="/app">Entrar</a>
+</div></header>
+
+<div class="wrap">
+
+<section class="hero" style="border:0">
+  <h1>Uma mesa de trading que<br>presta contas de cada centavo.</h1>
+  <p class="lead">Vários agentes com estratégias distintas operam em ciclos, sob limites
+  de risco que o sistema não consegue contornar. Cada ordem tem contabilidade de
+  partidas dobradas, reconciliação com a corretora e registro auditável.</p>
+  <div class="hero-cta">
+    <a class="btn primary" href="/app">Começar em Paper Trading</a>
+    <a class="btn ghost" href="#como">Ver como funciona</a>
+  </div>
+  <div class="badges">
+    <span class="badge"><i class="dot"></i>PAPER &amp; SHADOW</span>
+    <span class="badge"><i class="dot"></i>MULTI-TENANT</span>
+    <span class="badge" style="color:var(--red);border-color:#4a2333">DINHEIRO REAL BLOQUEADO</span>
+  </div>
+</section>
+
+<section id="como">
+  <h2 class="sec">Como funciona</h2>
+  <p class="sub">Do dado de mercado à ordem, com freio em cada etapa.</p>
+  <div class="passos">
+    <div class="passo"><b>1</b><div>
+      <h4>Os agentes analisam</h4>
+      <p>Traders com estratégias diferentes — tendência, reversão à média e rompimento —
+      leem o mercado em vários prazos e propõem operações. Estratégias distintas evitam
+      que todos errem junto no mesmo tipo de mercado.</p></div></div>
+    <div class="passo"><b>2</b><div>
+      <h4>O risco aprova ou veta</h4>
+      <p>Antes de qualquer envio, o sistema separa o capital da operação, confere o
+      mandato e o limite de exposição. Sem cobertura reservada, a ordem não sai.</p></div></div>
+    <div class="passo"><b>3</b><div>
+      <h4>A ordem vai à corretora</h4>
+      <p>Cada envio tem identificador próprio: pedir duas vezes não vira duas ordens.
+      Se a resposta se perde, o sistema trata como incerto e pergunta à corretora em vez
+      de reenviar às cegas.</p></div></div>
+    <div class="passo"><b>4</b><div>
+      <h4>Tudo é contabilizado</h4>
+      <p>Cada execução vira lançamento de partidas dobradas, com posição por agente e
+      resultado atribuído a quem operou. O histórico prova o desempenho.</p></div></div>
+  </div>
+</section>
+
+<section id="seguranca">
+  <h2 class="sec">O que impede um prejuízo bobo</h2>
+  <p class="sub">A maior parte do sistema existe para dizer "não" na hora certa.</p>
+  <div class="grid">
+    <div class="card"><span class="ico">🛑</span><h3>Freio diário</h3>
+      <p>Perda acumulada no dia passa do limite e a mesa para sozinha. O contador sobrevive
+      a reinício — o prejuízo de ontem não contamina hoje, nem some ao reiniciar.</p></div>
+    <div class="card"><span class="ico">🔍</span><h3>Reconciliação com a corretora</h3>
+      <p>Depois de qualquer queda, o sistema confere ordens, execuções e posições na
+      corretora antes de voltar a operar. "Não perguntei" nunca vira "está tudo certo".</p></div>
+    <div class="card"><span class="ico">🧾</span><h3>Contabilidade que fecha</h3>
+      <p>Capital disponível, reservado e investido são estados distintos. Dinheiro que
+      virou posição não reaparece como livre para ser alocado de novo.</p></div>
+    <div class="card"><span class="ico">🔒</span><h3>Nada de ordem duplicada</h3>
+      <p>Resposta perdida não é reenvio: a ordem fica marcada como incerta, o capital
+      segue reservado e nada novo é enviado até a dúvida ser resolvida.</p></div>
+    <div class="card"><span class="ico">👤</span><h3>Posição tem dono</h3>
+      <p>Cada agente encerra apenas o próprio lote. Resultado vai para quem operou, não
+      para quem apertou o botão.</p></div>
+    <div class="card"><span class="ico">🗝️</span><h3>Isolamento por cliente</h3>
+      <p>Cada conta tem mesa, credenciais e histórico próprios. Chaves de corretora ficam
+      no servidor e voltam sempre mascaradas.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2 class="sec">O que ainda não fazemos</h2>
+  <p class="sub">Vale mais dizer agora do que você descobrir depois.</p>
+  <div class="honesto">
+    <h3>Sendo direto sobre os limites</h3>
+    <ul>
+      <li><b>Dinheiro real está bloqueado.</b> A plataforma opera em Paper e Shadow
+      Trading. O núcleo financeiro está sob auditoria independente e só liberamos
+      execução real quando ela passar.</li>
+      <li><b>Não prometemos rentabilidade.</b> Nenhum sistema — com ou sem IA — garante
+      lucro em mercado. O que entregamos é disciplina de risco e registro auditável.</li>
+      <li><b>Custos comem resultado.</b> Ida e volta em cripto custa em torno de 0,3%;
+      estratégia que mira menos que isso perde dinheiro por construção, e o sistema
+      recusa operações que não pagam o próprio custo.</li>
+      <li><b>Estratégia só é promovida com evidência.</b> Validação fora da amostra,
+      com custos descontados. Resultado bonito no histórico não basta.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="planos">
+  <h2 class="sec">Planos</h2>
+  <p class="sub">Comece sem cartão. Pagamento por PIX quando quiser mais mesa.</p>
+  <div class="planos">
+    <div class="plano">
+      <h3>Paper</h3>
+      <div class="preco">R$ 0 <small>/ mês</small></div>
+      <ul>
+        <li>1 mesa em Paper Trading</li>
+        <li>Agentes com estratégias distintas</li>
+        <li>Painel completo e histórico</li>
+        <li>Relatório de risco</li>
+      </ul>
+      <a class="btn ghost" href="/app">Criar conta</a>
+    </div>
+    <div class="plano destaque">
+      <h3>Mesa</h3>
+      <div class="preco">R$ 149 <small>/ mês</small></div>
+      <ul>
+        <li>Tudo do Paper</li>
+        <li>Shadow Trading com dados reais</li>
+        <li>Alertas no Telegram e webhook</li>
+        <li>Backup e restauração do estado</li>
+        <li>Suporte por e-mail</li>
+      </ul>
+      <a class="btn primary" href="/app">Assinar</a>
+    </div>
+    <div class="plano">
+      <h3>Agência</h3>
+      <div class="preco">Sob consulta</div>
+      <ul>
+        <li>Várias contas isoladas</li>
+        <li>Mesa dedicada por cliente</li>
+        <li>Página pública de transparência</li>
+        <li>Acompanhamento na configuração</li>
+      </ul>
+      <a class="btn ghost" href="mailto:contato@dz23trading.com.br">Falar com a gente</a>
+    </div>
+  </div>
+</section>
+
+<section id="faq" class="faq">
+  <h2 class="sec">Dúvidas frequentes</h2>
+  <details><summary>Preciso saber programar?</summary>
+    <p>Não. Você cria a conta, conecta a corretora quando quiser e acompanha pelo painel.
+    Toda configuração é por formulário.</p></details>
+  <details><summary>Vocês têm acesso ao meu dinheiro?</summary>
+    <p>Não. As chaves de corretora ficam na sua conta, no servidor, e retornam sempre
+    mascaradas. Enquanto a execução real estiver bloqueada, nenhuma ordem sai com dinheiro
+    de verdade.</p></details>
+  <details><summary>Quanto rende?</summary>
+    <p>Não damos esse número, e desconfie de quem dá. O que mostramos é o histórico
+    completo das operações simuladas, com custos descontados, para você julgar.</p></details>
+  <details><summary>O que é Shadow Trading?</summary>
+    <p>Os agentes decidem com dados reais e as ordens são registradas como se fossem
+    enviadas, sem ir à corretora. Serve para medir a estratégia em condições de mercado
+    antes de qualquer risco.</p></details>
+  <details><summary>Posso cancelar quando quiser?</summary>
+    <p>Pode. A assinatura é mensal por PIX, sem fidelidade. Ao cancelar, o histórico
+    continua acessível para exportação.</p></details>
+</section>
+
+<section class="final" style="border:0">
+  <h2 class="sec">Comece sem arriscar nada</h2>
+  <p class="sub" style="margin:0 auto 26px">Crie a conta, rode em Paper Trading e veja o
+  sistema trabalhar antes de decidir qualquer coisa.</p>
+  <a class="btn primary" href="/app">Criar minha mesa</a>
+</section>
+
+</div>
+
+<footer><div class="wrap foot">
+  <div>© 2026 DZ23 Trading Platform · CNPJ 64.339.333/0001-22</div>
+  <div>Operações em mercado envolvem risco de perda. Não é recomendação de investimento.</div>
+</div></footer>
+
+</body></html>
