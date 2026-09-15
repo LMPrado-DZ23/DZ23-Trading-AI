@@ -221,7 +221,9 @@ class TestCenario14Contabilidade:
         led.fill_sell(INSTR, Decimal("1"), Decimal("130"), Decimal("2"),
                       cost_basis=Decimal("100"), agent_id="t", ref="r1")
         assert led.is_balanced()
-        assert led.balance("FEES") == Decimal("2")
+        # a conta de taxa passou a ter MOEDA: "FEES" sozinho somava
+        # unidades diferentes como se fossem a mesma
+        assert led.balance("FEES:USDT") == Decimal("2")
         assert led.attribution()["t"] == Decimal("30")          # bruto
         assert led.balance("CASH:USDT") == Decimal("1028")      # líquido no caixa
 
@@ -257,4 +259,4 @@ class TestCenario14Contabilidade:
                      reserved=Decimal("200"), ref="r1")
         # caixa 800 + sobra 19 + posição 180 = 999 (1 de taxa saiu)
         assert led.equity() == Decimal("999")
-        assert led.balance("FEES") == Decimal("1")
+        assert led.balance("FEES:USDT") == Decimal("1")

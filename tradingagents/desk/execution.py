@@ -566,7 +566,8 @@ class ExecutionCoordinator:
             self.aplicar_fill(
                 rec, side=(fill.get("side") or rec.lado or "buy"),
                 quantidade=qtd, preco=Decimal(str(fill.get("price") or 0)),
-                taxa=Decimal(str(fill.get("fee") or 0)), fill_id=fid)
+                taxa=Decimal(str(fill.get("fee") or 0)), fill_id=fid,
+                fee_currency=fill.get("fee_currency") or "")
 
         if acumulado is not None and aplicados != acumulado:
             # O acumulado é INVARIANTE, não fonte: divergir significa que a
@@ -582,7 +583,8 @@ class ExecutionCoordinator:
             rec.note = "reconciliada: execuções aplicadas"
 
     def aplicar_fill(self, rec, *, side: str, quantidade: Decimal,
-                     preco: Decimal, taxa: Decimal, fill_id: str) -> bool:
+                     preco: Decimal, taxa: Decimal, fill_id: str,
+                     fee_currency: str = "") -> bool:
         """Operação canônica de execução — usada pelo fluxo normal E pela
         reconciliação.
 
@@ -600,6 +602,20 @@ class ExecutionCoordinator:
         rec.seen_fills.add(fill_id)
         lado = (side or "").lower()
         instrumento = rec.instrumento
+        # A taxa tem MOEDA. Quando não é a de cotação, ela NÃO entra no custo
+        # (somaria unidades diferentes) e NÃO vira zero (faria a execução
+        # parecer mais barata do que foi): o custo real fica declarado como
+        # desconhecido e o risco novo trava.
+        cotacao = getattr(self.ledger, "currency", "USDT")
+        taxa_em_outra_moeda = bool(fee_currency and fee_currency != cotacao)
+        taxa_na_cotacao = Decimal("0") if taxa_em_outra_moeda else taxa
+        if taxa_em_outra_moeda:
+            self.risk.registrar_taxa_nao_valorada(
+                moeda=fee_currency, quantidade=taxa, order_id=rec.order_id,
+                instrumento=instrumento, fill_id=fill_id)
+            self.exigir_reconciliacao(
+                f"FEE_VALUATION_UNKNOWN: taxa de {taxa} {fee_currency} sem "
+                f"cotação em {cotacao} — custo real desconhecido")
 
         if lado == "buy":
             reserva = self._reserva_de(rec)
@@ -608,7 +624,7 @@ class ExecutionCoordinator:
                 terminal = (rec.filled_qty + quantidade) >= alvo_total
                 # CUSTO REAL da execução — é isto que sai do caixa, não a
                 # estimativa proporcional. Slippage e taxa entram aqui.
-                custo_real = (preco * quantidade + taxa).quantize(
+                custo_real = (preco * quantidade + taxa_na_cotacao).quantize(
                     Decimal("0.00000001"))
                 resultado = self.risk.registrar_execucao(
                     reserva["reservation_id"], custo=custo_real,
@@ -621,9 +637,12 @@ class ExecutionCoordinator:
                 rid = reserva["reservation_id"]
                 travado = self.ledger.reserved_cash(rid)
                 da_reserva = min(custo_real, travado) if travado > 0 else Decimal("0")
-                self.ledger.fill_buy(instrumento, quantidade, preco, taxa,
-                                     reserved=da_reserva, ref=rec.order_id,
-                                     agent_id=rec.agente, reservation_id=rid)
+                self.ledger.fill_buy(
+                    instrumento, quantidade, preco, taxa_na_cotacao,
+                    reserved=da_reserva, ref=rec.order_id,
+                    agent_id=rec.agente, reservation_id=rid,
+                    fee_in_other_currency=((taxa, fee_currency)
+                                           if taxa_em_outra_moeda else None))
                 sobra = Decimal(str(resultado.get("sobra") or 0))
                 if sobra > 0:
                     # Parte reservada e não usada volta ao caixa — limitada ao
@@ -651,11 +670,12 @@ class ExecutionCoordinator:
                 ref = getattr(rec, "cost_basis_ref", Decimal("0")) or Decimal("0")
                 alvo = rec.quantidade or quantidade
                 custo = (Decimal(str(ref)) * quantidade / alvo) if alvo else Decimal(str(ref))
-            self.ledger.fill_sell(instrumento, quantidade, preco, taxa,
+            self.ledger.fill_sell(instrumento, quantidade, preco,
+                                  taxa_na_cotacao,
                                   cost_basis=custo, agent_id=rec.agente,
                                   ref=rec.order_id)
             self.registrar_resultado_realizado(
-                (preco * quantidade) - custo - taxa)
+                (preco * quantidade) - custo - taxa_na_cotacao)
 
         anterior = rec.filled_qty
         rec.filled_qty = anterior + quantidade
@@ -663,7 +683,7 @@ class ExecutionCoordinator:
         if rec.filled_qty > 0:
             rec.avg_price = ((anterior * rec.avg_price + quantidade * preco)
                              / rec.filled_qty)
-        rec.fees = rec.fees + taxa
+        rec.fees = rec.fees + taxa_na_cotacao
         alvo = rec.quantidade
         rec.state = (OrderState.FILLED if alvo and rec.filled_qty >= alvo
                      else OrderState.PARTIALLY_FILLED)

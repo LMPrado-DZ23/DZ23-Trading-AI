@@ -160,19 +160,38 @@ class Ledger:
 
     def fill_buy(self, instrument: str, quantity: Decimal, price: Decimal,
                  fee: Decimal, *, reserved: Decimal, ref: str = "",
-                 agent_id: str = "", reservation_id: str = "") -> Transaction:
+                 agent_id: str = "", reservation_id: str = "",
+                 fee_in_other_currency: tuple | None = None) -> Transaction:
         """Compra executada: reserva vira posição; sobra volta ao caixa.
 
         `reserved` sai da conta DESTA reserva — nunca do bolo comum.
         """
         cost = (quantity * price).quantize(Decimal("0.00000001"))
+        # A taxa tem MOEDA. Guardar tudo numa conta "FEES" fazia 0,001 BNB
+        # somar 0,001 ao custo em USDT — número errado num livro que fecha,
+        # porque a aritmética está certa e o significado não.
         entries = [Entry(f"POSITION:{instrument}", cost, "posição ao custo"),
-                   Entry("FEES", fee, "corretagem"),
+                   Entry(f"FEES:{self.currency}", fee, "corretagem"),
                    Entry(self.conta_reserva(reservation_id), -reserved,
                          "reserva consumida")]
         rest = reserved - cost - fee
         if rest != ZERO:
             entries.append(Entry(f"CASH:{self.currency}", rest, "sobra devolvida"))
+        if fee_in_other_currency:
+            valor, moeda = fee_in_other_currency
+            valor = Decimal(str(valor))
+            if moeda == self.currency:
+                raise ValueError(
+                    "fee_in_other_currency é para moeda DIFERENTE da cotação; "
+                    f"use o parâmetro fee para {self.currency}")
+            if valor != ZERO:
+                # Sai do ativo pago e entra na despesa daquela moeda. Nenhuma
+                # conversão: converter com cotação adivinhada produz um número
+                # que parece certo e não é.
+                entries.append(Entry(f"FEES:{moeda}", valor,
+                                     "corretagem em outra moeda"))
+                entries.append(Entry(f"ASSET:{moeda}", -valor,
+                                     "ativo usado para pagar a corretagem"))
         return self._post("fill_buy", entries, ref, instrument=instrument,
                           quantity=quantity, agent_id=agent_id)
 
@@ -189,7 +208,7 @@ class Ledger:
         proceeds = (quantity * price).quantize(Decimal("0.00000001"))
         bruto = proceeds - cost_basis
         entries = [Entry(f"CASH:{self.currency}", proceeds - fee, "caixa da venda"),
-                   Entry("FEES", fee, "corretagem da saída"),
+                   Entry(f"FEES:{self.currency}", fee, "corretagem da saída"),
                    Entry(f"POSITION:{instrument}", -cost_basis, "baixa ao custo"),
                    Entry(f"PNL:{agent_id}", -bruto, "resultado bruto atribuído")]
         return self._post("fill_sell", entries, ref, instrument=instrument,

@@ -737,6 +737,82 @@ class RiskEngine:
             raise ValueError(
                 f"compensação de {coberto} não cobre o déficit de {devido}")
 
+    def registrar_taxa_nao_valorada(self, *, moeda: str, quantidade: Decimal,
+                                    order_id: str = "", instrumento: str = "",
+                                    fill_id: str = "") -> str:
+        """Taxa paga em moeda diferente da cotação — custo REAL desconhecido.
+
+        Sem cotação não há como dizer quanto a operação custou. Chutar um
+        câmbio produz um número que parece certo; ignorar a taxa faz a
+        execução parecer mais barata do que foi. As duas saídas mentem, então
+        o estado fica declarado como desconhecido e o risco novo trava.
+
+        Um incidente POR MOEDA: várias taxas em BNB são o mesmo problema
+        econômico, e abrir um por ordem viraria ruído.
+        """
+        chave = f"FEE_VALUATION_UNKNOWN:{moeda}"
+        ocorrencia = {"amount": str(quantidade), "order_id": order_id,
+                      "fill_id": fill_id, "instrumento": instrumento,
+                      "at": utcnow().isoformat(),
+                      "evidence": f"taxa de {quantidade} {moeda} sem cotação"}
+        existente = self._incidentes.get(chave)
+        if existente and existente["status"] == "OPEN":
+            existente["fee_amount"] = str(
+                Decimal(existente["fee_amount"]) + quantidade)
+            existente["amount"] = existente["fee_amount"]
+            existente.setdefault("occurrences", []).append(ocorrencia)
+            return existente["incident_id"]
+        import uuid as _uuid
+        inc = {
+            "incident_id": "inc_" + _uuid.uuid4().hex[:12],
+            "type": "FEE_VALUATION_UNKNOWN",
+            "fee_currency": moeda,
+            "fee_amount": str(quantidade),
+            "quote_currency": getattr(self.carteira, "currency", "USDT"),
+            "amount": str(quantidade),
+            "reservation_id": "", "order_id": order_id,
+            "currency": moeda,
+            "opened_at": utcnow().isoformat(),
+            "evidence": f"taxa em {moeda} sem cotação para valorar",
+            "status": "OPEN",
+            "resolved_at": "", "resolved_by": "", "resolution_evidence": "",
+            "resolution_refs": {}, "validated_by_policy": False,
+            "policy_version": "", "valuation": {},
+            "occurrences": [ocorrencia],
+        }
+        self._incidentes[chave] = inc
+        return inc["incident_id"]
+
+    def valorar_taxa(self, incident_id: str, *, rate, fonte: str, em) -> dict:
+        """Informa a cotação usada para valorar a taxa.
+
+        Exige cotação, FONTE e instante: sem procedência, ninguém consegue
+        auditar depois de onde saiu o número — e uma cotação sem origem é
+        indistinguível de um chute.
+        """
+        alvo = next((i for i in self._incidentes.values()
+                     if i["incident_id"] == incident_id), None)
+        if alvo is None:
+            raise ValueError(f"incidente {incident_id} não encontrado")
+        if rate is None or Decimal(str(rate)) <= 0:
+            raise ValueError(
+                "valorar exige a cotação (taxa de câmbio) usada, positiva")
+        if not fonte or not str(fonte).strip():
+            raise ValueError(
+                "valorar exige a fonte da cotação: sem origem, o número é "
+                "indistinguível de um chute")
+        if not em:
+            raise ValueError("valorar exige o instante da cotação")
+        cotacao = Decimal(str(rate))
+        quantidade = Decimal(alvo["fee_amount"])
+        alvo["valuation"] = {
+            "rate": str(cotacao), "fonte": str(fonte).strip(),
+            "em": str(em), "moeda": alvo["fee_currency"],
+            "quote_currency": alvo["quote_currency"],
+            "valor_em_cotacao": str(quantidade * cotacao),
+        }
+        return alvo
+
     def registrar_divergencia_de_cobertura(self, reservation_id: str, *,
                                            faltante: Decimal) -> None:
         """O risco tinha reserva que o livro não travou."""
