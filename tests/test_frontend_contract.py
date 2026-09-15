@@ -18,7 +18,10 @@ def test_dashboard_contains_multitenant_and_operational_surfaces():
         "/v1/agency/health",
         "/v1/execution/health",
         "dz23_token",
-        "LIVE BLOCKED",
+        # O estado operacional deixou de ser texto fixo: a tela PERGUNTA ao
+        # servidor. Travar a string aqui obrigaria a interface a mentir
+        # quando o estado mudasse.
+        "/v1/status/operacao",
     ):
         assert contract in html
 

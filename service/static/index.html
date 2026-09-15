@@ -13,7 +13,7 @@
 <body>
 <section id="authGate" class="auth-shell">
   <div class="auth-wrap">
-    <div class="auth-brand"><div class="logo"><img class="logo-mark" src="/static/marca/dz23-logo-192.png" alt="DZ23 Trading Platform">DZ23 AGENCY</div><h1>Inteligência coordenada. Risco governado.</h1><p>Uma agência multiagente para pesquisa, comitês, Paper Trading, Shadow Trading e preparação controlada para MT5 Demo.</p><div class="safety-row"><span class="badge"><i class="dot"></i>PAPER READY</span><span class="badge"><i class="dot"></i>MULTI-TENANT</span><span class="badge" style="color:var(--red)">LIVE BLOCKED</span></div></div>
+    <div class="auth-brand"><div class="logo"><img class="logo-mark" src="/static/marca/dz23-logo-192.png" alt="DZ23 Trading Platform">DZ23 AGENCY</div><h1>Inteligência coordenada. Risco governado.</h1><p>Uma agência autônoma multiagente para pesquisa, análise, Paper Trading, Shadow Trading e execução governada em múltiplos mercados e corretoras.</p><div class="safety-row"><span class="badge"><i class="dot"></i>PAPER MODE</span><span class="badge"><i class="dot"></i>MULTI-TENANT</span><span class="badge"><i class="dot"></i>EXECUÇÃO GOVERNADA</span></div></div>
     <div class="auth-panel"><div class="auth-card">
       <div class="eyebrow">Comece aqui · acesso seguro</div><h2 id="authTitle">Entrar na agência</h2><p class="muted" id="authSubtitle">Use o tenant, e-mail e senha cadastrados.</p>
       <div id="loginForm"><div class="field"><label>Tenant ID</label><input class="input" id="loginTenant" autocomplete="organization" placeholder="ten_..."></div><div class="field"><label>E-mail</label><input class="input" id="loginEmail" type="email" autocomplete="username"></div><div class="field"><label>Senha</label><div class="pwd-wrap"><input class="input" id="loginPassword" type="password" autocomplete="current-password"><button type="button" class="pwd-eye" data-alvo="loginPassword" onclick="verSenha(this)" aria-label="Mostrar senha" title="Mostrar senha">👁</button></div></div><button class="btn primary full" onclick="login()">Entrar</button></div>
@@ -36,7 +36,11 @@
   </div>
 </section>
 <div id="app" class="shell hide">
-  <aside class="sidebar"><div class="logo"><img class="logo-mark" src="/static/marca/dz23-logo-192.png" alt="DZ23 Trading Platform">DZ23 AGENCY</div><nav class="nav" id="sideNav"></nav><div class="side-footer"><span class="badge"><i class="dot"></i>PAPER / SHADOW</span><div class="muted" style="margin-top:8px;font-size:11px">Dinheiro real bloqueado</div></div></aside>
+  <aside class="sidebar"><div class="logo"><img class="logo-mark" src="/static/marca/dz23-logo-192.png" alt="DZ23 Trading Platform">DZ23 AGENCY</div><nav class="nav" id="sideNav"></nav><div class="side-footer" id="estadoOperacional">
+  <span class="badge"><i class="dot"></i><span id="modoAtual">—</span></span>
+  <div class="muted" style="margin-top:8px;font-size:11px" id="operacaoReal">
+    verificando estado…</div>
+</div></aside>
   <div class="workspace"><header class="topbar"><div><div class="eyebrow" id="pageEyebrow">Command center</div><h1 id="pageTitle">Visão geral</h1></div><div class="identity"><span class="badge" id="roleBadge">ADMIN</span><div class="identity-copy"><b id="userEmail">—</b><small id="tenantId">—</small></div><button class="btn secondary" onclick="logout()">Sair</button></div></header>
   <main class="content">
     <section id="page-overview" class="page active"><div class="page-head"><div><h2>Command Center</h2><p>Estado consolidado da agência, execução e infraestrutura.</p></div><button class="btn secondary" onclick="refreshOverview()">Atualizar</button></div><div class="grid">
@@ -132,7 +136,28 @@ async function carregarProvedores(){
   }catch(e){/* sem provedores: a tela segue com e-mail e senha */}
 }
 
-async function boot(){renderNav();$('tradeDate').value=new Date(Date.now()-864e5).toISOString().slice(0,10);const status=await fetch('/v1/auth/status').then(r=>r.json()).catch(()=>({multi_tenant:true}));if(status.bootstrap_required){$('loginForm').classList.add('hide');$('bootstrapForm').classList.remove('hide');$('authTitle').textContent='Criar primeira agência';$('authSubtitle').textContent='Configure o primeiro tenant e administrador.'}else{const saved=localStorage.getItem('dz23_tenant');if(saved)$('loginTenant').value=saved}if(token()){const me=await api('/v1/auth/me');if(me.ok)return enterApp(me.data)}showAuth();carregarProvedores()}
+async function carregarEstadoOperacional(){
+  // O estado vem do SERVIDOR. Texto fixo envelhece: um gate muda e a tela
+  // continua afirmando o contrário — na direção perigosa, convidando a
+  // operar algo que está fechado.
+  try{
+    const r=await fetch('/v1/status/operacao');
+    if(!r.ok) return;
+    const d=await r.json();
+    $('modoAtual').textContent=d.modo_atual;
+    const op=d.operacao_real||{};
+    const cor=op.disponivel?'ok':'bad';
+    $('operacaoReal').innerHTML='Operação real<br><span class="'+cor+'">'
+      +(op.estado||'—')+'</span>'+(op.motivo?(' — '+op.motivo):'');
+    const dispo=Object.entries(d.modos||{})
+      .map(([k,v])=>k+(v.habilitado?'':' (indisponível)')).join(' · ');
+    $('estadoOperacional').title='Modos: '+dispo;
+  }catch(e){
+    $('operacaoReal').textContent='estado operacional indisponível';
+  }
+}
+
+async function boot(){renderNav();$('tradeDate').value=new Date(Date.now()-864e5).toISOString().slice(0,10);const status=await fetch('/v1/auth/status').then(r=>r.json()).catch(()=>({multi_tenant:true}));if(status.bootstrap_required){$('loginForm').classList.add('hide');$('bootstrapForm').classList.remove('hide');$('authTitle').textContent='Criar primeira agência';$('authSubtitle').textContent='Configure o primeiro tenant e administrador.'}else{const saved=localStorage.getItem('dz23_tenant');if(saved)$('loginTenant').value=saved}if(token()){const me=await api('/v1/auth/me');if(me.ok){carregarEstadoOperacional();return enterApp(me.data)}}showAuth();carregarProvedores()}
 async function bootstrap(){const body={tenant_name:$('bootOrg').value.trim(),email:$('bootEmail').value.trim(),password:$('bootPassword').value};const bootstrapToken=$('bootToken').value.trim();if(!body.tenant_name||!body.email||body.password.length<12||!bootstrapToken)return $('authMsg').innerHTML='<span class="bad">Preencha todos os campos; senha mínima de 12 caracteres.</span>';const r=await fetch('/v1/auth/bootstrap',{method:'POST',headers:{'Content-Type':'application/json','X-Tenant-Bootstrap':bootstrapToken},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)return $('authMsg').innerHTML='<span class="bad">'+(d.detail||'Falha no bootstrap')+'</span>';localStorage.setItem('dz23_tenant',d.tenant_id);$('loginTenant').value=d.tenant_id;$('loginEmail').value=body.email;$('loginPassword').value=body.password;$('bootstrapForm').classList.add('hide');$('loginForm').classList.remove('hide');await login()}
 async function login(){const body={tenant_id:$('loginTenant').value.trim(),email:$('loginEmail').value.trim(),password:$('loginPassword').value};const r=await fetch('/v1/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)return $('authMsg').innerHTML='<span class="bad">'+(d.detail||'Credenciais inválidas')+'</span>';sessionStorage.setItem('dz23_token',d.access_token);localStorage.setItem('dz23_tenant',body.tenant_id);const me=await api('/v1/auth/me');if(me.ok)enterApp(me.data)}
 function enterApp(me){principal=me;$('authGate').classList.add('hide');$('app').classList.remove('hide');$('userEmail').textContent=me.email;$('tenantId').textContent=me.tenant_id;$('roleBadge').textContent=me.role.toUpperCase();document.querySelectorAll('[data-page="admin"]').forEach(e=>e.classList.toggle('hide',me.role!=='admin'));showPage('overview')}

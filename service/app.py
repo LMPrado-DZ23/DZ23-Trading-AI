@@ -1073,6 +1073,50 @@ _OAUTH_STATES = StateStore()
 _OAUTH_TRANSPORT = None          # injetável em teste; None = rede real
 
 
+@app.get("/v1/status/operacao")
+def status_operacao():
+    """Estado operacional REAL da plataforma.
+
+    Texto fixo na tela mente com o tempo: alguém libera um gate e a interface
+    continua dizendo o contrário, ou o gate fecha e a tela segue convidando a
+    operar. O painel pergunta; quem responde é o servidor.
+
+    LIVE não é removido do produto — é uma capacidade PREVISTA e hoje
+    indisponível. Some da tela seria esconder o roteiro; dizer que está
+    pronta seria mentir.
+    """
+    ambiente = {
+        "PAPER": {"habilitado": True,
+                  "descricao": "simulação completa, sem ordem na corretora"},
+        "SHADOW": {"habilitado": True,
+                   "descricao": "decisões com dados reais, sem envio"},
+        "DEMO": {"habilitado": bool(os.environ.get("DEMO_TRADING")),
+                 "descricao": "conta de demonstração da corretora"},
+        "LIVE": {"habilitado": False,
+                 "descricao": "execução com dinheiro real"},
+    }
+    # Um gate só é "aprovado" quando há evidência; enquanto não há, o estado
+    # é EM ANDAMENTO — não "pendente de configuração".
+    gates = [
+        {"nome": "kernel financeiro", "status": "EM_AUDITORIA",
+         "detalhe": "capital, reservas e reconciliação sob auditoria adversarial"},
+        {"nome": "segurança de dados", "status": "EM_AUDITORIA",
+         "detalhe": "isolamento por inquilino e exposição de dados em revisão"},
+    ]
+    bloqueado = not ambiente["LIVE"]["habilitado"]
+    return {
+        "modo_atual": "PAPER",
+        "modos": ambiente,
+        "operacao_real": {
+            "disponivel": not bloqueado,
+            "estado": "BLOQUEADA" if bloqueado else "LIBERADA",
+            "motivo": ("auditoria de segurança em andamento" if bloqueado
+                       else "gates aprovados"),
+        },
+        "gates": gates,
+    }
+
+
 @app.get("/v1/auth/oauth/providers")
 def oauth_providers():
     """Público: o painel só mostra o botão do provedor configurado."""
