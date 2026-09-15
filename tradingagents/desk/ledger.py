@@ -338,6 +338,25 @@ class Ledger:
                           incident_id or f"valoracao:{moeda}",
                           incident_id=incident_id)
 
+    def capital_adjustment_asset(self, moeda: str, quantidade: Decimal, *,
+                                 reason: str, actor: str,
+                                 external_reference: str = "") -> Transaction:
+        """Aporte (ou retirada) de um ATIVO que não é a moeda de cotação.
+
+        É como se cobre um ASSET negativo deixado por taxa em moeda que a
+        conta não tinha. Não passa pelo caixa: mover BNB não é mover USDT.
+        """
+        if quantidade == ZERO:
+            raise ValueError("aporte de ativo não pode ser zero")
+        memo = f"{reason} | por {actor}"
+        if external_reference:
+            memo += f" | ref {external_reference}"
+        return self._post("asset_adjustment",
+                          [Entry(f"ASSET:{moeda}", quantidade, memo),
+                           Entry("CONTRIBUTED_CAPITAL", -quantidade, memo)],
+                          external_reference or reason,
+                          purpose="ASSET_CONTRIBUTION")
+
     def find_incident_compensation(self, incident_id: str,
                                    settlement_id: str) -> dict | None:
         """A compensação DESTA liquidação — exige os dois identificadores.

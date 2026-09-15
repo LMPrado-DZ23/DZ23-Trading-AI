@@ -526,6 +526,14 @@ class RiskEngine:
             inc["resolved_by"] = actor_id
             inc["resolution_evidence"] = f"{evidence.strip()} | {reason}".strip(" |")
             inc["resolution_refs"] = refs
+            if inc["type"] == "UNCOVERED_ASSET_BALANCE":
+                # Guarda o descoberto REAL no instante da resolução — não o
+                # valor do incidente. Se o ativo foi aportado, ele é zero, e
+                # qualquer descoberto posterior é fato novo. Gravar o valor
+                # antigo faria um descoberto menor passar despercebido.
+                atual = self.ativos_descobertos().get(inc.get("fee_currency"),
+                                                      Decimal("0"))
+                inc["saldo_na_resolucao"] = str(atual)
             inc["validated_by_policy"] = True
             inc["policy_version"] = self.POLICY_VERSION
             # A prova econômica é consumida: uma compensação de 10 não paga
@@ -871,27 +879,73 @@ class RiskEngine:
 
         Acontece quando a corretora cobra taxa numa moeda que a conta não
         possui. O livro fecha — a contrapartida existe — mas a posição real
-        está a descoberto, e isso precisa aparecer.
+        está a descoberto.
+
+        UM incidente POR MOEDA, com o valor SINCRONIZADO ao saldo atual. A
+        versão anterior somava a cada chamada: o número crescia só de alguém
+        ler o estado, e duas moedas viravam um registro com a moeda da
+        última.
         """
         if self.carteira is None:
             return []
-        abertos = []
-        for conta, saldo in self.carteira.balances().items():
-            if conta.startswith("ASSET:") and saldo < 0:
-                moeda = conta.split(":", 1)[1]
-                self.abrir_incidente(
-                    "UNCOVERED_ASSET_BALANCE", amount=abs(saldo),
-                    evidence=f"saldo negativo de {saldo} em {conta}: taxa paga "
-                             f"em {moeda} sem o ativo em conta")
-                # fee_currency mantém a leitura uniforme com o incidente de
-                # valoração: quem lê não precisa saber de qual tipo veio.
-                for inc in self._incidentes.values():
-                    if (inc["type"] == "UNCOVERED_ASSET_BALANCE"
-                            and inc["status"] == "OPEN"):
-                        inc["fee_currency"] = moeda
-                        inc["currency"] = moeda
-                abertos.append(moeda)
-        return abertos
+        encontrados = []
+        for conta, saldo in sorted(self.carteira.balances().items()):
+            if not conta.startswith("ASSET:") or saldo >= 0:
+                continue
+            moeda = conta.split(":", 1)[1]
+            faltante = abs(saldo)
+            encontrados.append(moeda)
+            chave = f"UNCOVERED_ASSET_BALANCE:{moeda}"
+            existente = self._incidentes.get(chave)
+            if existente and existente["status"] == "OPEN":
+                # SINCRONIZA com a realidade em vez de acumular.
+                existente["amount"] = str(faltante)
+                existente["evidence"] = (
+                    f"saldo de {saldo} em {conta}: taxa paga em {moeda} sem o "
+                    "ativo em conta")
+                continue
+            if existente and existente["status"] == "RESOLVED":
+                if Decimal(existente.get("saldo_na_resolucao") or 0) >= faltante:
+                    # Já resolvido e o descoberto não piorou: reabrir aqui
+                    # apagaria o trabalho de quem consertou.
+                    continue
+                # Piorou depois da resolução: é um FATO NOVO, incidente novo.
+                chave = f"{chave}:{utcnow().isoformat()}"
+            import uuid as _uuid
+            self._incidentes[chave] = {
+                "incident_id": "inc_" + _uuid.uuid4().hex[:12],
+                "type": "UNCOVERED_ASSET_BALANCE",
+                "fee_currency": moeda, "currency": moeda,
+                "amount": str(faltante), "reservation_id": "", "order_id": "",
+                "opened_at": utcnow().isoformat(),
+                "evidence": (f"saldo de {saldo} em {conta}: taxa paga em "
+                             f"{moeda} sem o ativo em conta"),
+                "status": "OPEN",
+                "resolved_at": "", "resolved_by": "", "resolution_evidence": "",
+                "resolution_refs": {}, "validated_by_policy": False,
+                "policy_version": "", "occurrences": [],
+            }
+        return encontrados
+
+    def conversao_acumulada(self) -> Decimal:
+        """Diferença de unidade acumulada nas valorações de taxa.
+
+        Fica numa conta própria (FX:CONVERSION) e NÃO vira resultado de
+        trader: o que a estratégia fez e o que a conversão cambial fez são
+        coisas diferentes, e somar as duas premiaria ou puniria o agente por
+        um câmbio que ele não escolheu.
+        """
+        if self.carteira is None:
+            return Decimal("0")
+        return self.carteira.balances().get("FX:CONVERSION", Decimal("0"))
+
+    def ativos_descobertos(self) -> dict:
+        """Só LEITURA: moedas com saldo negativo, sem tocar em incidente."""
+        if self.carteira is None:
+            return {}
+        return {c.split(":", 1)[1]: abs(s)
+                for c, s in self.carteira.balances().items()
+                if c.startswith("ASSET:") and s < 0}
 
     def registrar_divergencia_de_cobertura(self, reservation_id: str, *,
                                            faltante: Decimal) -> None:
@@ -936,7 +990,14 @@ class RiskEngine:
         """
         # 1) Incidente financeiro em aberto bloqueia, ponto. Só resolução
         #    explícita com evidência tira o bloqueio.
-        self.conferir_ativos_descobertos()
+        # LEITURA PURA: detectar aqui escreveria incidente a cada consulta.
+        # O saldo negativo ainda BLOQUEIA — só não cria registro de lado.
+        descobertos = self.ativos_descobertos()
+        if descobertos:
+            moeda, falta = sorted(descobertos.items())[0]
+            return False, (
+                f"ativo descoberto: ASSET:{moeda} em -{falta} — taxa paga em "
+                f"{moeda} sem o ativo em conta (UNCOVERED_ASSET_BALANCE)")
         abertos = self.incidentes_abertos()
         if abertos:
             i = abertos[0]
