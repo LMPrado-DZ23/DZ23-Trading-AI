@@ -399,10 +399,15 @@ class RiskEngine:
                         evidence: str = "") -> str:
         import uuid as _uuid
         chave = f"{tipo}:{reservation_id or order_id}"
+        ocorrencia = {"amount": str(amount), "order_id": order_id,
+                      "reservation_id": reservation_id,
+                      "at": utcnow().isoformat(), "evidence": evidence}
         existente = self._incidentes.get(chave)
         if existente and existente["status"] == "OPEN":
-            # Mesma violação econômica: soma em vez de multiplicar registros.
+            # Mesma violação econômica: soma o total e GUARDA a origem de
+            # cada excesso. Só somar perderia de onde veio cada parcela.
             existente["amount"] = str(Decimal(existente["amount"]) + amount)
+            existente.setdefault("occurrences", []).append(ocorrencia)
             return existente["incident_id"]
         inc = {
             "incident_id": "inc_" + _uuid.uuid4().hex[:12],
@@ -417,6 +422,7 @@ class RiskEngine:
             "resolved_at": "", "resolved_by": "", "resolution_evidence": "",
             "resolution_refs": {}, "validated_by_policy": False,
             "policy_version": "",
+            "occurrences": [ocorrencia],
         }
         self._incidentes[chave] = inc
         return inc["incident_id"]
@@ -487,6 +493,47 @@ class RiskEngine:
             return inc
         raise ValueError(f"incidente {incident_id} não encontrado")
 
+    def settle_risk_incident(self, incident_id: str, *, actor,
+                             amount: Decimal, external_reference: str,
+                             evidence: str, reason: str = "") -> dict:
+        """Compensa e resolve em UMA operação.
+
+        Em duas etapas — aporte genérico agora, prova depois — abre-se a
+        janela para usar um lançamento feito para outra finalidade. Aqui a
+        compensação nasce amarrada ao incidente e é consumida na hora.
+
+        Autorização é verificada ANTES de mover dinheiro: recusar depois do
+        lançamento deixaria caixa alterado sem resolução.
+        """
+        capacidades = getattr(actor, "capabilities", None)
+        actor_id = getattr(actor, "actor_id", None)
+        if capacidades is None or not actor_id:
+            raise PermissionError(
+                "liquidação exige um ator autenticado com capacidades")
+        if self.CAPACIDADE_RESOLVER not in capacidades:
+            raise PermissionError(
+                f"{actor_id} não possui {self.CAPACIDADE_RESOLVER}")
+        alvo = next((i for i in self._incidentes.values()
+                     if i["incident_id"] == incident_id), None)
+        if alvo is None:
+            raise ValueError(f"incidente {incident_id} não encontrado")
+        if alvo["status"] != "OPEN":
+            return alvo
+        devido = Decimal(alvo["amount"])
+        if amount < devido:
+            raise ValueError(
+                f"compensação de {amount} não cobre o incidente de {devido}")
+        if self.carteira is None:
+            raise ValueError("sem carteira não há como registrar a compensação")
+
+        tx = self.carteira.risk_incident_compensation(
+            incident_id=incident_id, amount=amount,
+            external_reference=external_reference, actor=actor_id,
+            reason=reason)
+        return self.resolve_risk_incident(
+            incident_id, actor=actor, evidence=evidence, reason=reason,
+            resolution_refs={"ledger_tx_ids": [tx.tx_id]})
+
     def validate_incident_resolution(self, incidente: dict, refs: dict) -> None:
         """Despacha por TIPO — cada violação tem seu próprio critério."""
         tipo = incidente["type"]
@@ -525,11 +572,24 @@ class RiskEngine:
             tx = self.carteira.find_transaction(tx_id)
             if tx is None:
                 raise ValueError(f"lançamento {tx_id} não encontrado no livro")
-            if tx.get("kind") != "capital_adjustment":
+            if tx.get("kind") != "risk_incident_compensation":
                 raise ValueError(
-                    f"lançamento {tx_id} não é um ajuste de capital "
-                    f"(é {tx.get('kind')}): só compensação explícita serve "
-                    "como prova")
+                    f"lançamento {tx_id} não é uma compensação de incidente "
+                    f"(é {tx.get('kind')}): aporte genérico pode ter sido "
+                    "feito por qualquer motivo e não prova nada aqui")
+            vinculo = tx.get("incident_id") or ""
+            if vinculo != incidente["incident_id"]:
+                raise ValueError(
+                    f"lançamento {tx_id} está vinculado ao incidente "
+                    f"{vinculo or '(nenhum)'}, não a este: compensação de um "
+                    "incidente não resolve outro")
+            # ORDEM DOS FATOS: compensar antes de a violação existir é
+            # coincidência, não conserto.
+            quando = str(tx.get("at") or "")
+            if quando and quando < str(incidente.get("opened_at") or ""):
+                raise ValueError(
+                    f"lançamento {tx_id} é anterior à abertura do incidente: "
+                    "não pode ser a compensação dele")
             for entrada in tx.get("entries", []):
                 if entrada["account"].startswith("CASH:"):
                     coberto += Decimal(str(entrada["amount"]))

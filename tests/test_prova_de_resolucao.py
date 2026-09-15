@@ -87,9 +87,9 @@ class TestCompensacaoEconomica:
         m, risco, livro, coord = sistema()
         inc = criar_deficit(coord, risco, "10")
         caixa_antes = livro.cash_available()
-        tx = livro.capital_adjustment(
-            Decimal("10"), reason="aporte para cobrir déficit",
-            actor="risk-manager-1", external_reference="TED 2026-09-14")
+        tx = livro.risk_incident_compensation(
+            incident_id=inc["incident_id"], amount=Decimal("10"),
+            external_reference="TED 2026-09-14", actor="risk-manager-1")
         assert livro.cash_available() == caixa_antes + Decimal("10")
 
         risco.resolve_risk_incident(
@@ -103,8 +103,9 @@ class TestCompensacaoEconomica:
     def test_an_insufficient_adjustment_is_refused(self):
         m, risco, livro, coord = sistema()
         inc = criar_deficit(coord, risco, "10")
-        tx = livro.capital_adjustment(Decimal("5"), reason="metade",
-                                      actor="op", external_reference="x")
+        tx = livro.risk_incident_compensation(
+            incident_id=inc["incident_id"], amount=Decimal("5"),
+            external_reference="x", actor="op")
         with pytest.raises(ValueError, match="cobre|insuficiente"):
             risco.resolve_risk_incident(
                 inc["incident_id"], actor=Ator(), evidence="parcial",
@@ -137,8 +138,9 @@ class TestCompensacaoEconomica:
                               reservation_id="R-outra")
         inc2 = next(i for i in risco.incidentes_abertos()
                     if i["reservation_id"] == "R-outra")
-        tx = livro.capital_adjustment(Decimal("10"), reason="aporte",
-                                      actor="op", external_reference="TED")
+        tx = livro.risk_incident_compensation(
+            incident_id=inc1["incident_id"], amount=Decimal("10"),
+            external_reference="TED", actor="op")
         risco.resolve_risk_incident(
             inc1["incident_id"], actor=Ator(), evidence="TED", reason="",
             resolution_refs={"ledger_tx_ids": [tx.tx_id]})
@@ -184,8 +186,9 @@ class TestValidadorPorTipo:
         risco.abrir_incidente("COVERAGE_LEDGER_MISMATCH", amount=Decimal("5"),
                               reservation_id="R1")
         inc = risco.incidentes_abertos()[0]
-        tx = livro.capital_adjustment(Decimal("50"), reason="aporte",
-                                      actor="op", external_reference="x")
+        tx = livro.risk_incident_compensation(
+            incident_id=inc["incident_id"], amount=Decimal("50"),
+            external_reference="x", actor="op")
         # o critério aqui é a reconciliação dos saldos, não o aporte
         risco.resolve_risk_incident(
             inc["incident_id"], actor=Ator(), evidence="saldos reconciliados",
@@ -202,8 +205,9 @@ class TestRegistroDaResolucao:
     def test_the_proof_is_recorded(self):
         m, risco, livro, coord = sistema()
         inc = criar_deficit(coord, risco, "10")
-        tx = livro.capital_adjustment(Decimal("10"), reason="aporte",
-                                      actor="op", external_reference="TED-77")
+        tx = livro.risk_incident_compensation(
+            incident_id=inc["incident_id"], amount=Decimal("10"),
+            external_reference="TED-77", actor="op")
         risco.resolve_risk_incident(
             inc["incident_id"], actor=Ator(), evidence="TED-77", reason="ok",
             resolution_refs={"ledger_tx_ids": [tx.tx_id]})

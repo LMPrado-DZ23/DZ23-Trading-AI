@@ -35,6 +35,17 @@ class Entry:
     memo: str = ""
 
 
+def _instante(valor):
+    """Converte o instante persistido, preservando o que foi gravado."""
+    from datetime import datetime
+    if isinstance(valor, datetime):
+        return valor
+    try:
+        return datetime.fromisoformat(str(valor))
+    except ValueError:
+        return utcnow()
+
+
 @dataclass(frozen=True)
 class Transaction:
     tx_id: str
@@ -47,6 +58,10 @@ class Transaction:
     instrument: str = ""
     quantity: Decimal = ZERO
     agent_id: str = ""
+    # Movimento de capital: a que se destina e a qual incidente pertence.
+    # Sem o vínculo, um aporte feito para o incidente A resolvia o B.
+    purpose: str = ""
+    incident_id: str = ""
 
     def validate(self) -> None:
         total = sum((e.amount for e in self.entries), ZERO)
@@ -68,10 +83,13 @@ class Ledger:
 
     # -- núcleo --------------------------------------------------------
     def _post(self, kind: str, entries, ref: str = "", *, instrument: str = "",
-              quantity: Decimal = ZERO, agent_id: str = "") -> Transaction:
+              quantity: Decimal = ZERO, agent_id: str = "", purpose: str = "",
+              incident_id: str = "", at=None) -> Transaction:
         tx = Transaction(uuid.uuid4().hex[:16], tuple(entries), kind, ref=ref,
                          instrument=instrument, quantity=quantity,
-                         agent_id=agent_id)
+                         agent_id=agent_id, purpose=purpose,
+                         incident_id=incident_id,
+                         **({"at": at} if at is not None else {}))
         tx.validate()
         self._txs.append(tx)
         return tx
@@ -247,8 +265,43 @@ class Ledger:
         return sum((s for c, s in saldos.items()
                     if c == "RESERVED" or c.startswith("RESERVED:")), ZERO)
 
-    def capital_adjustment(self, amount: Decimal, *, reason: str, actor: str,
+    def risk_incident_compensation(self, *, incident_id: str, amount: Decimal,
+                                   external_reference: str, actor: str,
+                                   reason: str = "") -> Transaction:
+        """Compensação de UM incidente específico.
+
+        Um aporte genérico não serve de prova: ele pode ter sido feito por
+        qualquer motivo, e aceitar qualquer um ainda não usado deixava um
+        aporte destinado ao incidente A resolver o B. A transação nasce
+        amarrada ao incidente.
+        """
+        if amount <= ZERO:
+            raise ValueError(
+                f"compensação precisa ser positiva (recebido {amount}): "
+                "retirada não cobre déficit")
+        if not incident_id:
+            raise ValueError("compensação exige o incidente de destino")
+        return self.capital_adjustment(
+            amount, reason=reason or f"compensação do incidente {incident_id}",
+            actor=actor, external_reference=external_reference,
+            kind="risk_incident_compensation",
+            purpose="RISK_INCIDENT_COMPENSATION", incident_id=incident_id)
+
+    def capital_withdrawal(self, amount: Decimal, *, reason: str, actor: str,
                            external_reference: str = "") -> Transaction:
+        """Retirada de capital — nunca cobre déficit."""
+        if amount <= ZERO:
+            raise ValueError("retirada precisa ser positiva")
+        return self.capital_adjustment(-amount, reason=reason, actor=actor,
+                                       external_reference=external_reference,
+                                       kind="capital_withdrawal",
+                                       purpose="CAPITAL_WITHDRAWAL")
+
+    def capital_adjustment(self, amount: Decimal, *, reason: str, actor: str,
+                           external_reference: str = "",
+                           kind: str = "capital_adjustment",
+                           purpose: str = "",
+                           incident_id: str = "") -> Transaction:
         """Aporte ou retirada de capital EXTERNO, com partida dobrada.
 
         Entra como CONTRIBUTED_CAPITAL, não como resultado: dinheiro que o
@@ -266,10 +319,14 @@ class Ledger:
         memo = f"{reason} | por {actor}"
         if external_reference:
             memo += f" | ref {external_reference}"
-        return self._post("capital_adjustment",
+        return self._post(kind,
                           [Entry(f"CASH:{self.currency}", amount, memo),
                            Entry("CONTRIBUTED_CAPITAL", -amount, memo)],
-                          external_reference or reason)
+                          external_reference or reason,
+                          purpose=purpose or ("CAPITAL_CONTRIBUTION"
+                                              if amount > 0
+                                              else "CAPITAL_WITHDRAWAL"),
+                          incident_id=incident_id)
 
     def find_transaction(self, tx_id: str) -> dict | None:
         for tx in self.export_transactions():
@@ -383,6 +440,12 @@ class Ledger:
         auditabilidade — e é o histórico que prova o resultado."""
         return [
             {"tx_id": tx.tx_id, "kind": tx.kind, "ref": tx.ref,
+             # O INSTANTE é parte do histórico: sem ele, cada reinício
+             # reescrevia a data e a ordem dos fatos se perdia — justamente
+             # o que a auditoria precisa para saber o que veio antes.
+             "at": tx.at.isoformat() if hasattr(tx.at, "isoformat") else str(tx.at),
+             "incident_id": getattr(tx, "incident_id", ""),
+             "purpose": getattr(tx, "purpose", ""),
              "instrument": getattr(tx, "instrument", ""),
              "quantity": str(getattr(tx, "quantity", ZERO)),
              "agent_id": getattr(tx, "agent_id", ""),
@@ -409,7 +472,12 @@ class Ledger:
                 doc.get("kind", "restored"), ref=doc.get("ref", ""),
                 instrument=doc.get("instrument", ""),
                 quantity=Decimal(str(doc.get("quantity") or 0)),
-                agent_id=doc.get("agent_id", ""))
+                agent_id=doc.get("agent_id", ""),
+                purpose=doc.get("purpose", ""),
+                incident_id=doc.get("incident_id", ""),
+                # O instante ORIGINAL, não o de agora: substituir por utcnow
+                # reescreveria a data de todo o histórico a cada reinício.
+                **({"at": _instante(doc["at"])} if doc.get("at") else {}))
             tx.validate()               # lançamento desbalanceado não entra
             led._txs.append(tx)
         return led

@@ -72,12 +72,11 @@ def deficit_de(coord, risco, excesso="10"):
     return res
 
 
-def compensar(livro, valor):
-    """Registra a compensação econômica de verdade — texto não resolve mais."""
-    return livro.capital_adjustment(Decimal(str(valor)),
-                                    reason="aporte para cobrir déficit",
-                                    actor="risk-manager-1",
-                                    external_reference="TED-teste").tx_id
+def compensar(livro, valor, incident_id):
+    """Compensação VINCULADA ao incidente — aporte genérico não serve mais."""
+    return livro.risk_incident_compensation(
+        incident_id=incident_id, amount=Decimal(str(valor)),
+        external_reference="TED-teste", actor="risk-manager-1").tx_id
 
 
 class TestUmaFonteDeVerdade:
@@ -88,7 +87,7 @@ class TestUmaFonteDeVerdade:
         deficit_de(coord, risco)
         inc = next(i for i in risco.incidentes_abertos()
                    if i["type"] == "RESERVATION_DEFICIT")
-        tx = compensar(livro, "10")
+        tx = compensar(livro, "10", inc["incident_id"])
 
         risco.resolve_risk_incident(
             inc["incident_id"], actor=AtorAutorizado(),
@@ -108,7 +107,7 @@ class TestUmaFonteDeVerdade:
         assert historico_antes > 0
         inc = next(i for i in risco.incidentes_abertos()
                    if i["type"] == "RESERVATION_DEFICIT")
-        tx = compensar(livro, "10")
+        tx = compensar(livro, "10", inc["incident_id"])
         risco.resolve_risk_incident(
             inc["incident_id"], actor=AtorAutorizado(),
             evidence="compensado", reason="ok",
@@ -122,7 +121,7 @@ class TestUmaFonteDeVerdade:
         deficit_de(coord, risco)
         assert risco.deficit_total() == risco.historical_deficit_total()
         inc = risco.incidentes_abertos()[0]
-        tx = compensar(livro, "10")
+        tx = compensar(livro, "10", inc["incident_id"])
         risco.resolve_risk_incident(
             inc["incident_id"], actor=AtorAutorizado(),
             evidence="x", reason="y",
@@ -160,7 +159,7 @@ class TestResolucaoExigeEstadoCorrigido:
         m, risco, livro, coord = sistema()
         deficit_de(coord, risco)
         inc = risco.incidentes_abertos()[0]
-        tx = compensar(livro, "10")
+        tx = compensar(livro, "10", inc["incident_id"])
         risco.resolve_risk_incident(
             inc["incident_id"], actor=AtorAutorizado(),
             evidence="extrato confere", reason="ok",
@@ -190,7 +189,7 @@ class TestAutorizacaoNaoEString:
         m, risco, livro, coord = sistema()
         deficit_de(coord, risco)
         inc = risco.incidentes_abertos()[0]
-        tx = compensar(livro, "10")
+        tx = compensar(livro, "10", inc["incident_id"])
         risco.resolve_risk_incident(
             inc["incident_id"], actor=AtorAutorizado(),
             evidence="ok", reason="",
@@ -205,7 +204,7 @@ class TestPersistencia:
         m, risco, livro, coord = sistema()
         deficit_de(coord, risco)
         aberto = risco.incidentes_abertos()[0]
-        tx = compensar(livro, "10")
+        tx = compensar(livro, "10", aberto["incident_id"])
         risco.resolve_risk_incident(aberto["incident_id"],
                                     actor=AtorAutorizado(),
                                     evidence="ok", reason="",
