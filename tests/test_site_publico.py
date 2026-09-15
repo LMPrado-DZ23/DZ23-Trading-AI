@@ -54,6 +54,26 @@ class TestVerSenha:
         assert "campo.type=oculto?'text':'password'" in APP
         assert "aria-label" in APP, "sem rótulo o botão some para leitor de tela"
 
+    def test_each_field_has_exactly_one_toggle(self):
+        """Dois botões para o mesmo campo apareceram na tela como olhos
+        soltos — a regex de inserção rodou duas vezes."""
+        import re
+        alvos = re.findall(r'data-alvo="(\w+)"', APP)
+        duplicados = {a for a in alvos if alvos.count(a) > 1}
+        assert not duplicados, f"campos com olho duplicado: {duplicados}"
+
+    def test_no_toggle_floats_outside_its_field(self):
+        assert '</div><button type="button" class="pwd-eye"' not in APP, (
+            "há botão de olho fora do bloco do campo: ele aparece solto")
+
+    def test_every_password_field_in_the_auth_area_is_covered(self):
+        """Eu havia chutado nomes de campo que não existiam (signupPassword),
+        e o cadastro ficou sem o botão."""
+        for campo in ("loginPassword", "bootPassword", "bootToken", "suSenha",
+                      "newUserPassword"):
+            assert f'id="{campo}"' in APP, f"{campo} sumiu da tela"
+            assert f'data-alvo="{campo}"' in APP, f"{campo} sem botão de ver"
+
     def test_the_toggle_is_a_button_not_a_submit(self):
         assert 'type="button" class="pwd-eye"' in APP, (
             "sem type=button o clique enviaria o formulário")
