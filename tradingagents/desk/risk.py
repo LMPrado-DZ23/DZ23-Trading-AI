@@ -882,8 +882,8 @@ class RiskEngine:
 
     CAPACIDADE_VALORAR = "VALUE_FEE_INCIDENT"
 
-    def aplicar_valoracao(self, incident_id: str, *, actor,
-                          evidence: str) -> dict:
+    def aplicar_valoracao(self, incident_id: str, *, actor, evidence: str,
+                          valuation_id: str = "") -> dict:
         """APLICA a cotação proposta: lança no livro e resolve o incidente.
 
         Separado de `valorar_taxa` porque são atos diferentes: propor uma
@@ -912,22 +912,55 @@ class RiskEngine:
         if self.carteira is None:
             raise ValueError("sem carteira não há onde lançar a valoração")
 
-        tx = self.carteira.fee_valuation(
-            moeda=alvo["fee_currency"], quantidade=Decimal(alvo["fee_amount"]),
-            rate=Decimal(v["rate"]), fonte=v["fonte"], em=v["em"],
-            incident_id=incident_id)
-        alvo["valuation"] = {**v, "status": "APLICADA",
-                             "ledger_tx_id": tx.tx_id,
-                             "aplicada_por": actor_id,
-                             "aplicada_em": utcnow().isoformat()}
-        alvo["status"] = "RESOLVED"
-        alvo["resolved_at"] = utcnow().isoformat()
-        alvo["resolved_by"] = actor_id
-        alvo["resolution_evidence"] = evidence
-        alvo["resolution_refs"] = {"ledger_tx_ids": [tx.tx_id]}
-        alvo["validated_by_policy"] = True
-        alvo["policy_version"] = self.POLICY_VERSION
-        return alvo
+        import uuid as _uuid
+        vid = valuation_id or v.get("valuation_id") or (
+            "val_" + _uuid.uuid4().hex[:12])
+        quantidade = Decimal(alvo["fee_amount"])
+
+        # LASTRO NATIVO: só se converte o que está REGISTRADO na moeda. O
+        # incidente é a declaração do problema; o livro é a prova de que a
+        # taxa existe. Converter além do lastro inventaria taxa que ninguém
+        # lançou — e resolveria um incidente por decreto.
+        registrado = self.carteira.balances().get(
+            f"FEES:{alvo['fee_currency']}", Decimal("0"))
+
+        with self._lock_settlement:
+            # Recuperação: o lançamento pode já existir de um processo que
+            # caiu entre o livro e o incidente.
+            ja = self.carteira.find_fee_valuation(incident_id)
+            if ja is not None:
+                tx_id = ja["tx_id"]
+            else:
+                if registrado <= 0:
+                    raise ValueError(
+                        f"sem lastro: FEES:{alvo['fee_currency']} está em "
+                        f"{registrado} e o incidente afirma {quantidade}. "
+                        "Nada a converter")
+                if registrado < quantidade:
+                    raise ValueError(
+                        f"lastro parcial: o livro registra {registrado} "
+                        f"{alvo['fee_currency']} e o incidente afirma "
+                        f"{quantidade}. Converter tudo inventaria a diferença")
+                tx_id = self.carteira.fee_valuation(
+                    moeda=alvo["fee_currency"], quantidade=quantidade,
+                    rate=Decimal(v["rate"]), fonte=v["fonte"], em=v["em"],
+                    incident_id=incident_id).tx_id
+            if alvo["status"] == "RESOLVED":
+                return alvo
+            alvo["valuation"] = {**v, "status": "APLICADA",
+                                 "valuation_id": vid,
+                                 "ledger_tx_id": tx_id,
+                                 "aplicada_por": actor_id,
+                                 "aplicada_em": utcnow().isoformat()}
+            alvo["status"] = "RESOLVED"
+            alvo["resolved_at"] = utcnow().isoformat()
+            alvo["resolved_by"] = actor_id
+            alvo["resolution_evidence"] = evidence
+            alvo["resolution_refs"] = {"ledger_tx_ids": [tx_id],
+                                       "valuation_id": vid}
+            alvo["validated_by_policy"] = True
+            alvo["policy_version"] = self.POLICY_VERSION
+            return alvo
 
     def conferir_ativos_descobertos(self) -> list[str]:
         """Saldo negativo em ASSET:<moeda> é ativo que a mesa NÃO tem.

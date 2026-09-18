@@ -357,6 +357,18 @@ class Ledger:
                           external_reference or reason,
                           purpose="ASSET_CONTRIBUTION")
 
+    def find_fee_valuation(self, incident_id: str) -> dict | None:
+        """Lançamento de valoração já feito para este incidente.
+
+        É o que permite ao retry pós-crash descobrir que a conversão já
+        aconteceu, em vez de lançar de novo.
+        """
+        for tx in self.export_transactions():
+            if (tx.get("kind") == "fee_valuation"
+                    and tx.get("incident_id") == incident_id):
+                return tx
+        return None
+
     def find_incident_compensation(self, incident_id: str,
                                    settlement_id: str) -> dict | None:
         """A compensação DESTA liquidação — exige os dois identificadores.

@@ -37,7 +37,20 @@ def sistema(capital="1000"):
     return m, risco, livro, coord
 
 
-def incidente_de_taxa(risco, moeda="BNB", qtd="2"):
+def incidente_de_taxa(risco, moeda="BNB", qtd="2", com_lastro=True):
+    """Por padrão a taxa também é LANÇADA no livro.
+
+    Sem lastro nativo a valoração é recusada — e com razão: converter o que
+    ninguém registrou inventaria taxa.
+    """
+    if com_lastro and risco.carteira is not None:
+        livro = risco.carteira
+        livro.reserve(Decimal("100"), ref=f"lastro-{moeda}",
+                      reservation_id=f"R-{moeda}")
+        livro.fill_buy("BTC/USDT", Decimal("1"), Decimal("90"), Decimal("0"),
+                       reserved=Decimal("100"), ref=f"lastro-{moeda}",
+                       agent_id="A", reservation_id=f"R-{moeda}",
+                       fee_in_other_currency=(Decimal(qtd), moeda))
     risco.registrar_taxa_nao_valorada(moeda=moeda, quantidade=Decimal(qtd),
                                       order_id="o1", instrumento="BTC/USDT")
     return next(i for i in risco.incidentes_abertos()
