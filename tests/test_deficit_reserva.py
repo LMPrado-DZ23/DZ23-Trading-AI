@@ -64,7 +64,7 @@ class TestExecucaoMaisCaraQueAReserva:
         # reservado a 100/unidade; executa a 105
         coord.aplicar_fill(rec, side="buy", quantidade=res.quantity,
                            preco=Decimal("105"), taxa=Decimal("1"),
-                           fill_id="f1")
+                           fill_id="f1", fee_currency="USDT")
         assert risco.deficit_total() > 0, (
             "custo acima da reserva não virou incidente")
         assert coord.reconciliacao_pendente is True, (
@@ -76,7 +76,7 @@ class TestExecucaoMaisCaraQueAReserva:
         rec, res = ordem(coord, risco)
         coord.aplicar_fill(rec, side="buy", quantidade=res.quantity,
                            preco=Decimal("105"), taxa=Decimal("1"),
-                           fill_id="f1")
+                           fill_id="f1", fee_currency="USDT")
         assert livro.position_quantity("BTC/USDT") == res.quantity
         assert livro.is_balanced(), "o livro precisa refletir a verdade"
 
@@ -85,7 +85,7 @@ class TestExecucaoMaisCaraQueAReserva:
         rec, res = ordem(coord, risco)
         coord.aplicar_fill(rec, side="buy", quantidade=res.quantity,
                            preco=Decimal("105"), taxa=Decimal("1"),
-                           fill_id="f1")
+                           fill_id="f1", fee_currency="USDT")
         assert livro.is_balanced() is True
         ok, motivo = risco.capital_state_consistent()
         # a mensagem passou a identificar o INCIDENTE, que é mais preciso
@@ -98,7 +98,7 @@ class TestExecucaoMaisCaraQueAReserva:
         rec, res = ordem(coord, risco)
         coord.aplicar_fill(rec, side="buy", quantidade=res.quantity,
                            preco=Decimal("105"), taxa=Decimal("1"),
-                           fill_id="f1")
+                           fill_id="f1", fee_currency="USDT")
         # a recusa precisa vir do PORTÃO, não do veto de instrumento repetido
         from tradingagents.desk.intents import ExecutionIntent as _EI
         ei = _EI(kind=Kind.ENTRY, side=Side.BUY, instrument="BTC/USDT",
@@ -139,7 +139,7 @@ class TestCustoDentroDaReserva:
         rec, res = ordem(coord, risco)
         coord.aplicar_fill(rec, side="buy", quantidade=res.quantity,
                            preco=Decimal("100"), taxa=Decimal("5"),
-                           fill_id="f1")
+                           fill_id="f1", fee_currency="USDT")
         assert risco.deficit_total() > 0, "a taxa sumiu do custo"
 
 
@@ -193,7 +193,8 @@ class TestFolgaDeclarada:
         rec, res = ordem(coord, risco)
         taxa = res.original_amount * Decimal("0.002")     # 0,2%
         coord.aplicar_fill(rec, side="buy", quantidade=res.quantity,
-                           preco=Decimal("100"), taxa=taxa, fill_id="f1")
+                           preco=Decimal("100"), taxa=taxa, fill_id="f1",
+                           fee_currency="USDT")
         assert risco.deficit_total() == Decimal("0")
         assert coord.reconciliacao_pendente is False
 
@@ -202,7 +203,8 @@ class TestFolgaDeclarada:
         rec, res = ordem(coord, risco)
         taxa = res.original_amount * Decimal("0.05")      # 5%
         coord.aplicar_fill(rec, side="buy", quantidade=res.quantity,
-                           preco=Decimal("100"), taxa=taxa, fill_id="f1")
+                           preco=Decimal("100"), taxa=taxa, fill_id="f1",
+                           fee_currency="USDT")
         assert risco.deficit_total() > 0
         assert coord.reconciliacao_pendente is True
 
@@ -212,6 +214,6 @@ class TestFolgaDeclarada:
         rec, res = ordem(coord, risco)
         coord.aplicar_fill(rec, side="buy", quantidade=res.quantity,
                            preco=Decimal("100"), taxa=Decimal("0.01"),
-                           fill_id="f1")
+                           fill_id="f1", fee_currency="USDT")
         assert risco.deficit_total() > 0, (
             "com folga zero, qualquer centavo além do reservado é déficit")

@@ -235,11 +235,16 @@ class TestFillComTaxaEmOutraMoeda:
                     if i["type"] == "FEE_VALUATION_UNKNOWN"]
         assert coord.reconciliacao_pendente is False
 
-    def test_no_currency_informed_keeps_the_old_behaviour(self):
-        """Corretora que não informa moeda: assume-se a cotação, como antes."""
+    def test_no_currency_informed_is_now_unknown(self):
+        """Antes assumia-se a cotação. Assumir é um palpite com cara de
+        dado: a corretora que não declara a moeda deixa o custo real
+        desconhecido, e isso agora aparece."""
         m, risco, livro, coord = sistema()
         rec, res = self._ordem(coord, risco)
         coord.aplicar_fill(rec, side="buy", quantidade=res.quantity,
                            preco=Decimal("99"), taxa=Decimal("1"),
                            fill_id="f1")
-        assert livro.balance("FEES:USDT") == Decimal("1")
+        assert [i for i in risco.incidentes_abertos()
+                if i["type"] == "FEE_CURRENCY_UNKNOWN"]
+        assert livro.balance("FEES:USDT") == Decimal("0"), (
+            "a taxa sem moeda entrou como se fosse cotação")

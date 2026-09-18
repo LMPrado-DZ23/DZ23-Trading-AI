@@ -807,6 +807,45 @@ class RiskEngine:
         self._incidentes[chave] = inc
         return inc["incident_id"]
 
+    def registrar_taxa_sem_moeda(self, *, quantidade: Decimal,
+                                 order_id: str = "", instrumento: str = "",
+                                 fill_id: str = "", motivo: str = "") -> str:
+        """Taxa cobrada sem dizer em que moeda — ou com valor impossível.
+
+        Assumir a moeda de cotação transformaria um palpite em número
+        contábil. Fica declarado como desconhecido, com o valor original
+        preservado para a investigação.
+        """
+        chave = "FEE_CURRENCY_UNKNOWN"
+        ocorrencia = {"amount": str(quantidade), "order_id": order_id,
+                      "fill_id": fill_id, "instrumento": instrumento,
+                      "at": utcnow().isoformat(),
+                      "evidence": motivo or f"taxa de {quantidade} sem moeda"}
+        existente = self._incidentes.get(chave)
+        if existente and existente["status"] in self.ESTADOS_BLOQUEANTES:
+            existente["fee_amount"] = str(
+                Decimal(existente["fee_amount"]) + quantidade)
+            existente["amount"] = existente["fee_amount"]
+            existente.setdefault("occurrences", []).append(ocorrencia)
+            return existente["incident_id"]
+        import uuid as _uuid
+        inc = {
+            "incident_id": "inc_" + _uuid.uuid4().hex[:12],
+            "type": "FEE_CURRENCY_UNKNOWN",
+            "fee_currency": "", "fee_amount": str(quantidade),
+            "quote_currency": getattr(self.carteira, "currency", "USDT"),
+            "amount": str(quantidade), "reservation_id": "",
+            "order_id": order_id, "currency": "",
+            "opened_at": utcnow().isoformat(),
+            "evidence": motivo or "taxa cobrada sem moeda declarada",
+            "status": "OPEN", "resolved_at": "", "resolved_by": "",
+            "resolution_evidence": "", "resolution_refs": {},
+            "validated_by_policy": False, "policy_version": "",
+            "valuation": {}, "occurrences": [ocorrencia],
+        }
+        self._incidentes[chave] = inc
+        return inc["incident_id"]
+
     def valorar_taxa(self, incident_id: str, *, rate, fonte: str, em) -> dict:
         """Informa a cotação usada para valorar a taxa.
 

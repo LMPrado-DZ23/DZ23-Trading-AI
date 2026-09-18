@@ -247,6 +247,10 @@ class CCXTDeskBroker:
                 "filled": o.get("filled"), "average": o.get("average") or o.get("price"),
                 "fee": ((o.get("fee") or {}).get("cost") if isinstance(o.get("fee"), dict)
                         else o.get("fee")) or 0,
+                # A moeda viaja junto: sem ela o custo real fica desconhecido
+                # e o consumidor teria de adivinhar.
+                "fee_currency": ((o.get("fee") or {}).get("currency")
+                                 if isinstance(o.get("fee"), dict) else "") or "",
                 "fill_id": info.get("tradeId") or info.get("execId"),
                 "client_order_id": o.get("clientOrderId") or info.get("clOrdId")}
 
@@ -283,6 +287,7 @@ class CCXTDeskBroker:
             "filled": Decimal(str(order.get("filled") or 0)),
             "average": Decimal(str(order.get("average") or order.get("price") or 0)),
             "fee": Decimal(str((order.get("fee") or {}).get("cost") or 0)),
+            "fee_currency": (order.get("fee") or {}).get("currency") or "",
         }
         self.submitted[client_order_id] = result
         return result

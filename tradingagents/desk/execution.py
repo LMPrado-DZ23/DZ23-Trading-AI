@@ -169,6 +169,8 @@ class PaperBroker:
     """Corretora simulada — dinheiro fictício, comportamento honesto.
     Serve PAPER/SHADOW; testnet/live usam a ponte CCXT pelo mesmo contrato."""
 
+    fee_currency = "USDT"
+
     def __init__(self, price: Decimal, fee_rate: Decimal = Decimal("0.001"),
                  price_provider=None):
         self.price = price
@@ -204,8 +206,12 @@ class PaperBroker:
         # um fill sintético — que é justamente o defeito que estamos tirando.
         order = {"id": oid, "status": "filled", "filled": quantity,
                  "average": price, "fee": fee,
+                 # A moeda é DECLARADA: este broker sabe em que unidade
+                 # cobra, e omiti-la obrigaria o consumidor a adivinhar.
                  "trades": [{"id": f"{oid}-t1", "amount": quantity,
-                             "price": price, "fee": {"cost": fee}}]}
+                             "price": price,
+                             "fee": {"cost": fee,
+                                     "currency": self.fee_currency}}]}
         self.submitted[client_order_id] = order
         return order
 
@@ -584,7 +590,8 @@ class ExecutionCoordinator:
 
     def aplicar_fill(self, rec, *, side: str, quantidade: Decimal,
                      preco: Decimal, taxa: Decimal, fill_id: str,
-                     fee_currency: str = "") -> bool:
+                     fee_currency: str = "", fees: list | None = None,
+                     fee_invalida: bool = False) -> bool:
         """Operação canônica de execução — usada pelo fluxo normal E pela
         reconciliação.
 
@@ -607,6 +614,41 @@ class ExecutionCoordinator:
         # parecer mais barata do que foi): o custo real fica declarado como
         # desconhecido e o risco novo trava.
         cotacao = getattr(self.ledger, "currency", "USDT")
+        # MOEDA AUSENTE com valor não é "a de cotação": assumir seria um
+        # palpite com cara de dado. Vira incidente próprio.
+        if taxa and taxa > 0 and not fee_currency:
+            self.risk.registrar_taxa_sem_moeda(
+                quantidade=taxa, order_id=rec.order_id,
+                instrumento=rec.instrumento, fill_id=fill_id)
+            self.exigir_reconciliacao(
+                f"FEE_CURRENCY_UNKNOWN: taxa de {taxa} sem moeda declarada")
+            # NÃO se lança no livro: uma conta "FEES:DESCONHECIDA" inventaria
+            # uma unidade que não existe, que é o erro que este trabalho
+            # inteiro combate. O valor já ficou registrado no incidente
+            # acima, com ordem e fill, até alguém dizer qual era a moeda.
+            taxa = Decimal("0")
+            fee_currency = ""
+        if fee_invalida:
+            self.risk.registrar_taxa_sem_moeda(
+                quantidade=Decimal("0"), order_id=rec.order_id,
+                instrumento=rec.instrumento, fill_id=fill_id,
+                motivo="valor de taxa inválido (negativo, NaN ou infinito)")
+            self.exigir_reconciliacao("FEE_CURRENCY_UNKNOWN: taxa inválida")
+        # Componentes ADICIONAIS não podem sumir: cada um é avaliado.
+        for extra in (fees or [])[1:]:
+            moeda_extra = str(extra.get("currency") or "")
+            valor_extra = Decimal(str(extra.get("cost") or 0))
+            if valor_extra <= 0:
+                continue
+            if not moeda_extra:
+                self.risk.registrar_taxa_sem_moeda(
+                    quantidade=valor_extra, order_id=rec.order_id,
+                    instrumento=rec.instrumento, fill_id=fill_id)
+            elif moeda_extra != cotacao:
+                self.risk.registrar_taxa_nao_valorada(
+                    moeda=moeda_extra, quantidade=valor_extra,
+                    order_id=rec.order_id, instrumento=rec.instrumento,
+                    fill_id=fill_id)
         taxa_em_outra_moeda = bool(fee_currency and fee_currency != cotacao)
         taxa_na_cotacao = Decimal("0") if taxa_em_outra_moeda else taxa
         if taxa_em_outra_moeda:
@@ -672,6 +714,9 @@ class ExecutionCoordinator:
                 custo = (Decimal(str(ref)) * quantidade / alvo) if alvo else Decimal(str(ref))
             self.ledger.fill_sell(instrumento, quantidade, preco,
                                   taxa_na_cotacao,
+                                  fee_in_other_currency=(
+                                      (taxa, fee_currency)
+                                      if taxa_em_outra_moeda else None),
                                   cost_basis=custo, agent_id=rec.agente,
                                   ref=rec.order_id)
             self.registrar_resultado_realizado(
@@ -916,14 +961,57 @@ class ExecutionCoordinator:
             fid = t.get("id") or t.get("fill_id") or t.get("tradeId")
             if not fid:
                 continue        # execução sem identidade não é contabilizável
-            taxa = t.get("fee")
+            componentes = ExecutionCoordinator._componentes_de_taxa(t)
+            invalida = any(c.get("invalida") for c in componentes)
+            # O componente principal é o primeiro; os demais seguem no campo
+            # `fees` para que NENHUM desapareça no caminho.
+            principal = componentes[0] if componentes else {
+                "cost": Decimal("0"), "currency": ""}
             saida.append({"fill_id": str(fid),
                           "quantidade": Decimal(str(t.get("amount")
                                                     or t.get("quantity") or 0)),
                           "preco": Decimal(str(t.get("price") or 0)),
-                          "taxa": Decimal(str(taxa.get("cost") if isinstance(taxa, dict)
-                                              else taxa or 0))})
+                          "taxa": principal["cost"],
+                          "fee_currency": principal["currency"],
+                          "fees": [{"cost": c["cost"], "currency": c["currency"]}
+                                   for c in componentes],
+                          "fee_invalida": invalida})
         return [f for f in saida if f["quantidade"] > 0]
+
+    @staticmethod
+    def _componentes_de_taxa(trade: dict) -> list[dict]:
+        """Lê `fee` e `fees[]` preservando VALOR e MOEDA de cada componente.
+
+        A moeda era descartada aqui: 0,001 BNB virava 0,001 no custo em
+        USDT. E uma taxa quebrada (negativa, NaN, Infinity) precisa ser
+        marcada, não convertida em zero — zero é uma afirmação sobre o
+        custo, e nesse caso não se sabe qual foi.
+        """
+        brutos = []
+        lista = trade.get("fees")
+        if isinstance(lista, list) and lista:
+            brutos.extend(lista)
+        taxa = trade.get("fee")
+        if isinstance(taxa, dict):
+            brutos.append(taxa)
+        elif taxa not in (None, ""):
+            brutos.append({"cost": taxa, "currency": ""})
+        componentes = []
+        for bruto in brutos:
+            if not isinstance(bruto, dict):
+                bruto = {"cost": bruto, "currency": ""}
+            try:
+                custo = Decimal(str(bruto.get("cost") or 0))
+            except (ArithmeticError, ValueError, TypeError):
+                componentes.append({"cost": Decimal("0"), "currency": "",
+                                    "invalida": True})
+                continue
+            invalida = (not custo.is_finite()) or custo < 0
+            componentes.append({
+                "cost": Decimal("0") if invalida else custo,
+                "currency": str(bruto.get("currency") or ""),
+                "invalida": invalida})
+        return componentes
 
     def _autorizar_entrada(self, ei) -> None:
         """Regras que só valem para COMPRA. Declaradas, não implícitas.
