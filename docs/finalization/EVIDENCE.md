@@ -58,6 +58,15 @@ ruff check .   => All checks passed
 - Mutação: 6 mutantes (não-vazia, duplicado, soma×2, existência×2) ⇒ todos morrem
   (runner determinístico, revert em memória, sem `git checkout`).
 
+### B4 — valorar_taxa congela quantidade e batch (`a4e9490`)
+- Vermelho: `test_b4_fee_nova_apos_proposta_nao_infla_a_valoracao` (valoração
+  inflava de 2 para 3 BNB) e `test_b4_componente_congelado_valorado_fora_derruba_lastro`
+  (adotava componente fora do batch).
+- Correção: a proposta fixa `quantidade` e `fee_component_ids`; `aplicar_valoracao`
+  usa o congelado (fallback compat). `_batch_para_valorar` seleciona sem estourar.
+- Mutação: 2 mutantes (quantidade / batch não congelados) ⇒ ambos morrem.
+- Kernel (recovery/valoração/fee): 175 passed.
+
 ## Segurança
 - `LIVE.habilitado=false`, `operacao_real.estado=BLOQUEADA` no
   `/v1/status/operacao` de produção; PAPER ativo.

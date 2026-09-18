@@ -9,7 +9,7 @@
 | Repositório | `LMPrado-DZ23/tradingagents-dz23` |
 | Branch | `correcao-auditoria` |
 | HEAD | ver seção *Histórico* abaixo (sempre o topo) |
-| Fase atual | Fase 1 · patch F1/F2 da auditoria: B1,B2,B3,B7,B8,B9 fechados; B4–B6 abertos |
+| Fase atual | Fase 1 · patch F1/F2 da auditoria: B1,B2,B3,B4,B7,B8,B9 fechados; B5,B6 abertos |
 | LIVE | **BLOQUEADO** — não habilitar nesta missão |
 | SIGNUP_ENABLED | **false** — só liberar com as evidências do gate de cadastro |
 
@@ -22,7 +22,7 @@ A auditoria reabriu F1/F2 com 10 itens. Estado:
 | B1 | identidade canônica na adoção de recovery | ✅ fechado | `b199ee1` |
 | B2 | soma EXATA dos componentes (2 BNB não valora 1) | ✅ fechado | `7f5b714` |
 | B3 | ids duplicados/vazios/cross-currency/já-valorados | ✅ fechado | `7f5b714` |
-| B4 | incidente possui os componentes que resolve | 🔴 aberto | — |
+| B4 | incidente possui os componentes que resolve | ✅ fechado | `a4e9490` |
 | B5 | component id fora do memo (dado durável) | 🔴 aberto | — |
 | B6 | recovery e concorrência (CAS/unique) | 🔴 aberto (provável BLOCKED_BY_ARCHITECTURE) | — |
 | B7 | fingerprint canônico (normalização + dims) | ✅ fechado | `5563dcd` |
@@ -36,11 +36,11 @@ A auditoria reabriu F1/F2 com 10 itens. Estado:
 > explícita; os 14 call-sites antigos foram migrados para ela. Restam B4–B6;
 > não iniciar F3/F4 antes de fechá-los.
 >
-> Nota de dívida técnica exposta por B2 (vira B4): o `aplicar_valoracao` do
-> risco seleciona componentes de forma gulosa (`acumulado >= quantidade`),
-> podendo estourar a soma. Hoje nenhum incidente de teste estoura (todos usam
-> componente único que casa exato), mas B4 precisa tornar a seleção do batch
-> exata e possuída pelo incidente.
+> B4 fechado em `a4e9490`: `valorar_taxa` congela a quantidade coberta e o
+> batch de componentes não-valorados que a lastreiam; `aplicar_valoracao`
+> consome esse batch congelado (com fallback compat) em vez de reler o
+> fee_amount e varrer os componentes de novo. Fecha a inflação da valoração
+> por taxa que chega depois (F) e a adoção de componente fora do batch (E).
 
 ## Baseline reproduzida
 
@@ -75,15 +75,17 @@ real como fonte de verdade, conforme a regra do próprio prompt.
 
 ## Próximos três itens
 
-1. **B4** — incidente registra em `occurrences` os component ids que possui;
-   `valorar_taxa` congela o batch; `aplicar_valoracao` usa só esse batch, com
-   soma EXATA (não seleção gulosa por moeda que estoura a quantidade).
-2. **B5** — componente como dado durável estruturado (fora do parsing de memo):
+1. **B5** — componente como dado durável estruturado (fora do parsing de memo):
    `fee_component_id`, `fill_id`, `order_id`, `amount`, `currency`,
-   `occurred_at`, `source`, `valuation_status` como campos, não texto.
-3. **B6** — concorrência do recovery: unique/CAS por `fee_component_id` (uma
+   `occurred_at`, `source`, `valuation_status` como campos, não texto. Hoje
+   `fee_components()` faz `memo.split("fee_component_id=")` — um memo editado
+   destrói a identidade.
+2. **B6** — concorrência do recovery: unique/CAS por `fee_component_id` (uma
    valoração ativa por componente). Se o storage em memória não suportar,
    `BLOCKED_BY_ARCHITECTURE` documentado + gate fechado para multiprocess.
+3. **F3/F4** — só depois de B5/B6: valoração por ocorrência e liquidação do
+   passivo `LIABILITY:FEE_FUNDING`. Parar para auditoria antes da máquina do
+   fill (`RECEIVED → APPLYING → COMMITTED`).
 
 Depois de B2–B6: F3 (valoração por ocorrência), F4 (`LIABILITY:FEE_FUNDING`),
 e a máquina do fill `RECEIVED → APPLYING → COMMITTED` (parar para auditoria
@@ -117,6 +119,8 @@ arquivo.
 | `b199ee1` | B1/B9: identidade canônica na adoção de recovery | kernel subset |
 | `6384c11` | docs de finalização (gates, evidência, matriz) | — |
 | `7f5b714` | B2/B3: valoração operacional com lastro e soma exata | 243 (kernel) |
+| `8b65804` | docs: fecha B2/B3, registra B4-B6 | — |
+| `a4e9490` | B4: valorar_taxa congela quantidade e batch de componentes | 175 (kernel) |
 
 > A partir de `7884687` a contagem "kernel subset" reflete a limitação do
 > ambiente (3.14): ~200 testes de F1/F2 verdes localmente; suíte completa via

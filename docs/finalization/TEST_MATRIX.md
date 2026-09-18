@@ -1,7 +1,12 @@
 # TEST_MATRIX — patch F1/F2
 
-Arquivo de testes do patch: `tests/test_fee_patch_f1f2.py` (+ reforço em
-`tests/test_valuation_fingerprint.py`).
+Arquivos de teste do patch: `tests/test_fee_patch_f1f2.py`,
+`tests/test_fee_patch_b4.py` (+ reforço em `tests/test_valuation_fingerprint.py`).
+
+| Blocker | Teste (vermelho→verde) | Mutante que deve morrer | Estado |
+|---|---|---|---|
+| B4 (F) | `test_b4_fee_nova_apos_proposta_nao_infla_a_valoracao` | quantidade não congelada | ✅ morre |
+| B4 (E) | `test_b4_componente_congelado_valorado_fora_derruba_lastro` | batch não congelado | ✅ morre |
 
 ## Cobertura por blocker
 
@@ -32,8 +37,8 @@ Arquivo de testes do patch: `tests/test_fee_patch_f1f2.py` (+ reforço em
 | B | componente 2 cobre quantidade 1 | B2 | ✅ fechado |
 | C | ID duplicado aceito | B3 | ✅ fechado |
 | D | lista vazia cria valoração | B3 | ✅ fechado |
-| E | incidente F1 consome componente F2 | B4 | 🔴 aberto |
-| F | fee nova entra no batch após proposta | B4 | 🔴 aberto |
+| E | incidente F1 consome componente F2 | B4 | ✅ fechado |
+| F | fee nova entra no batch após proposta | B4 | ✅ fechado |
 | G | memo tratado como fonte de identidade | B5 | 🔴 aberto |
 | H | duas instâncias usam o mesmo componente | B6 | 🔴 aberto |
 | I | functional currency sai da impressão | B7c | ✅ fechado |
