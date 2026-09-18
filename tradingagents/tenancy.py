@@ -138,6 +138,38 @@ class TenantStore:
         sig = hmac.new(self.signing_key, body.encode(), hashlib.sha256).hexdigest()
         return body + "." + sig
 
+    def _verify_credentials(self, email: str, password: str) -> str:
+        """Prova e-mail+senha SEM escopo de tenant. Falha SEMPRE com o mesmo
+        erro genérico (anti-enumeração): não revela se o e-mail existe."""
+        with self._connect() as c:
+            row = c.execute("SELECT id,password_hash FROM users WHERE email=? "
+                            "AND status='active'",
+                            (email.strip().lower(),)).fetchone()
+        if not row or not self._verify_password(password, row["password_hash"]):
+            raise AuthError("credenciais inválidas")
+        return row["id"]
+
+    def login_by_email(self, email: str, password: str, *,
+                       ttl_seconds: int = 3600) -> dict:
+        """Login SEM Tenant ID. Prova a senha, descobre os workspaces do
+        usuário e emite a sessão (um só) ou devolve a seleção (vários). A
+        seleção só aparece DEPOIS da senha correta — nunca enumera contas.
+
+        Usa apenas métodos polimórficos (`_verify_credentials`, `login`,
+        `list_tenants_for_user`), então funciona igual em SQLite e Postgres.
+        """
+        user_id = self._verify_credentials(email, password)
+        tenants = self.list_tenants_for_user(user_id)
+        if not tenants:
+            raise AuthError("credenciais inválidas")
+        if len(tenants) == 1:
+            t = tenants[0]
+            token = self.login(email, password, t["id"],
+                               ttl_seconds=ttl_seconds)
+            return {"token": token, "tenant_id": t["id"], "role": t["role"]}
+        return {"select": [{"tenant_id": t["id"], "name": t["name"],
+                            "role": t["role"]} for t in tenants]}
+
     def find_membership_by_email(self, email: str):
         """Login social: descobre a qual agência o e-mail pertence."""
         email = (email or "").strip().lower()
@@ -285,6 +317,15 @@ class PostgresTenantStore(TenantStore):
         with self._connect() as c:
             c.execute("""INSERT INTO memberships(tenant_id,user_id,role,created_at) VALUES(%s,%s,%s,%s)
                 ON CONFLICT (tenant_id,user_id) DO UPDATE SET role=EXCLUDED.role""", (tenant_id, user_id, role, time.time()))
+
+    def _verify_credentials(self, email: str, password: str) -> str:
+        with self._connect() as c:
+            row = c.execute("SELECT id,password_hash FROM users WHERE email=%s "
+                            "AND status='active'",
+                            (email.strip().lower(),)).fetchone()
+        if not row or not self._verify_password(password, row["password_hash"]):
+            raise AuthError("credenciais inválidas")
+        return row["id"]
 
     def login(self, email: str, password: str, tenant_id: str, *, ttl_seconds: int = 3600) -> str:
         with self._connect() as c:

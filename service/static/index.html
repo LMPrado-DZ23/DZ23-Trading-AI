@@ -9,29 +9,50 @@
 <meta name="theme-color" content="#1447c8">
 <style>
 :root{--bg:#07101b;--surface:#0d1826;--surface2:#111f30;--line:#20344a;--text:#edf5ff;--muted:#8ba0b8;--green:#4be6a2;--cyan:#44c7f4;--amber:#ffc857;--red:#ff7185;--blue:#6f8cff;--shadow:0 18px 50px #0008}*{box-sizing:border-box}html{color-scheme:dark}body{margin:0;background:radial-gradient(circle at 70% -20%,#173a57 0,transparent 38%),var(--bg);color:var(--text);font:14px/1.5 Inter,ui-sans-serif,system-ui,sans-serif}button,input,select{font:inherit}.hide{display:none!important}.muted{color:var(--muted)}.ok{color:var(--green)}.bad{color:var(--red)}.warn{color:var(--amber)}.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.auth-shell{min-height:100vh;display:grid;place-items:center;padding:24px}.auth-wrap{width:min(1080px,100%);display:grid;grid-template-columns:1.08fr .92fr;border:1px solid var(--line);border-radius:24px;overflow:hidden;background:#091523dd;box-shadow:var(--shadow)}.auth-brand{padding:56px;background:linear-gradient(145deg,#102c45,#091522);position:relative}.auth-brand:after{content:"";position:absolute;inset:0;background-image:linear-gradient(#fff06 1px,transparent 1px),linear-gradient(90deg,#fff06 1px,transparent 1px);background-size:36px 36px;mask-image:linear-gradient(to bottom,#000,transparent)}.auth-brand>*{position:relative;z-index:1}.logo{display:flex;align-items:center;gap:12px;font-weight:850;letter-spacing:.08em}.logo-mark{width:38px;height:38px;border-radius:11px;display:block;object-fit:contain}.auth-brand h1{font-size:clamp(32px,5vw,56px);line-height:1.02;margin:72px 0 20px;max-width:640px}.auth-brand p{max-width:580px;color:#b1c5d8;font-size:16px}.safety-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:30px}.badge{display:inline-flex;align-items:center;gap:7px;padding:6px 10px;border:1px solid var(--line);border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.05em}.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 12px currentColor}.auth-panel{padding:44px;display:flex;align-items:center}.auth-card{width:100%}.eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--cyan);font-weight:800}.auth-card h2{font-size:28px;margin:8px 0}.field{margin:14px 0}.field label{display:block;color:var(--muted);font-size:12px;margin:0 0 5px}.input,select{width:100%;background:#08131f;border:1px solid var(--line);color:var(--text);border-radius:10px;padding:11px 12px;outline:none}.input:focus,select:focus{border-color:var(--cyan);box-shadow:0 0 0 3px #44c7f414}.btn{border:0;border-radius:10px;padding:11px 16px;font-weight:800;cursor:pointer}.btn.primary{background:var(--green);color:#062418}.btn.secondary{background:var(--surface2);border:1px solid var(--line);color:var(--text)}.btn.danger{background:#421b25;border:1px solid #713041;color:#ffb5c0}.btn:disabled{opacity:.45;cursor:not-allowed}.full{width:100%}.link-btn{background:none;border:0;color:var(--cyan);cursor:pointer;padding:0}.pwd-wrap{position:relative}.pwd-wrap .input{padding-right:44px}.pwd-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:0;color:var(--muted);cursor:pointer;padding:6px 8px;border-radius:8px;line-height:1}.pwd-eye:hover{color:var(--cyan)}.pwd-eye:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}.social{display:grid;gap:8px;margin:14px 0}.btn.social-btn{display:flex;align-items:center;justify-content:center;gap:10px;background:#fff;color:#1f2430;border:0}.btn.social-btn:hover{filter:brightness(.95)}.divisor{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:11px;margin:16px 0}.divisor:before,.divisor:after{content:"";flex:1;height:1px;background:var(--line)}.message{min-height:22px;margin-top:10px;font-size:12px}.shell{min-height:100vh;display:grid;grid-template-columns:245px 1fr}.sidebar{background:#091522e8;border-right:1px solid var(--line);padding:22px 16px;position:sticky;top:0;height:100vh}.sidebar .logo{padding:0 8px 22px}.nav{display:grid;gap:5px}.nav button{display:flex;align-items:center;gap:11px;width:100%;border:0;background:transparent;color:var(--muted);padding:11px 12px;border-radius:9px;text-align:left;cursor:pointer}.nav button.active{background:#163047;color:var(--text)}.nav i{font-style:normal;width:22px;color:var(--cyan)}.side-footer{position:absolute;bottom:18px;left:16px;right:16px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#0b1927}.workspace{min-width:0}.topbar{height:72px;display:flex;align-items:center;justify-content:space-between;padding:0 26px;border-bottom:1px solid var(--line);background:#07101bd9;backdrop-filter:blur(14px);position:sticky;top:0;z-index:10}.topbar h1{font-size:18px;margin:0}.identity{display:flex;gap:10px;align-items:center}.identity-copy{text-align:right}.identity-copy b,.identity-copy small{display:block}.identity-copy small{color:var(--muted)}.content{padding:24px;max-width:1480px;margin:auto}.page{display:none}.page.active{display:block}.page-head{display:flex;justify-content:space-between;gap:16px;align-items:end;margin-bottom:20px}.page-head h2{font-size:26px;margin:0}.page-head p{margin:4px 0 0;color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}.span-3{grid-column:span 3}.span-4{grid-column:span 4}.span-6{grid-column:span 6}.span-8{grid-column:span 8}.span-12{grid-column:span 12}.card{background:linear-gradient(145deg,var(--surface),#0a1623);border:1px solid var(--line);border-radius:15px;padding:17px;box-shadow:0 10px 28px #0003}.card h3{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:0 0 12px}.metric strong{display:block;font-size:25px}.metric small{color:var(--muted)}.metric-line{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #fff0a}.metric-line:last-child{border:0}.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:var(--amber)}.status-dot.good{background:var(--green)}.status-dot.fail{background:var(--red)}.form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.form-grid .wide{grid-column:1/-1}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.table-wrap{overflow:auto}.table{width:100%;border-collapse:collapse}.table th,.table td{padding:11px 9px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}.table th{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}.pill{padding:4px 8px;border-radius:999px;background:#15283a;color:var(--cyan);font-size:10px;font-weight:800}.timeline{max-height:390px;overflow:auto}.event{padding:10px 0;border-bottom:1px solid var(--line)}.event b{display:block;color:var(--cyan);font-size:11px}.event small{color:var(--muted)}.floor-frame{width:100%;height:690px;border:1px solid var(--line);border-radius:15px;background:var(--surface)}.job{padding:13px;border:1px solid var(--line);border-radius:11px;margin:9px 0;background:#091522}.job-top{display:flex;justify-content:space-between;gap:12px;align-items:center}.config-status{font-size:10px;color:var(--green);margin-left:5px}.toast{position:fixed;right:22px;bottom:22px;max-width:380px;background:#101f2f;border:1px solid var(--line);border-radius:12px;padding:13px 16px;box-shadow:var(--shadow);z-index:100}.mobile-nav{display:none}@media(max-width:1050px){.span-3{grid-column:span 6}.span-4,.span-8{grid-column:span 12}.auth-wrap{grid-template-columns:1fr}.auth-brand{display:none}}@media(max-width:760px){.shell{display:block}.sidebar{display:none}.topbar{padding:0 15px}.content{padding:15px 15px 80px}.span-3,.span-6{grid-column:span 12}.form-grid{grid-template-columns:1fr}.mobile-nav{display:flex;position:fixed;bottom:0;left:0;right:0;background:#091522f2;border-top:1px solid var(--line);z-index:30;padding:7px;overflow:auto}.mobile-nav button{min-width:72px;background:transparent;border:0;color:var(--muted);font-size:10px;padding:7px}.mobile-nav button.active{color:var(--green)}.identity-copy{display:none}.floor-frame{height:620px}}@media(prefers-reduced-motion:no-preference){.card,.btn,.nav button{transition:.18s ease}.card:hover{border-color:#2d4b68}}
-</style></head>
+.tabs{display:flex;gap:4px;background:#08131f;border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:18px}.tab{flex:1;background:none;border:0;color:var(--muted);padding:10px;border-radius:9px;font-weight:800;cursor:pointer}.tab.active{background:#163047;color:var(--text)}.tab:disabled{opacity:.5;cursor:not-allowed}.terms{display:flex;align-items:flex-start;gap:8px;color:var(--muted);font-size:12px;margin:10px 0}.terms input{margin-top:2px;width:16px;height:16px}.ws-btn{display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left}.link-row{text-align:right;margin:-2px 0 10px}</style></head>
 <body>
 <section id="authGate" class="auth-shell">
   <div class="auth-wrap">
     <div class="auth-brand"><div class="logo"><img class="logo-mark" src="/static/marca/dz23-logo-192.png" alt="DZ23 Trading Platform">DZ23 AGENCY</div><h1>Inteligência coordenada. Risco governado.</h1><p>Uma agência autônoma multiagente para pesquisa, análise, Paper Trading, Shadow Trading e execução governada em múltiplos mercados e corretoras.</p><div class="safety-row"><span class="badge"><i class="dot"></i>PAPER MODE</span><span class="badge"><i class="dot"></i>MULTI-TENANT</span><span class="badge"><i class="dot"></i>EXECUÇÃO GOVERNADA</span></div></div>
     <div class="auth-panel"><div class="auth-card">
-      <div class="eyebrow">Comece aqui · acesso seguro</div><h2 id="authTitle">Entrar na agência</h2><p class="muted" id="authSubtitle">Use o tenant, e-mail e senha cadastrados.</p>
-      <div id="loginForm"><div class="field"><label>Tenant ID</label><input class="input" id="loginTenant" autocomplete="organization" placeholder="ten_..."></div><div class="field"><label>E-mail</label><input class="input" id="loginEmail" type="email" autocomplete="username"></div><div class="field"><label>Senha</label><div class="pwd-wrap"><input class="input" id="loginPassword" type="password" autocomplete="current-password"><button type="button" class="pwd-eye" data-alvo="loginPassword" onclick="verSenha(this)" aria-label="Mostrar senha" title="Mostrar senha">👁</button></div></div><button class="btn primary full" onclick="login()">Entrar</button></div>
-      <div id="bootstrapForm" class="hide"><div class="field"><label>Nome da organização</label><input class="input" id="bootOrg" value="DZ23 Trading Agency"></div><div class="field"><label>E-mail do administrador</label><input class="input" id="bootEmail" type="email"></div><div class="field"><label>Senha do administrador (mínimo 12 caracteres)</label><div class="pwd-wrap"><input class="input" id="bootPassword" type="password"><button type="button" class="pwd-eye" data-alvo="bootPassword" onclick="verSenha(this)" aria-label="Mostrar senha" title="Mostrar senha">👁</button></div></div></div><div class="field"><label>Token de bootstrap do servidor</label><div class="pwd-wrap"><input class="input" id="bootToken" type="password"><button type="button" class="pwd-eye" data-alvo="bootToken" onclick="verSenha(this)" aria-label="Mostrar senha" title="Mostrar senha">👁</button></div></div></div><button class="btn primary full" onclick="bootstrap()">Criar agência e administrador</button></div>
-      <div id="signupForm" class="hide">
-<div class="field"><label>Nome da sua agência</label><input class="input" id="suAgencia" placeholder="Ex.: Mesa do Prado"></div>
-<div class="field"><label>Seu e-mail</label><input class="input" id="suEmail" type="email"></div>
-<div class="field"><label>Senha (mínimo 12 caracteres)</label><div class="pwd-wrap"><input class="input" id="suSenha" type="password"><button type="button" class="pwd-eye" data-alvo="suSenha" onclick="verSenha(this)" aria-label="Mostrar senha" title="Mostrar senha">👁</button></div></div>
-<button class="btn primary full" onclick="criarConta()">Criar conta e começar o teste grátis</button>
-<p class="muted" id="suInfo"></p>
-<button class="btn secondary full" style="margin-top:6px" onclick="mostrarLogin()">Já tenho conta</button>
-</div>
-<button class="btn secondary full hide" id="btnCriarConta" style="margin-top:8px" onclick="mostrarCadastro()">Criar conta</button>
-<div id="socialBox" class="hide">
-  <div class="divisor">ou entre com</div>
-  <div class="social" id="socialButtons"></div>
-</div>
-<div id="authMsg" class="message"></div>
+      <div class="tabs" role="tablist" aria-label="Entrar ou criar conta">
+        <button id="tabLogin" class="tab active" type="button" role="tab" aria-selected="true" onclick="trocarAba('login')">Entrar</button>
+        <button id="tabSignup" class="tab" type="button" role="tab" aria-selected="false" onclick="trocarAba('signup')">Criar conta</button>
+      </div>
+
+      <form id="loginForm" onsubmit="return login(event)" novalidate>
+        <h2 id="authTitle">Entrar</h2><p class="muted">Acesse sua área de trabalho.</p>
+        <div class="field"><label for="loginEmail">E-mail</label><input class="input" id="loginEmail" type="email" autocomplete="username" required></div>
+        <div class="field"><label for="loginPassword">Senha</label><div class="pwd-wrap"><input class="input" id="loginPassword" type="password" autocomplete="current-password" required><button type="button" class="pwd-eye" data-alvo="loginPassword" onclick="verSenha(this)" aria-label="Mostrar senha" title="Mostrar senha">👁</button></div></div>
+        <div class="link-row"><button type="button" class="link-btn" onclick="esqueciSenha()">Esqueci minha senha</button></div>
+        <button class="btn primary full" type="submit" id="loginBtn">Entrar</button>
+      </form>
+
+      <div id="workspaceSelect" class="hide">
+        <h2>Escolha a área</h2><p class="muted">Seu acesso vale para mais de uma área. Escolha para continuar.</p>
+        <div class="social" id="workspaceList"></div>
+        <button class="btn secondary full" type="button" onclick="trocarAba('login')" style="margin-top:8px">Voltar</button>
+      </div>
+
+      <form id="signupForm" class="hide" onsubmit="return criarConta(event)" novalidate>
+        <h2>Criar conta</h2>
+        <div id="signupOff" class="hide"><p class="muted">Cadastro disponível <b>por convite</b>. Peça um convite ao administrador da sua área para começar.</p></div>
+        <div id="signupFields">
+          <div class="field"><label for="suAgencia">Nome da sua área</label><input class="input" id="suAgencia" autocomplete="organization" placeholder="Ex.: Mesa do Prado" required></div>
+          <div class="field"><label for="suEmail">Seu e-mail</label><input class="input" id="suEmail" type="email" autocomplete="email" required></div>
+          <div class="field"><label for="suSenha">Senha (mínimo 12 caracteres)</label><div class="pwd-wrap"><input class="input" id="suSenha" type="password" autocomplete="new-password" minlength="12" required><button type="button" class="pwd-eye" data-alvo="suSenha" onclick="verSenha(this)" aria-label="Mostrar senha" title="Mostrar senha">👁</button></div></div>
+          <div class="field"><label for="suSenha2">Confirmar senha</label><div class="pwd-wrap"><input class="input" id="suSenha2" type="password" autocomplete="new-password" minlength="12" required><button type="button" class="pwd-eye" data-alvo="suSenha2" onclick="verSenha(this)" aria-label="Mostrar senha" title="Mostrar senha">👁</button></div></div>
+          <label class="terms"><input type="checkbox" id="suTermos" required> Li e aceito os termos de uso e a política de privacidade.</label>
+          <button class="btn primary full" type="submit">Criar conta</button>
+          <p class="muted" id="suInfo"></p>
+        </div>
+      </form>
+
+      <div id="socialBox" class="hide">
+        <div class="divisor">ou continue com</div>
+        <div class="social" id="socialButtons"></div>
+      </div>
+<div id="authMsg" class="message" role="alert" aria-live="assertive"></div>
     </div></div>
   </div>
 </section>
@@ -119,8 +140,6 @@ async function carregarProvedores(){
       b.className='btn social-btn full';
       b.innerHTML=marca.icone+'<span>Entrar com '+marca.nome+'</span>';
       b.onclick=async()=>{
-        const t=$('loginTenant')?$('loginTenant').value.trim():'';
-        if(t) localStorage.setItem('dz23_tenant',t);
         // o /start devolve a URL de autorização; quem navega é o navegador
         try{
           const r=await fetch('/v1/auth/oauth/'+id+'/start');
@@ -132,7 +151,7 @@ async function carregarProvedores(){
       };
       caixa.appendChild(b);
     });
-    $('socialBox').classList.remove('hide');
+    $('socialBox').dataset.disponivel='1';$('socialBox').classList.remove('hide');
   }catch(e){/* sem provedores: a tela segue com e-mail e senha */}
 }
 
@@ -157,9 +176,30 @@ async function carregarEstadoOperacional(){
   }
 }
 
-async function boot(){renderNav();$('tradeDate').value=new Date(Date.now()-864e5).toISOString().slice(0,10);const status=await fetch('/v1/auth/status').then(r=>r.json()).catch(()=>({multi_tenant:true}));if(status.bootstrap_required){$('loginForm').classList.add('hide');$('bootstrapForm').classList.remove('hide');$('authTitle').textContent='Criar primeira agência';$('authSubtitle').textContent='Configure o primeiro tenant e administrador.'}else{const saved=localStorage.getItem('dz23_tenant');if(saved)$('loginTenant').value=saved}if(token()){const me=await api('/v1/auth/me');if(me.ok)return enterApp(me.data)}showAuth();carregarProvedores()}
-async function bootstrap(){const body={tenant_name:$('bootOrg').value.trim(),email:$('bootEmail').value.trim(),password:$('bootPassword').value};const bootstrapToken=$('bootToken').value.trim();if(!body.tenant_name||!body.email||body.password.length<12||!bootstrapToken)return $('authMsg').innerHTML='<span class="bad">Preencha todos os campos; senha mínima de 12 caracteres.</span>';const r=await fetch('/v1/auth/bootstrap',{method:'POST',headers:{'Content-Type':'application/json','X-Tenant-Bootstrap':bootstrapToken},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)return $('authMsg').innerHTML='<span class="bad">'+(d.detail||'Falha no bootstrap')+'</span>';localStorage.setItem('dz23_tenant',d.tenant_id);$('loginTenant').value=d.tenant_id;$('loginEmail').value=body.email;$('loginPassword').value=body.password;$('bootstrapForm').classList.add('hide');$('loginForm').classList.remove('hide');await login()}
-async function login(){const body={tenant_id:$('loginTenant').value.trim(),email:$('loginEmail').value.trim(),password:$('loginPassword').value};const r=await fetch('/v1/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok)return $('authMsg').innerHTML='<span class="bad">'+(d.detail||'Credenciais inválidas')+'</span>';sessionStorage.setItem('dz23_token',d.access_token);localStorage.setItem('dz23_tenant',body.tenant_id);const me=await api('/v1/auth/me');if(me.ok)enterApp(me.data)}
+let _pendingLogin=null;
+function msgAuth(text,tipo='bad'){$('authMsg').innerHTML='<span class="'+tipo+'">'+escapeHtml(text)+'</span>'}
+async function postJson(path,body){const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});let data={};try{data=await r.json()}catch{}return{ok:r.ok,status:r.status,data}}
+function setLoading(id,on){const b=$(id);if(!b)return;b.disabled=on;if(on){b.dataset._t=b.textContent;b.textContent='Aguarde…'}else if(b.dataset._t){b.textContent=b.dataset._t}}
+async function boot(){renderNav();$('tradeDate').value=new Date(Date.now()-864e5).toISOString().slice(0,10);
+  const status=await fetch('/v1/auth/status').then(r=>r.json()).catch(()=>({}));
+  if(token()){const me=await api('/v1/auth/me');if(me.ok)return enterApp(me.data)}
+  showAuth();
+  // Bootstrap inicial NÃO aparece na tela pública: fica em /setup, protegido.
+  if(status.bootstrap_required){msgAuth('Configuração inicial pendente — crie a primeira área em /setup.','muted')}
+  carregarProvedores();verSignup()}
+async function login(ev){if(ev&&ev.preventDefault)ev.preventDefault();
+  const email=$('loginEmail').value.trim(),password=$('loginPassword').value;
+  if(!email||!password){msgAuth('Informe e-mail e senha.');return false}
+  setLoading('loginBtn',true);
+  const r=await postJson('/v1/auth/login',{email,password});
+  setLoading('loginBtn',false);
+  if(!r.ok){msgAuth(r.data.detail||'Credenciais inválidas.');return false}
+  if(r.data.select_workspace){_pendingLogin={email,password};mostrarWorkspaces(r.data.select_workspace);return false}
+  await concluirLogin(r.data.access_token);return false}
+async function concluirLogin(tok){sessionStorage.setItem('dz23_token',tok);const me=await api('/v1/auth/me');if(me.ok)enterApp(me.data)}
+function mostrarWorkspaces(lista){['loginForm','signupForm','socialBox','tabLogin','tabSignup'].forEach(x=>$(x)&&$(x).classList.add('hide'));$('workspaceSelect').classList.remove('hide');$('authMsg').innerHTML='';const box=$('workspaceList');box.innerHTML='';lista.forEach(w=>{const b=document.createElement('button');b.type='button';b.className='btn secondary full ws-btn';b.innerHTML='<span>'+escapeHtml(w.name)+'</span><span class="pill">'+escapeHtml(w.role)+'</span>';b.onclick=()=>escolherWorkspace(w.tenant_id);box.appendChild(b)})}
+async function escolherWorkspace(tid){if(!_pendingLogin){trocarAba('login');return}const r=await postJson('/v1/auth/login',{email:_pendingLogin.email,password:_pendingLogin.password,tenant_id:tid});if(!r.ok){msgAuth(r.data.detail||'Não foi possível entrar nessa área.');return}await concluirLogin(r.data.access_token)}
+function esqueciSenha(){msgAuth('Recuperação por autoatendimento em breve. Por ora, peça ao administrador da sua área para redefinir sua senha.','muted')}
 function enterApp(me){carregarEstadoOperacional();principal=me;$('authGate').classList.add('hide');$('app').classList.remove('hide');$('userEmail').textContent=me.email;$('tenantId').textContent=me.tenant_id;$('roleBadge').textContent=me.role.toUpperCase();document.querySelectorAll('[data-page="admin"]').forEach(e=>e.classList.toggle('hide',me.role!=='admin'));showPage('overview')}
 async function logout(){await api('/v1/auth/logout',{method:'POST'});sessionStorage.removeItem('dz23_token');location.reload()}
 async function refreshOverview(){const [ready,agency,jobs,events]=await Promise.all([fetch('/readyz').then(r=>r.json()).catch(()=>({status:'offline'})),api('/v1/agency/health'),api('/v1/jobs/health'),api('/v1/agency/events')]);$('appStatus').textContent=ready.status.toUpperCase();$('appStatus').className=ready.status==='ready'?'ok':'warn';$('appDetail').textContent='API e execução';$('jobBackend').textContent=(jobs.data.backend||'—').toUpperCase();$('agentCount').textContent=agency.data.agents??'—';loadChecklist();$('healthList').innerHTML=[['API',ready.status],['Job ledger',jobs.data.status],['Agência',agency.data.status||'ready'],['Live trading','blocked']].map(([k,v])=>`<div class="metric-line"><span>${k}</span><b><i class="status-dot ${['ready','ok'].includes(v)?'good':v==='blocked'?'fail':''}"></i>${String(v).toUpperCase()}</b></div>`).join('');renderEvents(events.data.events||[],'overviewEvents')}
@@ -203,18 +243,20 @@ const d=r.data;box.innerHTML=`<h3>Pague com PIX</h3>${d.qrcode_imagem?`<img src=
 ${d.brcode?`<div class="field"><label>PIX copia e cola</label><input class="input" readonly value="${escapeHtml(d.brcode)}" onclick="this.select()"></div>`:''}
 ${d.link?`<a class="btn secondary" href="${escapeHtml(d.link)}" target="_blank" style="text-decoration:none">Abrir página de pagamento</a>`:''}
 <p class="muted">Assim que a Woovi confirmar, seu plano é ativado automaticamente. Clique em Atualizar para conferir.</p>`}
-function mostrarCadastro(){$('loginForm').classList.add('hide');$('bootstrapForm')&&$('bootstrapForm').classList.add('hide');$('signupForm').classList.remove('hide');$('btnCriarConta').classList.add('hide');$('authTitle').textContent='Criar sua agência';$('authSubtitle').textContent='Teste grátis, sem cartão.'}
-function mostrarLogin(){$('signupForm').classList.add('hide');$('loginForm').classList.remove('hide');$('btnCriarConta').classList.remove('hide');$('authTitle').textContent='Entrar';$('authSubtitle').textContent='Acesse sua agência.'}
-async function criarConta(){const body={agencia:$('suAgencia').value.trim(),email:$('suEmail').value.trim(),senha:$('suSenha').value};
-if(!body.agencia||!body.email||body.senha.length<12)return $('authMsg').innerHTML='<span class="bad">Preencha tudo; a senha precisa de 12+ caracteres.</span>';
-$('authMsg').innerHTML='<span class="muted">Criando sua agência...</span>';
-const r=await fetch('/v1/auth/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-const d=await r.json();
-if(!r.ok)return $('authMsg').innerHTML='<span class="bad">'+escapeHtml(d.detail||'não foi possível criar a conta')+'</span>';
-sessionStorage.setItem('dz23_token',d.access_token);localStorage.setItem('dz23_tenant',d.tenant_id);
-const me=await api('/v1/auth/me');if(me.ok)enterApp(me.data)}
-async function verSignup(){try{const st=await fetch('/v1/auth/signup-status').then(r=>r.json());
-if(st.habilitado){$('btnCriarConta').classList.remove('hide');$('suInfo').textContent=st.dias_de_teste+' dias grátis; depois a partir de '+(st.planos[0]?st.planos[0].preco:'')+'/mês.'}}catch(e){}}
+function trocarAba(qual){const login=qual==='login';$('workspaceSelect').classList.add('hide');$('loginForm').classList.toggle('hide',!login);$('signupForm').classList.toggle('hide',login);$('tabLogin').classList.remove('hide');$('tabSignup').classList.remove('hide');$('tabLogin').classList.toggle('active',login);$('tabSignup').classList.toggle('active',!login);$('tabLogin').setAttribute('aria-selected',String(login));$('tabSignup').setAttribute('aria-selected',String(!login));$('authMsg').innerHTML='';$('socialBox').classList.toggle('hide',$('socialBox').dataset.disponivel!=='1')}
+async function criarConta(ev){if(ev&&ev.preventDefault)ev.preventDefault();
+const agencia=$('suAgencia').value.trim(),email=$('suEmail').value.trim(),senha=$('suSenha').value,senha2=$('suSenha2').value;
+if(!agencia||!email||senha.length<12){msgAuth('Preencha tudo; a senha precisa de 12+ caracteres.');return false}
+if(senha!==senha2){msgAuth('As senhas não coincidem.');return false}
+if(!$('suTermos').checked){msgAuth('Aceite os termos para continuar.');return false}
+msgAuth('Criando sua conta…','muted');
+const r=await postJson('/v1/auth/signup',{agencia,email,senha});
+if(!r.ok){msgAuth(r.data.detail||'Não foi possível criar a conta.');return false}
+await concluirLogin(r.data.access_token);return false}
+async function verSignup(){try{const st=await fetch('/v1/auth/signup-status').then(r=>r.json());const on=!!st.habilitado;
+$('signupFields').classList.toggle('hide',!on);$('signupOff').classList.toggle('hide',on);$('tabSignup').disabled=!on;$('tabSignup').title=on?'':'Cadastro disponível por convite';
+if(on&&st.planos&&st.planos[0])$('suInfo').textContent=(st.dias_de_teste||0)+' dias grátis; depois a partir de '+(st.planos[0].preco||'')+'/mês.'}
+catch(e){$('tabSignup').disabled=true;$('signupFields').classList.add('hide');$('signupOff').classList.remove('hide')}}
 async function liveStatus(){const r=await api('/v1/live/status');if(!r.ok)return toast('falhou','bad');const d=r.data;
 $('deskMsg').innerHTML=`<div class="${d.pode_operar_real?'ok':'warn'}"><b>${d.pode_operar_real?'Pronto para operar com dinheiro real':'Faltam '+d.pendencias+' item(ns) para dinheiro real'}</b></div>`+
 d.checklist.map(i=>`<div class="metric-line"><span>${i.pronto?'✔':'○'} ${escapeHtml(i.item)}</span>${i.pronto?'':'<small class="muted">'+escapeHtml(i.acao)+'</small>'}</div>`).join('')+
@@ -242,5 +284,5 @@ const a=document.createElement('a');a.href=URL.createObjectURL(blob);
 a.download='dz23-mudanca-'+(r.data.tenant_id||'agencia')+'.json';a.click();
 URL.revokeObjectURL(a.href);
 toast('Arquivo baixado. Contém SEGREDOS: guarde como uma senha.','warn')}
-function escapeHtml(value){return String(value??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}boot();verSignup();
+function escapeHtml(value){return String(value??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}boot();
 </script></body></html>

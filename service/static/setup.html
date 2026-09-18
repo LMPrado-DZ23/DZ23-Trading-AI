@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DZ23 · Configuração inicial</title>
+<link rel="icon" href="/static/marca/favicon.ico" sizes="any">
+<meta name="robots" content="noindex,nofollow">
+<style>
+:root{--bg:#07101b;--surface:#0d1826;--line:#20344a;--text:#edf5ff;--muted:#8ba0b8;--green:#4be6a2;--cyan:#44c7f4;--red:#ff7185}
+*{box-sizing:border-box}html{color-scheme:dark}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at 70% -20%,#173a57 0,transparent 38%),var(--bg);color:var(--text);font:14px/1.5 Inter,ui-sans-serif,system-ui,sans-serif}
+.card{width:min(460px,100%);background:#091523ee;border:1px solid var(--line);border-radius:18px;padding:30px;box-shadow:0 18px 50px #0008}
+h1{font-size:22px;margin:0 0 4px}.muted{color:var(--muted)}.bad{color:var(--red)}.ok{color:var(--green)}
+.field{margin:14px 0}label{display:block;color:var(--muted);font-size:12px;margin:0 0 5px}
+.input{width:100%;background:#08131f;border:1px solid var(--line);color:var(--text);border-radius:10px;padding:11px 12px;outline:none;font:inherit}
+.input:focus{border-color:var(--cyan);box-shadow:0 0 0 3px #44c7f414}
+.btn{width:100%;border:0;border-radius:10px;padding:12px 16px;font-weight:800;cursor:pointer;background:var(--green);color:#062418;font:inherit}
+.btn:disabled{opacity:.5;cursor:not-allowed}.msg{min-height:22px;margin-top:12px;font-size:13px}
+a{color:var(--cyan)}
+</style></head>
+<body>
+<main class="card">
+  <h1>Configuração inicial</h1>
+  <p class="muted">Crie a <b>primeira área</b> e o administrador. Esta página é separada do login e some depois da primeira área criada.</p>
+  <form id="form" onsubmit="return criar(event)" novalidate>
+    <div class="field"><label for="org">Nome da organização</label><input class="input" id="org" autocomplete="organization" required></div>
+    <div class="field"><label for="email">E-mail do administrador</label><input class="input" id="email" type="email" autocomplete="email" required></div>
+    <div class="field"><label for="senha">Senha do administrador (mínimo 12 caracteres)</label><input class="input" id="senha" type="password" autocomplete="new-password" minlength="12" required></div>
+    <div class="field"><label for="token">Token de bootstrap do servidor</label><input class="input" id="token" type="password" autocomplete="off" required></div>
+    <button class="btn" id="btn" type="submit">Criar área e administrador</button>
+  </form>
+  <div class="msg" id="msg" role="alert" aria-live="assertive"></div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+function msg(t,c='bad'){$('msg').innerHTML='<span class="'+c+'">'+t+'</span>'}
+async function estado(){try{const s=await fetch('/v1/auth/status').then(r=>r.json());
+  if(!s.bootstrap_required){$('form').style.display='none';msg('Configuração já concluída. <a href="/app">Ir para o login</a>.','ok')}}
+  catch(e){}}
+async function criar(ev){ev.preventDefault();
+  const tenant_name=$('org').value.trim(),email=$('email').value.trim(),password=$('senha').value,tk=$('token').value.trim();
+  if(!tenant_name||!email||password.length<12||!tk){msg('Preencha tudo; a senha precisa de 12+ caracteres.');return false}
+  $('btn').disabled=true;$('btn').textContent='Criando…';
+  try{
+    const r=await fetch('/v1/auth/bootstrap',{method:'POST',headers:{'Content-Type':'application/json','X-Tenant-Bootstrap':tk},body:JSON.stringify({tenant_name,email,password})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){msg(d.detail||'Falha ao criar a área.');$('btn').disabled=false;$('btn').textContent='Criar área e administrador';return false}
+    msg('Área criada. Redirecionando para o login…','ok');
+    setTimeout(()=>location.href='/app',1200);
+  }catch(e){msg('Erro de rede. Tente novamente.');$('btn').disabled=false;$('btn').textContent='Criar área e administrador'}
+  return false}
+estado();
+</script></body></html>

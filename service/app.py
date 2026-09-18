@@ -255,11 +255,25 @@ async def tenant_login(req: Request):
     if not MULTI_TENANT_ENABLED or not TENANT_STORE:
         raise HTTPException(404, "login multi-tenant desabilitado")
     body = await _json_body(req)
+    email = str(body.get("email", ""))
+    password = str(body.get("password", ""))
+    tenant_id = str(body.get("tenant_id", "")).strip()
     try:
-        token = TENANT_STORE.login(str(body["email"]), str(body["password"]), str(body["tenant_id"]))
+        if tenant_id:
+            # Caminho clássico: workspace já escolhido (ex.: seleção de área).
+            token = TENANT_STORE.login(email, password, tenant_id)
+            return {"access_token": token, "token_type": "bearer",
+                    "expires_in": 3600}
+        # SEM Tenant ID: o backend descobre o workspace pelo e-mail+senha. Se
+        # houver vários, devolve a seleção (só após a senha correta — não
+        # enumera contas). O usuário final nunca digita Tenant ID.
+        resultado = TENANT_STORE.login_by_email(email, password)
     except (KeyError, AuthError) as exc:
         raise HTTPException(401, str(exc)) from None
-    return {"access_token": token, "token_type": "bearer", "expires_in": 3600}
+    if "token" in resultado:
+        return {"access_token": resultado["token"], "token_type": "bearer",
+                "expires_in": 3600, "tenant_id": resultado["tenant_id"]}
+    return {"select_workspace": resultado["select"]}
 
 
 @app.get("/v1/auth/status")
@@ -514,6 +528,15 @@ def index():
 def aplicacao():
     """A plataforma em si — login e painel."""
     return FileResponse(STATIC / "index.html")
+
+
+@app.get("/setup", include_in_schema=False)
+@app.get("/setup/", include_in_schema=False)
+def setup_inicial():
+    """Bootstrap da PRIMEIRA agência — rota separada do /app público. A API
+    `/v1/auth/bootstrap` exige o token e recusa quando já existe tenant (uso
+    único); esta página só expõe o formulário nesse cenário."""
+    return FileResponse(STATIC / "setup.html")
 
 
 @app.get("/static/marca/{arquivo}", include_in_schema=False)
