@@ -29,7 +29,7 @@ dois processos com livros em memória divergentes é
 ### Fee pipeline — restante
 | # | Item | Dano se ignorado |
 |---|---|---|
-| F3 | Valoração por ocorrência | uma cotação aplicada a taxas de horários diferentes |
+| F3 | ✅ Valoração por componente (`10eb598`) | — fechado: cotação por ocorrência |
 | F4 | Liquidação do passivo funcional | `LIABILITY:FEE_FUNDING` nunca zera |
 | F5 | Taxa em base currency | posição 1 BTC com 0,001 BTC de taxa sem origem |
 | F6 | Parser único na reconciliação | dois caminhos podem divergir |

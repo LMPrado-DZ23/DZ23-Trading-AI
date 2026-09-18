@@ -92,22 +92,13 @@ real como fonte de verdade, conforme a regra do próprio prompt.
 
 ## Próximos três itens
 
-1. **F3** — valoração por OCORRÊNCIA (branch `fase1-f3-f4`). Análise de projeto:
-   - Hoje `valorar_taxa`/`aplicar_valoracao` aplicam UMA cotação (`rate`,`em`) ao
-     agregado do incidente (que soma ocorrências de horários diferentes). Duas
-     taxas cobradas em instantes distintos recebem a mesma cotação — o dano do F3.
-   - Cada ocorrência já guarda `at`; cada componente guarda `occurred_at` (B5).
-   - **Cuidado**: um guard ingênuo de "instantes distintos" MISFIRA — ocorrências
-     criadas em sequência recebem `at = utcnow()` quase idêntico. A semântica
-     correta é a cotação ser válida para o instante de CADA ocorrência (janela de
-     tolerância) e/ou uma cotação por ocorrência, não unicidade de timestamp.
-   - **Design pretendido**: `valorar_taxa` aceita cotação por ocorrência (ou por
-     bucket de tempo dentro de tolerância); `aplicar_valoracao` posta a conversão
-     por ocorrência, cada uma com seu fingerprint/lastro. Reaproveitar o batch
-     congelado (B4) e a identidade estruturada (B5). É um CICLO próprio (TDD +
-     mutação), não um guard rápido — não fazer às pressas.
+1. **F3** — ✅ FECHADO (`10eb598`, branch `fase1-f3-f4`). Valoração POR
+   COMPONENTE: `valorar_taxa(cotacoes={fee_component_id: {rate,fonte,em}})`;
+   cada componente valorado com sua cotação/fonte/instante e fingerprint. Modo
+   agregado (cotação única) intacto por dispatch. 11 testes (A–K) + 6 mutantes.
 2. **F4** — liquidação do passivo funcional `LIABILITY:FEE_FUNDING` (hoje
-   nunca zera): o aporte/compra do ativo descoberto quita o passivo.
+   nunca zera): o aporte/compra do ativo descoberto quita o passivo, usando os
+   lançamentos funcionais por componente do F3, rastreável e exatamente uma vez.
 3. **Máquina do fill** (`RECEIVED → APPLYING → COMMITTED`) — **PARAR PARA
    AUDITORIA antes de iniciar**, conforme o prompt mestre. Não começar sem
    sinal verde do arquiteto/aprovador.

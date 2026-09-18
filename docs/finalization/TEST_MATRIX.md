@@ -51,3 +51,23 @@ Script determinístico (commit o fix ANTES de mutar — o `git checkout` de
 revert descarta trabalho não-commitado):
 `scratchpad/mutmatrix.py` desta sessão; cada entrada = (arquivo, trecho, mutação, teste).
 Regra: todo mutante não-equivalente tem de matar seu teste.
+
+## F3 — valoração por componente (`tests/test_fee_patch_f3.py`)
+
+| Teste | Prova | Mutante que morre |
+|---|---|---|
+| A | 1 BNB @300 + 1 BNB @600 = 900 | cotação única a todas as ocorrências |
+| B | dois componentes do mesmo fill, rates diferentes | fill_id como identidade |
+| C | BNB e SOL no mesmo fill são independentes | — |
+| D | componente novo depois da proposta fica fora | (freeze estrutural + B4) |
+| E | retry idêntico não duplica | — |
+| F | retry divergente gera RecoveryConflict | conflito divergente adotado |
+| G | restart preserva cada valoração | (persistência + B5) |
+| H | incidente não resolve com componente pendente | resolve parcial |
+| I | identidade é fee_component_id, não fill_id | fill_id como identidade |
+| J | cotação agregada em várias ocorrências falha | agregado permitido |
+| K | cada componente registra source e valued_at | ignora source / valued_at |
+
+Mutantes mortos (6): fill_id-como-identidade, agregado-permitido, resolve-parcial,
+adota-divergente, ignora-source, ignora-valued_at. Freeze (D) e restart (G) são
+cobertos estruturalmente e pelas matrizes de B4 e B5.

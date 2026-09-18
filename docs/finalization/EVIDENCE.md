@@ -91,3 +91,15 @@ ruff check .   => All checks passed
   `/v1/status/operacao` de produção; PAPER ativo.
 - RLS ativo nas 6 tabelas do Supabase (chave publicável recebe `42501`).
 - Nenhum segredo versionado (`.env.example` só com nomes).
+
+### F3 — valoração por componente (`10eb598`)
+- Vermelho: `tests/test_fee_patch_f3.py` A–K (11 testes) contra o comportamento
+  agregado antigo (cotação única sobre 2 BNB dava 600/1200, não 900).
+- Correção: `valorar_taxa(cotacoes={fee_component_id:{rate,fonte,em}})`; cada
+  componente valorado com sua cotação/fonte/instante e fingerprint próprio;
+  `find_fee_valuation_component` no ledger; incidente resolve só quando todos os
+  componentes que possui (linhagem por fill_id) estão valorados. Modo agregado
+  (cotação única / componente único) preservado por dispatch em `valuation.modo`.
+- Mutação: 6 mutantes (fill_id-identidade, agregado-permitido, resolve-parcial,
+  adota-divergente, ignora-source, ignora-valued_at) ⇒ todos morrem.
+- Regressão local: 310 passed, 1 pré-existente (permissão Windows).
