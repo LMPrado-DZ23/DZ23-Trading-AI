@@ -10,12 +10,12 @@ F3+. Detalhe e estado em `STATUS.md`.
 
 | # | Item | Dano se ignorado | Estado |
 |---|---|---|---|
-| B2 | soma exata dos componentes | componente 2 BNB marca VALUED valorando só 1 | 🔴 aberto |
-| B3 | validação de ids (vazio/dup/cross/valorado) | valoração sem lastro real | 🔴 aberto |
 | B4 | incidente possui os componentes que resolve | usa componente de outro fill/ordem | 🔴 aberto |
 | B5 | component id durável (fora do memo) | memo editado destrói identidade | 🔴 aberto |
 | B6 | concorrência do recovery (CAS/unique) | dois processos usam o mesmo componente | 🔴 aberto |
 | B1 | identidade canônica na adoção | livro=val-A, incidente=val-B | ✅ `b199ee1` |
+| B2 | soma exata dos componentes | componente 2 BNB marca VALUED valorando só 1 | ✅ `7f5b714` |
+| B3 | validação de ids (vazio/dup/cross/valorado) | valoração sem lastro real | ✅ `7f5b714` |
 | B7 | fingerprint canônico | 300≠300.0; falta functional/policy | ✅ `5563dcd` |
 | B8 | restore revalida dimensões | doc cross-unit volta pelo restore | ✅ `7884687` |
 | B9 | teste da identidade dupla fortalecido | mutação sobrevivia | ✅ `b199ee1` |

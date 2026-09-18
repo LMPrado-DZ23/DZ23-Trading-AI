@@ -16,15 +16,22 @@ Arquivo de testes do patch: `tests/test_fee_patch_f1f2.py` (+ reforço em
 | B7e | `test_b7e_moeda_normalizada` | moeda sem normalizar | ✅ morre |
 | B7 | `test_b7_id_continua_fora_da_impressao` | (invariante preservada) | ✅ |
 | B1/B9 | `TestIdNaoEhConteudo::test_the_same_content_under_another_id_is_adopted` | não adotar id do livro | ✅ morre |
+| B3 | `test_b3_lista_vazia_recusa` | checagem não-vazia removida | ✅ morre |
+| B3 | `test_b3_duplicado_recusa` | checagem de duplicado removida | ✅ morre |
+| B3 | `test_b3_inexistente_recusa` / `_cross_currency_recusa` | checagem de existência removida | ✅ morre |
+| B2 | `test_b2_componente_maior_que_quantidade_recusa` | checagem de soma removida | ✅ morre |
+| B2 | `test_b2_soma_diferente_recusa` | checagem de soma removida (parcial) | ✅ morre |
+| B2 | `test_b2_soma_exata_aceita_e_valora_todos` | — (regressão: 0.4+0.6==1) | ✅ |
+| B3 | `test_b3_legacy_sem_lastro_explicito` | — (compat existe e é separada) | ✅ |
 
 ## Matriz de mutação da auditoria (itens A–J do patch)
 
 | # | Mutação pedida | Coberta por | Estado |
 |---|---|---|---|
 | A | retry adota val-A, incidente grava val-B | B1/B9 | ✅ fechado |
-| B | componente 2 cobre quantidade 1 | B2 | 🔴 aberto |
-| C | ID duplicado aceito | B3 | 🔴 aberto |
-| D | lista vazia cria valoração | B3 | 🔴 aberto |
+| B | componente 2 cobre quantidade 1 | B2 | ✅ fechado |
+| C | ID duplicado aceito | B3 | ✅ fechado |
+| D | lista vazia cria valoração | B3 | ✅ fechado |
 | E | incidente F1 consome componente F2 | B4 | 🔴 aberto |
 | F | fee nova entra no batch após proposta | B4 | 🔴 aberto |
 | G | memo tratado como fonte de identidade | B5 | 🔴 aberto |

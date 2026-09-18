@@ -11,8 +11,9 @@
 pytest -q tests/test_fee_*.py tests/test_recovery_settlement.py \
           tests/test_incidentes_risco.py tests/test_valuation_fingerprint.py \
           tests/test_contabilidade_multimoeda.py tests/test_crash_restart.py \
-          tests/test_compensacao_vinculada.py tests/test_desk_backup.py
-  => 200 passed, 1 failed*
+          tests/test_compensacao_vinculada.py tests/test_desk_backup.py \
+          tests/test_ativo_descoberto.py tests/test_valoracao_exactly_once.py
+  => 243 passed, 1 failed*   (após B2/B3; era 200 antes)
 
 *a única falha (test_config_permissions_are_restored_tight) é pré-existente e
  específica de permissão de arquivo no Windows — confirmada no HEAD limpo,
@@ -44,6 +45,18 @@ ruff check .   => All checks passed
 - Correção: na adoção, id canônico = o do LIVRO; id trazido vira
   `resolution_refs['requested_valuation_id']` (alias).
 - Mutação: "não adotar id do livro" ⇒ teste morre.
+
+### B2/B3 — valoração operacional com lastro e soma exata (`7f5b714`)
+- Vermelho: `test_b3_lista_vazia_recusa`, `test_b3_duplicado_recusa`,
+  `test_b2_componente_maior_que_quantidade_recusa`, `test_b2_soma_diferente_recusa`,
+  `test_b3_legacy_sem_lastro_explicito` (5 falhas contra o comportamento antigo,
+  que aceitava lista vazia e não conferia a soma).
+- Correção: `fee_valuation` exige `fee_component_ids` não-vazia, sem duplicados,
+  todos na moeda e não-valorados, e `soma(componentes) == quantidade` exata;
+  `fee_valuation_sem_lastro` é a porta de compat explícita; `_valorar` é o núcleo
+  comum. 14 call-sites antigos migrados para a compat.
+- Mutação: 6 mutantes (não-vazia, duplicado, soma×2, existência×2) ⇒ todos morrem
+  (runner determinístico, revert em memória, sem `git checkout`).
 
 ## Segurança
 - `LIVE.habilitado=false`, `operacao_real.estado=BLOQUEADA` no

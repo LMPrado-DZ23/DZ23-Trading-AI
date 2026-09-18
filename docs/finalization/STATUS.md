@@ -9,7 +9,7 @@
 | Repositório | `LMPrado-DZ23/tradingagents-dz23` |
 | Branch | `correcao-auditoria` |
 | HEAD | ver seção *Histórico* abaixo (sempre o topo) |
-| Fase atual | Fase 1 · patch F1/F2 da auditoria: B1,B7,B8,B9 fechados; B2–B6 abertos |
+| Fase atual | Fase 1 · patch F1/F2 da auditoria: B1,B2,B3,B7,B8,B9 fechados; B4–B6 abertos |
 | LIVE | **BLOQUEADO** — não habilitar nesta missão |
 | SIGNUP_ENABLED | **false** — só liberar com as evidências do gate de cadastro |
 
@@ -20,8 +20,8 @@ A auditoria reabriu F1/F2 com 10 itens. Estado:
 | # | Item | Estado | SHA |
 |---|---|---|---|
 | B1 | identidade canônica na adoção de recovery | ✅ fechado | `b199ee1` |
-| B2 | soma EXATA dos componentes (2 BNB não valora 1) | 🔴 aberto | — |
-| B3 | ids duplicados/vazios/cross-currency/já-valorados | 🔴 aberto | — |
+| B2 | soma EXATA dos componentes (2 BNB não valora 1) | ✅ fechado | `7f5b714` |
+| B3 | ids duplicados/vazios/cross-currency/já-valorados | ✅ fechado | `7f5b714` |
 | B4 | incidente possui os componentes que resolve | 🔴 aberto | — |
 | B5 | component id fora do memo (dado durável) | 🔴 aberto | — |
 | B6 | recovery e concorrência (CAS/unique) | 🔴 aberto (provável BLOCKED_BY_ARCHITECTURE) | — |
@@ -30,10 +30,17 @@ A auditoria reabriu F1/F2 com 10 itens. Estado:
 | B9 | teste da identidade dupla fortalecido | ✅ fechado | `b199ee1` |
 | B10 | mutation matrix | ✅ em cada commit | — |
 
-> B2/B3 têm raio de ~14 call-sites de `fee_valuation` em testes que hoje
-> chamam sem `fee_component_ids`. Exigem separar API operacional (exige ids +
-> soma exata) de uma API legacy explícita, e atualizar os setups. É a próxima
-> tarefa; não iniciar F3/F4 antes de fechar B2–B6.
+> B2/B3 fechados em `7f5b714`: `fee_valuation` virou a API operacional (exige
+> `fee_component_ids` não-vazia, sem duplicados, mesma moeda, não-valorados e
+> **soma exata** == quantidade). `fee_valuation_sem_lastro` é a porta de compat
+> explícita; os 14 call-sites antigos foram migrados para ela. Restam B4–B6;
+> não iniciar F3/F4 antes de fechá-los.
+>
+> Nota de dívida técnica exposta por B2 (vira B4): o `aplicar_valoracao` do
+> risco seleciona componentes de forma gulosa (`acumulado >= quantidade`),
+> podendo estourar a soma. Hoje nenhum incidente de teste estoura (todos usam
+> componente único que casa exato), mas B4 precisa tornar a seleção do batch
+> exata e possuída pelo incidente.
 
 ## Baseline reproduzida
 
@@ -68,14 +75,12 @@ real como fonte de verdade, conforme a regra do próprio prompt.
 
 ## Próximos três itens
 
-1. **B2 + B3** — `fee_valuation` operacional: exigir `fee_component_ids`
-   não-vazia, sem duplicados, mesma moeda, não-valorados, e **soma EXATA** ==
-   quantidade (senão REFUSED). API legacy separada e explícita para os
-   chamadores antigos sem ids. Atualizar os ~14 call-sites de teste.
-2. **B4** — incidente registra em `occurrences` os component ids que possui;
-   `valorar_taxa` congela o batch; `aplicar_valoracao` usa só esse batch (não
-   seleção arbitrária por moeda). **B5** junto: componente como dado durável
-   estruturado (não parsing de memo).
+1. **B4** — incidente registra em `occurrences` os component ids que possui;
+   `valorar_taxa` congela o batch; `aplicar_valoracao` usa só esse batch, com
+   soma EXATA (não seleção gulosa por moeda que estoura a quantidade).
+2. **B5** — componente como dado durável estruturado (fora do parsing de memo):
+   `fee_component_id`, `fill_id`, `order_id`, `amount`, `currency`,
+   `occurred_at`, `source`, `valuation_status` como campos, não texto.
 3. **B6** — concorrência do recovery: unique/CAS por `fee_component_id` (uma
    valoração ativa por componente). Se o storage em memória não suportar,
    `BLOCKED_BY_ARCHITECTURE` documentado + gate fechado para multiprocess.
@@ -110,6 +115,8 @@ arquivo.
 | `7884687` | B8: restore revalida dimensões | kernel subset |
 | `5563dcd` | B7: fingerprint canônico normalizado + policy version | kernel subset |
 | `b199ee1` | B1/B9: identidade canônica na adoção de recovery | kernel subset |
+| `6384c11` | docs de finalização (gates, evidência, matriz) | — |
+| `7f5b714` | B2/B3: valoração operacional com lastro e soma exata | 243 (kernel) |
 
 > A partir de `7884687` a contagem "kernel subset" reflete a limitação do
 > ambiente (3.14): ~200 testes de F1/F2 verdes localmente; suíte completa via
