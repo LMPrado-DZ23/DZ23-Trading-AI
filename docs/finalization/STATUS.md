@@ -2,6 +2,17 @@
 
 > Documento de retomada. Se a sessão cair, comece por aqui.
 
+## Auditoria em andamento (NÃO mover este SHA)
+
+- **Patch F1/F2 (B1–B10)** congelado em `correcao-auditoria` @ **`e51ce536`**.
+- **DRAFT PR #3** → https://github.com/LMPrado-DZ23/tradingagents-dz23/pull/3
+  (base `main` ← head `correcao-auditoria`). **Sem merge, sem auto-merge.**
+- Gate 1 (suíte completa) roda no CI **deste PR**. Só entregar para auditoria
+  com todos os checks obrigatórios verdes.
+- Continuação (F3/F4) vive na branch **`fase1-f3-f4`**, a partir de `e51ce536`,
+  para não transformar o SHA em auditoria num alvo móvel. Nada de deploy destes
+  commits antes do Gate 1 verde e da auditoria de F1/F2.
+
 ## Onde estamos
 
 | | |
