@@ -41,10 +41,15 @@ crítica sem plano · merge definitivo sem rollback · liberar cadastro público
 ## Estado atual do deploy
 - Produção (`dz23trading.com.br`): rodando `40dbbf3` (validado nesta sessão:
   healthz 200, `/v1/status/operacao` 200 PAPER, LIVE=false).
-- Patch F1/F2 (B1–B10) **COMPLETO**; commits até `8b265ce` (inclui B5 `cad7a5c`
-  e B6 `8b265ce`) **publicados em `origin/correcao-auditoria`** para o CI rodar
-  a suíte completa (gate 1). **Ainda não implantados** em produção — redeploy
-  espera o CI verde. LIVE bloqueado; SIGNUP_ENABLED=false.
+- Patch F1/F2 (B1–B10) **COMPLETO**; commits até `d6472bd` (inclui B5 `cad7a5c`
+  e B6 `8b265ce`) **publicados em `origin/correcao-auditoria`**. **Ainda não
+  implantados** em produção. LIVE bloqueado; SIGNUP_ENABLED=false.
+- ⚠️ Gate 1 (suíte completa via CI) **ainda NÃO rodou** nestes commits: o
+  workflow `ci.yml` dispara só em push para `main`/`unificacao`/`feat/**` ou em
+  **pull_request**. `correcao-auditoria` não está nos gatilhos de push. Para
+  rodar a suíte completa é preciso **abrir um PR** (evento pull_request) —
+  ação outward-facing, aguardando decisão do dono (base e abertura). Localmente
+  só roda o subconjunto do kernel (py3.14).
 - Gate multiprocess **fechado**: o ledger em memória não impõe
   `UNIQUE(fee_component_id)` entre processos (B6). Deploy single-process apenas
   até o ledger migrar para Postgres.

@@ -89,8 +89,12 @@ real como fonte de verdade, conforme a regra do próprio prompt.
    AUDITORIA antes de iniciar**, conforme o prompt mestre. Não começar sem
    sinal verde do arquiteto/aprovador.
 
-> O patch F1/F2 (B1–B10) está completo e publicado. Antes de F3/F4, aguardar
-> o CI verde da suíte completa (gate 1) sobre os commits publicados.
+> O patch F1/F2 (B1–B10) está completo e publicado em `correcao-auditoria`.
+> ATENÇÃO: o CI (`ci.yml`) NÃO dispara em push para essa branch (só
+> `main`/`unificacao`/`feat/**` ou `pull_request`). A suíte completa (gate 1)
+> só roda ao abrir um PR — ação outward-facing, aguardando o dono. Localmente,
+> só o subconjunto do kernel (py3.14). Antes de F3/F4 e de qualquer redeploy,
+> gate 1 verde no CI.
 
 Depois de B2–B6: F3 (valoração por ocorrência), F4 (`LIABILITY:FEE_FUNDING`),
 e a máquina do fill `RECEIVED → APPLYING → COMMITTED` (parar para auditoria
