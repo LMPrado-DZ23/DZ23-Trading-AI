@@ -839,6 +839,60 @@ class Ledger:
                 return tx
         return None
 
+    def _find_fee_funding_settlement(self, fee_component_id: str) -> dict | None:
+        for tx in self.export_transactions():
+            if (tx.get("kind") == "fee_funding_settlement"
+                    and fee_component_id in (tx.get("fee_component_ids") or [])):
+                return tx
+        return None
+
+    def liquidar_fee_funding(self, fee_component_id: str, *, actor: str,
+                             reason: str = "",
+                             external_reference: str = "") -> Transaction | dict:
+        """Liquida o passivo `LIABILITY:FEE_FUNDING` DESTE componente (F4).
+
+        Valorar cria o passivo funcional (a mesa deve o valor da taxa paga em
+        moeda não funcional). Depois que o ativo descoberto é financiado, o
+        funding é quitado: o passivo é extinto contra o capital que o cobriu.
+        Exatamente uma vez por componente, amarrado à sua valoração.
+        """
+        ja = self._find_fee_funding_settlement(fee_component_id)
+        if ja is not None:
+            return ja                    # idempotente: não move dinheiro de novo
+        val = None
+        for tx in self.export_transactions():
+            if (tx.get("kind") == "fee_valuation"
+                    and fee_component_id in (tx.get("fee_component_ids") or [])):
+                val = tx
+                break
+        if val is None:
+            raise ValueError(
+                f"componente {fee_component_id} não tem valoração: não há "
+                "funding para liquidar")
+        moeda = val.get("native_currency") or ""
+        valor = Decimal(str(val.get("functional_amount") or "0"))
+        if valor <= ZERO:
+            raise ValueError(
+                f"valoração do componente {fee_component_id} sem valor "
+                "funcional para liquidar")
+        # O ativo descoberto precisa ter sido financiado ANTES: liquidar sem
+        # isso fingiria um lastro que não existe.
+        if moeda and self.balance(f"ASSET:{moeda}") < ZERO:
+            raise ValueError(
+                f"ASSET:{moeda} ainda descoberto ({self.balance(f'ASSET:{moeda}')}"
+                "): financie o ativo antes de liquidar o funding da taxa")
+        memo = (f"liquidação do funding | componente {fee_component_id} | "
+                f"{valor} {self.currency} | por {actor}")
+        if reason:
+            memo += f" | {reason}"
+        return self._post(
+            "fee_funding_settlement",
+            [Entry("LIABILITY:FEE_FUNDING", valor, memo),
+             Entry("CONTRIBUTED_CAPITAL", -valor, memo)],
+            external_reference or fee_component_id,
+            fee_component_ids=[fee_component_id],
+            functional_amount=valor, functional_currency=self.currency)
+
     def find_incident_compensation(self, incident_id: str,
                                    settlement_id: str) -> dict | None:
         """A compensação DESTA liquidação — exige os dois identificadores.
