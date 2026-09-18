@@ -928,6 +928,13 @@ class RiskEngine:
             raise ValueError("valorar exige o instante da cotação")
         cotacao = Decimal(str(rate))
         quantidade = Decimal(alvo["fee_amount"])
+        # CONGELA o batch: a proposta vale para os componentes NÃO valorados
+        # AGORA que somam esta quantidade. Uma taxa que chegar depois é outra
+        # ocorrência — sem o congelamento, `aplicar_valoracao` releria o
+        # fee_amount e varreria os componentes de novo, aplicando esta cotação
+        # a uma quantidade maior do que a proposta cobria.
+        ids_congelados = self._batch_para_valorar(alvo["fee_currency"],
+                                                  quantidade)
         alvo["valuation"] = {
             # PROPOSTA: anotar a cotação não move dinheiro nem encerra nada.
             # Sem essa distinção, o incidente parecia resolvido e o livro
@@ -937,8 +944,30 @@ class RiskEngine:
             "em": str(em), "moeda": alvo["fee_currency"],
             "quote_currency": alvo["quote_currency"],
             "valor_em_cotacao": str(quantidade * cotacao),
+            "quantidade": str(quantidade),
+            "fee_component_ids": ids_congelados,
         }
         return alvo
+
+    def _batch_para_valorar(self, moeda: str, quantidade: Decimal) -> list:
+        """Componentes NÃO valorados que somam até `quantidade`, sem estourar.
+
+        Seleciona em ordem de registro e nunca ultrapassa a quantidade: o
+        batch é o lastro EXATO que a proposta cobre. O que não cabe fica de
+        fora — é outra ocorrência, com sua própria valoração.
+        """
+        if not hasattr(self.carteira, "fee_components"):
+            return []
+        escolhidos, acumulado = [], Decimal("0")
+        for c in self.carteira.fee_components(moeda, apenas_nao_valorados=True):
+            if acumulado >= quantidade:
+                break
+            amt = Decimal(str(c["amount"]))
+            if acumulado + amt > quantidade:
+                continue
+            escolhidos.append(c["fee_component_id"])
+            acumulado += amt
+        return escolhidos
 
     CAPACIDADE_VALORAR = "VALUE_FEE_INCIDENT"
 
@@ -978,7 +1007,10 @@ class RiskEngine:
         # Id que ESTE processo trouxe. Se adotarmos um lancamento ja existente,
         # a identidade canonica passa a ser a DELE e este vira apenas alias.
         requested_vid = ""
-        quantidade = Decimal(alvo["fee_amount"])
+        # QUANTIDADE CONGELADA na proposta: aplicar NÃO relê o fee_amount (que
+        # pode ter crescido com taxas novas depois da proposta). Vale o que a
+        # proposta cobria; o resto é outra ocorrência.
+        quantidade = Decimal(v.get("quantidade") or alvo["fee_amount"])
 
         # LASTRO NATIVO: só se converte o que está REGISTRADO na moeda. O
         # incidente é a declaração do problema; o livro é a prova de que a
@@ -987,10 +1019,20 @@ class RiskEngine:
         # LASTRO POR COMPONENTE: o saldo `FEES:<moeda>` é histórico e
         # permanece depois de uma valoração. Usá-lo como prova deixaria a
         # taxa antiga, já convertida, financiar uma dívida nova.
+        # BATCH CONGELADO: usa só os componentes que a PROPOSTA fixou, e apenas
+        # os que continuam não valorados. Um componente da proposta já valorado
+        # por outro processo derruba o lastro e o conflito aparece aqui.
         disponiveis = []
         if hasattr(self.carteira, "fee_components"):
-            disponiveis = self.carteira.fee_components(
+            nao_valorados = self.carteira.fee_components(
                 alvo["fee_currency"], apenas_nao_valorados=True)
+            congelados = v.get("fee_component_ids")
+            if congelados is not None:
+                alvos = set(congelados)
+                disponiveis = [c for c in nao_valorados
+                               if c["fee_component_id"] in alvos]
+            else:
+                disponiveis = nao_valorados
         registrado = sum((Decimal(str(c["amount"])) for c in disponiveis),
                          Decimal("0"))
 
