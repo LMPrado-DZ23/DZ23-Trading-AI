@@ -71,3 +71,15 @@ Regra: todo mutante não-equivalente tem de matar seu teste.
 Mutantes mortos (6): fill_id-como-identidade, agregado-permitido, resolve-parcial,
 adota-divergente, ignora-source, ignora-valued_at. Freeze (D) e restart (G) são
 cobertos estruturalmente e pelas matrizes de B4 e B5.
+
+## F4 — liquidação do funding (`tests/test_fee_patch_f4.py`)
+
+| Teste | Prova | Mutante que morre |
+|---|---|---|
+| F4a | liquidar zera o passivo | sinal do passivo invertido |
+| F4b | liquidação por componente | — |
+| F4c | exatamente uma vez | idempotência removida |
+| F4d | componente sem valoração não liquida | valoração obrigatória removida |
+| F4e | ativo descoberto bloqueia a liquidação | gate de ativo removido |
+| F4f | restart preserva a liquidação | (persistência) |
+| F4g | lado nativo intacto, funcional fecha | — |

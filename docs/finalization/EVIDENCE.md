@@ -103,3 +103,15 @@ ruff check .   => All checks passed
 - Mutação: 6 mutantes (fill_id-identidade, agregado-permitido, resolve-parcial,
   adota-divergente, ignora-source, ignora-valued_at) ⇒ todos morrem.
 - Regressão local: 310 passed, 1 pré-existente (permissão Windows).
+
+### F4 — liquidação do LIABILITY:FEE_FUNDING (`2cf2cf5`)
+- Vermelho: `tests/test_fee_patch_f4.py` (F4a–g) — o passivo funcional ficava
+  em -600 para sempre depois de valorar + aportar o ativo.
+- Correção: `Ledger.liquidar_fee_funding(fee_component_id)` extingue o passivo
+  do componente contra `CONTRIBUTED_CAPITAL` (ambos funcionais), amarrado ao
+  `fee_component_id`, idempotente (settlement único), com gate de ativo já
+  financiado (`ASSET:<moeda> >= 0`) e exigência de valoração. Persiste no
+  roundtrip export/restore; lado nativo intacto; funcional continua fechando.
+- Mutação: 4 mutantes (idempotência, gate de ativo, sinal do passivo, valoração
+  obrigatória) ⇒ todos morrem.
+- Regressão local: 327 passed.

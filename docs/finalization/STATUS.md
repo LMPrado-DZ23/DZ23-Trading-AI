@@ -96,12 +96,13 @@ real como fonte de verdade, conforme a regra do próprio prompt.
    COMPONENTE: `valorar_taxa(cotacoes={fee_component_id: {rate,fonte,em}})`;
    cada componente valorado com sua cotação/fonte/instante e fingerprint. Modo
    agregado (cotação única) intacto por dispatch. 11 testes (A–K) + 6 mutantes.
-2. **F4** — liquidação do passivo funcional `LIABILITY:FEE_FUNDING` (hoje
-   nunca zera): o aporte/compra do ativo descoberto quita o passivo, usando os
-   lançamentos funcionais por componente do F3, rastreável e exatamente uma vez.
+2. **F4** — ✅ FECHADO (`2cf2cf5`). `liquidar_fee_funding(fee_component_id)`
+   extingue o passivo funcional por componente contra `CONTRIBUTED_CAPITAL`,
+   exatamente uma vez, com gate de ativo financiado. 7 testes + 4 mutantes.
 3. **Máquina do fill** (`RECEIVED → APPLYING → COMMITTED`) — **PARAR PARA
-   AUDITORIA antes de iniciar**, conforme o prompt mestre. Não começar sem
-   sinal verde do arquiteto/aprovador.
+   AUDITORIA / NOVO CHECKPOINT antes de iniciar**, conforme o prompt mestre e a
+   instrução do dono. Não começar sem sinal verde. (F5/F6 do fee pipeline
+   também pendentes, ver BLOCKERS.)
 
 > O patch F1/F2 (B1–B10) está completo e publicado em `correcao-auditoria`.
 > ATENÇÃO: o CI (`ci.yml`) NÃO dispara em push para essa branch (só
