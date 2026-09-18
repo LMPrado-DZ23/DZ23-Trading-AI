@@ -96,6 +96,10 @@ class Transaction:
     native_currency: str = ""
     functional_amount: Decimal = ZERO
     functional_currency: str = ""
+    # Identidade DURÁVEL dos componentes de taxa criados nesta transação —
+    # dado estruturado, não texto de memo. Um memo editado não pode destruir
+    # a prova de qual cobrança existiu.
+    fee_component_records: tuple = ()
 
     def _moeda_nativa(self, conta: str, funcional: str) -> str:
         for prefixo in ("FEES:", "ASSET:", "CONTRIBUTED_CAPITAL:"):
@@ -154,6 +158,7 @@ class Ledger:
               valuation_policy_version: str = "",
               native_amount: Decimal = ZERO, native_currency: str = "",
               functional_amount: Decimal = ZERO, functional_currency: str = "",
+              fee_component_records: list | None = None,
               at=None) -> Transaction:
         tx = Transaction(uuid.uuid4().hex[:16], tuple(entries), kind, ref=ref,
                          instrument=instrument, quantity=quantity,
@@ -167,6 +172,8 @@ class Ledger:
                          native_currency=native_currency,
                          functional_amount=functional_amount,
                          functional_currency=functional_currency,
+                         fee_component_records=tuple(
+                             fee_component_records or ()),
                          **({"at": at} if at is not None else {}))
         tx.validate()
         tx.validar_dimensoes(self.currency)
@@ -295,11 +302,13 @@ class Ledger:
         rest = reserved - cost - fee
         if rest != ZERO:
             entries.append(Entry(f"CASH:{self.currency}", rest, "sobra devolvida"))
-        entries.extend(self._pernas_nativas(
+        pernas, registros = self._pernas_nativas(
             self._um_parametro_de_taxa(native_fees, fee_in_other_currency),
-            "corretagem em outra moeda", fill_id=fill_id or ref))
+            "corretagem em outra moeda", fill_id=fill_id or ref)
+        entries.extend(pernas)
         return self._post("fill_buy", entries, ref, instrument=instrument,
-                          quantity=quantity, agent_id=agent_id)
+                          quantity=quantity, agent_id=agent_id,
+                          fee_component_records=registros)
 
     def fill_sell(self, instrument: str, quantity: Decimal, price: Decimal,
                   fee: Decimal, *, cost_basis: Decimal, agent_id: str,
@@ -320,11 +329,13 @@ class Ledger:
                    Entry(f"FEES:{self.currency}", fee, "corretagem da saída"),
                    Entry(f"POSITION:{instrument}", -cost_basis, "baixa ao custo"),
                    Entry(f"PNL:{agent_id}", -bruto, "resultado bruto atribuído")]
-        entries.extend(self._pernas_nativas(
+        pernas, registros = self._pernas_nativas(
             self._um_parametro_de_taxa(native_fees, fee_in_other_currency),
-            "corretagem da saída em outra moeda", fill_id=fill_id or ref))
+            "corretagem da saída em outra moeda", fill_id=fill_id or ref)
+        entries.extend(pernas)
         return self._post("fill_sell", entries, ref, instrument=instrument,
-                          quantity=quantity, agent_id=agent_id)
+                          quantity=quantity, agent_id=agent_id,
+                          fee_component_records=registros)
 
     def ai_cost(self, amount: Decimal, agent_id: str, ref: str = "") -> Transaction:
         """Custo de IA é custo real — entra na conta, não some."""
@@ -620,14 +631,18 @@ class Ledger:
         return native_fees or fee_in_other_currency
 
     def _pernas_nativas(self, native_fees, memo: str,
-                        fill_id: str = "") -> list:
+                        fill_id: str = "") -> tuple:
         """Uma perna por COMPONENTE nativo — nenhum pode ficar de fora.
 
         A versão anterior aceitava uma tupla só: com BNB e SOL na mesma
         execução, a segunda sumia do livro e ficava só no incidente.
+
+        Devolve `(pernas, registros)`: as pernas contábeis e os registros
+        ESTRUTURADOS de identidade dos componentes (id, fill, moeda, valor),
+        para que a identidade não dependa do texto do memo.
         """
         if not native_fees:
-            return []
+            return [], []
         if isinstance(native_fees, tuple) and len(native_fees) == 2 \
                 and not isinstance(native_fees[0], (list, tuple)):
             # Compatibilidade com o parâmetro antigo, que aceitava UMA tupla
@@ -635,6 +650,7 @@ class Ledger:
             # numa rodada que trata de outra coisa.
             native_fees = [native_fees]
         pernas = []
+        registros = []
         for componente in native_fees:
             valor, moeda = componente
             # O LIVRO valida por conta própria: depender do parser acima
@@ -676,11 +692,16 @@ class Ledger:
             # deixaria a taxa velha financiar a dívida nova.
             import uuid as _uuid
             cid = "fc_" + _uuid.uuid4().hex[:12]
+            # O memo mantém a marca (auditoria humana e compat com livros
+            # antigos), mas a identidade CANÔNICA é o registro estruturado.
             marca = f"{memo} | fee_component_id={cid} | fill_id={fill_id}"
             pernas.append(Entry(f"FEES:{moeda}", valor, marca))
             pernas.append(Entry(f"ASSET:{moeda}", -valor,
                                 "ativo usado para pagar a corretagem"))
-        return pernas
+            registros.append({"fee_component_id": cid, "fill_id": fill_id,
+                              "currency": moeda, "amount": format(valor, "f"),
+                              "source": "native_fee"})
+        return pernas, registros
 
     @staticmethod
     def _fp_decimal(x) -> str:
@@ -751,6 +772,27 @@ class Ledger:
                     valorados.add(cid)
         saida = []
         for tx in self.export_transactions():
+            registros = tx.get("fee_component_records") or []
+            if registros:
+                # IDENTIDADE ESTRUTURADA: não depende do texto do memo. Um
+                # memo higienizado ou reformatado não apaga o componente.
+                for r in registros:
+                    if r.get("currency") != moeda:
+                        continue
+                    cid = r.get("fee_component_id", "")
+                    status = "VALUED" if cid in valorados else "UNVALUED"
+                    if apenas_nao_valorados and status == "VALUED":
+                        continue
+                    saida.append({
+                        "fee_component_id": cid, "currency": moeda,
+                        "amount": r.get("amount", "0"),
+                        "fill_id": r.get("fill_id", ""),
+                        "order_id": r.get("order_id") or tx.get("ref") or "",
+                        "occurred_at": r.get("occurred_at") or tx.get("at") or "",
+                        "source": r.get("source", ""),
+                        "valuation_status": status})
+                continue
+            # COMPAT: livros antigos, sem registro estruturado, lêem do memo.
             for e in tx.get("entries", []):
                 if e["account"] != f"FEES:{moeda}":
                     continue
@@ -768,7 +810,7 @@ class Ledger:
                     "amount": e["amount"], "fill_id": fid,
                     "order_id": tx.get("ref") or "",
                     "occurred_at": tx.get("at") or "",
-                    "valuation_status": status})
+                    "source": "memo", "valuation_status": status})
         return saida
 
     def find_fee_valuation(self, incident_id: str) -> dict | None:
@@ -990,6 +1032,8 @@ class Ledger:
              "native_currency": getattr(tx, "native_currency", ""),
              "functional_amount": str(getattr(tx, "functional_amount", ZERO)),
              "functional_currency": getattr(tx, "functional_currency", ""),
+             "fee_component_records": [dict(r) for r in getattr(
+                 tx, "fee_component_records", ())],
              "purpose": getattr(tx, "purpose", ""),
              "instrument": getattr(tx, "instrument", ""),
              "quantity": str(getattr(tx, "quantity", ZERO)),
@@ -1030,6 +1074,8 @@ class Ledger:
                 native_currency=doc.get("native_currency", ""),
                 functional_amount=Decimal(str(doc.get("functional_amount") or 0)),
                 functional_currency=doc.get("functional_currency", ""),
+                fee_component_records=tuple(
+                    doc.get("fee_component_records") or ()),
                 # O instante ORIGINAL, não o de agora: substituir por utcnow
                 # reescreveria a data de todo o histórico a cada reinício.
                 **({"at": _instante(doc["at"])} if doc.get("at") else {}))

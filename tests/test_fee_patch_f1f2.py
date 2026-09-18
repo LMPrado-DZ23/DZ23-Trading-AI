@@ -230,3 +230,36 @@ def test_b3_legacy_sem_lastro_explicito():
     livro.fee_valuation_sem_lastro(moeda="BNB", quantidade=Decimal("2"),
                                    rate=Decimal("300"), fonte="x", em=_EM)
     assert livro.balance("FEES:USDT") == Decimal("600")
+
+
+# ===========================================================================
+# BLOCKER 5 — identidade do componente é dado durável, não texto de memo
+# ===========================================================================
+def test_b5_identidade_sobrevive_memo_editado():
+    """Mutação G: apagar a marca do memo NÃO pode destruir a identidade do
+    componente — ela vive como dado estruturado, não como texto."""
+    livro = _livro()
+    cid = _cobrar(livro, "2")
+    docs = livro.export_transactions()
+    for d in docs:
+        for e in d["entries"]:
+            if "fee_component_id=" in (e.get("memo") or ""):
+                e["memo"] = "corretagem em outra moeda"   # memo higienizado
+    rest = Ledger.from_transactions(docs, currency="USDT")
+    comps = rest.fee_components("BNB")
+    assert len(comps) == 1, "a identidade sumiu quando o memo foi editado"
+    assert comps[0]["fee_component_id"] == cid
+    assert comps[0]["fill_id"] == "a"
+    assert comps[0]["valuation_status"] == "UNVALUED"
+
+
+def test_b5_componente_tem_campos_estruturados():
+    """O componente exposto carrega os campos como dados, não derivados de texto."""
+    livro = _livro()
+    _cobrar(livro, "2", ref="ord1", fill_id="F1")
+    c = livro.fee_components("BNB")[0]
+    for campo in ("fee_component_id", "fill_id", "order_id", "amount",
+                  "currency", "occurred_at", "valuation_status"):
+        assert campo in c, f"componente sem campo estruturado {campo}"
+    assert c["currency"] == "BNB"
+    assert c["fill_id"] == "F1"
