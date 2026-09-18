@@ -7,6 +7,7 @@ chamadas simultâneas podiam lançar duas vezes.
 """
 from __future__ import annotations
 
+import contextlib
 from decimal import Decimal
 
 import pytest
@@ -188,11 +189,11 @@ class TestSerializacaoForcada:
 
         def aplicar():
             partida.wait()
-            try:
+            # As perdedoras da corrida levantam; o que importa é o efeito
+            # no livro, verificado no fim.
+            with contextlib.suppress(Exception):
                 risco.aplicar_valoracao(inc["incident_id"], actor=Ator(),
                                         evidence="concorrente")
-            except Exception:
-                pass
 
         fios = [threading.Thread(target=aplicar) for _ in range(4)]
         for f in fios:
