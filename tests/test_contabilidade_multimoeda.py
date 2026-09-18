@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+import pytest
+
 from tradingagents.desk.ledger import Ledger
 
 
@@ -74,13 +76,18 @@ class TestConversaoDeclarada:
         assert livro.balance("FEES:USDT") == Decimal("600")
         assert livro.functional_balanced()
 
-    def test_the_native_side_is_cleared_in_its_own_subledger(self):
+    def test_the_native_side_is_untouched_by_the_valuation(self):
+        """Valorar responde QUANTO vale, não financia nem baixa a origem.
+
+        Zerar a perna nativa aqui faria a taxa em BNB sumir do livro sem
+        ninguém ter pago nada."""
         livro = livro_com_taxa("BNB", "2")
         livro.fee_valuation(moeda="BNB", quantidade=Decimal("2"),
                             rate=Decimal("300"), fonte="binance",
                             em="2026-09-14T23:00:00+00:00")
         nativo = livro.native_balances()
-        assert nativo.get("BNB", {}).get("FEES", Decimal("0")) == Decimal("0")
+        assert nativo["BNB"]["FEES"] == Decimal("2")
+        assert nativo["BNB"]["ASSET"] == Decimal("-2")
 
     def test_the_conversion_account_is_not_a_dimensionless_bucket(self):
         """FX:CONVERSION não pode absorver a diferença entre 2 e 600."""
@@ -110,19 +117,18 @@ class TestLancamentoQueMisturaUnidades:
     BNB e outra em USDT soma zero e mesmo assim está errado — nenhuma das
     duas escriturações fecha."""
 
-    def test_a_cross_unit_entry_is_not_balanced(self):
+    def test_a_cross_unit_entry_is_refused_at_entry(self):
+        """Antes o livro aceitava e só o balanço final acusava. Agora a
+        transação nem entra: validar depois deixa um lançamento errado
+        registrado no histórico."""
         from tradingagents.desk.ledger import Entry
         livro = Ledger(opening_cash=Decimal("1000"))
-        livro._post("suspeito",
-                    [Entry("FEES:BNB", Decimal("2"), "taxa em BNB"),
-                     Entry("CASH:USDT", Decimal("-2"), "pago em USDT")],
-                    ref="cruzado")
-        assert sum(livro.balances().values(), Decimal("0")) == Decimal("0"), (
-            "o cenário precisa somar zero no total")
-        assert livro.functional_balanced() is False
-        assert livro.native_balanced() is False
-        assert livro.is_balanced() is False, (
-            "somar tudo num total único aceitou 2 BNB como 2 USDT")
+        with pytest.raises(ValueError, match="unidade"):
+            livro._post("suspeito",
+                        [Entry("FEES:BNB", Decimal("2"), "taxa em BNB"),
+                         Entry("CASH:USDT", Decimal("-2"), "pago em USDT")],
+                        ref="cruzado")
+        assert livro.is_balanced()
 
     def test_the_valuation_declares_both_sides(self):
         livro = livro_com_taxa("BNB", "2")

@@ -634,23 +634,43 @@ class ExecutionCoordinator:
                 instrumento=rec.instrumento, fill_id=fill_id,
                 motivo="valor de taxa inválido (negativo, NaN ou infinito)")
             self.exigir_reconciliacao("FEE_CURRENCY_UNKNOWN: taxa inválida")
-        # Componentes ADICIONAIS não podem sumir: cada um é avaliado.
-        for extra in (fees or [])[1:]:
-            moeda_extra = str(extra.get("currency") or "")
-            valor_extra = Decimal(str(extra.get("cost") or 0))
-            if valor_extra <= 0:
+        # NÃO existe "componente principal": cada um produz efeito. Os da
+        # moeda de cotação SOMAM no custo; os de outra moeda vão ao livro na
+        # moeda deles, agregados por moeda.
+        componentes = list(fees or [])
+        if not componentes and taxa:
+            componentes = [{"cost": taxa, "currency": fee_currency}]
+        em_cotacao = Decimal("0")
+        nativas: dict = {}
+        for c in componentes:
+            valor_c = Decimal(str(c.get("cost") or 0))
+            moeda_c = str(c.get("currency") or "")
+            if valor_c <= 0:
                 continue
-            if not moeda_extra:
+            if not moeda_c:
                 self.risk.registrar_taxa_sem_moeda(
-                    quantidade=valor_extra, order_id=rec.order_id,
+                    quantidade=valor_c, order_id=rec.order_id,
                     instrumento=rec.instrumento, fill_id=fill_id)
-            elif moeda_extra != cotacao:
-                self.risk.registrar_taxa_nao_valorada(
-                    moeda=moeda_extra, quantidade=valor_extra,
-                    order_id=rec.order_id, instrumento=rec.instrumento,
-                    fill_id=fill_id)
-        taxa_em_outra_moeda = bool(fee_currency and fee_currency != cotacao)
-        taxa_na_cotacao = Decimal("0") if taxa_em_outra_moeda else taxa
+                self.exigir_reconciliacao(
+                    f"FEE_CURRENCY_UNKNOWN: taxa de {valor_c} sem moeda")
+                continue
+            if moeda_c == cotacao:
+                em_cotacao += valor_c
+            else:
+                nativas[moeda_c] = nativas.get(moeda_c, Decimal("0")) + valor_c
+        for moeda_c, valor_c in nativas.items():
+            self.risk.registrar_taxa_nao_valorada(
+                moeda=moeda_c, quantidade=valor_c, order_id=rec.order_id,
+                instrumento=rec.instrumento, fill_id=fill_id)
+            self.exigir_reconciliacao(
+                f"FEE_VALUATION_UNKNOWN: taxa de {valor_c} {moeda_c} sem "
+                f"cotação em {cotacao}")
+        taxa = em_cotacao
+        fee_currency = cotacao if em_cotacao > 0 else ""
+        # o livro espera (valor, moeda); `nativas` é {moeda: valor}
+        taxa_nativa = next(((v, m) for m, v in nativas.items()), None)
+        taxa_em_outra_moeda = taxa_nativa is not None
+        taxa_na_cotacao = taxa
         if taxa_em_outra_moeda:
             self.risk.registrar_taxa_nao_valorada(
                 moeda=fee_currency, quantidade=taxa, order_id=rec.order_id,
@@ -683,7 +703,7 @@ class ExecutionCoordinator:
                     instrumento, quantidade, preco, taxa_na_cotacao,
                     reserved=da_reserva, ref=rec.order_id,
                     agent_id=rec.agente, reservation_id=rid,
-                    fee_in_other_currency=((taxa, fee_currency)
+                    fee_in_other_currency=(taxa_nativa
                                            if taxa_em_outra_moeda else None))
                 sobra = Decimal(str(resultado.get("sobra") or 0))
                 if sobra > 0:
@@ -715,7 +735,7 @@ class ExecutionCoordinator:
             self.ledger.fill_sell(instrumento, quantidade, preco,
                                   taxa_na_cotacao,
                                   fee_in_other_currency=(
-                                      (taxa, fee_currency)
+                                      taxa_nativa
                                       if taxa_em_outra_moeda else None),
                                   cost_basis=custo, agent_id=rec.agente,
                                   ref=rec.order_id)
@@ -996,6 +1016,16 @@ class ExecutionCoordinator:
             brutos.append(taxa)
         elif taxa not in (None, ""):
             brutos.append({"cost": taxa, "currency": ""})
+        # DEDUPLICAÇÃO entre os dois campos: muita corretora repete o mesmo
+        # componente em `fee` e em `fees[]`. Contar os dois dobraria uma
+        # cobrança que aconteceu uma vez. Repetição DENTRO de `fees[]` é
+        # outra história: ali são duas cobranças de fato.
+        if isinstance(taxa, dict) and isinstance(lista, list) and lista:
+            assinatura = (str(taxa.get("cost")), str(taxa.get("currency") or ""))
+            nas_listas = [(str(x.get("cost")), str(x.get("currency") or ""))
+                          for x in lista if isinstance(x, dict)]
+            if assinatura in nas_listas:
+                brutos.pop()        # o componente de `fee` já está em `fees[]`
         componentes = []
         for bruto in brutos:
             if not isinstance(bruto, dict):

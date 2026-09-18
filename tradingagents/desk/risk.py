@@ -689,6 +689,17 @@ class RiskEngine:
         tipo = incidente["type"]
         if tipo == "RESERVATION_DEFICIT":
             return self._validar_deficit(incidente, refs)
+        if tipo in ("FEE_VALUATION_UNKNOWN", "FEE_CURRENCY_UNKNOWN"):
+            # Estes têm caminho PRÓPRIO de conserto. Fechá-los pelo
+            # resolvedor genérico encerraria o alarme sem nunca descobrir em
+            # que moeda a taxa foi cobrada nem quanto ela custou.
+            caminho = ("aplicar_valoracao (após valorar_taxa com cotação, "
+                       "fonte e instante)" if tipo == "FEE_VALUATION_UNKNOWN"
+                       else "identificar a moeda e lançar o componente")
+            raise ValueError(
+                f"{tipo} não se resolve pelo caminho genérico: use "
+                f"{caminho}. Uma frase não diz qual era a moeda nem quanto "
+                "custou")
         if tipo == "UNCOVERED_ASSET_BALANCE":
             # Aceitar uma frase aqui encerraria o alarme com o ativo ainda
             # faltando — e a mesa voltaria a operar devendo o que não tem.
@@ -1197,7 +1208,7 @@ class RiskEngine:
         return motivos
 
     def conversao_acumulada(self) -> Decimal:
-        """Diferença de unidade acumulada nas valorações de taxa.
+        """Passivo acumulado das taxas valoradas e ainda não financiadas.
 
         Fica numa conta própria (FX:CONVERSION) e NÃO vira resultado de
         trader: o que a estratégia fez e o que a conversão cambial fez são
@@ -1206,7 +1217,7 @@ class RiskEngine:
         """
         if self.carteira is None:
             return Decimal("0")
-        return self.carteira.balances().get("FX:CONVERSION_FUNCIONAL",
+        return self.carteira.balances().get("LIABILITY:FEE_FUNDING",
                                             Decimal("0"))
 
     def ativos_descobertos(self) -> dict:

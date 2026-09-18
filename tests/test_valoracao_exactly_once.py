@@ -81,8 +81,12 @@ class TestLastroNativo:
         propor(risco, inc)
         risco.aplicar_valoracao(inc["incident_id"], actor=Ator(),
                                 evidence="lastro completo")
-        assert livro.balance("FEES:BNB") == Decimal("0")
+        # a perna nativa PERMANECE: a taxa em BNB foi cobrada de verdade e
+        # valorar não a desfaz — o que entra é a despesa em cotação contra
+        # o passivo de financiamento
+        assert livro.balance("FEES:BNB") == Decimal("2")
         assert livro.balance("FEES:USDT") == Decimal("600")
+        assert livro.balance("LIABILITY:FEE_FUNDING") == Decimal("-600")
         assert not [i for i in risco.incidentes_abertos()
                     if i["type"] == "FEE_VALUATION_UNKNOWN"]
 

@@ -96,8 +96,8 @@ class TestAplicarValoracao:
                                            evidence="cotação conferida")
         # 2 BNB a 300 = 600 USDT
         assert livro.balance("FEES:USDT") == Decimal("600")
-        assert livro.balance("FEES:BNB") == Decimal("0"), (
-            "a taxa continuou registrada na moeda original")
+        assert livro.balance("FEES:BNB") == Decimal("2"), (
+            "valorar não pode apagar a taxa que foi cobrada em BNB")
         assert livro.is_balanced()
         assert registro["status"] == "RESOLVED"
         assert not risco.incidentes_abertos()

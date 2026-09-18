@@ -89,6 +89,36 @@ class Transaction:
     functional_amount: Decimal = ZERO
     functional_currency: str = ""
 
+    def _moeda_nativa(self, conta: str, funcional: str) -> str:
+        for prefixo in ("FEES:", "ASSET:", "CONTRIBUTED_CAPITAL:"):
+            if conta.startswith(prefixo):
+                moeda = conta.split(":", 1)[1]
+                if moeda != funcional:
+                    return moeda
+        return ""
+
+    def validar_dimensoes(self, funcional: str) -> None:
+        """Cada escrituração fecha DENTRO da transação.
+
+        Aceitar +2 BNB com -2 USDT porque a soma dá zero é somar unidades
+        diferentes. Movimento entre escriturações exige os metadados de
+        conversão declarados — aí a diferença tem significado.
+        """
+        por_moeda: dict = {}
+        for e in self.entries:
+            moeda = self._moeda_nativa(e.account, funcional) or funcional
+            por_moeda[moeda] = por_moeda.get(moeda, ZERO) + e.amount
+        abertas = {m: v for m, v in por_moeda.items() if v != ZERO}
+        if not abertas:
+            return
+        declarada = (self.native_currency and self.functional_currency
+                     and self.native_amount != ZERO)
+        if not declarada:
+            raise ValueError(
+                f"transação mistura unidades sem declarar conversão: "
+                f"{ {m: str(v) for m, v in abertas.items()} }. Some débitos "
+                "e créditos de moedas diferentes não é partida dobrada")
+
     def validate(self) -> None:
         total = sum((e.amount for e in self.entries), ZERO)
         if total != ZERO:
@@ -124,6 +154,7 @@ class Ledger:
                          functional_currency=functional_currency,
                          **({"at": at} if at is not None else {}))
         tx.validate()
+        tx.validar_dimensoes(self.currency)
         self._txs.append(tx)
         return tx
 
@@ -144,7 +175,7 @@ class Ledger:
 
     def _e_nativa(self, conta: str) -> str:
         """Moeda NATIVA desta conta, ou "" se ela é da escrituração funcional."""
-        for prefixo in ("FEES:", "ASSET:"):
+        for prefixo in ("FEES:", "ASSET:", "CONTRIBUTED_CAPITAL:"):
             if conta.startswith(prefixo):
                 moeda = conta.split(":", 1)[1]
                 if moeda != self.currency:
@@ -396,17 +427,15 @@ class Ledger:
         valor = (quantidade * rate).quantize(Decimal("0.00000001"))
         # Baixa apenas o que REALMENTE está registrado naquela moeda: zerar
         # mais do que existe criaria saldo negativo — o oposto do conserto.
-        registrado = self.balances().get(f"FEES:{moeda}", ZERO)
-        baixa = min(quantidade, registrado) if registrado > ZERO else ZERO
-        # LADO FUNCIONAL: despesa em cotação, com contrapartida na mesma
-        # escrituração — fecha sozinho, sem depender da perna nativa.
+        # A valoração responde UMA pergunta: quanto essa taxa vale na moeda
+        # funcional. Ela NÃO financia a origem — creditar ASSET:<moeda> faria
+        # um ativo descoberto desaparecer sem aporte nenhum, que é criar
+        # dinheiro por contabilidade.
+        #
+        # LADO FUNCIONAL: a despesa entra contra um PASSIVO, porque a mesa
+        # deve esse valor até alguém aportar o ativo ou comprá-lo.
         entradas = [Entry(f"FEES:{self.currency}", valor, memo),
-                    Entry("FX:CONVERSION_FUNCIONAL", -valor, memo)]
-        if baixa > ZERO:
-            # LADO NATIVO: baixa a taxa na moeda original contra a mesma
-            # moeda, mantendo o subledger dela fechado.
-            entradas.append(Entry(f"FEES:{moeda}", -baixa, memo))
-            entradas.append(Entry(f"ASSET:{moeda}", baixa, memo))
+                    Entry("LIABILITY:FEE_FUNDING", -valor, memo)]
         return self._post("fee_valuation", entradas,
                           incident_id or f"valoracao:{moeda}",
                           incident_id=incident_id,
@@ -414,13 +443,74 @@ class Ledger:
                           functional_amount=valor,
                           functional_currency=self.currency)
 
+    def asset_contribution(self, moeda: str, quantidade: Decimal, *,
+                           reason: str, actor: str, rate: Decimal,
+                           fonte: str, em: str,
+                           external_reference: str = "") -> Transaction:
+        """Aporte de ATIVO em moeda não funcional, com valor declarado.
+
+        É isto — não a valoração — que cobre um ASSET negativo. Os dois
+        lados são declarados: a quantidade nativa que entrou e quanto ela
+        vale, com cotação e origem.
+        """
+        if quantidade <= ZERO:
+            raise ValueError(
+                f"aporte de ativo precisa ser positivo (recebido {quantidade})")
+        return self._movimento_de_ativo(
+            moeda, quantidade, reason=reason, actor=actor, rate=rate,
+            fonte=fonte, em=em, external_reference=external_reference,
+            kind="asset_contribution", purpose="ASSET_CONTRIBUTION")
+
+    def asset_withdrawal(self, moeda: str, quantidade: Decimal, *,
+                         reason: str, actor: str, rate: Decimal,
+                         fonte: str, em: str,
+                         external_reference: str = "") -> Transaction:
+        """Retirada de ativo — operação SEPARADA do aporte."""
+        if quantidade <= ZERO:
+            raise ValueError(
+                f"retirada de ativo precisa ser positiva (recebido {quantidade})")
+        return self._movimento_de_ativo(
+            moeda, -quantidade, reason=reason, actor=actor, rate=rate,
+            fonte=fonte, em=em, external_reference=external_reference,
+            kind="asset_withdrawal", purpose="ASSET_WITHDRAWAL")
+
+    def _movimento_de_ativo(self, moeda: str, quantidade: Decimal, *,
+                            reason: str, actor: str, rate: Decimal,
+                            fonte: str, em: str, external_reference: str,
+                            kind: str, purpose: str) -> Transaction:
+        if rate is None or Decimal(str(rate)) <= ZERO:
+            raise ValueError("movimento de ativo exige cotação positiva")
+        if not fonte or not em:
+            raise ValueError("movimento de ativo exige fonte e instante")
+        valor = (abs(quantidade) * Decimal(str(rate))).quantize(
+            Decimal("0.00000001"))
+        memo = (f"{reason} | por {actor} | {quantidade} {moeda} a {rate} "
+                f"{self.currency}/{moeda} | fonte {fonte} | em {em}")
+        # O aporte acontece na escrituração NATIVA: entram 2 BNB contra o
+        # capital aportado NAQUELA moeda. A escrituração funcional não se
+        # move — ninguém pagou em USDT —, e o valor declarado
+        # (functional_amount) registra quanto isso representa, com cotação e
+        # origem, para o relatório.
+        #
+        # Debitar FEES:<moeda> aqui seria pior: reduziria a DESPESA, como se
+        # aportar o ativo desfizesse a taxa que já foi cobrada.
+        return self._post(
+            kind,
+            [Entry(f"ASSET:{moeda}", quantidade, memo),
+             Entry(f"CONTRIBUTED_CAPITAL:{moeda}", -quantidade, memo)],
+            external_reference or reason, purpose=purpose,
+            native_amount=abs(quantidade), native_currency=moeda,
+            functional_amount=valor, functional_currency=self.currency)
+
     def capital_adjustment_asset(self, moeda: str, quantidade: Decimal, *,
                                  reason: str, actor: str,
                                  external_reference: str = "") -> Transaction:
-        """Aporte (ou retirada) de um ATIVO que não é a moeda de cotação.
+        """Aporte de ativo SEM valor declarado — forma antiga, mantida.
 
-        É como se cobre um ASSET negativo deixado por taxa em moeda que a
-        conta não tinha. Não passa pelo caixa: mover BNB não é mover USDT.
+        Lançava ASSET:<moeda> contra CONTRIBUTED_CAPITAL na moeda funcional,
+        misturando unidades numa única soma. Agora fica inteiramente na
+        escrituração nativa. Para registrar quanto o aporte VALE, use
+        asset_contribution, que exige cotação, fonte e instante.
         """
         if quantidade == ZERO:
             raise ValueError("aporte de ativo não pode ser zero")
@@ -429,7 +519,8 @@ class Ledger:
             memo += f" | ref {external_reference}"
         return self._post("asset_adjustment",
                           [Entry(f"ASSET:{moeda}", quantidade, memo),
-                           Entry("CONTRIBUTED_CAPITAL", -quantidade, memo)],
+                           Entry(f"CONTRIBUTED_CAPITAL:{moeda}", -quantidade,
+                                 memo)],
                           external_reference or reason,
                           purpose="ASSET_CONTRIBUTION")
 
