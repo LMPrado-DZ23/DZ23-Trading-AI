@@ -84,6 +84,7 @@ class Transaction:
     settlement_id: str = ""
     # Conversão entre escriturações: os DOIS lados declarados, nunca um
     # número solto que se soma ao outro.
+    fee_component_ids: tuple = ()
     native_amount: Decimal = ZERO
     native_currency: str = ""
     functional_amount: Decimal = ZERO
@@ -141,6 +142,7 @@ class Ledger:
     def _post(self, kind: str, entries, ref: str = "", *, instrument: str = "",
               quantity: Decimal = ZERO, agent_id: str = "", purpose: str = "",
               incident_id: str = "", settlement_id: str = "",
+              fee_component_ids: list | None = None,
               native_amount: Decimal = ZERO, native_currency: str = "",
               functional_amount: Decimal = ZERO, functional_currency: str = "",
               at=None) -> Transaction:
@@ -148,6 +150,7 @@ class Ledger:
                          instrument=instrument, quantity=quantity,
                          agent_id=agent_id, purpose=purpose,
                          incident_id=incident_id, settlement_id=settlement_id,
+                         fee_component_ids=tuple(fee_component_ids or ()),
                          native_amount=native_amount,
                          native_currency=native_currency,
                          functional_amount=functional_amount,
@@ -262,8 +265,9 @@ class Ledger:
     def fill_buy(self, instrument: str, quantity: Decimal, price: Decimal,
                  fee: Decimal, *, reserved: Decimal, ref: str = "",
                  agent_id: str = "", reservation_id: str = "",
+                 fill_id: str = "",
                  native_fees: list | tuple | None = None,
-                  fee_in_other_currency: tuple | None = None) -> Transaction:
+                 fee_in_other_currency: tuple | None = None) -> Transaction:
         """Compra executada: reserva vira posição; sobra volta ao caixa.
 
         `reserved` sai da conta DESTA reserva — nunca do bolo comum.
@@ -281,7 +285,7 @@ class Ledger:
             entries.append(Entry(f"CASH:{self.currency}", rest, "sobra devolvida"))
         entries.extend(self._pernas_nativas(
             self._um_parametro_de_taxa(native_fees, fee_in_other_currency),
-            "corretagem em outra moeda"))
+            "corretagem em outra moeda", fill_id=fill_id or ref))
         return self._post("fill_buy", entries, ref, instrument=instrument,
                           quantity=quantity, agent_id=agent_id)
 
@@ -289,7 +293,8 @@ class Ledger:
                   fee: Decimal, *, cost_basis: Decimal, agent_id: str,
                   ref: str = "",
                   native_fees: list | tuple | None = None,
-                  fee_in_other_currency: tuple | None = None) -> Transaction:
+                  fee_in_other_currency: tuple | None = None,
+                  fill_id: str = "") -> Transaction:
         """Venda executada: baixa a posição pelo custo e atribui o resultado.
 
         A conta PNL:<agente> carrega o resultado BRUTO (venda − custo); a
@@ -305,7 +310,7 @@ class Ledger:
                    Entry(f"PNL:{agent_id}", -bruto, "resultado bruto atribuído")]
         entries.extend(self._pernas_nativas(
             self._um_parametro_de_taxa(native_fees, fee_in_other_currency),
-            "corretagem da saída em outra moeda"))
+            "corretagem da saída em outra moeda", fill_id=fill_id or ref))
         return self._post("fill_sell", entries, ref, instrument=instrument,
                           quantity=quantity, agent_id=agent_id)
 
@@ -393,7 +398,8 @@ class Ledger:
 
     def fee_valuation(self, *, moeda: str, quantidade: Decimal,
                       rate: Decimal, fonte: str, em: str,
-                      incident_id: str = "") -> Transaction:
+                      incident_id: str = "",
+                      fee_component_ids: list | None = None) -> Transaction:
         """Converte a taxa registrada em outra moeda para a de cotação.
 
         Enquanto isto não acontece, a taxa existe no livro na moeda original
@@ -402,6 +408,15 @@ class Ledger:
         """
         if quantidade <= ZERO or rate <= ZERO:
             raise ValueError("valoração exige quantidade e cotação positivas")
+        ids = list(fee_component_ids or [])
+        if ids:
+            disponiveis = {c["fee_component_id"]
+                           for c in self.fee_components(moeda, True)}
+            ja_usados = [c for c in ids if c not in disponiveis]
+            if ja_usados:
+                raise ValueError(
+                    f"componentes já valorados ou inexistentes: {ja_usados}. "
+                    "Um componente financia UMA valoração")
         memo = (f"taxa {quantidade} {moeda} valorada a {rate} "
                 f"{self.currency}/{moeda} | fonte {fonte} | em {em}")
         valor = (quantidade * rate).quantize(Decimal("0.00000001"))
@@ -419,6 +434,7 @@ class Ledger:
         return self._post("fee_valuation", entradas,
                           incident_id or f"valoracao:{moeda}",
                           incident_id=incident_id,
+                          fee_component_ids=ids,
                           native_amount=quantidade, native_currency=moeda,
                           functional_amount=valor,
                           functional_currency=self.currency)
@@ -525,7 +541,8 @@ class Ledger:
                 "ignorar um em silêncio perderia uma taxa")
         return native_fees or fee_in_other_currency
 
-    def _pernas_nativas(self, native_fees, memo: str) -> list:
+    def _pernas_nativas(self, native_fees, memo: str,
+                        fill_id: str = "") -> list:
         """Uma perna por COMPONENTE nativo — nenhum pode ficar de fora.
 
         A versão anterior aceitava uma tupla só: com BNB e SOL na mesma
@@ -576,10 +593,51 @@ class Ledger:
             # Sai do ativo pago e entra na despesa daquela moeda. Nenhuma
             # conversão: converter com cotação adivinhada produz um número
             # que parece certo e não é.
-            pernas.append(Entry(f"FEES:{moeda}", valor, memo))
+            # IDENTIDADE do componente: o saldo acumulado não distingue uma
+            # cobrança nova de uma antiga já valorada, e usá-lo como prova
+            # deixaria a taxa velha financiar a dívida nova.
+            import uuid as _uuid
+            cid = "fc_" + _uuid.uuid4().hex[:12]
+            marca = f"{memo} | fee_component_id={cid} | fill_id={fill_id}"
+            pernas.append(Entry(f"FEES:{moeda}", valor, marca))
             pernas.append(Entry(f"ASSET:{moeda}", -valor,
                                 "ativo usado para pagar a corretagem"))
         return pernas
+
+    def fee_components(self, moeda: str,
+                       apenas_nao_valorados: bool = False) -> list:
+        """Componentes de taxa registrados nesta moeda, com identidade.
+
+        `FEES:<moeda>` é saldo HISTÓRICO: permanece depois da valoração. Por
+        isso ele não prova que uma ocorrência nova existe — quem prova é o
+        componente, que só pode ser usado uma vez.
+        """
+        valorados = set()
+        for tx in self.export_transactions():
+            if tx.get("kind") == "fee_valuation":
+                for cid in (tx.get("fee_component_ids") or []):
+                    valorados.add(cid)
+        saida = []
+        for tx in self.export_transactions():
+            for e in tx.get("entries", []):
+                if e["account"] != f"FEES:{moeda}":
+                    continue
+                memo = e.get("memo") or ""
+                if "fee_component_id=" not in memo:
+                    continue
+                cid = memo.split("fee_component_id=")[1].split(" |")[0].strip()
+                fid = (memo.split("fill_id=")[1].strip()
+                       if "fill_id=" in memo else "")
+                status = "VALUED" if cid in valorados else "UNVALUED"
+                if apenas_nao_valorados and status == "VALUED":
+                    continue
+                saida.append({
+                    "fee_component_id": cid, "currency": moeda,
+                    "amount": e["amount"], "fill_id": fid,
+                    "order_id": tx.get("ref") or "",
+                    "occurred_at": tx.get("at") or "",
+                    "valuation_status": status})
+        return saida
 
     def find_fee_valuation(self, incident_id: str) -> dict | None:
         """Lançamento de valoração já feito para este incidente.
@@ -791,6 +849,7 @@ class Ledger:
              "at": tx.at.isoformat() if hasattr(tx.at, "isoformat") else str(tx.at),
              "incident_id": getattr(tx, "incident_id", ""),
              "settlement_id": getattr(tx, "settlement_id", ""),
+             "fee_component_ids": list(getattr(tx, "fee_component_ids", ())),
              "native_amount": str(getattr(tx, "native_amount", ZERO)),
              "native_currency": getattr(tx, "native_currency", ""),
              "functional_amount": str(getattr(tx, "functional_amount", ZERO)),
@@ -826,6 +885,7 @@ class Ledger:
                 purpose=doc.get("purpose", ""),
                 incident_id=doc.get("incident_id", ""),
                 settlement_id=doc.get("settlement_id", ""),
+                fee_component_ids=doc.get("fee_component_ids") or [],
                 native_amount=Decimal(str(doc.get("native_amount") or 0)),
                 native_currency=doc.get("native_currency", ""),
                 functional_amount=Decimal(str(doc.get("functional_amount") or 0)),

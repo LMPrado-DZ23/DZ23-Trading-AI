@@ -9,7 +9,7 @@
 | Repositório | `LMPrado-DZ23/tradingagents-dz23` |
 | Branch | `correcao-auditoria` |
 | HEAD | ver seção *Histórico* abaixo (sempre o topo) |
-| Fase atual | Fase 0 concluída · Fase 1 em andamento |
+| Fase atual | Fase 0 concluída · Fase 1 em andamento (F1 fechado) |
 | LIVE | **BLOQUEADO** — não habilitar nesta missão |
 
 ## Baseline reproduzida
@@ -17,7 +17,7 @@
 Medida por execução, não por leitura de README:
 
 ```
-pytest -q            1960 passed · 2 skipped · 71 subtests · ~33s
+pytest -q            1970 passed · 2 skipped · 71 subtests · ~30s
 ruff check .         All checks passed
 compileall           ok (tradingagents, service, scripts)
 secret scan          nenhum segredo real versionado
@@ -35,9 +35,9 @@ real como fonte de verdade, conforme a regra do próprio prompt.
 
 ## Próximos três itens
 
-1. `fee_component_id` — lastro por componente, não por saldo acumulado
-2. `valuation_id` + fingerprint no Ledger; conflito de recovery com cotação diferente
-3. Máquina do fill `RECEIVED → APPLYING → COMMITTED`
+1. `valuation_id` + fingerprint no Ledger; conflito de recovery com cotação diferente
+2. Máquina do fill `RECEIVED → APPLYING → COMMITTED`
+3. Liquidação do passivo `LIABILITY:FEE_FUNDING`
 
 ## Dependências externas
 
@@ -59,3 +59,5 @@ arquivo.
 | SHA | O quê | Testes |
 |---|---|---|
 | `8925e0d` | passagem única, moeda canônica, ambiguidade estruturada | 1960 |
+| `e678871` | baseline reproduzida, mapa de blockers | 1960 |
+| *este* | `fee_component_id`: lastro por componente | 1970 |

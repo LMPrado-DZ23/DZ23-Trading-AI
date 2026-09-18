@@ -981,8 +981,15 @@ class RiskEngine:
         # incidente é a declaração do problema; o livro é a prova de que a
         # taxa existe. Converter além do lastro inventaria taxa que ninguém
         # lançou — e resolveria um incidente por decreto.
-        registrado = self.carteira.balances().get(
-            f"FEES:{alvo['fee_currency']}", Decimal("0"))
+        # LASTRO POR COMPONENTE: o saldo `FEES:<moeda>` é histórico e
+        # permanece depois de uma valoração. Usá-lo como prova deixaria a
+        # taxa antiga, já convertida, financiar uma dívida nova.
+        disponiveis = []
+        if hasattr(self.carteira, "fee_components"):
+            disponiveis = self.carteira.fee_components(
+                alvo["fee_currency"], apenas_nao_valorados=True)
+        registrado = sum((Decimal(str(c["amount"])) for c in disponiveis),
+                         Decimal("0"))
 
         with self._lock_settlement:
             # Recuperação: o lançamento pode já existir de um processo que
@@ -993,18 +1000,28 @@ class RiskEngine:
             else:
                 if registrado <= 0:
                     raise ValueError(
-                        f"sem lastro: FEES:{alvo['fee_currency']} está em "
-                        f"{registrado} e o incidente afirma {quantidade}. "
-                        "Nada a converter")
+                        f"sem lastro: nenhum componente de "
+                        f"{alvo['fee_currency']} não valorado no livro, e o "
+                        f"incidente afirma {quantidade}. O saldo histórico "
+                        "não prova ocorrência nova")
                 if registrado < quantidade:
                     raise ValueError(
-                        f"lastro parcial: o livro registra {registrado} "
-                        f"{alvo['fee_currency']} e o incidente afirma "
-                        f"{quantidade}. Converter tudo inventaria a diferença")
+                        f"lastro parcial: componentes não valorados somam "
+                        f"{registrado} {alvo['fee_currency']} e o incidente "
+                        f"afirma {quantidade}. Converter tudo inventaria a "
+                        "diferença")
+                # Consome os componentes que lastreiam ESTA valoração.
+                usados, acumulado = [], Decimal("0")
+                for c in disponiveis:
+                    if acumulado >= quantidade:
+                        break
+                    usados.append(c["fee_component_id"])
+                    acumulado += Decimal(str(c["amount"]))
                 tx_id = self.carteira.fee_valuation(
                     moeda=alvo["fee_currency"], quantidade=quantidade,
                     rate=Decimal(v["rate"]), fonte=v["fonte"], em=v["em"],
-                    incident_id=incident_id).tx_id
+                    incident_id=incident_id,
+                    fee_component_ids=usados).tx_id
             if alvo["status"] == "RESOLVED":
                 return alvo
             alvo["valuation"] = {**v, "status": "APLICADA",
