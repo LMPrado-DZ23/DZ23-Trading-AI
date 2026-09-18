@@ -1651,7 +1651,15 @@ from tradingagents.brokers.ccxt_bridge import LIVE_CONFIRM_PHRASE  # noqa: E402
 
 # Parada de emergência DURÁVEL. O conjunto em memória anterior desarmava
 # sozinho a cada reinício — o dono acreditava ter parado tudo e não tinha.
-from tradingagents.desk.killswitch import KillSwitch, KillSwitchError  # noqa: E402
+# ALIAS obrigatório: este KillSwitch (do desk, por armazém/tenant) é OUTRA
+# classe que o `execution.KillSwitch` importado no topo. Importá-lo com o
+# mesmo nome REBINDAVA o global `KillSwitch`, e o `TenantRuntime` (que resolve
+# o nome em tempo de chamada) passava a construir a classe errada — sem
+# `.state` —, quebrando `/v1/office/snapshot` e `/v1/office/events` com 500.
+from tradingagents.desk.killswitch import (  # noqa: E402
+    KillSwitch as DeskKillSwitch,
+    KillSwitchError,
+)
 
 
 def _relatorio_de_reconciliacao(tenant_id: str) -> dict:
@@ -1698,12 +1706,12 @@ def _relatorio_de_reconciliacao(tenant_id: str) -> dict:
     return {"seguro": not pendencias, "pendencias": pendencias}
 
 
-def _parada(tenant_id: str) -> KillSwitch:
+def _parada(tenant_id: str) -> DeskKillSwitch:
     from tradingagents.desk.storage import ArmazemDeEstado
     d = _DESKS.get(tenant_id)
     armazem = d.get("armazem") if d else ArmazemDeEstado(
         os.environ.get("DATABASE_URL"), diretorio=DATA / "desks")
-    return KillSwitch(armazem, tenant_id)
+    return DeskKillSwitch(armazem, tenant_id)
 
 
 @app.get("/v1/live/status")
