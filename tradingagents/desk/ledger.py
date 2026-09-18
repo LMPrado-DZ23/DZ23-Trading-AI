@@ -280,7 +280,7 @@ class Ledger:
         if rest != ZERO:
             entries.append(Entry(f"CASH:{self.currency}", rest, "sobra devolvida"))
         entries.extend(self._pernas_nativas(
-            native_fees or fee_in_other_currency,
+            self._um_parametro_de_taxa(native_fees, fee_in_other_currency),
             "corretagem em outra moeda"))
         return self._post("fill_buy", entries, ref, instrument=instrument,
                           quantity=quantity, agent_id=agent_id)
@@ -304,7 +304,7 @@ class Ledger:
                    Entry(f"POSITION:{instrument}", -cost_basis, "baixa ao custo"),
                    Entry(f"PNL:{agent_id}", -bruto, "resultado bruto atribuído")]
         entries.extend(self._pernas_nativas(
-            native_fees or fee_in_other_currency,
+            self._um_parametro_de_taxa(native_fees, fee_in_other_currency),
             "corretagem da saída em outra moeda"))
         return self._post("fill_sell", entries, ref, instrument=instrument,
                           quantity=quantity, agent_id=agent_id)
@@ -485,7 +485,11 @@ class Ledger:
     def capital_adjustment_asset(self, moeda: str, quantidade: Decimal, *,
                                  reason: str, actor: str,
                                  external_reference: str = "") -> Transaction:
-        """Aporte de ativo SEM valor declarado — forma antiga, mantida.
+        """USO INTERNO/MIGRAÇÃO: aporte de ativo sem valor declarado.
+
+        Não é API operacional. O fluxo normal usa asset_contribution, que
+        exige cotação, fonte e instante — sem isso não há como auditar quanto
+        o aporte representou.
 
         Lançava ASSET:<moeda> contra CONTRIBUTED_CAPITAL na moeda funcional,
         misturando unidades numa única soma. Agora fica inteiramente na
@@ -507,6 +511,20 @@ class Ledger:
                           external_reference or reason,
                           purpose="ASSET_CONTRIBUTION")
 
+    @staticmethod
+    def _um_parametro_de_taxa(native_fees, fee_in_other_currency):
+        """Recusa os dois parâmetros juntos.
+
+        Aceitar um e ignorar o outro em silêncio faria uma taxa real
+        desaparecer sem que ninguém percebesse.
+        """
+        if native_fees and fee_in_other_currency:
+            raise ValueError(
+                "conflito de contrato: use native_fees OU "
+                "fee_in_other_currency (compatibilidade), nunca ambos — "
+                "ignorar um em silêncio perderia uma taxa")
+        return native_fees or fee_in_other_currency
+
     def _pernas_nativas(self, native_fees, memo: str) -> list:
         """Uma perna por COMPONENTE nativo — nenhum pode ficar de fora.
 
@@ -524,7 +542,31 @@ class Ledger:
         pernas = []
         for componente in native_fees:
             valor, moeda = componente
-            valor = Decimal(str(valor))
+            # O LIVRO valida por conta própria: depender do parser acima
+            # ter feito o trabalho deixa a última porta aberta para um
+            # lançamento impossível.
+            try:
+                valor = Decimal(str(valor))
+            except (ArithmeticError, ValueError, TypeError) as exc:
+                raise ValueError(
+                    f"componente de taxa com valor inválido: {componente!r}"
+                ) from exc
+            if not valor.is_finite():
+                raise ValueError(
+                    f"componente de taxa não finito ({valor}): NaN e infinito "
+                    "não são valores contabilizáveis")
+            if valor < ZERO:
+                raise ValueError(
+                    f"componente de taxa negativo ({valor}): rebate é outro "
+                    "contrato, não uma taxa com sinal trocado")
+            moeda = str(moeda or "")
+            if not moeda:
+                raise ValueError(
+                    "componente de taxa sem moeda: não há conta onde lançar")
+            if moeda != moeda.strip().upper():
+                raise ValueError(
+                    f"moeda {moeda!r} não está canônica: use {moeda.strip().upper()!r} "
+                    "— formas diferentes criariam contas diferentes")
             if moeda == self.currency:
                 raise ValueError(
                     "native_fees é para moedas DIFERENTES da cotação; use o "

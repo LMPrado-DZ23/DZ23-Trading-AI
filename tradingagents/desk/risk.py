@@ -689,6 +689,11 @@ class RiskEngine:
         tipo = incidente["type"]
         if tipo == "RESERVATION_DEFICIT":
             return self._validar_deficit(incidente, refs)
+        if tipo == "FEE_COMPONENTS_AMBIGUOUS":
+            raise ValueError(
+                "FEE_COMPONENTS_AMBIGUOUS não se resolve pelo caminho "
+                "genérico: é preciso determinar o que o total relatado "
+                "incluía. Uma frase não explica a diferença")
         if tipo in ("FEE_VALUATION_UNKNOWN", "FEE_CURRENCY_UNKNOWN"):
             # Estes têm caminho PRÓPRIO de conserto. Fechá-los pelo
             # resolvedor genérico encerraria o alarme sem nunca descobrir em
@@ -853,6 +858,50 @@ class RiskEngine:
             "resolution_evidence": "", "resolution_refs": {},
             "validated_by_policy": False, "policy_version": "",
             "valuation": {}, "occurrences": [ocorrencia],
+        }
+        self._incidentes[chave] = inc
+        return inc["incident_id"]
+
+    def registrar_componentes_ambiguos(self, *, reported_total: str,
+                                       reported_currency: str,
+                                       component_sum: str,
+                                       unexplained_difference: str,
+                                       components: list,
+                                       order_id: str = "", fill_id: str = "",
+                                       instrumento: str = "") -> str:
+        """Total relatado que não bate com a soma dos componentes.
+
+        Guarda os NÚMEROS, não só o aviso: sem o total relatado, a soma e a
+        diferença não explicada, quem investigar depois não tem por onde
+        começar — e um incidente com amount=0 e nenhum dado é um alarme que
+        não diz nada.
+        """
+        import uuid as _uuid
+        chave = f"FEE_COMPONENTS_AMBIGUOUS:{fill_id or order_id}"
+        existente = self._incidentes.get(chave)
+        if existente and existente["status"] in self.ESTADOS_BLOQUEANTES:
+            return existente["incident_id"]
+        inc = {
+            "incident_id": "inc_" + _uuid.uuid4().hex[:12],
+            "type": "FEE_COMPONENTS_AMBIGUOUS",
+            "reported_total": reported_total,
+            "reported_currency": reported_currency,
+            "component_sum": component_sum,
+            "unexplained_difference": unexplained_difference,
+            "components": components,
+            "amount": unexplained_difference,
+            "currency": reported_currency, "fee_currency": reported_currency,
+            "reservation_id": "", "order_id": order_id, "fill_id": fill_id,
+            "instrumento": instrumento,
+            "opened_at": utcnow().isoformat(),
+            "evidence": (f"total relatado {reported_total} "
+                         f"{reported_currency} não é repetição nem soma dos "
+                         f"componentes ({component_sum}); diferença não "
+                         f"explicada: {unexplained_difference}"),
+            "status": "OPEN", "resolved_at": "", "resolved_by": "",
+            "resolution_evidence": "", "resolution_refs": {},
+            "validated_by_policy": False, "policy_version": "",
+            "occurrences": [],
         }
         self._incidentes[chave] = inc
         return inc["incident_id"]
