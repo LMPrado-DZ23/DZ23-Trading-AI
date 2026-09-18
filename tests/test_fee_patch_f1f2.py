@@ -59,3 +59,55 @@ def test_b8_restore_aceita_cross_unit_com_metadata():
     }
     led = Ledger.from_transactions([doc], currency="USDT")
     assert led.balance("FEES:USDT") == Decimal("600")
+
+
+# ===========================================================================
+# BLOCKER 7 — fingerprint canônico (normalização + dimensões que faltam)
+# ===========================================================================
+_FP = Ledger.fingerprint_de_valoracao
+_EM = "2026-01-01T00:00:00+00:00"
+
+
+def test_b7a_decimal_equivalente_mesma_impressao():
+    """300 e 300.0 são o mesmo valor — não podem gerar impressões diferentes."""
+    base = {"moeda": "BNB", "rate": Decimal("2"), "fonte": "x", "em": _EM}
+    assert _FP(quantidade=Decimal("300"), **base) \
+        == _FP(quantidade=Decimal("300.0"), **base)
+
+
+def test_b7b_mesmo_instante_offsets_diferentes():
+    """20:00-03:00 e 23:00Z são o MESMO ponto no tempo."""
+    base = {"moeda": "BNB", "quantidade": Decimal("2"), "rate": Decimal("300"),
+            "fonte": "x"}
+    assert _FP(em="2026-01-01T20:00:00-03:00", **base) \
+        == _FP(em="2026-01-01T23:00:00+00:00", **base)
+
+
+def test_b7c_functional_currency_entra_na_impressao():
+    """USDT vs EUR: mesma taxa nativa, custo funcional diferente."""
+    base = {"moeda": "BNB", "quantidade": Decimal("2"), "rate": Decimal("300"),
+            "fonte": "x", "em": _EM}
+    assert _FP(**base, functional_currency="USDT") \
+        != _FP(**base, functional_currency="EUR")
+
+
+def test_b7d_policy_version_entra_na_impressao():
+    """Política de valoração diferente => impressão diferente."""
+    base = {"moeda": "BNB", "quantidade": Decimal("2"), "rate": Decimal("300"),
+            "fonte": "x", "em": _EM}
+    assert _FP(**base, policy_version="dz23.resolucao/1") \
+        != _FP(**base, policy_version="dz23.resolucao/2")
+
+
+def test_b7e_moeda_normalizada():
+    """Formas diferentes da mesma moeda não são conteúdos diferentes."""
+    base = {"quantidade": Decimal("2"), "rate": Decimal("300"), "fonte": "x",
+            "em": _EM}
+    assert _FP(moeda=" bnb ", **base) == _FP(moeda="BNB", **base)
+
+
+def test_b7_id_continua_fora_da_impressao():
+    """Regra preservada: dois ids para o MESMO conteúdo não divergem."""
+    base = {"moeda": "BNB", "quantidade": Decimal("2"), "rate": Decimal("300"),
+            "fonte": "x", "em": _EM}
+    assert _FP(**base, valuation_id="A") == _FP(**base, valuation_id="B")

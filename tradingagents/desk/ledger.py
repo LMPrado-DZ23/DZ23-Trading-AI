@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from .models import utcnow
@@ -87,6 +87,11 @@ class Transaction:
     fee_component_ids: tuple = ()
     valuation_id: str = ""
     valuation_fingerprint: str = ""
+    # Versão da política sob a qual a valoração foi impressa. Guardada para o
+    # recovery recomputar a impressão com a MESMA política de origem, em vez
+    # da atual — senão toda retomada após uma troca de política viraria
+    # conflito falso.
+    valuation_policy_version: str = ""
     native_amount: Decimal = ZERO
     native_currency: str = ""
     functional_amount: Decimal = ZERO
@@ -146,6 +151,7 @@ class Ledger:
               incident_id: str = "", settlement_id: str = "",
               fee_component_ids: list | None = None,
               valuation_id: str = "", valuation_fingerprint: str = "",
+              valuation_policy_version: str = "",
               native_amount: Decimal = ZERO, native_currency: str = "",
               functional_amount: Decimal = ZERO, functional_currency: str = "",
               at=None) -> Transaction:
@@ -156,6 +162,7 @@ class Ledger:
                          fee_component_ids=tuple(fee_component_ids or ()),
                          valuation_id=valuation_id,
                          valuation_fingerprint=valuation_fingerprint,
+                         valuation_policy_version=valuation_policy_version,
                          native_amount=native_amount,
                          native_currency=native_currency,
                          functional_amount=functional_amount,
@@ -405,7 +412,8 @@ class Ledger:
                       rate: Decimal, fonte: str, em: str,
                       incident_id: str = "",
                       fee_component_ids: list | None = None,
-                      valuation_id: str = "") -> Transaction:
+                      valuation_id: str = "",
+                      policy_version: str = "") -> Transaction:
         """Converte a taxa registrada em outra moeda para a de cotação.
 
         Enquanto isto não acontece, a taxa existe no livro na moeda original
@@ -442,11 +450,14 @@ class Ledger:
                           incident_id=incident_id,
                           fee_component_ids=ids,
                           valuation_id=valuation_id,
+                          valuation_policy_version=policy_version,
                           valuation_fingerprint=self.fingerprint_de_valoracao(
                               moeda=moeda, quantidade=quantidade, rate=rate,
                               fonte=fonte, em=em, fee_component_ids=ids,
                               incident_id=incident_id,
-                              valuation_id=valuation_id),
+                              valuation_id=valuation_id,
+                              functional_currency=self.currency,
+                              policy_version=policy_version),
                           native_amount=quantidade, native_currency=moeda,
                           functional_amount=valor,
                           functional_currency=self.currency)
@@ -617,21 +628,57 @@ class Ledger:
         return pernas
 
     @staticmethod
+    def _fp_decimal(x) -> str:
+        """Forma canônica de um Decimal: 300 e 300.0 imprimem igual, e sem
+        notação exponencial (300, não 3E+2)."""
+        d = Decimal(str(x))
+        if not d.is_finite():
+            raise ValueError(f"valor não finito na impressão: {x!r}")
+        return format(d.normalize(), "f")
+
+    @staticmethod
+    def _fp_instante(em) -> str:
+        """Forma canônica do instante: o MESMO ponto no tempo em offsets
+        diferentes imprime igual (tudo normalizado para UTC)."""
+        texto = str(em).strip()
+        try:
+            dt = datetime.fromisoformat(texto)
+        except ValueError:
+            return texto           # não-ISO: preserva o texto, determinístico
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(timezone.utc)
+        return dt.isoformat()
+
+    @staticmethod
     def fingerprint_de_valoracao(*, moeda: str, quantidade, rate, fonte: str,
-                                 em: str, fee_component_ids=None,
+                                 em, fee_component_ids=None,
                                  incident_id: str = "",
-                                 valuation_id: str = "") -> str:
+                                 valuation_id: str = "",
+                                 functional_currency: str = "",
+                                 policy_version: str = "") -> str:
         """Impressão do CONTEÚDO da valoração.
 
-        Sem ela, o retry pós-crash adota qualquer lançamento do incidente e
-        grava os metadados novos por cima: o registro diz 400 e o lançamento
-        diz 300. `valuation_id` fica de fora da impressão de propósito — dois
-        identificadores diferentes para o MESMO conteúdo não são divergência.
+        Cobre todas as dimensões que definem o resultado — moeda nativa e
+        funcional, quantidade e cotação normalizadas, fonte, instante em UTC,
+        componentes, incidente e a versão da política. Sem isto, o retry
+        pós-crash adota um lançamento e grava metadados divergentes por cima:
+        o registro diz 400 e o lançamento diz 300. Normalizar evita o oposto —
+        tratar 300 e 300.0, ou o mesmo instante em offsets diferentes, como
+        conteúdos distintos. `valuation_id` fica FORA: dois identificadores
+        para o MESMO conteúdo não são divergência.
         """
         import hashlib
-        partes = [moeda, str(Decimal(str(quantidade))), str(Decimal(str(rate))),
-                  (fonte or "").strip(), str(em),
-                  ",".join(sorted(fee_component_ids or [])), incident_id]
+        partes = [
+            (moeda or "").strip().upper(),
+            Ledger._fp_decimal(quantidade),
+            Ledger._fp_decimal(rate),
+            (fonte or "").strip(),
+            Ledger._fp_instante(em),
+            ",".join(sorted(fee_component_ids or [])),
+            incident_id,
+            (functional_currency or "").strip().upper(),
+            (policy_version or "").strip(),
+        ]
         return hashlib.sha256("|".join(partes).encode()).hexdigest()[:32]
 
     def fee_components(self, moeda: str,
@@ -882,6 +929,8 @@ class Ledger:
              "fee_component_ids": list(getattr(tx, "fee_component_ids", ())),
              "valuation_id": getattr(tx, "valuation_id", ""),
              "valuation_fingerprint": getattr(tx, "valuation_fingerprint", ""),
+             "valuation_policy_version": getattr(
+                 tx, "valuation_policy_version", ""),
              "native_amount": str(getattr(tx, "native_amount", ZERO)),
              "native_currency": getattr(tx, "native_currency", ""),
              "functional_amount": str(getattr(tx, "functional_amount", ZERO)),
@@ -920,6 +969,8 @@ class Ledger:
                 fee_component_ids=doc.get("fee_component_ids") or [],
                 valuation_id=doc.get("valuation_id", ""),
                 valuation_fingerprint=doc.get("valuation_fingerprint", ""),
+                valuation_policy_version=doc.get(
+                    "valuation_policy_version", ""),
                 native_amount=Decimal(str(doc.get("native_amount") or 0)),
                 native_currency=doc.get("native_currency", ""),
                 functional_amount=Decimal(str(doc.get("functional_amount") or 0)),

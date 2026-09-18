@@ -64,10 +64,10 @@ class TestFingerprintNoLivro:
         m, risco, livro = sistema()
         cobrar(livro)
         ids = [c["fee_component_id"] for c in livro.fee_components("BNB")]
-        base = dict(moeda="BNB", quantidade=Decimal("2"), rate=Decimal("300"),
-                    fonte="binance", em="2026-09-14T23:00:00+00:00",
-                    fee_component_ids=ids, incident_id="inc_1",
-                    valuation_id="val-A")
+        base = {"moeda": "BNB", "quantidade": Decimal("2"),
+                "rate": Decimal("300"), "fonte": "binance",
+                "em": "2026-09-14T23:00:00+00:00", "fee_component_ids": ids,
+                "incident_id": "inc_1", "valuation_id": "val-A"}
         impressao = livro.fingerprint_de_valoracao(**base)
         for campo, valor in (("rate", Decimal("400")), ("fonte", "outra"),
                              ("em", "2026-09-15T10:00:00+00:00"),
@@ -205,8 +205,9 @@ class TestIdNaoEhConteudo:
 
     def test_the_fingerprint_ignores_the_id(self):
         m, risco, livro = sistema()
-        base = dict(moeda="BNB", quantidade=Decimal("2"), rate=Decimal("300"),
-                    fonte="binance", em="2026-09-14T23:00:00+00:00",
-                    fee_component_ids=["fc_1"], incident_id="inc_1")
+        base = {"moeda": "BNB", "quantidade": Decimal("2"),
+                "rate": Decimal("300"), "fonte": "binance",
+                "em": "2026-09-14T23:00:00+00:00",
+                "fee_component_ids": ["fc_1"], "incident_id": "inc_1"}
         assert livro.fingerprint_de_valoracao(**base, valuation_id="A") == \
             livro.fingerprint_de_valoracao(**base, valuation_id="B")

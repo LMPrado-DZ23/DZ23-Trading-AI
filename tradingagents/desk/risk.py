@@ -1004,7 +1004,14 @@ class RiskEngine:
                     rate=Decimal(v["rate"]), fonte=v["fonte"], em=v["em"],
                     fee_component_ids=list(ja.get("fee_component_ids") or []),
                     incident_id=incident_id,
-                    valuation_id=ja.get("valuation_id", ""))
+                    valuation_id=ja.get("valuation_id", ""),
+                    # A impressão original foi feita com a moeda funcional e a
+                    # política DAQUELE momento: recomputar com as de agora
+                    # transformaria uma troca de política numa divergência de
+                    # conteúdo. Migração é ato explícito, não efeito colateral
+                    # da retomada.
+                    functional_currency=ja.get("functional_currency", ""),
+                    policy_version=ja.get("valuation_policy_version", ""))
                 impressa = ja.get("valuation_fingerprint") or ""
                 if impressa and impressa != esperada:
                     raise RecoveryConflict(
@@ -1042,7 +1049,8 @@ class RiskEngine:
                     moeda=alvo["fee_currency"], quantidade=quantidade,
                     rate=Decimal(v["rate"]), fonte=v["fonte"], em=v["em"],
                     incident_id=incident_id,
-                    fee_component_ids=usados, valuation_id=vid).tx_id
+                    fee_component_ids=usados, valuation_id=vid,
+                    policy_version=self.POLICY_VERSION).tx_id
             if alvo["status"] == "RESOLVED":
                 return alvo
             alvo["valuation"] = {**v, "status": "APLICADA",
