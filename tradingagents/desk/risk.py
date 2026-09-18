@@ -975,6 +975,9 @@ class RiskEngine:
         import uuid as _uuid
         vid = valuation_id or v.get("valuation_id") or (
             "val_" + _uuid.uuid4().hex[:12])
+        # Id que ESTE processo trouxe. Se adotarmos um lancamento ja existente,
+        # a identidade canonica passa a ser a DELE e este vira apenas alias.
+        requested_vid = ""
         quantidade = Decimal(alvo["fee_amount"])
 
         # LASTRO NATIVO: só se converte o que está REGISTRADO na moeda. O
@@ -1024,6 +1027,14 @@ class RiskEngine:
                         f"cotação {v['rate']}, fonte {v['fonte']}, em "
                         f"{v['em']}). Recupere a valoração original em vez de "
                         "sobrescrevê-la")
+                # IDENTIDADE CANONICA: adotamos o lancamento do livro; a
+                # identidade verdadeira e a DELE. Gravar o id novo por cima
+                # deixaria o incidente dizendo val-B e o livro dizendo val-A —
+                # duas identidades para a MESMA operacao. O id trazido por este
+                # processo vira alias de auditoria, nao segunda identidade.
+                if ja.get("valuation_id"):
+                    requested_vid = vid
+                    vid = ja["valuation_id"]
                 tx_id = ja["tx_id"]
             else:
                 if registrado <= 0:
@@ -1062,8 +1073,10 @@ class RiskEngine:
             alvo["resolved_at"] = utcnow().isoformat()
             alvo["resolved_by"] = actor_id
             alvo["resolution_evidence"] = evidence
-            alvo["resolution_refs"] = {"ledger_tx_ids": [tx_id],
-                                       "valuation_id": vid}
+            refs = {"ledger_tx_ids": [tx_id], "valuation_id": vid}
+            if requested_vid and requested_vid != vid:
+                refs["requested_valuation_id"] = requested_vid
+            alvo["resolution_refs"] = refs
             alvo["validated_by_policy"] = True
             alvo["policy_version"] = self.POLICY_VERSION
             return alvo

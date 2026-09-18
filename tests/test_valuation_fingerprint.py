@@ -202,6 +202,19 @@ class TestIdNaoEhConteudo:
         assert livro.balance("FEES:USDT") == saldo, "lançou de novo"
         assert registro["status"] == "RESOLVED", (
             "tratou id diferente como conteúdo diferente")
+        # B9/B1: identidade canônica ÚNICA. O livro guarda a do processo
+        # anterior; incidente e refs têm de convergir para ELA — não para o
+        # id novo que este processo trouxe sem conhecer o do primeiro. Duas
+        # identidades para a mesma operação é o defeito.
+        canonico = "val-do-processo-anterior"
+        ledger_tx = livro.find_fee_valuation(inc["incident_id"])
+        assert ledger_tx["valuation_id"] == canonico, "livro perdeu o id"
+        assert registro["valuation"]["valuation_id"] == canonico, (
+            "incidente gravou o id novo por cima do canônico")
+        assert registro["resolution_refs"]["valuation_id"] == canonico, (
+            "resolution_refs aponta para id que não é o do lançamento")
+        assert registro["resolution_refs"].get("requested_valuation_id") \
+            == "val-novo", "o id trazido devia ficar como alias de auditoria"
 
     def test_the_fingerprint_ignores_the_id(self):
         m, risco, livro = sistema()
