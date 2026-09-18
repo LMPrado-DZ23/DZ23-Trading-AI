@@ -996,6 +996,27 @@ class RiskEngine:
             # caiu entre o livro e o incidente.
             ja = self.carteira.find_fee_valuation(incident_id)
             if ja is not None:
+                # CONFERE O CONTEÚDO antes de adotar. Adotar o lançamento
+                # antigo e gravar os metadados novos por cima produziria um
+                # registro dizendo 400 e um lançamento dizendo 300.
+                esperada = self.carteira.fingerprint_de_valoracao(
+                    moeda=alvo["fee_currency"], quantidade=quantidade,
+                    rate=Decimal(v["rate"]), fonte=v["fonte"], em=v["em"],
+                    fee_component_ids=list(ja.get("fee_component_ids") or []),
+                    incident_id=incident_id,
+                    valuation_id=ja.get("valuation_id", ""))
+                impressa = ja.get("valuation_fingerprint") or ""
+                if impressa and impressa != esperada:
+                    raise RecoveryConflict(
+                        f"o incidente {incident_id} já tem a valoração "
+                        f"{ja.get('valuation_id') or '(sem id)'} com outro "
+                        f"conteúdo (lançamento: {ja.get('native_amount')} "
+                        f"{ja.get('native_currency')} -> "
+                        f"{ja.get('functional_amount')} "
+                        f"{ja.get('functional_currency')}; proposta atual: "
+                        f"cotação {v['rate']}, fonte {v['fonte']}, em "
+                        f"{v['em']}). Recupere a valoração original em vez de "
+                        "sobrescrevê-la")
                 tx_id = ja["tx_id"]
             else:
                 if registrado <= 0:
@@ -1021,7 +1042,7 @@ class RiskEngine:
                     moeda=alvo["fee_currency"], quantidade=quantidade,
                     rate=Decimal(v["rate"]), fonte=v["fonte"], em=v["em"],
                     incident_id=incident_id,
-                    fee_component_ids=usados).tx_id
+                    fee_component_ids=usados, valuation_id=vid).tx_id
             if alvo["status"] == "RESOLVED":
                 return alvo
             alvo["valuation"] = {**v, "status": "APLICADA",

@@ -85,6 +85,8 @@ class Transaction:
     # Conversão entre escriturações: os DOIS lados declarados, nunca um
     # número solto que se soma ao outro.
     fee_component_ids: tuple = ()
+    valuation_id: str = ""
+    valuation_fingerprint: str = ""
     native_amount: Decimal = ZERO
     native_currency: str = ""
     functional_amount: Decimal = ZERO
@@ -143,6 +145,7 @@ class Ledger:
               quantity: Decimal = ZERO, agent_id: str = "", purpose: str = "",
               incident_id: str = "", settlement_id: str = "",
               fee_component_ids: list | None = None,
+              valuation_id: str = "", valuation_fingerprint: str = "",
               native_amount: Decimal = ZERO, native_currency: str = "",
               functional_amount: Decimal = ZERO, functional_currency: str = "",
               at=None) -> Transaction:
@@ -151,6 +154,8 @@ class Ledger:
                          agent_id=agent_id, purpose=purpose,
                          incident_id=incident_id, settlement_id=settlement_id,
                          fee_component_ids=tuple(fee_component_ids or ()),
+                         valuation_id=valuation_id,
+                         valuation_fingerprint=valuation_fingerprint,
                          native_amount=native_amount,
                          native_currency=native_currency,
                          functional_amount=functional_amount,
@@ -399,7 +404,8 @@ class Ledger:
     def fee_valuation(self, *, moeda: str, quantidade: Decimal,
                       rate: Decimal, fonte: str, em: str,
                       incident_id: str = "",
-                      fee_component_ids: list | None = None) -> Transaction:
+                      fee_component_ids: list | None = None,
+                      valuation_id: str = "") -> Transaction:
         """Converte a taxa registrada em outra moeda para a de cotação.
 
         Enquanto isto não acontece, a taxa existe no livro na moeda original
@@ -435,6 +441,12 @@ class Ledger:
                           incident_id or f"valoracao:{moeda}",
                           incident_id=incident_id,
                           fee_component_ids=ids,
+                          valuation_id=valuation_id,
+                          valuation_fingerprint=self.fingerprint_de_valoracao(
+                              moeda=moeda, quantidade=quantidade, rate=rate,
+                              fonte=fonte, em=em, fee_component_ids=ids,
+                              incident_id=incident_id,
+                              valuation_id=valuation_id),
                           native_amount=quantidade, native_currency=moeda,
                           functional_amount=valor,
                           functional_currency=self.currency)
@@ -603,6 +615,24 @@ class Ledger:
             pernas.append(Entry(f"ASSET:{moeda}", -valor,
                                 "ativo usado para pagar a corretagem"))
         return pernas
+
+    @staticmethod
+    def fingerprint_de_valoracao(*, moeda: str, quantidade, rate, fonte: str,
+                                 em: str, fee_component_ids=None,
+                                 incident_id: str = "",
+                                 valuation_id: str = "") -> str:
+        """Impressão do CONTEÚDO da valoração.
+
+        Sem ela, o retry pós-crash adota qualquer lançamento do incidente e
+        grava os metadados novos por cima: o registro diz 400 e o lançamento
+        diz 300. `valuation_id` fica de fora da impressão de propósito — dois
+        identificadores diferentes para o MESMO conteúdo não são divergência.
+        """
+        import hashlib
+        partes = [moeda, str(Decimal(str(quantidade))), str(Decimal(str(rate))),
+                  (fonte or "").strip(), str(em),
+                  ",".join(sorted(fee_component_ids or [])), incident_id]
+        return hashlib.sha256("|".join(partes).encode()).hexdigest()[:32]
 
     def fee_components(self, moeda: str,
                        apenas_nao_valorados: bool = False) -> list:
@@ -850,6 +880,8 @@ class Ledger:
              "incident_id": getattr(tx, "incident_id", ""),
              "settlement_id": getattr(tx, "settlement_id", ""),
              "fee_component_ids": list(getattr(tx, "fee_component_ids", ())),
+             "valuation_id": getattr(tx, "valuation_id", ""),
+             "valuation_fingerprint": getattr(tx, "valuation_fingerprint", ""),
              "native_amount": str(getattr(tx, "native_amount", ZERO)),
              "native_currency": getattr(tx, "native_currency", ""),
              "functional_amount": str(getattr(tx, "functional_amount", ZERO)),
@@ -886,6 +918,8 @@ class Ledger:
                 incident_id=doc.get("incident_id", ""),
                 settlement_id=doc.get("settlement_id", ""),
                 fee_component_ids=doc.get("fee_component_ids") or [],
+                valuation_id=doc.get("valuation_id", ""),
+                valuation_fingerprint=doc.get("valuation_fingerprint", ""),
                 native_amount=Decimal(str(doc.get("native_amount") or 0)),
                 native_currency=doc.get("native_currency", ""),
                 functional_amount=Decimal(str(doc.get("functional_amount") or 0)),

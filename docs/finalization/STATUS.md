@@ -9,7 +9,7 @@
 | Repositório | `LMPrado-DZ23/tradingagents-dz23` |
 | Branch | `correcao-auditoria` |
 | HEAD | ver seção *Histórico* abaixo (sempre o topo) |
-| Fase atual | Fase 0 concluída · Fase 1 em andamento (F1 fechado) |
+| Fase atual | Fase 0 concluída · Fase 1 em andamento (F1, F2 fechados) |
 | LIVE | **BLOQUEADO** — não habilitar nesta missão |
 
 ## Baseline reproduzida
@@ -17,7 +17,7 @@
 Medida por execução, não por leitura de README:
 
 ```
-pytest -q            1970 passed · 2 skipped · 71 subtests · ~30s
+pytest -q            1979 passed · 2 skipped · 71 subtests · ~30s
 ruff check .         All checks passed
 compileall           ok (tradingagents, service, scripts)
 secret scan          nenhum segredo real versionado
@@ -35,9 +35,9 @@ real como fonte de verdade, conforme a regra do próprio prompt.
 
 ## Próximos três itens
 
-1. `valuation_id` + fingerprint no Ledger; conflito de recovery com cotação diferente
-2. Máquina do fill `RECEIVED → APPLYING → COMMITTED`
-3. Liquidação do passivo `LIABILITY:FEE_FUNDING`
+1. Máquina do fill `RECEIVED → APPLYING → COMMITTED`
+2. Liquidação do passivo `LIABILITY:FEE_FUNDING`
+3. Valoração por ocorrência (cotação por horário)
 
 ## Dependências externas
 
@@ -60,4 +60,5 @@ arquivo.
 |---|---|---|
 | `8925e0d` | passagem única, moeda canônica, ambiguidade estruturada | 1960 |
 | `e678871` | baseline reproduzida, mapa de blockers | 1960 |
-| *este* | `fee_component_id`: lastro por componente | 1970 |
+| `f28dc55` | `fee_component_id`: lastro por componente | 1970 |
+| *este* | `valuation_id` + fingerprint; conflito de recovery | 1979 |

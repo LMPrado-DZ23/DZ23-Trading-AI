@@ -7,7 +7,6 @@ Ordem por dano financeiro potencial. Fechado só com teste que prova.
 ### Fee pipeline
 | # | Item | Dano se ignorado |
 |---|---|---|
-| F2 | `valuation_id` + fingerprint no Ledger | retry com cotação diferente adota a antiga e grava metadado novo |
 | F3 | Valoração por ocorrência | uma cotação aplicada a taxas de horários diferentes |
 | F4 | Liquidação do passivo funcional | `LIABILITY:FEE_FUNDING` nunca zera |
 | F5 | Taxa em base currency | posição 1 BTC com 0,001 BTC de taxa sem origem |
@@ -46,4 +45,5 @@ Ordem por dano financeiro potencial. Fechado só com teste que prova.
 | Guard de execução | `8b0f912`, `b488eb3` |
 | Fee pipeline: moeda, lastro, multimoeda | `fee75cd`, `5cd2c1e`, `363b8ed` |
 | Componentes, passagem única, ambiguidade | `aed6334`, `ef2a234`, `8925e0d` |
-| F1 — lastro por componente | *este commit* |
+| F1 — lastro por componente | `f28dc55` |
+| F2 — fingerprint e conflito de recovery | *este commit* |
