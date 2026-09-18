@@ -9,7 +9,7 @@
 | Repositório | `LMPrado-DZ23/tradingagents-dz23` |
 | Branch | `correcao-auditoria` |
 | HEAD | ver seção *Histórico* abaixo (sempre o topo) |
-| Fase atual | Fase 1 · patch F1/F2 da auditoria: B1,B2,B3,B4,B7,B8,B9 fechados; B5,B6 abertos |
+| Fase atual | Fase 1 · patch F1/F2 da auditoria **COMPLETO** (B1–B10 fechados). Próximo: F3/F4 |
 | LIVE | **BLOQUEADO** — não habilitar nesta missão |
 | SIGNUP_ENABLED | **false** — só liberar com as evidências do gate de cadastro |
 
@@ -23,8 +23,8 @@ A auditoria reabriu F1/F2 com 10 itens. Estado:
 | B2 | soma EXATA dos componentes (2 BNB não valora 1) | ✅ fechado | `7f5b714` |
 | B3 | ids duplicados/vazios/cross-currency/já-valorados | ✅ fechado | `7f5b714` |
 | B4 | incidente possui os componentes que resolve | ✅ fechado | `a4e9490` |
-| B5 | component id fora do memo (dado durável) | 🔴 aberto | — |
-| B6 | recovery e concorrência (CAS/unique) | 🔴 aberto (provável BLOCKED_BY_ARCHITECTURE) | — |
+| B5 | component id fora do memo (dado durável) | ✅ fechado | `cad7a5c` |
+| B6 | recovery e concorrência (CAS/unique) | ✅ BLOCKED_BY_ARCH(multiproc) documentado | `8b265ce` |
 | B7 | fingerprint canônico (normalização + dims) | ✅ fechado | `5563dcd` |
 | B8 | restore revalida dimensões | ✅ fechado | `7884687` |
 | B9 | teste da identidade dupla fortalecido | ✅ fechado | `b199ee1` |
@@ -36,11 +36,17 @@ A auditoria reabriu F1/F2 com 10 itens. Estado:
 > explícita; os 14 call-sites antigos foram migrados para ela. Restam B4–B6;
 > não iniciar F3/F4 antes de fechá-los.
 >
-> B4 fechado em `a4e9490`: `valorar_taxa` congela a quantidade coberta e o
-> batch de componentes não-valorados que a lastreiam; `aplicar_valoracao`
-> consome esse batch congelado (com fallback compat) em vez de reler o
-> fee_amount e varrer os componentes de novo. Fecha a inflação da valoração
-> por taxa que chega depois (F) e a adoção de componente fora do batch (E).
+> Patch F1/F2 completo. Fechamentos: B1 `b199ee1`, B2/B3 `7f5b714`, B4
+> `a4e9490`, B5 `cad7a5c`, B6 `8b265ce` (BLOCKED_BY_ARCH multiproc), B7
+> `5563dcd`, B8 `7884687`, B9 `b199ee1`, B10 (matriz de mutação em cada
+> commit). Cada fix teve teste vermelho primeiro + matriz de mutação.
+>
+> B5: identidade do componente virou dado estruturado (`fee_component_records`
+> na transação), lido antes do memo; roundtrip export/restore. B6: dentro do
+> processo `_lock_settlement` serializa (provado); entre processos a segurança
+> é a reconciliação por estado compartilhado (adoção); o caso de livros em
+> memória divergentes é BLOCKED_BY_ARCHITECTURE(multiprocess), imposição
+> futura via UNIQUE no ledger em Postgres.
 
 ## Baseline reproduzida
 
@@ -75,17 +81,16 @@ real como fonte de verdade, conforme a regra do próprio prompt.
 
 ## Próximos três itens
 
-1. **B5** — componente como dado durável estruturado (fora do parsing de memo):
-   `fee_component_id`, `fill_id`, `order_id`, `amount`, `currency`,
-   `occurred_at`, `source`, `valuation_status` como campos, não texto. Hoje
-   `fee_components()` faz `memo.split("fee_component_id=")` — um memo editado
-   destrói a identidade.
-2. **B6** — concorrência do recovery: unique/CAS por `fee_component_id` (uma
-   valoração ativa por componente). Se o storage em memória não suportar,
-   `BLOCKED_BY_ARCHITECTURE` documentado + gate fechado para multiprocess.
-3. **F3/F4** — só depois de B5/B6: valoração por ocorrência e liquidação do
-   passivo `LIABILITY:FEE_FUNDING`. Parar para auditoria antes da máquina do
-   fill (`RECEIVED → APPLYING → COMMITTED`).
+1. **F3** — valoração por OCORRÊNCIA: uma cotação por horário/ocorrência, não
+   uma cotação única aplicada a taxas de instantes diferentes.
+2. **F4** — liquidação do passivo funcional `LIABILITY:FEE_FUNDING` (hoje
+   nunca zera): o aporte/compra do ativo descoberto quita o passivo.
+3. **Máquina do fill** (`RECEIVED → APPLYING → COMMITTED`) — **PARAR PARA
+   AUDITORIA antes de iniciar**, conforme o prompt mestre. Não começar sem
+   sinal verde do arquiteto/aprovador.
+
+> O patch F1/F2 (B1–B10) está completo e publicado. Antes de F3/F4, aguardar
+> o CI verde da suíte completa (gate 1) sobre os commits publicados.
 
 Depois de B2–B6: F3 (valoração por ocorrência), F4 (`LIABILITY:FEE_FUNDING`),
 e a máquina do fill `RECEIVED → APPLYING → COMMITTED` (parar para auditoria
@@ -121,6 +126,8 @@ arquivo.
 | `7f5b714` | B2/B3: valoração operacional com lastro e soma exata | 243 (kernel) |
 | `8b65804` | docs: fecha B2/B3, registra B4-B6 | — |
 | `a4e9490` | B4: valorar_taxa congela quantidade e batch de componentes | 175 (kernel) |
+| `cad7a5c` | B5: identidade do componente como dado durável (fora do memo) | 247 (kernel) |
+| `8b265ce` | B6: fronteira multiprocess documentada + teste de reconciliação | 241 (kernel) |
 
 > A partir de `7884687` a contagem "kernel subset" reflete a limitação do
 > ambiente (3.14): ~200 testes de F1/F2 verdes localmente; suíte completa via

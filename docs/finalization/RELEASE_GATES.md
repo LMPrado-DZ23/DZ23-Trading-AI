@@ -41,7 +41,10 @@ crítica sem plano · merge definitivo sem rollback · liberar cadastro público
 ## Estado atual do deploy
 - Produção (`dz23trading.com.br`): rodando `40dbbf3` (validado nesta sessão:
   healthz 200, `/v1/status/operacao` 200 PAPER, LIVE=false).
-- Commits até `a4e9490` (B8/B7/B1-B9, docs, B2/B3, B4) na branch e
-  **publicados em `origin/correcao-auditoria`** para o CI rodar a suíte
-  completa (gate 1). **Ainda não implantados** em produção — redeploy espera o
-  CI verde. LIVE segue bloqueado; SIGNUP_ENABLED=false.
+- Patch F1/F2 (B1–B10) **COMPLETO**; commits até `8b265ce` (inclui B5 `cad7a5c`
+  e B6 `8b265ce`) **publicados em `origin/correcao-auditoria`** para o CI rodar
+  a suíte completa (gate 1). **Ainda não implantados** em produção — redeploy
+  espera o CI verde. LIVE bloqueado; SIGNUP_ENABLED=false.
+- Gate multiprocess **fechado**: o ledger em memória não impõe
+  `UNIQUE(fee_component_id)` entre processos (B6). Deploy single-process apenas
+  até o ledger migrar para Postgres.

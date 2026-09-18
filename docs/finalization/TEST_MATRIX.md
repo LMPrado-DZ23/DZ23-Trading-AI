@@ -7,6 +7,8 @@ Arquivos de teste do patch: `tests/test_fee_patch_f1f2.py`,
 |---|---|---|---|
 | B4 (F) | `test_b4_fee_nova_apos_proposta_nao_infla_a_valoracao` | quantidade não congelada | ✅ morre |
 | B4 (E) | `test_b4_componente_congelado_valorado_fora_derruba_lastro` | batch não congelado | ✅ morre |
+| B5 (G) | `test_b5_identidade_sobrevive_memo_editado` | leitura ignora estrutura / restore ou export descartam | ✅ morrem (3) |
+| B6 (H) | `TestConcorrenciaMultiprocessoB6` + `TestExactlyOnce`/`TestSerializacaoForcada` | (serialização intra-processo; multiproc BLOCKED_BY_ARCH) | ✅ |
 
 ## Cobertura por blocker
 
@@ -39,8 +41,8 @@ Arquivos de teste do patch: `tests/test_fee_patch_f1f2.py`,
 | D | lista vazia cria valoração | B3 | ✅ fechado |
 | E | incidente F1 consome componente F2 | B4 | ✅ fechado |
 | F | fee nova entra no batch após proposta | B4 | ✅ fechado |
-| G | memo tratado como fonte de identidade | B5 | 🔴 aberto |
-| H | duas instâncias usam o mesmo componente | B6 | 🔴 aberto |
+| G | memo tratado como fonte de identidade | B5 | ✅ fechado |
+| H | duas instâncias usam o mesmo componente | B6 | ✅ intra-proc / multiproc BLOCKED_BY_ARCH |
 | I | functional currency sai da impressão | B7c | ✅ fechado |
 | J | restore não chama validar_dimensoes | B8 | ✅ fechado |
 

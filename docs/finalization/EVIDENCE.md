@@ -67,6 +67,25 @@ ruff check .   => All checks passed
 - Mutação: 2 mutantes (quantidade / batch não congelados) ⇒ ambos morrem.
 - Kernel (recovery/valoração/fee): 175 passed.
 
+### B5 — identidade do componente como dado durável (`cad7a5c`)
+- Vermelho: `test_b5_identidade_sobrevive_memo_editado` — apagar a marca do
+  memo fazia o componente sumir de `fee_components()`.
+- Correção: `fee_component_records` estruturado na transação (id, fill, moeda,
+  valor, source), lido antes do memo; roundtrip export/restore; memo mantido
+  só para auditoria humana e compat com livros antigos.
+- Mutação: 3 mutantes (leitura ignora estrutura / restore descarta / export
+  não serializa) ⇒ todos morrem.
+- Kernel subset: 247 passed, 1 pré-existente (permissão Windows).
+
+### B6 — fronteira de concorrência multiprocess (`8b265ce`)
+- Intra-processo: `TestExactlyOnce` (4 threads) e `TestSerializacaoForcada`
+  (escrita lenta) já provam UM lançamento via `_lock_settlement`.
+- Entre processos: `TestConcorrenciaMultiprocessoB6` prova que um processo que
+  restaura o livro do outro ADOTA o lançamento (não duplica).
+- Limite honesto: dois processos com livros em memória divergentes e sem
+  reconciliação são `BLOCKED_BY_ARCHITECTURE(multiprocess)` — imposição futura
+  via `UNIQUE(fee_component_id)` no ledger em Postgres. Gate multiproc fechado.
+
 ## Segurança
 - `LIVE.habilitado=false`, `operacao_real.estado=BLOQUEADA` no
   `/v1/status/operacao` de produção; PAPER ativo.

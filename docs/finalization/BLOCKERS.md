@@ -4,14 +4,14 @@ Ordem por dano financeiro potencial. Fechado só com teste que prova.
 
 ## Abertos
 
-### Fee pipeline — patch da auditoria (F1/F2 REABERTOS)
-A auditoria adversarial encontrou blockers DENTRO de F1/F2. Fechar antes de
-F3+. Detalhe e estado em `STATUS.md`.
+### Fee pipeline — patch da auditoria (F1/F2) — ✅ COMPLETO (B1–B10)
+A auditoria adversarial encontrou blockers DENTRO de F1/F2. Todos fechados
+com teste vermelho primeiro + matriz de mutação. Detalhe em `STATUS.md`.
 
 | # | Item | Dano se ignorado | Estado |
 |---|---|---|---|
-| B5 | component id durável (fora do memo) | memo editado destrói identidade | 🔴 aberto |
-| B6 | concorrência do recovery (CAS/unique) | dois processos usam o mesmo componente | 🔴 aberto |
+| B5 | component id durável (fora do memo) | memo editado destrói identidade | ✅ `cad7a5c` |
+| B6 | concorrência do recovery | dois processos usam o mesmo componente | ✅ `8b265ce`¹ |
 | B1 | identidade canônica na adoção | livro=val-A, incidente=val-B | ✅ `b199ee1` |
 | B2 | soma exata dos componentes | componente 2 BNB marca VALUED valorando só 1 | ✅ `7f5b714` |
 | B3 | validação de ids (vazio/dup/cross/valorado) | valoração sem lastro real | ✅ `7f5b714` |
@@ -19,6 +19,12 @@ F3+. Detalhe e estado em `STATUS.md`.
 | B7 | fingerprint canônico | 300≠300.0; falta functional/policy | ✅ `5563dcd` |
 | B8 | restore revalida dimensões | doc cross-unit volta pelo restore | ✅ `7884687` |
 | B9 | teste da identidade dupla fortalecido | mutação sobrevivia | ✅ `b199ee1` |
+
+¹ B6: serialização INTRA-processo provada (4 threads, escrita lenta) e
+reconciliação ENTRE processos por estado compartilhado (adoção). O caso de
+dois processos com livros em memória divergentes é
+`BLOCKED_BY_ARCHITECTURE(multiprocess)` — imposição futura via
+`UNIQUE(fee_component_id)` no ledger em Postgres. Gate multiprocess fechado.
 
 ### Fee pipeline — restante
 | # | Item | Dano se ignorado |
