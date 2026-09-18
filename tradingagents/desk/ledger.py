@@ -928,6 +928,11 @@ class Ledger:
                 # reescreveria a data de todo o histórico a cada reinício.
                 **({"at": _instante(doc["at"])} if doc.get("at") else {}))
             tx.validate()               # lançamento desbalanceado não entra
+            # E as DIMENSÕES: um doc que mistura unidades sem declarar a
+            # conversão seria recusado por _post na entrada. Deixá-lo voltar
+            # pelo restore abriria a porta dos fundos para o lançamento
+            # impossível que a validação de entrada barra.
+            tx.validar_dimensoes(currency)
             led._txs.append(tx)
         return led
 
