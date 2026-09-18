@@ -210,3 +210,37 @@ class TestSerializacaoForcada:
         assert len(lancamentos) == 1, (
             f"{len(lancamentos)} lançamentos: a janela não estava serializada")
         assert livro.balance("FEES:USDT") == Decimal("600")
+
+
+class TestConcorrenciaMultiprocessoB6:
+    """B6 — fronteira de concorrência entre processos.
+
+    Dentro de um processo, `_lock_settlement` serializa (ver TestExactlyOnce
+    e TestSerializacaoForcada). ENTRE processos, a segurança é a RECONCILIAÇÃO
+    por estado compartilhado: um processo que restaura o livro do outro ADOTA
+    o lançamento em vez de criar um segundo. Dois processos com livros em
+    memória DIVERGENTES e sem reconciliação não são cobertos — o livro em
+    memória não tem constraint única: BLOCKED_BY_ARCHITECTURE(multiprocess),
+    imposição futura via UNIQUE(fee_component_id) no ledger em Postgres.
+    """
+
+    def test_processo_que_restaura_o_livro_adota_e_nao_lanca_de_novo(self):
+        m, risco, livro = sistema()
+        taxa_no_livro(livro, "BNB", "2")
+        inc = incidente(risco, "BNB", "2")
+        propor(risco, inc)
+        # processo A grava o lançamento e cai ANTES de resolver o incidente
+        livro.fee_valuation_sem_lastro(
+            moeda="BNB", quantidade=Decimal("2"), rate=Decimal("300"),
+            fonte="binance ticker", em="2026-09-14T23:00:00+00:00",
+            incident_id=inc["incident_id"])
+        # processo B: livro RESTAURADO do estado compartilhado; incidente OPEN
+        livro_b = Ledger.from_transactions(livro.export_transactions(),
+                                           currency="USDT")
+        risco_b = RiskEngine(m, carteira=livro_b)
+        risco_b.restaurar_incidentes(risco.incidentes_doc())
+        risco_b.aplicar_valoracao(inc["incident_id"], actor=Ator(),
+                                  evidence="processo B")
+        lanc = [t for t in livro_b.export_transactions()
+                if t["kind"] == "fee_valuation"]
+        assert len(lanc) == 1, "processo B lançou a valoração de novo"

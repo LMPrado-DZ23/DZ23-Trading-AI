@@ -1037,6 +1037,18 @@ class RiskEngine:
                          Decimal("0"))
 
         with self._lock_settlement:
+            # FRONTEIRA DE CONCORRÊNCIA (B6): `_lock_settlement` é um RLock de
+            # PROCESSO. Ele serializa a janela "não existe -> existe" dentro
+            # deste processo (testes de 4 threads e de escrita lenta provam UM
+            # lançamento). ENTRE processos que compartilham o estado por
+            # export/restore, a segurança vem da ADOÇÃO abaixo (o retry acha o
+            # lançamento do processo anterior e o adota, sem lançar de novo).
+            # O que este nível NÃO garante é a corrida entre DOIS processos com
+            # livros em memória DIVERGENTES e sem reconciliação: o livro em
+            # memória não tem constraint única compartilhada. Isso está
+            # documentado como BLOCKED_BY_ARCHITECTURE(multiprocess) em
+            # docs/finalization/BLOCKERS.md; o ponto de imposição passa a ser
+            # UNIQUE(fee_component_id) no ledger em Postgres quando ele existir.
             # Recuperação: o lançamento pode já existir de um processo que
             # caiu entre o livro e o incidente.
             ja = self.carteira.find_fee_valuation(incident_id)
