@@ -111,3 +111,122 @@ def test_b7_id_continua_fora_da_impressao():
     base = {"moeda": "BNB", "quantidade": Decimal("2"), "rate": Decimal("300"),
             "fonte": "x", "em": _EM}
     assert _FP(**base, valuation_id="A") == _FP(**base, valuation_id="B")
+
+
+# ===========================================================================
+# BLOCKERS 2 e 3 — valoração operacional: exige lastro e SOMA EXATA
+# ===========================================================================
+def _livro(capital="10000"):
+    return Ledger(opening_cash=Decimal(capital))
+
+
+def _cobrar(livro, qtd, moeda="BNB", ref="a", fill_id=""):
+    """Registra um componente de taxa nativo e devolve o id recém-criado."""
+    antes = {c["fee_component_id"] for c in livro.fee_components(moeda)}
+    livro.reserve(Decimal("100"), ref=ref, reservation_id=f"R{ref}")
+    livro.fill_buy("BTC/USDT", Decimal("1"), Decimal("90"), Decimal("0"),
+                   reserved=Decimal("100"), ref=ref, agent_id="A",
+                   reservation_id=f"R{ref}",
+                   native_fees=[(Decimal(qtd), moeda)], fill_id=fill_id or ref)
+    novos = [c["fee_component_id"] for c in livro.fee_components(moeda)
+             if c["fee_component_id"] not in antes]
+    assert len(novos) == 1, "o fill não registrou exatamente um componente"
+    return novos[0]
+
+
+def test_b3_lista_vazia_recusa():
+    """Mutação D: lista vazia NÃO pode criar valoração — sem lastro nenhum."""
+    livro = _livro()
+    _cobrar(livro, "2")
+    with pytest.raises(ValueError, match="fee_component_ids|lastro"):
+        livro.fee_valuation(moeda="BNB", quantidade=Decimal("2"),
+                            rate=Decimal("300"), fonte="x", em=_EM,
+                            fee_component_ids=[])
+
+
+def test_b3_duplicado_recusa():
+    """Mutação C: um componente citado duas vezes lastraria o dobro."""
+    livro = _livro()
+    cid = _cobrar(livro, "2")
+    with pytest.raises(ValueError, match="duplicad"):
+        livro.fee_valuation(moeda="BNB", quantidade=Decimal("4"),
+                            rate=Decimal("300"), fonte="x", em=_EM,
+                            fee_component_ids=[cid, cid])
+
+
+def test_b3_inexistente_recusa():
+    livro = _livro()
+    _cobrar(livro, "2")
+    with pytest.raises(ValueError, match="inexistente|valorado"):
+        livro.fee_valuation(moeda="BNB", quantidade=Decimal("2"),
+                            rate=Decimal("300"), fonte="x", em=_EM,
+                            fee_component_ids=["fc_naoexiste00"])
+
+
+def test_b3_ja_valorado_recusa():
+    livro = _livro()
+    cid = _cobrar(livro, "2")
+    livro.fee_valuation(moeda="BNB", quantidade=Decimal("2"),
+                        rate=Decimal("300"), fonte="x", em=_EM,
+                        fee_component_ids=[cid])
+    with pytest.raises(ValueError, match="valorado|inexistente"):
+        livro.fee_valuation(moeda="BNB", quantidade=Decimal("2"),
+                            rate=Decimal("400"), fonte="y", em=_EM,
+                            fee_component_ids=[cid])
+
+
+def test_b3_cross_currency_recusa():
+    """Componente de SOL não lastreia valoração de BNB."""
+    livro = _livro()
+    _cobrar(livro, "2", moeda="BNB", ref="a", fill_id="F1")
+    sol = _cobrar(livro, "3", moeda="SOL", ref="b", fill_id="F2")
+    with pytest.raises(ValueError, match="inexistente|valorado"):
+        livro.fee_valuation(moeda="BNB", quantidade=Decimal("3"),
+                            rate=Decimal("300"), fonte="x", em=_EM,
+                            fee_component_ids=[sol])
+
+
+def test_b2_componente_maior_que_quantidade_recusa():
+    """Mutação B: 2 BNB não pode valorar quantidade 1 (marcaria VALUED o resto)."""
+    livro = _livro()
+    cid = _cobrar(livro, "2")
+    with pytest.raises(ValueError, match="soma|quantidade"):
+        livro.fee_valuation(moeda="BNB", quantidade=Decimal("1"),
+                            rate=Decimal("300"), fonte="x", em=_EM,
+                            fee_component_ids=[cid])
+    # nada sumiu: o componente segue disponível
+    disp = [c["fee_component_id"]
+            for c in livro.fee_components("BNB", apenas_nao_valorados=True)]
+    assert disp == [cid]
+
+
+def test_b2_soma_diferente_recusa():
+    """0.7 + 0.7 = 1.4 não valora quantidade 1."""
+    livro = _livro()
+    a = _cobrar(livro, "0.7", ref="a", fill_id="F1")
+    b = _cobrar(livro, "0.7", ref="b", fill_id="F2")
+    with pytest.raises(ValueError, match="soma|quantidade"):
+        livro.fee_valuation(moeda="BNB", quantidade=Decimal("1"),
+                            rate=Decimal("300"), fonte="x", em=_EM,
+                            fee_component_ids=[a, b])
+
+
+def test_b2_soma_exata_aceita_e_valora_todos():
+    """0.4 + 0.6 = 1 valora quantidade 1 e marca os DOIS componentes."""
+    livro = _livro()
+    a = _cobrar(livro, "0.4", ref="a", fill_id="F1")
+    b = _cobrar(livro, "0.6", ref="b", fill_id="F2")
+    livro.fee_valuation(moeda="BNB", quantidade=Decimal("1"),
+                        rate=Decimal("300"), fonte="x", em=_EM,
+                        fee_component_ids=[a, b])
+    assert livro.fee_components("BNB", apenas_nao_valorados=True) == []
+    assert livro.balance("FEES:USDT") == Decimal("300")
+
+
+def test_b3_legacy_sem_lastro_explicito():
+    """A API de compat existe, é SEPARADA e explícita: não exige ids."""
+    livro = _livro()
+    _cobrar(livro, "2")
+    livro.fee_valuation_sem_lastro(moeda="BNB", quantidade=Decimal("2"),
+                                   rate=Decimal("300"), fonte="x", em=_EM)
+    assert livro.balance("FEES:USDT") == Decimal("600")

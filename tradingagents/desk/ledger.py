@@ -410,27 +410,82 @@ class Ledger:
 
     def fee_valuation(self, *, moeda: str, quantidade: Decimal,
                       rate: Decimal, fonte: str, em: str,
+                      fee_component_ids: list,
                       incident_id: str = "",
-                      fee_component_ids: list | None = None,
                       valuation_id: str = "",
                       policy_version: str = "") -> Transaction:
-        """Converte a taxa registrada em outra moeda para a de cotação.
+        """API OPERACIONAL: valora a taxa com LASTRO obrigatório.
 
-        Enquanto isto não acontece, a taxa existe no livro na moeda original
-        e o custo real em cotação é desconhecido. A procedência da cotação
-        vai no memo: sem ela, ninguém audita de onde saiu o número.
+        Exige a lista de componentes que estão sendo convertidos e cobre a
+        quantidade EXATA deles — nem sobra, nem parte. Sem isso, um
+        componente de 2 BNB marcaria VALUED enquanto só 1 foi valorado, e a
+        outra unidade sumiria do controle de ativo descoberto.
+
+        Validações (todas recusam, nenhuma silenciosa):
+        - lista não vazia (sem lastro não há prova de qual cobrança converteu);
+        - sem duplicados (um componente financia UMA valoração);
+        - todos existentes, na moeda `moeda` e ainda NÃO valorados;
+        - soma dos componentes == `quantidade`.
+        """
+        ids = list(fee_component_ids or [])
+        if not ids:
+            raise ValueError(
+                "valoração operacional exige fee_component_ids: sem lastro a "
+                "valoração não prova qual cobrança está convertendo. Para a "
+                "mecânica sem lastro use fee_valuation_sem_lastro (compat)")
+        if len(ids) != len(set(ids)):
+            raise ValueError(
+                f"fee_component_ids com duplicados: {ids}. Um componente "
+                "financia UMA valoração — citá-lo duas vezes lastraria o dobro")
+        disponiveis = {c["fee_component_id"]: c
+                       for c in self.fee_components(moeda, True)}
+        ausentes = [c for c in ids if c not in disponiveis]
+        if ausentes:
+            raise ValueError(
+                f"componentes já valorados ou inexistentes: {ausentes}. "
+                "Um componente financia UMA valoração")
+        soma = sum((Decimal(str(disponiveis[c]["amount"])) for c in ids), ZERO)
+        if soma != quantidade:
+            raise ValueError(
+                f"soma dos componentes ({soma} {moeda}) diferente da "
+                f"quantidade valorada ({quantidade} {moeda}): a valoração "
+                "cobre a quantidade EXATA dos componentes, sem sobra nem parte")
+        return self._valorar(
+            moeda=moeda, quantidade=quantidade, rate=rate, fonte=fonte, em=em,
+            fee_component_ids=ids, incident_id=incident_id,
+            valuation_id=valuation_id, policy_version=policy_version)
+
+    def fee_valuation_sem_lastro(self, *, moeda: str, quantidade: Decimal,
+                                 rate: Decimal, fonte: str, em: str,
+                                 incident_id: str = "",
+                                 valuation_id: str = "",
+                                 policy_version: str = "") -> Transaction:
+        """COMPAT: valoração SEM lastro por componente. Não usar em fluxo novo.
+
+        Mantida, explicitamente separada da API operacional, apenas para os
+        chamadores antigos que exercitam a MECÂNICA da valoração (lado nativo
+        intacto, passivo funcional, FX) sem se importar com a identidade do
+        componente. Não prova qual cobrança converteu — por isso é uma porta
+        distinta, com nome que denuncia o que ela deixa de fora.
+        """
+        return self._valorar(
+            moeda=moeda, quantidade=quantidade, rate=rate, fonte=fonte, em=em,
+            fee_component_ids=[], incident_id=incident_id,
+            valuation_id=valuation_id, policy_version=policy_version)
+
+    def _valorar(self, *, moeda: str, quantidade: Decimal, rate: Decimal,
+                 fonte: str, em: str, fee_component_ids: list,
+                 incident_id: str, valuation_id: str,
+                 policy_version: str) -> Transaction:
+        """Núcleo do lançamento de valoração, comum às duas portas.
+
+        Enquanto a conversão não acontece, a taxa existe no livro na moeda
+        original e o custo real em cotação é desconhecido. A procedência da
+        cotação vai no memo: sem ela, ninguém audita de onde saiu o número.
         """
         if quantidade <= ZERO or rate <= ZERO:
             raise ValueError("valoração exige quantidade e cotação positivas")
         ids = list(fee_component_ids or [])
-        if ids:
-            disponiveis = {c["fee_component_id"]
-                           for c in self.fee_components(moeda, True)}
-            ja_usados = [c for c in ids if c not in disponiveis]
-            if ja_usados:
-                raise ValueError(
-                    f"componentes já valorados ou inexistentes: {ja_usados}. "
-                    "Um componente financia UMA valoração")
         memo = (f"taxa {quantidade} {moeda} valorada a {rate} "
                 f"{self.currency}/{moeda} | fonte {fonte} | em {em}")
         valor = (quantidade * rate).quantize(Decimal("0.00000001"))

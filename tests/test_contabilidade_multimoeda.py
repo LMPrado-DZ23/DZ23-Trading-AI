@@ -59,7 +59,7 @@ class TestSubledgerNativo:
 class TestConversaoDeclarada:
     def test_the_conversion_states_both_sides(self):
         livro = livro_com_taxa("BNB", "2")
-        tx = livro.fee_valuation(moeda="BNB", quantidade=Decimal("2"),
+        tx = livro.fee_valuation_sem_lastro(moeda="BNB", quantidade=Decimal("2"),
                                  rate=Decimal("300"), fonte="binance",
                                  em="2026-09-14T23:00:00+00:00")
         d = livro.find_transaction(tx.tx_id)
@@ -70,7 +70,7 @@ class TestConversaoDeclarada:
 
     def test_the_functional_side_is_a_real_expense(self):
         livro = livro_com_taxa("BNB", "2")
-        livro.fee_valuation(moeda="BNB", quantidade=Decimal("2"),
+        livro.fee_valuation_sem_lastro(moeda="BNB", quantidade=Decimal("2"),
                             rate=Decimal("300"), fonte="binance",
                             em="2026-09-14T23:00:00+00:00")
         assert livro.balance("FEES:USDT") == Decimal("600")
@@ -82,7 +82,7 @@ class TestConversaoDeclarada:
         Zerar a perna nativa aqui faria a taxa em BNB sumir do livro sem
         ninguém ter pago nada."""
         livro = livro_com_taxa("BNB", "2")
-        livro.fee_valuation(moeda="BNB", quantidade=Decimal("2"),
+        livro.fee_valuation_sem_lastro(moeda="BNB", quantidade=Decimal("2"),
                             rate=Decimal("300"), fonte="binance",
                             em="2026-09-14T23:00:00+00:00")
         nativo = livro.native_balances()
@@ -92,7 +92,7 @@ class TestConversaoDeclarada:
     def test_the_conversion_account_is_not_a_dimensionless_bucket(self):
         """FX:CONVERSION não pode absorver a diferença entre 2 e 600."""
         livro = livro_com_taxa("BNB", "2")
-        livro.fee_valuation(moeda="BNB", quantidade=Decimal("2"),
+        livro.fee_valuation_sem_lastro(moeda="BNB", quantidade=Decimal("2"),
                             rate=Decimal("300"), fonte="binance",
                             em="2026-09-14T23:00:00+00:00")
         fx = livro.balance("FX:CONVERSION")
@@ -132,7 +132,7 @@ class TestLancamentoQueMisturaUnidades:
 
     def test_the_valuation_declares_both_sides(self):
         livro = livro_com_taxa("BNB", "2")
-        tx = livro.fee_valuation(moeda="BNB", quantidade=Decimal("2"),
+        tx = livro.fee_valuation_sem_lastro(moeda="BNB", quantidade=Decimal("2"),
                                  rate=Decimal("300"), fonte="binance",
                                  em="2026-09-14T23:00:00+00:00")
         d = livro.find_transaction(tx.tx_id)
@@ -142,7 +142,7 @@ class TestLancamentoQueMisturaUnidades:
 
     def test_the_declaration_survives_a_restart(self):
         livro = livro_com_taxa("BNB", "2")
-        tx = livro.fee_valuation(moeda="BNB", quantidade=Decimal("2"),
+        tx = livro.fee_valuation_sem_lastro(moeda="BNB", quantidade=Decimal("2"),
                                  rate=Decimal("300"), fonte="binance",
                                  em="2026-09-14T23:00:00+00:00")
         restaurado = Ledger.from_transactions(livro.export_transactions(),

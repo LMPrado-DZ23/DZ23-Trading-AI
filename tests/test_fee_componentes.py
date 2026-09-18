@@ -130,7 +130,7 @@ class TestValorarNaoQuitaAOrigem:
         """Valorar responde QUANTO valem 2 BNB. Não financia os 2 BNB."""
         livro = self._com_taxa_nativa()
         assert livro.balance("ASSET:BNB") == Decimal("-2")
-        livro.fee_valuation(moeda="BNB", quantidade=Decimal("2"),
+        livro.fee_valuation_sem_lastro(moeda="BNB", quantidade=Decimal("2"),
                             rate=Decimal("300"), fonte="binance",
                             em="2026-09-14T23:00:00+00:00")
         assert livro.balance("ASSET:BNB") == Decimal("-2"), (
@@ -138,7 +138,7 @@ class TestValorarNaoQuitaAOrigem:
 
     def test_the_functional_side_creates_a_liability(self):
         livro = self._com_taxa_nativa()
-        livro.fee_valuation(moeda="BNB", quantidade=Decimal("2"),
+        livro.fee_valuation_sem_lastro(moeda="BNB", quantidade=Decimal("2"),
                             rate=Decimal("300"), fonte="binance",
                             em="2026-09-14T23:00:00+00:00")
         assert livro.balance("FEES:USDT") == Decimal("600")
@@ -153,7 +153,7 @@ class TestValorarNaoQuitaAOrigem:
                        reserved=Decimal("100"), ref="o", agent_id="A",
                        reservation_id="R1",
                        fee_in_other_currency=(Decimal("2"), "BNB"))
-        livro.fee_valuation(moeda="BNB", quantidade=Decimal("2"),
+        livro.fee_valuation_sem_lastro(moeda="BNB", quantidade=Decimal("2"),
                             rate=Decimal("300"), fonte="binance",
                             em="2026-09-14T23:00:00+00:00")
         assert risco.execution_blockers(), (
@@ -226,7 +226,7 @@ class TestValidacaoDimensionalPorTransacao:
                        reserved=Decimal("100"), ref="o", agent_id="A",
                        reservation_id="R1",
                        fee_in_other_currency=(Decimal("2"), "BNB"))
-        livro.fee_valuation(moeda="BNB", quantidade=Decimal("2"),
+        livro.fee_valuation_sem_lastro(moeda="BNB", quantidade=Decimal("2"),
                             rate=Decimal("300"), fonte="binance",
                             em="2026-09-14T23:00:00+00:00")
         assert livro.is_balanced()

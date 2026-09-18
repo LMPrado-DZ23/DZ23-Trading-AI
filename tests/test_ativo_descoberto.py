@@ -188,7 +188,7 @@ class TestContaDeConversao:
         diferença entre 2 BNB e 600 USDT."""
         m, risco, livro = sistema()
         taxa_em(livro, "BNB", "2", "a")
-        livro.fee_valuation(moeda="BNB", quantidade=Decimal("2"),
+        livro.fee_valuation_sem_lastro(moeda="BNB", quantidade=Decimal("2"),
                             rate=Decimal("300"), fonte="binance",
                             em="2026-09-14T23:00:00+00:00")
         assert livro.balance("LIABILITY:FEE_FUNDING") != Decimal("0")
@@ -197,7 +197,7 @@ class TestContaDeConversao:
     def test_the_risk_engine_can_read_it(self):
         m, risco, livro = sistema()
         taxa_em(livro, "BNB", "2", "a")
-        livro.fee_valuation(moeda="BNB", quantidade=Decimal("2"),
+        livro.fee_valuation_sem_lastro(moeda="BNB", quantidade=Decimal("2"),
                             rate=Decimal("300"), fonte="x",
                             em="2026-09-14T23:00:00+00:00")
         assert risco.conversao_acumulada() == livro.balance(
@@ -207,7 +207,7 @@ class TestContaDeConversao:
     def test_it_is_not_silently_treated_as_profit(self):
         m, risco, livro = sistema()
         taxa_em(livro, "BNB", "2", "a")
-        livro.fee_valuation(moeda="BNB", quantidade=Decimal("2"),
+        livro.fee_valuation_sem_lastro(moeda="BNB", quantidade=Decimal("2"),
                             rate=Decimal("300"), fonte="x",
                             em="2026-09-14T23:00:00+00:00")
         assert all(v == Decimal("0") for v in livro.attribution().values()) \

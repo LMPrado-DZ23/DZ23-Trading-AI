@@ -156,7 +156,7 @@ class TestExactlyOnce:
         taxa_no_livro(livro, "BNB", "2")
         inc = incidente(risco, "BNB", "2")
         propor(risco, inc)
-        tx = livro.fee_valuation(moeda="BNB", quantidade=Decimal("2"),
+        tx = livro.fee_valuation_sem_lastro(moeda="BNB", quantidade=Decimal("2"),
                                  rate=Decimal("300"), fonte="binance ticker",
                                  em="2026-09-14T23:00:00+00:00",
                                  incident_id=inc["incident_id"])
