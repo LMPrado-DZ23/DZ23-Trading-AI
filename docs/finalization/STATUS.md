@@ -92,8 +92,20 @@ real como fonte de verdade, conforme a regra do próprio prompt.
 
 ## Próximos três itens
 
-1. **F3** — valoração por OCORRÊNCIA: uma cotação por horário/ocorrência, não
-   uma cotação única aplicada a taxas de instantes diferentes.
+1. **F3** — valoração por OCORRÊNCIA (branch `fase1-f3-f4`). Análise de projeto:
+   - Hoje `valorar_taxa`/`aplicar_valoracao` aplicam UMA cotação (`rate`,`em`) ao
+     agregado do incidente (que soma ocorrências de horários diferentes). Duas
+     taxas cobradas em instantes distintos recebem a mesma cotação — o dano do F3.
+   - Cada ocorrência já guarda `at`; cada componente guarda `occurred_at` (B5).
+   - **Cuidado**: um guard ingênuo de "instantes distintos" MISFIRA — ocorrências
+     criadas em sequência recebem `at = utcnow()` quase idêntico. A semântica
+     correta é a cotação ser válida para o instante de CADA ocorrência (janela de
+     tolerância) e/ou uma cotação por ocorrência, não unicidade de timestamp.
+   - **Design pretendido**: `valorar_taxa` aceita cotação por ocorrência (ou por
+     bucket de tempo dentro de tolerância); `aplicar_valoracao` posta a conversão
+     por ocorrência, cada uma com seu fingerprint/lastro. Reaproveitar o batch
+     congelado (B4) e a identidade estruturada (B5). É um CICLO próprio (TDD +
+     mutação), não um guard rápido — não fazer às pressas.
 2. **F4** — liquidação do passivo funcional `LIABILITY:FEE_FUNDING` (hoje
    nunca zera): o aporte/compra do ativo descoberto quita o passivo.
 3. **Máquina do fill** (`RECEIVED → APPLYING → COMMITTED`) — **PARAR PARA
@@ -107,9 +119,6 @@ real como fonte de verdade, conforme a regra do próprio prompt.
 > só o subconjunto do kernel (py3.14). Antes de F3/F4 e de qualquer redeploy,
 > gate 1 verde no CI.
 
-Depois de B2–B6: F3 (valoração por ocorrência), F4 (`LIABILITY:FEE_FUNDING`),
-e a máquina do fill `RECEIVED → APPLYING → COMMITTED` (parar para auditoria
-antes desta).
 
 ## Dependências externas
 
