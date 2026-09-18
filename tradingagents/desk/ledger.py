@@ -825,6 +825,20 @@ class Ledger:
                 return tx
         return None
 
+    def find_fee_valuation_component(self, incident_id: str,
+                                     fee_component_id: str) -> dict | None:
+        """Lançamento de valoração DESTE componente neste incidente (F3).
+
+        Cada componente tem sua própria valoração; a busca por incidente só
+        não basta quando há várias. A identidade é o `fee_component_id`.
+        """
+        for tx in self.export_transactions():
+            if (tx.get("kind") == "fee_valuation"
+                    and tx.get("incident_id") == incident_id
+                    and fee_component_id in (tx.get("fee_component_ids") or [])):
+                return tx
+        return None
+
     def find_incident_compensation(self, incident_id: str,
                                    settlement_id: str) -> dict | None:
         """A compensação DESTA liquidação — exige os dois identificadores.

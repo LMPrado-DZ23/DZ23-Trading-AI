@@ -906,17 +906,53 @@ class RiskEngine:
         self._incidentes[chave] = inc
         return inc["incident_id"]
 
-    def valorar_taxa(self, incident_id: str, *, rate, fonte: str, em) -> dict:
-        """Informa a cotação usada para valorar a taxa.
+    def valorar_taxa(self, incident_id: str, *, rate=None, fonte=None, em=None,
+                     cotacoes: dict | None = None) -> dict:
+        """Propõe cotação(ões) para valorar a taxa — POR COMPONENTE (F3).
 
-        Exige cotação, FONTE e instante: sem procedência, ninguém consegue
-        auditar depois de onde saiu o número — e uma cotação sem origem é
-        indistinguível de um chute.
+        A identidade é o `fee_component_id`; `fill_id` é só procedência. Cada
+        componente recebe SUA cotação, fonte e instante: dois BNB cobrados em
+        horários diferentes valem a soma das conversões, nunca uma cotação
+        única aplicada ao agregado.
+
+        Duas formas:
+        - `cotacoes={fee_component_id: {rate, fonte, em}}` — explícita por
+          componente.
+        - `rate`/`fonte`/`em` — conveniência, SÓ quando há exatamente UM
+          componente não valorado; com vários exige `cotacoes` (senão seria
+          uma cotação agregada sobre ocorrências distintas).
         """
         alvo = next((i for i in self._incidentes.values()
                      if i["incident_id"] == incident_id), None)
         if alvo is None:
             raise ValueError(f"incidente {incident_id} não encontrado")
+        moeda = alvo["fee_currency"]
+        if cotacoes is not None:
+            return self._propor_por_componente(alvo, moeda, cotacoes)
+        # CONVENIÊNCIA (agregado por moeda): uma cotação só é válida quando há
+        # no máximo UM componente não valorado. Com vários seria uma cotação
+        # única sobre ocorrências distintas — recusa (use cotacoes).
+        self._exige_cotacao(rate, fonte, em)
+        quantidade = Decimal(alvo["fee_amount"])
+        ids = self._batch_para_valorar(moeda, quantidade)
+        if len(ids) > 1:
+            raise ValueError(
+                "cotação agregada sobre várias ocorrências: informe cotacoes "
+                "por fee_component_id (uma cotação por componente), não uma "
+                "única sobre o agregado")
+        alvo.pop("component_valuations", None)   # modo agregado (legado)
+        cot = Decimal(str(rate))
+        alvo["valuation"] = {
+            "status": "PROPOSTA", "modo": "agregado",
+            "rate": str(cot), "fonte": str(fonte).strip(), "em": str(em),
+            "moeda": moeda, "quote_currency": alvo["quote_currency"],
+            "valor_em_cotacao": str(quantidade * cot),
+            "quantidade": str(quantidade), "fee_component_ids": ids,
+        }
+        return alvo
+
+    @staticmethod
+    def _exige_cotacao(rate, fonte, em) -> None:
         if rate is None or Decimal(str(rate)) <= 0:
             raise ValueError(
                 "valorar exige a cotação (taxa de câmbio) usada, positiva")
@@ -926,26 +962,51 @@ class RiskEngine:
                 "indistinguível de um chute")
         if not em:
             raise ValueError("valorar exige o instante da cotação")
-        cotacao = Decimal(str(rate))
-        quantidade = Decimal(alvo["fee_amount"])
-        # CONGELA o batch: a proposta vale para os componentes NÃO valorados
-        # AGORA que somam esta quantidade. Uma taxa que chegar depois é outra
-        # ocorrência — sem o congelamento, `aplicar_valoracao` releria o
-        # fee_amount e varreria os componentes de novo, aplicando esta cotação
-        # a uma quantidade maior do que a proposta cobria.
-        ids_congelados = self._batch_para_valorar(alvo["fee_currency"],
-                                                  quantidade)
+
+    def _propor_por_componente(self, alvo: dict, moeda: str,
+                               cotacoes: dict) -> dict:
+        """Proposta EXPLÍCITA por fee_component_id (F3)."""
+        disponiveis = {}
+        if hasattr(self.carteira, "fee_components"):
+            disponiveis = {c["fee_component_id"]: c
+                           for c in self.carteira.fee_components(moeda, True)}
+        pedido = dict(cotacoes)
+        if not pedido:
+            raise ValueError("valorar exige ao menos uma cotação de componente")
+        comp_vals = {}
+        for cid, q in pedido.items():
+            if cid not in disponiveis:
+                raise ValueError(
+                    f"componente {cid} não é um componente não valorado de "
+                    f"{moeda} deste incidente")
+            self._exige_cotacao(q.get("rate"), q.get("fonte"), q.get("em"))
+            c = disponiveis[cid]
+            amount = Decimal(str(c["amount"]))
+            rr = Decimal(str(q["rate"]))
+            comp_vals[cid] = {
+                "fee_component_id": cid, "fill_id": c.get("fill_id", ""),
+                "order_id": c.get("order_id", ""), "amount": str(amount),
+                "native_currency": moeda,
+                "occurred_at": c.get("occurred_at", ""),
+                "source": str(q["fonte"]).strip(), "rate": str(rr),
+                "valued_at": str(q["em"]),
+                "functional_currency": alvo["quote_currency"],
+                "functional_amount": str(amount * rr),
+                "valuation_status": "PROPOSTA",
+            }
+        alvo["component_valuations"] = comp_vals
+        total = sum((Decimal(cv["functional_amount"])
+                     for cv in comp_vals.values()), Decimal("0"))
+        qtd = sum((Decimal(cv["amount"]) for cv in comp_vals.values()),
+                  Decimal("0"))
+        primeira = next(iter(comp_vals.values()))
         alvo["valuation"] = {
-            # PROPOSTA: anotar a cotação não move dinheiro nem encerra nada.
-            # Sem essa distinção, o incidente parecia resolvido e o livro
-            # continuava sem saber quanto a operação custou.
-            "status": "PROPOSTA",
-            "rate": str(cotacao), "fonte": str(fonte).strip(),
-            "em": str(em), "moeda": alvo["fee_currency"],
+            "status": "PROPOSTA", "modo": "por_componente", "moeda": moeda,
             "quote_currency": alvo["quote_currency"],
-            "valor_em_cotacao": str(quantidade * cotacao),
-            "quantidade": str(quantidade),
-            "fee_component_ids": ids_congelados,
+            "quantidade": str(qtd), "valor_em_cotacao": str(total),
+            "fee_component_ids": list(comp_vals.keys()),
+            "rate": primeira["rate"], "fonte": primeira["source"],
+            "em": primeira["valued_at"],
         }
         return alvo
 
@@ -1000,28 +1061,21 @@ class RiskEngine:
                 "antes, com cotação, fonte e instante")
         if self.carteira is None:
             raise ValueError("sem carteira não há onde lançar a valoração")
+        if v.get("modo") == "por_componente":
+            return self._aplicar_por_componente(
+                alvo, incident_id, actor_id, evidence, valuation_id, v)
+        return self._aplicar_agregado(
+            alvo, incident_id, actor_id, evidence, valuation_id, v)
 
+    def _aplicar_agregado(self, alvo: dict, incident_id: str, actor_id: str,
+                          evidence: str, valuation_id: str, v: dict) -> dict:
+        """Modo LEGADO (agregado por moeda): uma valoração por incidente,
+        para componente único ou cotação única. Mantido intacto."""
         import uuid as _uuid
         vid = valuation_id or v.get("valuation_id") or (
             "val_" + _uuid.uuid4().hex[:12])
-        # Id que ESTE processo trouxe. Se adotarmos um lancamento ja existente,
-        # a identidade canonica passa a ser a DELE e este vira apenas alias.
         requested_vid = ""
-        # QUANTIDADE CONGELADA na proposta: aplicar NÃO relê o fee_amount (que
-        # pode ter crescido com taxas novas depois da proposta). Vale o que a
-        # proposta cobria; o resto é outra ocorrência.
         quantidade = Decimal(v.get("quantidade") or alvo["fee_amount"])
-
-        # LASTRO NATIVO: só se converte o que está REGISTRADO na moeda. O
-        # incidente é a declaração do problema; o livro é a prova de que a
-        # taxa existe. Converter além do lastro inventaria taxa que ninguém
-        # lançou — e resolveria um incidente por decreto.
-        # LASTRO POR COMPONENTE: o saldo `FEES:<moeda>` é histórico e
-        # permanece depois de uma valoração. Usá-lo como prova deixaria a
-        # taxa antiga, já convertida, financiar uma dívida nova.
-        # BATCH CONGELADO: usa só os componentes que a PROPOSTA fixou, e apenas
-        # os que continuam não valorados. Um componente da proposta já valorado
-        # por outro processo derruba o lastro e o conflito aparece aqui.
         disponiveis = []
         if hasattr(self.carteira, "fee_components"):
             nao_valorados = self.carteira.fee_components(
@@ -1035,38 +1089,15 @@ class RiskEngine:
                 disponiveis = nao_valorados
         registrado = sum((Decimal(str(c["amount"])) for c in disponiveis),
                          Decimal("0"))
-
         with self._lock_settlement:
-            # FRONTEIRA DE CONCORRÊNCIA (B6): `_lock_settlement` é um RLock de
-            # PROCESSO. Ele serializa a janela "não existe -> existe" dentro
-            # deste processo (testes de 4 threads e de escrita lenta provam UM
-            # lançamento). ENTRE processos que compartilham o estado por
-            # export/restore, a segurança vem da ADOÇÃO abaixo (o retry acha o
-            # lançamento do processo anterior e o adota, sem lançar de novo).
-            # O que este nível NÃO garante é a corrida entre DOIS processos com
-            # livros em memória DIVERGENTES e sem reconciliação: o livro em
-            # memória não tem constraint única compartilhada. Isso está
-            # documentado como BLOCKED_BY_ARCHITECTURE(multiprocess) em
-            # docs/finalization/BLOCKERS.md; o ponto de imposição passa a ser
-            # UNIQUE(fee_component_id) no ledger em Postgres quando ele existir.
-            # Recuperação: o lançamento pode já existir de um processo que
-            # caiu entre o livro e o incidente.
             ja = self.carteira.find_fee_valuation(incident_id)
             if ja is not None:
-                # CONFERE O CONTEÚDO antes de adotar. Adotar o lançamento
-                # antigo e gravar os metadados novos por cima produziria um
-                # registro dizendo 400 e um lançamento dizendo 300.
                 esperada = self.carteira.fingerprint_de_valoracao(
                     moeda=alvo["fee_currency"], quantidade=quantidade,
                     rate=Decimal(v["rate"]), fonte=v["fonte"], em=v["em"],
                     fee_component_ids=list(ja.get("fee_component_ids") or []),
                     incident_id=incident_id,
                     valuation_id=ja.get("valuation_id", ""),
-                    # A impressão original foi feita com a moeda funcional e a
-                    # política DAQUELE momento: recomputar com as de agora
-                    # transformaria uma troca de política numa divergência de
-                    # conteúdo. Migração é ato explícito, não efeito colateral
-                    # da retomada.
                     functional_currency=ja.get("functional_currency", ""),
                     policy_version=ja.get("valuation_policy_version", ""))
                 impressa = ja.get("valuation_fingerprint") or ""
@@ -1081,11 +1112,6 @@ class RiskEngine:
                         f"cotação {v['rate']}, fonte {v['fonte']}, em "
                         f"{v['em']}). Recupere a valoração original em vez de "
                         "sobrescrevê-la")
-                # IDENTIDADE CANONICA: adotamos o lancamento do livro; a
-                # identidade verdadeira e a DELE. Gravar o id novo por cima
-                # deixaria o incidente dizendo val-B e o livro dizendo val-A —
-                # duas identidades para a MESMA operacao. O id trazido por este
-                # processo vira alias de auditoria, nao segunda identidade.
                 if ja.get("valuation_id"):
                     requested_vid = vid
                     vid = ja["valuation_id"]
@@ -1103,7 +1129,6 @@ class RiskEngine:
                         f"{registrado} {alvo['fee_currency']} e o incidente "
                         f"afirma {quantidade}. Converter tudo inventaria a "
                         "diferença")
-                # Consome os componentes que lastreiam ESTA valoração.
                 usados, acumulado = [], Decimal("0")
                 for c in disponiveis:
                     if acumulado >= quantidade:
@@ -1119,8 +1144,7 @@ class RiskEngine:
             if alvo["status"] == "RESOLVED":
                 return alvo
             alvo["valuation"] = {**v, "status": "APLICADA",
-                                 "valuation_id": vid,
-                                 "ledger_tx_id": tx_id,
+                                 "valuation_id": vid, "ledger_tx_id": tx_id,
                                  "aplicada_por": actor_id,
                                  "aplicada_em": utcnow().isoformat()}
             alvo["status"] = "RESOLVED"
@@ -1134,6 +1158,145 @@ class RiskEngine:
             alvo["validated_by_policy"] = True
             alvo["policy_version"] = self.POLICY_VERSION
             return alvo
+
+    def _aplicar_por_componente(self, alvo: dict, incident_id: str,
+                                actor_id: str, evidence: str, valuation_id: str,
+                                v: dict) -> dict:
+        """Modo F3: uma valoração POR COMPONENTE, cada uma com sua cotação."""
+        comp_vals = alvo.get("component_valuations") or {}
+        if not comp_vals:
+            raise ValueError("proposta por componente sem componentes")
+        single = len(comp_vals) == 1
+        with self._lock_settlement:
+            # FRONTEIRA DE CONCORRÊNCIA (B6): `_lock_settlement` serializa a
+            # janela "não existe -> existe" dentro do processo. Entre processos
+            # que compartilham o estado por export/restore, a segurança vem da
+            # ADOÇÃO por componente abaixo. Livros em memória divergentes sem
+            # reconciliação são BLOCKED_BY_ARCHITECTURE(multiprocess).
+            aplicados = []
+            for cid, cv in comp_vals.items():
+                aplicados.append(self._aplicar_componente(
+                    incident_id, cid, cv, actor_id,
+                    valuation_id if single else "", legacy_ok=single))
+            for res in aplicados:
+                comp_vals[res["cid"]].update({
+                    "valuation_id": res["vid"], "ledger_tx_id": res["tx_id"],
+                    "valuation_fingerprint": res["fingerprint"],
+                    "valued_at": comp_vals[res["cid"]]["valued_at"],
+                    "valuation_status": "APPLIED"})
+            tx_ids = [r["tx_id"] for r in aplicados]
+            # RESOLUÇÃO só quando TODOS os componentes que o incidente POSSUI
+            # estiverem valorados. Um componente pendente mantém o incidente
+            # aberto e continua bloqueando nova exposição.
+            pendentes = self._componentes_pendentes_do_incidente(alvo)
+            primeiro = aplicados[0]
+            alvo["valuation"] = {
+                **v, "status": "APLICADA" if not pendentes else "PARCIAL",
+                "valuation_id": primeiro["vid"] if single else "",
+                "ledger_tx_id": tx_ids[0] if single else "",
+                "ledger_tx_ids": tx_ids,
+                "aplicada_por": actor_id, "aplicada_em": utcnow().isoformat()}
+            refs = {
+                "ledger_tx_ids": tx_ids,
+                "valuation_id": primeiro["vid"] if single else "",
+                "component_valuations": {
+                    r["cid"]: {"valuation_id": r["vid"],
+                               "ledger_tx_id": r["tx_id"]}
+                    for r in aplicados}}
+            if single and primeiro["requested_vid"] \
+                    and primeiro["requested_vid"] != primeiro["vid"]:
+                refs["requested_valuation_id"] = primeiro["requested_vid"]
+            alvo["resolution_refs"] = refs
+            if not pendentes:
+                alvo["status"] = "RESOLVED"
+                alvo["resolved_at"] = utcnow().isoformat()
+                alvo["resolved_by"] = actor_id
+                alvo["resolution_evidence"] = evidence
+                alvo["validated_by_policy"] = True
+                alvo["policy_version"] = self.POLICY_VERSION
+            return alvo
+
+    def _aplicar_componente(self, incident_id: str, cid: str, cv: dict,
+                            actor_id: str, valuation_id_pedido: str,
+                            legacy_ok: bool) -> dict:
+        """Aplica a valoração de UM componente: adota o lançamento existente
+        (recovery) ou posta um novo, exatamente uma vez por conteúdo."""
+        import uuid as _uuid
+        amount = Decimal(cv["amount"])
+        rate = Decimal(cv["rate"])
+        fonte, em, moeda = cv["source"], cv["valued_at"], cv["native_currency"]
+        vid = valuation_id_pedido or cv.get("valuation_id") or (
+            "val_" + _uuid.uuid4().hex[:12])
+        requested_vid = ""
+        ja = self.carteira.find_fee_valuation_component(incident_id, cid)
+        if ja is None and legacy_ok:
+            # COMPAT: recovery antigo por incidente (fee_valuation_sem_lastro,
+            # sem fee_component_ids). Só para o caso de componente único.
+            cand = self.carteira.find_fee_valuation(incident_id)
+            if cand is not None and (not cand.get("fee_component_ids")
+                                     or cid in cand.get("fee_component_ids")):
+                ja = cand
+        if ja is not None:
+            # CONFERE O CONTEÚDO antes de adotar — usando os ids DO LANÇAMENTO
+            # (um sem_lastro legado imprimiu com lista vazia).
+            esperada = self.carteira.fingerprint_de_valoracao(
+                moeda=moeda, quantidade=amount, rate=rate, fonte=fonte, em=em,
+                fee_component_ids=list(ja.get("fee_component_ids") or []),
+                incident_id=incident_id,
+                valuation_id=ja.get("valuation_id", ""),
+                functional_currency=ja.get("functional_currency", ""),
+                policy_version=ja.get("valuation_policy_version", ""))
+            impressa = ja.get("valuation_fingerprint") or ""
+            if impressa and impressa != esperada:
+                raise RecoveryConflict(
+                    f"o componente {cid} do incidente {incident_id} já tem a "
+                    f"valoração {ja.get('valuation_id') or '(sem id)'} com "
+                    f"outro conteúdo (lançamento: {ja.get('native_amount')} "
+                    f"{ja.get('native_currency')} -> "
+                    f"{ja.get('functional_amount')} "
+                    f"{ja.get('functional_currency')}; proposta atual: cotação "
+                    f"{cv['rate']}, fonte {fonte}, em {em}). Recupere a "
+                    "valoração original em vez de sobrescrevê-la")
+            # IDENTIDADE CANÔNICA: adota o id DO LIVRO; o trazido vira alias.
+            if ja.get("valuation_id"):
+                requested_vid = vid
+                vid = ja["valuation_id"]
+            return {"cid": cid, "vid": vid, "requested_vid": requested_vid,
+                    "tx_id": ja["tx_id"],
+                    "fingerprint": ja.get("valuation_fingerprint", "")}
+        # Sem lançamento: o componente precisa estar REGISTRADO e não valorado.
+        disp = {c["fee_component_id"] for c in
+                self.carteira.fee_components(moeda, apenas_nao_valorados=True)}
+        if cid not in disp:
+            raise ValueError(
+                f"lastro ausente: o componente {cid} de {moeda} não está "
+                "disponível (inexistente ou já valorado) — não há o que lançar")
+        tx = self.carteira.fee_valuation(
+            moeda=moeda, quantidade=amount, rate=rate, fonte=fonte, em=em,
+            incident_id=incident_id, fee_component_ids=[cid], valuation_id=vid,
+            policy_version=self.POLICY_VERSION)
+        return {"cid": cid, "vid": vid, "requested_vid": requested_vid,
+                "tx_id": tx.tx_id, "fingerprint": tx.valuation_fingerprint}
+
+    def _componentes_pendentes_do_incidente(self, alvo: dict) -> list:
+        """Componentes que o incidente POSSUI e ainda não foram valorados.
+
+        Posse por linhagem de `fill_id` das ocorrências; sem fill_id nas
+        ocorrências, cai para o batch proposto. Componentes de outro fill
+        (outra ocorrência) NÃO prendem este incidente.
+        """
+        moeda = alvo["fee_currency"]
+        if not hasattr(self.carteira, "fee_components"):
+            return []
+        nao_valorados = self.carteira.fee_components(
+            moeda, apenas_nao_valorados=True)
+        fills = {o.get("fill_id") for o in alvo.get("occurrences", [])
+                 if o.get("fill_id")}
+        if fills:
+            return [c for c in nao_valorados if c.get("fill_id") in fills]
+        propostos = set((alvo.get("component_valuations") or {}).keys())
+        return [c for c in nao_valorados
+                if c["fee_component_id"] in propostos]
 
     def conferir_ativos_descobertos(self) -> list[str]:
         """Saldo negativo em ASSET:<moeda> é ativo que a mesa NÃO tem.
