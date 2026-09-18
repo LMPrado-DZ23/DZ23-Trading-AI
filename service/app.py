@@ -916,6 +916,7 @@ def runtime_for_tenant_id(tenant_id: str):
 # ================================================================== COBRANÇA
 # PIX via Woovi. O servidor só ativa plano com webhook ASSINADO (verificado
 # com a chave pública) — nada que venha do navegador libera acesso.
+from tradingagents.analytics import ConversionCounter  # noqa: E402
 from tradingagents.billing import account_state as ACCT  # noqa: E402
 from tradingagents.billing.store import SubscriptionStore  # noqa: E402
 from tradingagents.billing.woovi import (  # noqa: E402
@@ -943,6 +944,7 @@ def _build_subscription_store():
 
 
 SUBS = _build_subscription_store()
+CONV = ConversionCounter()   # conversão anônima (sem PII), em memória
 
 
 def _woovi_public_key() -> str:
@@ -1006,6 +1008,21 @@ def account_state_endpoint(request: Request, _=Depends(auth)):
     estado = ACCT.derive_state(sub)
     return {**ACCT.describe(estado), "plan": sub.plan_code,
             "expires_at": sub.expires_at.isoformat()}
+
+
+@app.post("/v1/analytics/event")
+async def analytics_event(req: Request):
+    """Evento de conversão ANÔNIMO (público). Sem PII: só nome+origem da
+    allowlist; nada de IP, e-mail ou identificador é guardado."""
+    body = await _json_body(req)
+    CONV.record(str(body.get("event", "")), str(body.get("source", "none")))
+    return {"ok": True}
+
+
+@app.get("/v1/analytics/summary")
+def analytics_summary(_=Depends(auth)):
+    """Agregado de conversão (sem PII) — para o time, atrás de login."""
+    return CONV.summary()
 
 
 @app.post("/v1/billing/checkout")

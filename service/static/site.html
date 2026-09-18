@@ -325,10 +325,16 @@ function selPlano(id){
   const eco=document.getElementById('pEco'), top=document.getElementById('pTop');
   if(economia>0){eco.textContent='Economize '+BRL(economia)+' vs mensal · '+desconto+'% off';eco.classList.remove('hide')}else{eco.classList.add('hide')}
   top.classList.toggle('hide', id!=='anual');
+  track('pricing_view', id);
 }
+// Analytics de conversão SEM PII: envia só o nome do evento + uma origem curta.
+function track(evt,origem){try{
+  const body=JSON.stringify({event:evt,source:origem||'none'});
+  if(navigator.sendBeacon){navigator.sendBeacon('/v1/analytics/event',new Blob([body],{type:'application/json'}));}
+  else{fetch('/v1/analytics/event',{method:'POST',headers:{'Content-Type':'application/json'},body,keepalive:true}).catch(()=>{});}
+}catch(e){}}
+track('page_view','landing');
 selPlano('mensal');
-// Analytics de conversão SEM PII: só o nome do evento e a origem, se houver coletor.
-function track(evt,origem){try{if(window.dz23track)window.dz23track(evt,origem);}catch(e){}}
 </script>
 <style>.hide{display:none!important}</style>
 </body></html>
