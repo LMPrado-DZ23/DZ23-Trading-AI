@@ -262,7 +262,8 @@ class Ledger:
     def fill_buy(self, instrument: str, quantity: Decimal, price: Decimal,
                  fee: Decimal, *, reserved: Decimal, ref: str = "",
                  agent_id: str = "", reservation_id: str = "",
-                 fee_in_other_currency: tuple | None = None) -> Transaction:
+                 native_fees: list | tuple | None = None,
+                  fee_in_other_currency: tuple | None = None) -> Transaction:
         """Compra executada: reserva vira posição; sobra volta ao caixa.
 
         `reserved` sai da conta DESTA reserva — nunca do bolo comum.
@@ -278,27 +279,16 @@ class Ledger:
         rest = reserved - cost - fee
         if rest != ZERO:
             entries.append(Entry(f"CASH:{self.currency}", rest, "sobra devolvida"))
-        if fee_in_other_currency:
-            valor, moeda = fee_in_other_currency
-            valor = Decimal(str(valor))
-            if moeda == self.currency:
-                raise ValueError(
-                    "fee_in_other_currency é para moeda DIFERENTE da cotação; "
-                    f"use o parâmetro fee para {self.currency}")
-            if valor != ZERO:
-                # Sai do ativo pago e entra na despesa daquela moeda. Nenhuma
-                # conversão: converter com cotação adivinhada produz um número
-                # que parece certo e não é.
-                entries.append(Entry(f"FEES:{moeda}", valor,
-                                     "corretagem em outra moeda"))
-                entries.append(Entry(f"ASSET:{moeda}", -valor,
-                                     "ativo usado para pagar a corretagem"))
+        entries.extend(self._pernas_nativas(
+            native_fees or fee_in_other_currency,
+            "corretagem em outra moeda"))
         return self._post("fill_buy", entries, ref, instrument=instrument,
                           quantity=quantity, agent_id=agent_id)
 
     def fill_sell(self, instrument: str, quantity: Decimal, price: Decimal,
                   fee: Decimal, *, cost_basis: Decimal, agent_id: str,
                   ref: str = "",
+                  native_fees: list | tuple | None = None,
                   fee_in_other_currency: tuple | None = None) -> Transaction:
         """Venda executada: baixa a posição pelo custo e atribui o resultado.
 
@@ -313,19 +303,9 @@ class Ledger:
                    Entry(f"FEES:{self.currency}", fee, "corretagem da saída"),
                    Entry(f"POSITION:{instrument}", -cost_basis, "baixa ao custo"),
                    Entry(f"PNL:{agent_id}", -bruto, "resultado bruto atribuído")]
-        if fee_in_other_currency:
-            valor, moeda = fee_in_other_currency
-            valor = Decimal(str(valor))
-            if moeda == self.currency:
-                raise ValueError(
-                    "fee_in_other_currency é para moeda DIFERENTE da cotação")
-            if valor != ZERO:
-                # Fora do PnL em cotação: descontar 5 BNB de um resultado em
-                # USDT misturaria unidades.
-                entries.append(Entry(f"FEES:{moeda}", valor,
-                                     "corretagem da saída em outra moeda"))
-                entries.append(Entry(f"ASSET:{moeda}", -valor,
-                                     "ativo usado para pagar a corretagem"))
+        entries.extend(self._pernas_nativas(
+            native_fees or fee_in_other_currency,
+            "corretagem da saída em outra moeda"))
         return self._post("fill_sell", entries, ref, instrument=instrument,
                           quantity=quantity, agent_id=agent_id)
 
@@ -512,8 +492,11 @@ class Ledger:
         escrituração nativa. Para registrar quanto o aporte VALE, use
         asset_contribution, que exige cotação, fonte e instante.
         """
-        if quantidade == ZERO:
-            raise ValueError("aporte de ativo não pode ser zero")
+        if quantidade <= ZERO:
+            raise ValueError(
+                f"aporte de ativo precisa ser positivo (recebido {quantidade}); "
+                "para retirar, use asset_withdrawal, que exige cotação, fonte "
+                "e instante")
         memo = f"{reason} | por {actor}"
         if external_reference:
             memo += f" | ref {external_reference}"
@@ -523,6 +506,38 @@ class Ledger:
                                  memo)],
                           external_reference or reason,
                           purpose="ASSET_CONTRIBUTION")
+
+    def _pernas_nativas(self, native_fees, memo: str) -> list:
+        """Uma perna por COMPONENTE nativo — nenhum pode ficar de fora.
+
+        A versão anterior aceitava uma tupla só: com BNB e SOL na mesma
+        execução, a segunda sumia do livro e ficava só no incidente.
+        """
+        if not native_fees:
+            return []
+        if isinstance(native_fees, tuple) and len(native_fees) == 2 \
+                and not isinstance(native_fees[0], (list, tuple)):
+            # Compatibilidade com o parâmetro antigo, que aceitava UMA tupla
+            # (valor, moeda). Mantido para não reescrever dezenas de chamadas
+            # numa rodada que trata de outra coisa.
+            native_fees = [native_fees]
+        pernas = []
+        for componente in native_fees:
+            valor, moeda = componente
+            valor = Decimal(str(valor))
+            if moeda == self.currency:
+                raise ValueError(
+                    "native_fees é para moedas DIFERENTES da cotação; use o "
+                    f"parâmetro fee para {self.currency}")
+            if valor == ZERO:
+                continue
+            # Sai do ativo pago e entra na despesa daquela moeda. Nenhuma
+            # conversão: converter com cotação adivinhada produz um número
+            # que parece certo e não é.
+            pernas.append(Entry(f"FEES:{moeda}", valor, memo))
+            pernas.append(Entry(f"ASSET:{moeda}", -valor,
+                                "ativo usado para pagar a corretagem"))
+        return pernas
 
     def find_fee_valuation(self, incident_id: str) -> dict | None:
         """Lançamento de valoração já feito para este incidente.

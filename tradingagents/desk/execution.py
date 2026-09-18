@@ -591,7 +591,8 @@ class ExecutionCoordinator:
     def aplicar_fill(self, rec, *, side: str, quantidade: Decimal,
                      preco: Decimal, taxa: Decimal, fill_id: str,
                      fee_currency: str = "", fees: list | None = None,
-                     fee_invalida: bool = False) -> bool:
+                     fee_invalida: bool = False,
+                     fee_ambigua: bool = False) -> bool:
         """Operação canônica de execução — usada pelo fluxo normal E pela
         reconciliação.
 
@@ -637,6 +638,15 @@ class ExecutionCoordinator:
         # NÃO existe "componente principal": cada um produz efeito. Os da
         # moeda de cotação SOMAM no custo; os de outra moeda vão ao livro na
         # moeda deles, agregados por moeda.
+        if fee_ambigua:
+            self.risk.abrir_incidente(
+                "FEE_COMPONENTS_AMBIGUOUS", amount=Decimal("0"),
+                order_id=rec.order_id,
+                evidence=("a corretora enviou um total em `fee` que não é "
+                          "repetição nem soma de `fees[]`: não dá para saber "
+                          "se ele inclui os componentes"))
+            self.exigir_reconciliacao(
+                "FEE_COMPONENTS_AMBIGUOUS: total e componentes incompatíveis")
         componentes = list(fees or [])
         if not componentes and taxa:
             componentes = [{"cost": taxa, "currency": fee_currency}]
@@ -667,17 +677,13 @@ class ExecutionCoordinator:
                 f"cotação em {cotacao}")
         taxa = em_cotacao
         fee_currency = cotacao if em_cotacao > 0 else ""
-        # o livro espera (valor, moeda); `nativas` é {moeda: valor}
-        taxa_nativa = next(((v, m) for m, v in nativas.items()), None)
-        taxa_em_outra_moeda = taxa_nativa is not None
+        # TODAS as moedas: `next()` deixava a segunda sumir do livro.
+        taxas_nativas = [(v, m) for m, v in sorted(nativas.items())]
+        # Os incidentes nativos JÁ foram criados no laço acima, por moeda.
+        # Havia aqui um segundo registro que usava `fee_currency` e `taxa` —
+        # que a essa altura já são os da COTAÇÃO — e abria um incidente
+        # espúrio de "0,01 USDT" ou de moeda vazia.
         taxa_na_cotacao = taxa
-        if taxa_em_outra_moeda:
-            self.risk.registrar_taxa_nao_valorada(
-                moeda=fee_currency, quantidade=taxa, order_id=rec.order_id,
-                instrumento=instrumento, fill_id=fill_id)
-            self.exigir_reconciliacao(
-                f"FEE_VALUATION_UNKNOWN: taxa de {taxa} {fee_currency} sem "
-                f"cotação em {cotacao} — custo real desconhecido")
 
         if lado == "buy":
             reserva = self._reserva_de(rec)
@@ -703,8 +709,7 @@ class ExecutionCoordinator:
                     instrumento, quantidade, preco, taxa_na_cotacao,
                     reserved=da_reserva, ref=rec.order_id,
                     agent_id=rec.agente, reservation_id=rid,
-                    fee_in_other_currency=(taxa_nativa
-                                           if taxa_em_outra_moeda else None))
+                    native_fees=taxas_nativas)
                 sobra = Decimal(str(resultado.get("sobra") or 0))
                 if sobra > 0:
                     # Parte reservada e não usada volta ao caixa — limitada ao
@@ -734,9 +739,7 @@ class ExecutionCoordinator:
                 custo = (Decimal(str(ref)) * quantidade / alvo) if alvo else Decimal(str(ref))
             self.ledger.fill_sell(instrumento, quantidade, preco,
                                   taxa_na_cotacao,
-                                  fee_in_other_currency=(
-                                      taxa_nativa
-                                      if taxa_em_outra_moeda else None),
+                                  native_fees=taxas_nativas,
                                   cost_basis=custo, agent_id=rec.agente,
                                   ref=rec.order_id)
             self.registrar_resultado_realizado(
@@ -983,6 +986,8 @@ class ExecutionCoordinator:
                 continue        # execução sem identidade não é contabilizável
             componentes = ExecutionCoordinator._componentes_de_taxa(t)
             invalida = any(c.get("invalida") for c in componentes)
+            ambigua = any(c.get("ambigua") for c in componentes)
+            componentes = [c for c in componentes if not c.get("ambigua")]
             # O componente principal é o primeiro; os demais seguem no campo
             # `fees` para que NENHUM desapareça no caminho.
             principal = componentes[0] if componentes else {
@@ -995,7 +1000,8 @@ class ExecutionCoordinator:
                           "fee_currency": principal["currency"],
                           "fees": [{"cost": c["cost"], "currency": c["currency"]}
                                    for c in componentes],
-                          "fee_invalida": invalida})
+                          "fee_invalida": invalida,
+                          "fee_ambigua": ambigua})
         return [f for f in saida if f["quantidade"] > 0]
 
     @staticmethod
@@ -1016,16 +1022,35 @@ class ExecutionCoordinator:
             brutos.append(taxa)
         elif taxa not in (None, ""):
             brutos.append({"cost": taxa, "currency": ""})
-        # DEDUPLICAÇÃO entre os dois campos: muita corretora repete o mesmo
-        # componente em `fee` e em `fees[]`. Contar os dois dobraria uma
-        # cobrança que aconteceu uma vez. Repetição DENTRO de `fees[]` é
-        # outra história: ali são duas cobranças de fato.
+        # DEDUPLICAÇÃO entre os dois campos, por VALOR e moeda normalizada:
+        # "2" e "2.0" são a mesma taxa, "usdt" e "USDT" a mesma moeda.
+        # Comparar texto cru veria diferença onde não há.
+        ambigua = False
         if isinstance(taxa, dict) and isinstance(lista, list) and lista:
-            assinatura = (str(taxa.get("cost")), str(taxa.get("currency") or ""))
-            nas_listas = [(str(x.get("cost")), str(x.get("currency") or ""))
-                          for x in lista if isinstance(x, dict)]
-            if assinatura in nas_listas:
-                brutos.pop()        # o componente de `fee` já está em `fees[]`
+            def _num(v):
+                try:
+                    return Decimal(str(v or 0))
+                except (ArithmeticError, ValueError, TypeError):
+                    return None
+            custo_agregado = _num(taxa.get("cost"))
+            moeda_agregada = str(taxa.get("currency") or "").upper()
+            componentes_lista = [
+                (_num(x.get("cost")), str(x.get("currency") or "").upper())
+                for x in lista if isinstance(x, dict)]
+            iguais = [c for c in componentes_lista
+                      if c == (custo_agregado, moeda_agregada)]
+            soma_mesma_moeda = sum(
+                (c[0] for c in componentes_lista
+                 if c[0] is not None and c[1] == moeda_agregada), Decimal("0"))
+            if iguais:
+                brutos.pop()        # o de `fee` já está em `fees[]`
+            elif custo_agregado is not None and custo_agregado == soma_mesma_moeda:
+                brutos.pop()        # `fee` é o AGREGADO dos componentes
+            elif custo_agregado and soma_mesma_moeda:
+                # Nem repetição nem agregado: não dá para saber se o total
+                # inclui os componentes. Somar ou descartar seria chute.
+                brutos.pop()
+                ambigua = True
         componentes = []
         for bruto in brutos:
             if not isinstance(bruto, dict):
@@ -1041,6 +1066,9 @@ class ExecutionCoordinator:
                 "cost": Decimal("0") if invalida else custo,
                 "currency": str(bruto.get("currency") or ""),
                 "invalida": invalida})
+        if ambigua:
+            componentes.append({"cost": Decimal("0"), "currency": "",
+                                "invalida": False, "ambigua": True})
         return componentes
 
     def _autorizar_entrada(self, ei) -> None:
