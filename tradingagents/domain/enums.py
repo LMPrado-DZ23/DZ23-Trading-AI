@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from enum import StrEnum
+from tradingagents._compat import StrEnum
 
 
 class Side(StrEnum):
