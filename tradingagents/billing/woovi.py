@@ -197,9 +197,11 @@ def apply_paid_event(sub: Subscription | None, tenant_id: str, plan_code: str,
 
 
 def start_trial(tenant_id: str, now: datetime | None = None) -> Subscription:
+    # Teste grátis de 24 HORAS (modelo comercial atual). Depois disso a área
+    # fica somente-leitura até a assinatura — sem apagar dados.
     now = now or datetime.now(timezone.utc)
     return Subscription(tenant_id, "trial", "trialing",
-                        now + timedelta(days=PLANS["trial"].period_days))
+                        now + timedelta(hours=24))
 
 
 __all__ = ["PLANS", "Plan", "Subscription", "WooviClient", "BillingError",

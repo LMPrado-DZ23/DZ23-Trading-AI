@@ -596,6 +596,7 @@ def get_cfg(request: Request, _=Depends(auth)):
 
 @app.post("/v1/config")
 async def set_cfg(req: Request, _=Depends(auth)):
+    require_write(req)                    # somente-leitura bloqueia a escrita
     body = await _json_body(req)
     tenant_id = request_tenant(req)
     cfg = load_cfg(tenant_id)
@@ -617,6 +618,7 @@ async def set_cfg(req: Request, _=Depends(auth)):
 
 @app.post("/v1/jobs")
 async def new_job(req: Request, _=Depends(auth)):
+    require_write(req)                    # somente-leitura bloqueia a escrita
     b = await _json_body(req)
     t, d = str(b.get("ticker", "")).strip().upper(), str(b.get("trade_date", "")).strip()
     if not t or len(d) != 10:
@@ -914,6 +916,7 @@ def runtime_for_tenant_id(tenant_id: str):
 # ================================================================== COBRANÇA
 # PIX via Woovi. O servidor só ativa plano com webhook ASSINADO (verificado
 # com a chave pública) — nada que venha do navegador libera acesso.
+from tradingagents.billing import account_state as ACCT  # noqa: E402
 from tradingagents.billing.store import SubscriptionStore  # noqa: E402
 from tradingagents.billing.woovi import (  # noqa: E402
     PLANS,
@@ -975,7 +978,34 @@ def billing_status(request: Request, _=Depends(auth)):
     sub = SUBS.ensure(request_tenant(request))
     return {"plano": sub.plan_code, "nome": sub.plan.name, "status": sub.status,
             "ativo": sub.is_active(), "expira_em": sub.expires_at.isoformat(),
+            "estado": ACCT.derive_state(sub),
             "gateway_configurado": WooviClient().configured}
+
+
+def require_write(request: Request):
+    """Portão de ESCRITA (trial de 24h / assinatura). Quando a conta está
+    somente-leitura (TRIAL_EXPIRED / PAST_DUE / SUSPENDED / NOT_STARTED), a
+    escrita é bloqueada — leitura e exportação continuam, e NADA é apagado."""
+    tenant = request_tenant(request)
+    sub = SUBS.ensure(tenant)
+    estado = ACCT.derive_state(sub)
+    if ACCT.is_read_only(estado):
+        raise HTTPException(402, {
+            "erro": "conta somente-leitura",
+            "estado": estado,
+            "acao": "Assine em Plano e pagamento para voltar a operar. "
+                    "Seus dados continuam salvos.",
+        })
+    return sub
+
+
+@app.get("/v1/account/state")
+def account_state_endpoint(request: Request, _=Depends(auth)):
+    """Estado server-side da conta para a UI (sem PII)."""
+    sub = SUBS.ensure(request_tenant(request))
+    estado = ACCT.derive_state(sub)
+    return {**ACCT.describe(estado), "plan": sub.plan_code,
+            "expires_at": sub.expires_at.isoformat()}
 
 
 @app.post("/v1/billing/checkout")
