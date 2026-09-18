@@ -1206,7 +1206,8 @@ class RiskEngine:
         """
         if self.carteira is None:
             return Decimal("0")
-        return self.carteira.balances().get("FX:CONVERSION", Decimal("0"))
+        return self.carteira.balances().get("FX:CONVERSION_FUNCIONAL",
+                                            Decimal("0"))
 
     def ativos_descobertos(self) -> dict:
         """Só LEITURA: moedas com saldo negativo, sem tocar em incidente."""

@@ -4,6 +4,25 @@ Lançamentos imutáveis em partidas dobradas: toda linha tem contrapartida e a
 soma dos débitos é igual à dos créditos, sempre. Correção só por compensação
 — nada é editado retroativamente para o resultado parecer melhor.
 
+EQUAÇÃO MULTIMOEDA
+------------------
+A partida dobrada vale na moeda FUNCIONAL (a de cotação da conta, `currency`):
+
+    soma(contas funcionais) == 0
+
+Quantidades em outras moedas — taxa cobrada em BNB, por exemplo — vivem num
+SUBLEDGER NATIVO, uma escrituração por moeda, cada uma fechando em si:
+
+    para cada moeda M != funcional:  soma(contas nativas de M) == 0
+
+As duas escriturações só se encontram numa CONVERSÃO explícita
+(`fee_valuation`), que declara os dois lados: `native_amount`/`native_currency`
+e `functional_amount`/`functional_currency`, com a cotação e sua origem.
+
+Somar as duas num total único produziria `600 USDT - 2 BNB + 598 = 0`: os
+números fecham porque foram tratados como se não tivessem dimensão — o mesmo
+erro de somar metro com quilo e concluir que deu certo.
+
 Contas usadas:
   CASH:<moeda>          caixa disponível
   POSITION:<instrumento> posição em quantidade valorizada ao custo
@@ -63,6 +82,12 @@ class Transaction:
     purpose: str = ""
     incident_id: str = ""
     settlement_id: str = ""
+    # Conversão entre escriturações: os DOIS lados declarados, nunca um
+    # número solto que se soma ao outro.
+    native_amount: Decimal = ZERO
+    native_currency: str = ""
+    functional_amount: Decimal = ZERO
+    functional_currency: str = ""
 
     def validate(self) -> None:
         total = sum((e.amount for e in self.entries), ZERO)
@@ -86,11 +111,17 @@ class Ledger:
     def _post(self, kind: str, entries, ref: str = "", *, instrument: str = "",
               quantity: Decimal = ZERO, agent_id: str = "", purpose: str = "",
               incident_id: str = "", settlement_id: str = "",
+              native_amount: Decimal = ZERO, native_currency: str = "",
+              functional_amount: Decimal = ZERO, functional_currency: str = "",
               at=None) -> Transaction:
         tx = Transaction(uuid.uuid4().hex[:16], tuple(entries), kind, ref=ref,
                          instrument=instrument, quantity=quantity,
                          agent_id=agent_id, purpose=purpose,
                          incident_id=incident_id, settlement_id=settlement_id,
+                         native_amount=native_amount,
+                         native_currency=native_currency,
+                         functional_amount=functional_amount,
+                         functional_currency=functional_currency,
                          **({"at": at} if at is not None else {}))
         tx.validate()
         self._txs.append(tx)
@@ -111,8 +142,47 @@ class Ledger:
     def transactions(self) -> tuple[Transaction, ...]:
         return tuple(self._txs)
 
+    def _e_nativa(self, conta: str) -> str:
+        """Moeda NATIVA desta conta, ou "" se ela é da escrituração funcional."""
+        for prefixo in ("FEES:", "ASSET:"):
+            if conta.startswith(prefixo):
+                moeda = conta.split(":", 1)[1]
+                if moeda != self.currency:
+                    return moeda
+        return ""
+
+    def functional_balances(self) -> dict:
+        """Contas da moeda funcional — onde a partida dobrada é verificada."""
+        return {c: s for c, s in self.balances().items()
+                if not self._e_nativa(c)}
+
+    def native_balances(self) -> dict:
+        """Subledger por moeda: {moeda: {tipo: saldo}}."""
+        saidas: dict = {}
+        for conta, saldo in self.balances().items():
+            moeda = self._e_nativa(conta)
+            if not moeda:
+                continue
+            tipo = conta.split(":", 1)[0]
+            saidas.setdefault(moeda, {})[tipo] = saldo
+        return saidas
+
+    def functional_balanced(self) -> bool:
+        """A partida dobrada da moeda funcional, sozinha."""
+        return sum(self.functional_balances().values(), ZERO) == ZERO
+
+    def native_balanced(self) -> bool:
+        """Cada subledger nativo fecha em si."""
+        return all(sum(contas.values(), ZERO) == ZERO
+                   for contas in self.native_balances().values())
+
     def is_balanced(self) -> bool:
-        return sum(self.balances().values(), ZERO) == ZERO
+        """Balanceado = funcional fecha E cada moeda nativa fecha.
+
+        Somar tudo num total único daria `600 USDT - 2 BNB + 598` e chamaria
+        isso de zero.
+        """
+        return self.functional_balanced() and self.native_balanced()
 
     # -- operações da mesa ---------------------------------------------
     @staticmethod
@@ -328,15 +398,21 @@ class Ledger:
         # mais do que existe criaria saldo negativo — o oposto do conserto.
         registrado = self.balances().get(f"FEES:{moeda}", ZERO)
         baixa = min(quantidade, registrado) if registrado > ZERO else ZERO
-        entradas = [Entry(f"FEES:{self.currency}", valor, memo)]
+        # LADO FUNCIONAL: despesa em cotação, com contrapartida na mesma
+        # escrituração — fecha sozinho, sem depender da perna nativa.
+        entradas = [Entry(f"FEES:{self.currency}", valor, memo),
+                    Entry("FX:CONVERSION_FUNCIONAL", -valor, memo)]
         if baixa > ZERO:
+            # LADO NATIVO: baixa a taxa na moeda original contra a mesma
+            # moeda, mantendo o subledger dela fechado.
             entradas.append(Entry(f"FEES:{moeda}", -baixa, memo))
-        # A diferença de unidade fica explícita numa conta de conversão, em
-        # vez de sumir dentro do custo.
-        entradas.append(Entry("FX:CONVERSION", baixa - valor, memo))
+            entradas.append(Entry(f"ASSET:{moeda}", baixa, memo))
         return self._post("fee_valuation", entradas,
                           incident_id or f"valoracao:{moeda}",
-                          incident_id=incident_id)
+                          incident_id=incident_id,
+                          native_amount=quantidade, native_currency=moeda,
+                          functional_amount=valor,
+                          functional_currency=self.currency)
 
     def capital_adjustment_asset(self, moeda: str, quantidade: Decimal, *,
                                  reason: str, actor: str,
@@ -567,6 +643,10 @@ class Ledger:
              "at": tx.at.isoformat() if hasattr(tx.at, "isoformat") else str(tx.at),
              "incident_id": getattr(tx, "incident_id", ""),
              "settlement_id": getattr(tx, "settlement_id", ""),
+             "native_amount": str(getattr(tx, "native_amount", ZERO)),
+             "native_currency": getattr(tx, "native_currency", ""),
+             "functional_amount": str(getattr(tx, "functional_amount", ZERO)),
+             "functional_currency": getattr(tx, "functional_currency", ""),
              "purpose": getattr(tx, "purpose", ""),
              "instrument": getattr(tx, "instrument", ""),
              "quantity": str(getattr(tx, "quantity", ZERO)),
@@ -598,6 +678,10 @@ class Ledger:
                 purpose=doc.get("purpose", ""),
                 incident_id=doc.get("incident_id", ""),
                 settlement_id=doc.get("settlement_id", ""),
+                native_amount=Decimal(str(doc.get("native_amount") or 0)),
+                native_currency=doc.get("native_currency", ""),
+                functional_amount=Decimal(str(doc.get("functional_amount") or 0)),
+                functional_currency=doc.get("functional_currency", ""),
                 # O instante ORIGINAL, não o de agora: substituir por utcnow
                 # reescreveria a data de todo o histórico a cada reinício.
                 **({"at": _instante(doc["at"])} if doc.get("at") else {}))

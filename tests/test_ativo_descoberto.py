@@ -183,12 +183,15 @@ class TestMoedaVemDoFillReal:
 
 class TestContaDeConversao:
     def test_the_conversion_account_is_visible(self):
+        """A conta de conversão vive na escrituração FUNCIONAL: ela é a
+        contrapartida da despesa em cotação, não um balde que absorve a
+        diferença entre 2 BNB e 600 USDT."""
         m, risco, livro = sistema()
         taxa_em(livro, "BNB", "2", "a")
         livro.fee_valuation(moeda="BNB", quantidade=Decimal("2"),
                             rate=Decimal("300"), fonte="binance",
                             em="2026-09-14T23:00:00+00:00")
-        assert livro.balance("FX:CONVERSION") != Decimal("0")
+        assert livro.balance("FX:CONVERSION_FUNCIONAL") != Decimal("0")
         assert livro.is_balanced()
 
     def test_the_risk_engine_can_read_it(self):
@@ -197,7 +200,8 @@ class TestContaDeConversao:
         livro.fee_valuation(moeda="BNB", quantidade=Decimal("2"),
                             rate=Decimal("300"), fonte="x",
                             em="2026-09-14T23:00:00+00:00")
-        assert risco.conversao_acumulada() == livro.balance("FX:CONVERSION"), (
+        assert risco.conversao_acumulada() == livro.balance(
+            "FX:CONVERSION_FUNCIONAL"), (
             "a diferença de conversão não é consultável pelo risco")
 
     def test_it_is_not_silently_treated_as_profit(self):
