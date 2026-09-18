@@ -539,6 +539,26 @@ def setup_inicial():
     return FileResponse(STATIC / "setup.html")
 
 
+@app.get("/termos", include_in_schema=False)
+def termos():
+    return FileResponse(STATIC / "termos.html")
+
+
+@app.get("/privacidade", include_in_schema=False)
+def privacidade():
+    return FileResponse(STATIC / "privacidade.html")
+
+
+@app.get("/robots.txt", include_in_schema=False)
+def robots_txt():
+    return FileResponse(STATIC / "robots.txt", media_type="text/plain")
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+def sitemap_xml():
+    return FileResponse(STATIC / "sitemap.xml", media_type="application/xml")
+
+
 @app.get("/static/marca/{arquivo}", include_in_schema=False)
 def marca(arquivo: str):
     """Serve os arquivos da marca (favicon, ícone de atalho, logo).

@@ -2,251 +2,333 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DZ23 Trading Platform — mesa de trading com risco governado</title>
-<meta name="description" content="Agência multiagente de trading com contabilidade auditável, reconciliação com a corretora e travas de risco. Paper e Shadow Trading hoje; dinheiro real só depois de auditoria independente.">
+<title>DZ23 Trading — seu escritório de trading com agentes de IA e risco governado</title>
+<meta name="description" content="Um escritório de trading com agentes de IA e risco governado. Vários agentes operam em ciclos sob limites de risco, com contabilidade auditável e reconciliação. Hoje em PAPER e SHADOW; dinheiro real indisponível.">
+<link rel="canonical" href="https://dz23trading.com.br/">
 <link rel="icon" href="/static/marca/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="/static/marca/favicon-32.png">
 <link rel="apple-touch-icon" href="/static/marca/dz23-logo-192.png">
-<meta name="theme-color" content="#1447c8">
-<meta property="og:title" content="DZ23 Trading Platform">
-<meta property="og:description" content="Mesa multiagente com risco governado e contabilidade auditável.">
-<meta property="og:image" content="/static/marca/dz23-logo-512.png">
+<meta name="theme-color" content="#0b1220">
+<meta property="og:title" content="DZ23 Trading — escritório de trading com agentes de IA">
+<meta property="og:description" content="Agentes de IA operando sob risco governado, contabilidade auditável e reconciliação. Hoje em PAPER e SHADOW; dinheiro real indisponível.">
+<meta property="og:image" content="https://dz23trading.com.br/static/marca/dz23-logo-512.png">
 <meta property="og:type" content="website">
+<meta property="og:url" content="https://dz23trading.com.br/">
+<meta property="og:locale" content="pt_BR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="DZ23 Trading — escritório de trading com agentes de IA">
+<meta name="twitter:description" content="Risco governado, contabilidade auditável e reconciliação. PAPER e SHADOW; dinheiro real indisponível.">
+<meta name="twitter:image" content="https://dz23trading.com.br/static/marca/dz23-logo-512.png">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Organization","name":"DZ23 Trading","url":"https://dz23trading.com.br/","logo":"https://dz23trading.com.br/static/marca/dz23-logo-512.png"}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"DZ23 Trading","applicationCategory":"FinanceApplication","operatingSystem":"Web","description":"Escritório de trading com agentes de IA e risco governado. PAPER e SHADOW; execução real indisponível.","offers":[{"@type":"Offer","name":"Mensal","price":"150.00","priceCurrency":"BRL"},{"@type":"Offer","name":"Trimestral","price":"405.00","priceCurrency":"BRL"},{"@type":"Offer","name":"Semestral","price":"720.00","priceCurrency":"BRL"},{"@type":"Offer","name":"Anual","price":"1200.00","priceCurrency":"BRL"}]}
+</script>
 <style>
-:root{--bg:#07101b;--surface:#0d1826;--line:#20344a;--text:#edf5ff;--muted:#8ba0b8;--green:#4be6a2;--cyan:#44c7f4;--red:#ff7185;--azul:#1447c8}
-*{box-sizing:border-box}html{color-scheme:dark;scroll-behavior:smooth}
-body{margin:0;background:radial-gradient(circle at 75% -10%,#173a57 0,transparent 42%),var(--bg);color:var(--text);font:16px/1.65 Inter,ui-sans-serif,system-ui,sans-serif}
-a{color:var(--cyan)}img{max-width:100%}
-.wrap{width:min(1120px,92vw);margin:auto}
-header{position:sticky;top:0;z-index:20;background:#07101bd9;backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+:root{
+  --bg:#0b1220;--surface:#111b2e;--surface2:#0e1728;--line:#22304a;--text:#eaf1fb;--muted:#93a4bd;
+  --azul:#2f6bff;--azul2:#5b8bff;--ok:#22c55e;--red:#ff6b81;--radius:14px;
+}
+*{box-sizing:border-box}
+html{color-scheme:dark;scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.65 Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--azul2)}img{max-width:100%;display:block}
+.wrap{width:min(1140px,92vw);margin:auto}
+.eyebrow{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--azul2);font-weight:800}
+h1,h2,h3{letter-spacing:-.01em}
+:focus-visible{outline:2px solid var(--azul2);outline-offset:2px;border-radius:6px}
+/* Header */
+header{position:sticky;top:0;z-index:30;background:#0b1220e6;backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
 .nav{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0}
-.logo{display:flex;align-items:center;gap:11px;font-weight:850;letter-spacing:.06em}
-.logo img{width:36px;height:36px;border-radius:10px;display:block}
+.logo{display:flex;align-items:center;gap:11px;font-weight:850;letter-spacing:.05em;color:var(--text);text-decoration:none}
+.logo img{width:34px;height:34px;border-radius:9px}
 .nav-links{display:flex;gap:22px;align-items:center}
 .nav-links a{color:var(--muted);text-decoration:none;font-size:14px}
 .nav-links a:hover{color:var(--text)}
-.btn{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:11px;padding:12px 20px;font-weight:800;cursor:pointer;text-decoration:none;font-size:15px}
-.btn.primary{background:var(--green);color:#062418}
+.nav-cta{display:flex;gap:10px;align-items:center}
+/* Buttons — AZUL é ação; verde só para sucesso */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:11px;padding:12px 20px;font-weight:800;cursor:pointer;text-decoration:none;font-size:15px;line-height:1}
+.btn.primary{background:var(--azul);color:#fff}
+.btn.primary:hover{background:#255ce0}
 .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--text)}
-.hero{padding:88px 0 64px}
-.hero h1{font-size:clamp(34px,6vw,62px);line-height:1.04;margin:0 0 22px;letter-spacing:-.02em}
-.hero p.lead{font-size:clamp(17px,2.2vw,21px);color:#b7cadd;max-width:640px;margin:0 0 30px}
-.hero-cta{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:26px}
-.badges{display:flex;gap:9px;flex-wrap:wrap}
-.badge{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border:1px solid var(--line);border-radius:999px;font-size:11.5px;font-weight:800;letter-spacing:.05em}
-.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 12px currentColor}
-section{padding:66px 0;border-top:1px solid var(--line)}
-h2.sec{font-size:clamp(26px,4vw,38px);margin:0 0 12px;letter-spacing:-.01em}
-p.sub{color:var(--muted);max-width:680px;margin:0 0 34px}
-.grid{display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(270px,1fr))}
-.card{background:linear-gradient(150deg,var(--surface),#0a1623);border:1px solid var(--line);border-radius:16px;padding:24px}
-.card h3{margin:0 0 9px;font-size:18px}
+.btn.ghost:hover{border-color:#3a5177}
+.btn.small{padding:9px 14px;font-size:13px}
+.link-quiet{color:var(--muted);text-decoration:none;font-size:14px}
+.link-quiet:hover{color:var(--text)}
+/* Hero */
+.hero{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center;padding:72px 0 56px}
+.hero h1{font-size:clamp(32px,5vw,54px);line-height:1.05;margin:14px 0 20px}
+.hero p.lead{font-size:clamp(16px,2vw,20px);color:#c2d0e6;max-width:560px;margin:0 0 28px}
+.hero-cta{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.badges{display:flex;gap:9px;flex-wrap:wrap;margin-top:26px}
+.badge{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border:1px solid var(--line);border-radius:999px;font-size:11.5px;font-weight:800;letter-spacing:.05em;color:var(--muted)}
+.badge .d{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+.badge.warn{color:#ffd0d7;border-color:#4a2a34}.badge.warn .d{background:var(--red)}
+/* Product frame (prévia real, sem dados inventados) */
+.frame{background:var(--surface2);border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 20px 50px #00000055}
+.frame .bar{display:flex;align-items:center;gap:7px;padding:11px 14px;border-bottom:1px solid var(--line);background:#0c1526}
+.frame .bar i{width:10px;height:10px;border-radius:50%;background:#2a3a56;display:block}
+.frame .bar span{margin-left:10px;color:var(--muted);font-size:12px}
+.frame .body{padding:16px}
+.mini-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.mini-head b{font-size:13px}.tagp{font-size:10px;font-weight:800;letter-spacing:.08em;color:#bcd0ff;border:1px solid #2a3a5e;border-radius:999px;padding:3px 8px}
+.mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mini{background:#0b1424;border:1px solid var(--line);border-radius:11px;padding:12px}
+.mini small{color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:800}
+.mini b{display:block;font-size:18px;margin-top:6px}
+.mini b.ok{color:var(--ok)}
+.mini-line{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #ffffff0d;font-size:13px;color:var(--muted)}
+.mini-line:last-child{border:0}.mini-line b{color:var(--text)}
+/* Sections */
+section{padding:64px 0;border-top:1px solid var(--line)}
+h2.sec{font-size:clamp(24px,3.6vw,36px);margin:8px 0 12px}
+p.sub{color:var(--muted);max-width:680px;margin:0 0 32px}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(258px,1fr))}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:22px}
+.card h3{margin:10px 0 8px;font-size:17px}
 .card p{margin:0;color:var(--muted);font-size:14.5px}
-.card .ico{font-size:22px;margin-bottom:12px;display:block}
-.passos{counter-reset:p}
+.ic{width:34px;height:34px;border-radius:9px;background:#152447;border:1px solid #24345c;display:grid;place-items:center}
+.ic svg{width:18px;height:18px;stroke:var(--azul2);fill:none;stroke-width:1.8}
+.passos{display:grid;gap:0}
 .passo{display:flex;gap:18px;padding:20px 0;border-bottom:1px solid var(--line)}
 .passo:last-child{border:0}
-.passo b{flex:0 0 40px;height:40px;border-radius:12px;background:#12263a;color:var(--cyan);display:grid;place-items:center;font-size:15px}
-.passo h4{margin:2px 0 5px;font-size:17px}
-.passo p{margin:0;color:var(--muted);font-size:14.5px}
-.honesto{background:#140f14;border:1px solid #4a2333;border-radius:16px;padding:26px}
-.honesto h3{margin:0 0 10px;color:#ffb5c0;font-size:18px}
-.honesto ul{margin:0;padding-left:20px;color:#e3c7cf}
-.honesto li{margin:7px 0}
-.planos{display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
-.plano{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:26px;display:flex;flex-direction:column}
-.plano.destaque{border-color:var(--green);box-shadow:0 0 0 1px var(--green) inset}
-.plano .preco{font-size:34px;font-weight:850;margin:10px 0 4px}
-.plano .preco small{font-size:14px;color:var(--muted);font-weight:600}
-.plano ul{list-style:none;padding:0;margin:16px 0 22px;flex:1}
-.plano li{padding:7px 0;color:var(--muted);font-size:14.5px;border-bottom:1px solid #ffffff08}
-.faq details{border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:10px;background:#0a1623}
+.passo b{flex:0 0 38px;height:38px;border-radius:11px;background:#152447;color:var(--azul2);display:grid;place-items:center;font-size:15px;font-weight:800}
+.passo h4{margin:1px 0 5px;font-size:16px}.passo p{margin:0;color:var(--muted);font-size:14.5px}
+.risco{background:#160f16;border:1px solid #3f2130;border-radius:var(--radius);padding:24px}
+.risco h3{margin:0 0 10px;color:#ffc2cd;font-size:17px}
+.risco ul{margin:0;padding-left:20px;color:#e6cbd2}.risco li{margin:8px 0}
+/* Pricing */
+.price-card{max-width:560px;margin:0 auto;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:26px}
+.seg{display:flex;gap:4px;background:#0b1424;border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:22px}
+.seg button{flex:1;background:none;border:0;color:var(--muted);padding:10px 6px;border-radius:9px;font-weight:800;cursor:pointer;font-size:13px}
+.seg button.active{background:var(--azul);color:#fff}
+.price-top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.price-big{font-size:44px;font-weight:850;line-height:1}
+.price-per{color:var(--muted);font-weight:700}
+.price-meta{margin:8px 0 2px;color:var(--muted);font-size:14px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:800;border-radius:999px;padding:4px 10px;margin-left:2px}
+.chip.eco{background:#0f2a17;color:#8ff0b3;border:1px solid #1f4a2e}
+.chip.top{background:#14213f;color:#bcd0ff;border:1px solid #2a3a5e}
+.price-list{list-style:none;padding:0;margin:18px 0 22px}
+.price-list li{display:flex;gap:10px;padding:8px 0;color:var(--text);font-size:14.5px;border-bottom:1px solid #ffffff0a}
+.price-list li:last-child{border:0}
+.check{color:var(--ok);flex:0 0 18px}
+.price-note{color:var(--muted);font-size:12.5px;margin-top:12px;text-align:center}
+/* FAQ */
+.faq details{border:1px solid var(--line);border-radius:12px;padding:15px 18px;margin-bottom:10px;background:var(--surface2)}
 .faq summary{cursor:pointer;font-weight:700;list-style:none}
 .faq summary::-webkit-details-marker{display:none}
-.faq summary:after{content:"+";float:right;color:var(--cyan)}
+.faq summary:after{content:"+";float:right;color:var(--azul2)}
 .faq details[open] summary:after{content:"–"}
 .faq p{color:var(--muted);margin:12px 0 0;font-size:14.5px}
-.final{text-align:center;padding:76px 0}
-footer{border-top:1px solid var(--line);padding:30px 0;color:var(--muted);font-size:13px}
-.foot{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
-@media(max-width:760px){.nav-links{display:none}.hero{padding:56px 0 44px}}
-@media(prefers-reduced-motion:no-preference){.card,.btn,.plano{transition:.18s ease}.card:hover{border-color:#2d4b68;transform:translateY(-2px)}}
+/* Final + footer */
+.final{text-align:center;padding:72px 0}
+.final .btn{margin-top:8px}
+footer{border-top:1px solid var(--line);padding:28px 0;color:var(--muted);font-size:13px}
+.foot{display:flex;justify-content:space-between;gap:18px;flex-wrap:wrap;align-items:center}
+.foot-links{display:flex;gap:18px;flex-wrap:wrap}.foot-links a{color:var(--muted);text-decoration:none}.foot-links a:hover{color:var(--text)}
+@media(max-width:900px){.hero{grid-template-columns:1fr;gap:30px;padding:48px 0 36px}.nav-links{display:none}.mini-grid{grid-template-columns:1fr 1fr}}
+@media(prefers-reduced-motion:no-preference){.card,.btn{transition:.16s ease}.card:hover{border-color:#31456b}}
 </style></head>
 <body>
 
 <header><div class="wrap nav">
-  <div class="logo"><img src="/static/marca/dz23-logo-192.png" alt="DZ23 Trading Platform">DZ23</div>
-  <nav class="nav-links">
-    <a href="#como">Como funciona</a>
-    <a href="#seguranca">Segurança</a>
-    <a href="#planos">Planos</a>
+  <a class="logo" href="/"><img src="/static/marca/dz23-logo-192.png" alt="DZ23 Trading">DZ23</a>
+  <nav class="nav-links" aria-label="Seções">
+    <a href="#problema">Problema</a>
+    <a href="#agentes">Agentes</a>
+    <a href="#fluxo">Como funciona</a>
+    <a href="#planos">Plano</a>
     <a href="#faq">Dúvidas</a>
   </nav>
-  <a class="btn primary" href="/app">Entrar</a>
+  <div class="nav-cta">
+    <a class="link-quiet" href="/app">Entrar</a>
+    <a class="btn primary small" href="#planos">Solicitar acesso à beta</a>
+  </div>
 </div></header>
 
 <div class="wrap">
 
 <section class="hero" style="border:0">
-  <h1>Uma mesa de trading que<br>presta contas de cada centavo.</h1>
-  <p class="lead">Vários agentes com estratégias distintas operam em ciclos, sob limites
-  de risco que o sistema não consegue contornar. Cada ordem tem contabilidade de
-  partidas dobradas, reconciliação com a corretora e registro auditável.</p>
-  <div class="hero-cta">
-    <a class="btn primary" href="/app">Começar em Paper Trading</a>
-    <a class="btn ghost" href="#como">Ver como funciona</a>
+  <div>
+    <div class="eyebrow">Software Operations para trading</div>
+    <h1>Seu escritório de trading com agentes de IA e risco governado.</h1>
+    <p class="lead">Vários agentes com estratégias distintas operam em ciclos, sob limites de risco que o sistema não contorna — com contabilidade de partidas dobradas, reconciliação e registro auditável de cada ordem.</p>
+    <div class="hero-cta">
+      <a class="btn primary" href="#planos">Solicitar acesso à beta</a>
+      <a class="btn ghost" href="#produto">Ver a plataforma em ação</a>
+    </div>
+    <a class="link-quiet" href="/app">Já possui conta? Entrar</a>
+    <div class="badges">
+      <span class="badge"><i class="d"></i>PAPER &amp; SHADOW</span>
+      <span class="badge"><i class="d"></i>RISCO GOVERNADO</span>
+      <span class="badge warn"><i class="d"></i>DINHEIRO REAL INDISPONÍVEL</span>
+    </div>
   </div>
-  <div class="badges">
-    <span class="badge"><i class="dot"></i>PAPER &amp; SHADOW</span>
-    <span class="badge"><i class="dot"></i>MULTI-TENANT</span>
-    <span class="badge" style="color:var(--red);border-color:#4a2333">DINHEIRO REAL BLOQUEADO</span>
-  </div>
-</section>
-
-<section id="como">
-  <h2 class="sec">Como funciona</h2>
-  <p class="sub">Do dado de mercado à ordem, com freio em cada etapa.</p>
-  <div class="passos">
-    <div class="passo"><b>1</b><div>
-      <h4>Os agentes analisam</h4>
-      <p>Traders com estratégias diferentes — tendência, reversão à média e rompimento —
-      leem o mercado em vários prazos e propõem operações. Estratégias distintas evitam
-      que todos errem junto no mesmo tipo de mercado.</p></div></div>
-    <div class="passo"><b>2</b><div>
-      <h4>O risco aprova ou veta</h4>
-      <p>Antes de qualquer envio, o sistema separa o capital da operação, confere o
-      mandato e o limite de exposição. Sem cobertura reservada, a ordem não sai.</p></div></div>
-    <div class="passo"><b>3</b><div>
-      <h4>A ordem vai à corretora</h4>
-      <p>Cada envio tem identificador próprio: pedir duas vezes não vira duas ordens.
-      Se a resposta se perde, o sistema trata como incerto e pergunta à corretora em vez
-      de reenviar às cegas.</p></div></div>
-    <div class="passo"><b>4</b><div>
-      <h4>Tudo é contabilizado</h4>
-      <p>Cada execução vira lançamento de partidas dobradas, com posição por agente e
-      resultado atribuído a quem operou. O histórico prova o desempenho.</p></div></div>
+  <div id="produto" class="frame" role="img" aria-label="Prévia do painel Command Center da plataforma DZ23">
+    <div class="bar"><i></i><i></i><i></i><span>dz23trading.com.br/app</span></div>
+    <div class="body">
+      <div class="mini-head"><b>Command Center</b><span class="tagp">PAPER</span></div>
+      <div class="mini-grid">
+        <div class="mini"><small>Execução</small><b class="ok">PAPER</b></div>
+        <div class="mini"><small>Dinheiro real</small><b>Bloqueado</b></div>
+        <div class="mini"><small>Agentes</small><b>7</b></div>
+        <div class="mini"><small>Contabilidade</small><b class="ok">Fecha</b></div>
+      </div>
+      <div style="margin-top:12px">
+        <div class="mini-line"><span>Reconciliação</span><b>consistente</b></div>
+        <div class="mini-line"><span>Freio de risco</span><b>armado</b></div>
+        <div class="mini-line"><span>Ordens duplicadas</span><b>0</b></div>
+      </div>
+    </div>
   </div>
 </section>
 
-<section id="seguranca">
-  <h2 class="sec">O que impede um prejuízo bobo</h2>
-  <p class="sub">A maior parte do sistema existe para dizer "não" na hora certa.</p>
+<section id="problema">
+  <div class="eyebrow">O problema</div>
+  <h2 class="sec">Operar é fácil. Prestar contas é o que separa robô de prejuízo.</h2>
+  <p class="sub">A maioria dos bots decide rápido e registra mal: sem controle de risco que não dá para contornar, sem contabilidade que fecha, sem saber o que aconteceu quando a conexão cai. O erro aparece tarde — no extrato.</p>
   <div class="grid">
-    <div class="card"><span class="ico">🛑</span><h3>Freio diário</h3>
-      <p>Perda acumulada no dia passa do limite e a mesa para sozinha. O contador sobrevive
-      a reinício — o prejuízo de ontem não contamina hoje, nem some ao reiniciar.</p></div>
-    <div class="card"><span class="ico">🔍</span><h3>Reconciliação com a corretora</h3>
-      <p>Depois de qualquer queda, o sistema confere ordens, execuções e posições na
-      corretora antes de voltar a operar. "Não perguntei" nunca vira "está tudo certo".</p></div>
-    <div class="card"><span class="ico">🧾</span><h3>Contabilidade que fecha</h3>
-      <p>Capital disponível, reservado e investido são estados distintos. Dinheiro que
-      virou posição não reaparece como livre para ser alocado de novo.</p></div>
-    <div class="card"><span class="ico">🔒</span><h3>Nada de ordem duplicada</h3>
-      <p>Resposta perdida não é reenvio: a ordem fica marcada como incerta, o capital
-      segue reservado e nada novo é enviado até a dúvida ser resolvida.</p></div>
-    <div class="card"><span class="ico">👤</span><h3>Posição tem dono</h3>
-      <p>Cada agente encerra apenas o próprio lote. Resultado vai para quem operou, não
-      para quem apertou o botão.</p></div>
-    <div class="card"><span class="ico">🗝️</span><h3>Isolamento por cliente</h3>
-      <p>Cada conta tem mesa, credenciais e histórico próprios. Chaves de corretora ficam
-      no servidor e voltam sempre mascaradas.</p></div>
+    <div class="card"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg></div><h3>Risco que se contorna</h3><p>Limite que é sugestão não é limite. Uma ordem grande demais passa e o prejuízo já aconteceu.</p></div>
+    <div class="card"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg></div><h3>Contabilidade que não fecha</h3><p>Capital disponível, reservado e investido viram um número só. Dinheiro que já é posição reaparece como livre.</p></div>
+    <div class="card"><div class="ic"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v5h-5"/></svg></div><h3>Silêncio depois da queda</h3><p>Resposta perdida vira reenvio às cegas: a mesma ordem, duas vezes. Ninguém confere com a corretora.</p></div>
   </div>
 </section>
 
-<section>
-  <h2 class="sec">O que ainda não fazemos</h2>
+<section id="agentes">
+  <div class="eyebrow">Equipe de agentes</div>
+  <h2 class="sec">Estratégias diferentes, para não errarem todas juntas.</h2>
+  <p class="sub">Cada agente lê o mercado à sua maneira e propõe operações. O risco decide antes de qualquer envio; a execução acompanha; a contabilidade registra.</p>
+  <div class="grid">
+    <div class="card"><div class="ic"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/></svg></div><h3>Tendência</h3><p>Segue o movimento dominante em vários prazos e evita entrar contra a maré.</p></div>
+    <div class="card"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 12h16M8 8l-4 4 4 4m8-8 4 4-4 4"/></svg></div><h3>Reversão à média</h3><p>Aposta no retorno ao normal quando o preço estica demais para um lado.</p></div>
+    <div class="card"><div class="ic"><svg viewBox="0 0 24 24"><path d="M4 15l5-5 4 3 7-8"/></svg></div><h3>Rompimento</h3><p>Age quando o preço sai de uma faixa com força, e recua quando o rompimento falha.</p></div>
+    <div class="card"><div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9M12 3v9l6 3"/></svg></div><h3>Risco e portfólio</h3><p>Dimensiona por risco, limita correlação e veta o que não paga o próprio custo.</p></div>
+  </div>
+</section>
+
+<section id="fluxo">
+  <div class="eyebrow">Fluxo da operação</div>
+  <h2 class="sec">Do dado de mercado à ordem, com freio em cada etapa.</h2>
+  <div class="passos">
+    <div class="passo"><b>1</b><div><h4>Os agentes analisam</h4><p>Leem o mercado em vários prazos e propõem operações. Estratégias distintas evitam que todos errem junto.</p></div></div>
+    <div class="passo"><b>2</b><div><h4>O risco aprova ou veta</h4><p>Antes de qualquer envio, o sistema separa o capital, confere o mandato e o limite de exposição. Sem cobertura reservada, a ordem não sai.</p></div></div>
+    <div class="passo"><b>3</b><div><h4>A ordem é registrada</h4><p>Cada envio tem identificador próprio: pedir duas vezes não vira duas ordens. Resposta perdida vira "incerto" e o sistema pergunta à corretora, não reenvia.</p></div></div>
+    <div class="passo"><b>4</b><div><h4>Tudo é contabilizado</h4><p>Cada execução vira lançamento de partidas dobradas, com posição por agente e resultado atribuído a quem operou.</p></div></div>
+  </div>
+</section>
+
+<section id="screenshots">
+  <div class="eyebrow">A plataforma</div>
+  <h2 class="sec">Um painel que mostra o estado real — sem número inventado.</h2>
+  <p class="sub">Command Center, mesa de agentes, risco e reconciliação. Em PAPER e SHADOW, o painel exibe o que o servidor sabe; quando não sabe, diz que não sabe.</p>
+  <div class="grid">
+    <div class="frame"><div class="bar"><i></i><i></i><i></i><span>Command Center</span></div><div class="body"><div class="mini-head"><b>Visão geral</b><span class="tagp">PAPER</span></div><div class="mini-line"><span>Aplicação</span><b>operacional</b></div><div class="mini-line"><span>Job ledger</span><b>persistente</b></div><div class="mini-line"><span>Execução</span><b class="ok" style="color:var(--ok)">PAPER</b></div></div></div>
+    <div class="frame"><div class="bar"><i></i><i></i><i></i><span>Mesa de Agentes</span></div><div class="body"><div class="mini-head"><b>Traders</b><span class="tagp">CICLOS</span></div><div class="mini-line"><span>Contabilidade</span><b>balanceada</b></div><div class="mini-line"><span>Reservado / disponível</span><b>separados</b></div><div class="mini-line"><span>Resultado por agente</span><b>atribuído</b></div></div></div>
+    <div class="frame"><div class="bar"><i></i><i></i><i></i><span>Risco e execução</span></div><div class="body"><div class="mini-head"><b>Execution engine</b><span class="tagp">GUARDIÃO</span></div><div class="mini-line"><span>KillSwitch</span><b>disponível</b></div><div class="mini-line"><span>Live trading</span><b style="color:var(--red)">bloqueado</b></div><div class="mini-line"><span>Reconciliação</span><b>exigida no boot</b></div></div></div>
+  </div>
+  <p class="price-note" style="margin-top:16px">Prévias do produto com estados neutros. As telas reais aparecem após entrar na sua área.</p>
+</section>
+
+<section id="risco">
+  <div class="eyebrow">Sendo direto</div>
+  <h2 class="sec">O que ainda não fazemos.</h2>
   <p class="sub">Vale mais dizer agora do que você descobrir depois.</p>
-  <div class="honesto">
-    <h3>Sendo direto sobre os limites</h3>
+  <div class="risco">
+    <h3>Limites, sem rodeio</h3>
     <ul>
-      <li><b>Dinheiro real está bloqueado.</b> A plataforma opera em Paper e Shadow
-      Trading. O núcleo financeiro está sob auditoria independente e só liberamos
-      execução real quando ela passar.</li>
-      <li><b>Não prometemos rentabilidade.</b> Nenhum sistema — com ou sem IA — garante
-      lucro em mercado. O que entregamos é disciplina de risco e registro auditável.</li>
-      <li><b>Custos comem resultado.</b> Ida e volta em cripto custa em torno de 0,3%;
-      estratégia que mira menos que isso perde dinheiro por construção, e o sistema
-      recusa operações que não pagam o próprio custo.</li>
-      <li><b>Estratégia só é promovida com evidência.</b> Validação fora da amostra,
-      com custos descontados. Resultado bonito no histórico não basta.</li>
+      <li><b>Dinheiro real está indisponível.</b> A plataforma opera em PAPER e SHADOW. O núcleo financeiro está sob auditoria independente; execução real só depois que ela passar.</li>
+      <li><b>Não prometemos rentabilidade.</b> Nenhum sistema — com ou sem IA — garante lucro em mercado. O que entregamos é disciplina de risco e registro auditável.</li>
+      <li><b>Custos comem resultado.</b> O sistema recusa operações que não pagam o próprio custo; estratégia só é promovida com validação fora da amostra, com custos descontados.</li>
+      <li><b>Cadastro público ainda fechado.</b> No momento, o acesso é por beta. Nada de "conta criada" sem uma conta de verdade.</li>
     </ul>
   </div>
 </section>
 
 <section id="planos">
-  <h2 class="sec">Planos</h2>
-  <p class="sub">Comece sem cartão. Pagamento por PIX quando quiser mais mesa.</p>
-  <div class="planos">
-    <div class="plano">
-      <h3>Paper</h3>
-      <div class="preco">R$ 0 <small>/ mês</small></div>
-      <ul>
-        <li>1 mesa em Paper Trading</li>
-        <li>Agentes com estratégias distintas</li>
-        <li>Painel completo e histórico</li>
-        <li>Relatório de risco</li>
-      </ul>
-      <a class="btn ghost" href="/app">Criar conta</a>
+  <div class="eyebrow">Plano</div>
+  <h2 class="sec">Um produto completo. Você escolhe por quanto tempo.</h2>
+  <p class="sub">Mesmo produto em todos os períodos — quanto maior o período, menor o equivalente mensal. Pagamento por PIX quando o checkout abrir.</p>
+  <div class="price-card">
+    <div class="seg" role="tablist" aria-label="Período do plano">
+      <button type="button" data-p="mensal" class="active" role="tab" aria-selected="true" onclick="selPlano('mensal')">Mensal</button>
+      <button type="button" data-p="tri" role="tab" aria-selected="false" onclick="selPlano('tri')">3 meses</button>
+      <button type="button" data-p="sem" role="tab" aria-selected="false" onclick="selPlano('sem')">6 meses</button>
+      <button type="button" data-p="anual" role="tab" aria-selected="false" onclick="selPlano('anual')">Anual</button>
     </div>
-    <div class="plano destaque">
-      <h3>Mesa</h3>
-      <div class="preco">R$ 149 <small>/ mês</small></div>
-      <ul>
-        <li>Tudo do Paper</li>
-        <li>Shadow Trading com dados reais</li>
-        <li>Alertas no Telegram e webhook</li>
-        <li>Backup e restauração do estado</li>
-        <li>Suporte por e-mail</li>
-      </ul>
-      <a class="btn primary" href="/app">Assinar</a>
+    <div class="price-top">
+      <span class="price-big" id="pEquiv">R$ 150</span><span class="price-per">/ mês</span>
+      <span class="chip eco hide" id="pEco"></span>
+      <span class="chip top hide" id="pTop">Maior economia</span>
     </div>
-    <div class="plano">
-      <h3>Agência</h3>
-      <div class="preco">Sob consulta</div>
-      <ul>
-        <li>Várias contas isoladas</li>
-        <li>Mesa dedicada por cliente</li>
-        <li>Página pública de transparência</li>
-        <li>Acompanhamento na configuração</li>
-      </ul>
-      <a class="btn ghost" href="mailto:contato@dz23trading.com.br">Falar com a gente</a>
-    </div>
+    <div class="price-meta" id="pMeta">Cobrança de R$ 150 por mês.</div>
+    <ul class="price-list">
+      <li><span class="check" aria-hidden="true">✓</span> Um produto completo — PAPER e SHADOW</li>
+      <li><span class="check" aria-hidden="true">✓</span> Agentes com estratégias distintas e risco governado</li>
+      <li><span class="check" aria-hidden="true">✓</span> Contabilidade auditável e reconciliação</li>
+      <li><span class="check" aria-hidden="true">✓</span> Alertas, backup e exportação do estado</li>
+      <li><span class="check" aria-hidden="true">✓</span> Teste grátis de 24 horas ao entrar na beta</li>
+    </ul>
+    <a class="btn primary" style="width:100%" href="mailto:contato@dz23trading.com.br?subject=Acesso%20%C3%A0%20beta%20DZ23%20Trading&body=Quero%20solicitar%20acesso%20%C3%A0%20beta." onclick="track('beta_request','pricing')">Solicitar acesso à beta</a>
+    <p class="price-note">O checkout por PIX abre quando o cadastro e o teste estiverem liberados. Enquanto isso, o acesso é por beta — sem cobrar por algo que ainda não está aberto.</p>
   </div>
 </section>
 
 <section id="faq" class="faq">
-  <h2 class="sec">Dúvidas frequentes</h2>
-  <details><summary>Preciso saber programar?</summary>
-    <p>Não. Você cria a conta, conecta a corretora quando quiser e acompanha pelo painel.
-    Toda configuração é por formulário.</p></details>
-  <details><summary>Vocês têm acesso ao meu dinheiro?</summary>
-    <p>Não. As chaves de corretora ficam na sua conta, no servidor, e retornam sempre
-    mascaradas. Enquanto a execução real estiver bloqueada, nenhuma ordem sai com dinheiro
-    de verdade.</p></details>
-  <details><summary>Quanto rende?</summary>
-    <p>Não damos esse número, e desconfie de quem dá. O que mostramos é o histórico
-    completo das operações simuladas, com custos descontados, para você julgar.</p></details>
-  <details><summary>O que é Shadow Trading?</summary>
-    <p>Os agentes decidem com dados reais e as ordens são registradas como se fossem
-    enviadas, sem ir à corretora. Serve para medir a estratégia em condições de mercado
-    antes de qualquer risco.</p></details>
-  <details><summary>Posso cancelar quando quiser?</summary>
-    <p>Pode. A assinatura é mensal por PIX, sem fidelidade. Ao cancelar, o histórico
-    continua acessível para exportação.</p></details>
+  <div class="eyebrow">Dúvidas</div>
+  <h2 class="sec">Perguntas frequentes</h2>
+  <details><summary>Preciso saber programar?</summary><p>Não. Toda a configuração é por formulário no painel; você conecta a corretora quando quiser e acompanha o resto por lá.</p></details>
+  <details><summary>Vocês têm acesso ao meu dinheiro?</summary><p>Não. As chaves de corretora ficam na sua área, no servidor, e voltam sempre mascaradas. Com a execução real indisponível, nenhuma ordem sai com dinheiro de verdade.</p></details>
+  <details><summary>Quanto rende?</summary><p>Não damos esse número, e desconfie de quem dá. Mostramos o histórico das operações simuladas, com custos descontados, para você julgar.</p></details>
+  <details><summary>O que é o teste de 24 horas?</summary><p>Ao entrar na beta, você usa o produto completo em PAPER/SHADOW por 24 horas. Depois, a área fica somente-leitura até a assinatura — seus dados não são apagados.</p></details>
+  <details><summary>Como funciona o pagamento?</summary><p>Por PIX, no período que você escolher (mensal, 3, 6 ou 12 meses). O checkout abre quando o cadastro estiver liberado; até lá, o acesso é por beta.</p></details>
 </section>
 
 <section class="final" style="border:0">
-  <h2 class="sec">Comece sem arriscar nada</h2>
-  <p class="sub" style="margin:0 auto 26px">Crie a conta, rode em Paper Trading e veja o
-  sistema trabalhar antes de decidir qualquer coisa.</p>
-  <a class="btn primary" href="/app">Criar minha mesa</a>
+  <div class="eyebrow">Comece pela beta</div>
+  <h2 class="sec">Veja o sistema trabalhar antes de decidir.</h2>
+  <p class="sub" style="margin:0 auto 8px">Solicite acesso à beta e teste o produto completo em PAPER/SHADOW por 24 horas.</p>
+  <a class="btn primary" href="mailto:contato@dz23trading.com.br?subject=Acesso%20%C3%A0%20beta%20DZ23%20Trading" onclick="track('beta_request','final')">Solicitar acesso à beta</a>
 </section>
 
 </div>
 
 <footer><div class="wrap foot">
-  <div>© 2026 DZ23 Trading Platform · CNPJ 64.339.333/0001-22</div>
-  <div>Operações em mercado envolvem risco de perda. Não é recomendação de investimento.</div>
-</div></footer>
+  <div>© 2026 DZ23 Trading · CNPJ 64.339.333/0001-22</div>
+  <div class="foot-links">
+    <a href="/termos">Termos</a>
+    <a href="/privacidade">Privacidade</a>
+    <a href="#risco">Aviso de risco</a>
+    <a href="/app">Entrar</a>
+  </div>
+</div>
+<div class="wrap" style="margin-top:14px;font-size:12px">Operações em mercado envolvem risco de perda. Conteúdo informativo; não é recomendação de investimento. Resultados passados ou simulados não garantem resultados futuros. Execução com dinheiro real indisponível nesta fase.</div>
+</footer>
 
+<script>
+const PLANOS={
+  mensal:{label:'Mensal',meses:1,total:150},
+  tri:{label:'3 meses',meses:3,total:405},
+  sem:{label:'6 meses',meses:6,total:720},
+  anual:{label:'Anual',meses:12,total:1200}
+};
+const BRL=n=>'R$ '+n.toLocaleString('pt-BR',{minimumFractionDigits:n%1?2:0,maximumFractionDigits:2});
+function selPlano(id){
+  const p=PLANOS[id]; if(!p) return;
+  const base=150*p.meses, economia=base-p.total, desconto=Math.round((1-p.total/base)*100), equiv=p.total/p.meses;
+  document.querySelectorAll('.seg button').forEach(b=>{const on=b.dataset.p===id;b.classList.toggle('active',on);b.setAttribute('aria-selected',String(on))});
+  document.getElementById('pEquiv').textContent=BRL(equiv);
+  const meta=document.getElementById('pMeta');
+  meta.textContent = p.meses===1 ? 'Cobrança de '+BRL(p.total)+' por mês.'
+    : 'Cobrança única de '+BRL(p.total)+' a cada '+p.meses+' meses ('+BRL(equiv)+'/mês).';
+  const eco=document.getElementById('pEco'), top=document.getElementById('pTop');
+  if(economia>0){eco.textContent='Economize '+BRL(economia)+' vs mensal · '+desconto+'% off';eco.classList.remove('hide')}else{eco.classList.add('hide')}
+  top.classList.toggle('hide', id!=='anual');
+}
+selPlano('mensal');
+// Analytics de conversão SEM PII: só o nome do evento e a origem, se houver coletor.
+function track(evt,origem){try{if(window.dz23track)window.dz23track(evt,origem);}catch(e){}}
+</script>
+<style>.hide{display:none!important}</style>
 </body></html>

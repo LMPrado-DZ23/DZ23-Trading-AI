@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /app
+Disallow: /setup
+Sitemap: https://dz23trading.com.br/sitemap.xml
