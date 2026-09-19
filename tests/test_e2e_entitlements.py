@@ -27,9 +27,11 @@ def _assinar(corpo: bytes) -> str:
         CHAVE.sign(corpo, padding.PKCS1v15(), hashes.SHA256())).decode()
 
 
-def _webhook_body(tenant: str, plano: str, charge: str = "chg-1") -> bytes:
+def _webhook_body(tenant: str, plano: str, charge: str = "chg-1",
+                  value: int = 15000, currency: str = "BRL") -> bytes:
     return json.dumps({"event": "OPENPIX:CHARGE_COMPLETED",
                        "charge": {"status": "COMPLETED", "identifier": charge,
+                                  "value": value, "currency": currency,
                                   "correlationID": f"dz23-{tenant}-{plano}-202609"}}
                       ).encode()
 
@@ -149,6 +151,29 @@ class TestCatalogoECheckout:
         r = c.post("/v1/webhooks/woovi", content=_webhook_body("tenwh", "dz23_monthly"))
         assert r.status_code == 401
         assert m.SUBS.get("tenwh") is None
+
+    def test_webhook_tenant_desconhecido_e_recusado(self, mt, monkeypatch):
+        m, c = mt
+        monkeypatch.setenv("WOOVI_WEBHOOK_PUBLIC_KEY", PUB_PEM)
+        # assinado e válido em tudo, mas o tenant não existe -> 404 (§8)
+        corpo = _webhook_body("tenantfantasma", "dz23_monthly")
+        r = c.post("/v1/webhooks/woovi", content=corpo,
+                   headers={"x-webhook-signature": _assinar(corpo)})
+        assert r.status_code == 404
+
+    def test_webhook_replay_e_idempotente(self, mt, monkeypatch):
+        m, c = mt
+        monkeypatch.setenv("WOOVI_WEBHOOK_PUBLIC_KEY", PUB_PEM)
+        h = _tenant(m, "tenwh", "wh@a.com")
+        corpo = _webhook_body("tenwh", "dz23_monthly", charge="chg-rp")
+        h_sig = {"x-webhook-signature": _assinar(corpo)}
+        r1 = c.post("/v1/webhooks/woovi", content=corpo, headers=h_sig)
+        assert r1.status_code == 200 and not r1.json().get("replay")
+        exp1 = m.SUBS.get("tenwh").expires_at
+        r2 = c.post("/v1/webhooks/woovi", content=corpo, headers=h_sig)
+        assert r2.status_code == 200 and r2.json().get("replay") is True
+        assert m.SUBS.get("tenwh").expires_at == exp1
+        assert c.get("/v1/billing/status", headers=h).json()["ativo"] is True
 
 
 class TestSignupELogin:
@@ -287,8 +312,26 @@ class TestTrialSoPorAcaoExplicita:
         m, c = mt
         h = _tenant(m, "tena", "a@a.com")
         _expira(m, "tena")
+        # §4: teste vencido NÃO reinicia — 409, e a assinatura segue vencida.
         r = c.post("/v1/trial/start", headers=h)
-        assert r.status_code == 200 and r.json()["state"] == m.ACCT.TRIAL_EXPIRED
+        assert r.status_code == 409
+        assert m.SUBS.get("tena").is_active() is False
+
+    def test_trial_start_e_idempotente_em_trialing(self, mt):
+        m, c = mt
+        h = _tenant(m, "tena", "a@a.com")
+        fim = c.post("/v1/trial/start", headers=h).json()["expires_at"]
+        again = c.post("/v1/trial/start", headers=h)
+        assert again.status_code == 200 and again.json()["idempotent"] is True
+        assert again.json()["expires_at"] == fim        # não estende
+
+    def test_trial_start_recusado_para_conta_ativa(self, mt):
+        m, c = mt
+        h = _tenant(m, "tena", "a@a.com")
+        # paga (ativa) e então tenta iniciar trial -> 409 (nunca reinicia)
+        from tradingagents.billing.woovi import apply_paid_event
+        m.SUBS.save(apply_paid_event(None, "tena", "dz23_monthly", "c1"))
+        assert c.post("/v1/trial/start", headers=h).status_code == 409
 
     def test_restart_nao_estende_o_trial(self, tmp_path, monkeypatch):
         import importlib

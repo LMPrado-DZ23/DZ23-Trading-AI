@@ -32,9 +32,12 @@ def assinar(corpo: bytes) -> str:
         CHAVE.sign(corpo, padding.PKCS1v15(), hashes.SHA256())).decode()
 
 
-def evento(tenant="t1", plano="starter", charge="chg-1", status="COMPLETED") -> bytes:
+def evento(tenant="t1", plano="dz23_monthly", charge="chg-1", status="COMPLETED",
+           value=15000, currency="BRL") -> bytes:
+    # value bate com o preço do plano mensal do catálogo (R$ 150,00).
     return json.dumps({"event": "OPENPIX:CHARGE_COMPLETED",
                        "charge": {"status": status, "identifier": charge,
+                                  "value": value, "currency": currency,
                                   "correlationID": f"dz23-{tenant}-{plano}-202609"}}
                       ).encode()
 
@@ -52,7 +55,7 @@ class TestAssinaturaDoWebhook:
     def test_tampered_body_is_rejected(self):
         corpo = evento()
         assinatura = assinar(corpo)
-        adulterado = corpo.replace(b"starter", b"pro")      # tenta plano melhor
+        adulterado = corpo.replace(b"dz23_monthly", b"dz23_annual")   # tenta plano melhor
         with pytest.raises(WebhookRejected, match="assinatura"):
             verify_webhook(adulterado, assinatura, PUB_PEM)
 
@@ -188,10 +191,10 @@ class TestPortaoDeAcesso:
         monkeypatch.setenv("WOOVI_WEBHOOK_PUBLIC_KEY", PUB_PEM)
         m = self._app(tmp_path, monkeypatch)
         c = TestClient(m.app)
-        corpo = evento(tenant="legacy", plano="starter", charge="chg-x")
+        corpo = evento(tenant="legacy", charge="chg-x")     # dz23_monthly, R$150
         r = c.post("/v1/webhooks/woovi", content=corpo,
                    headers={"x-webhook-signature": assinar(corpo)})
-        assert r.status_code == 200 and r.json()["plano"] == "starter"
+        assert r.status_code == 200 and r.json()["plano"] == "dz23_monthly"
         assert m.SUBS.get("legacy").status == "active"
         # e o acesso volta:
         assert c.get("/v1/desk/status",
@@ -221,3 +224,74 @@ class TestPainelDePagamento:
         from pathlib import Path
         html = Path("service/static/index.html").read_text(encoding="utf-8")
         assert "WOOVI_TOKEN" not in html and "Authorization: Client_Id" not in html
+
+
+class TestWebhookEndurecido:
+    """§8: assinatura + moeda + valor + plano + tenant + charge id + replay +
+    idempotência durável, e 5xx quando o banco cai depois do pagamento."""
+
+    def _app(self, tmp_path, monkeypatch):
+        import importlib
+        monkeypatch.setenv("ACCESS_PASSWORD", "s3nh4")
+        monkeypatch.setenv("DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("WOOVI_WEBHOOK_PUBLIC_KEY", PUB_PEM)
+        import service.app as m
+        importlib.reload(m)
+        m._FAILS.clear()
+        return m
+
+    def _post(self, c, corpo):
+        return c.post("/v1/webhooks/woovi", content=corpo,
+                      headers={"x-webhook-signature": assinar(corpo)})
+
+    def test_replay_nao_credita_duas_vezes(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = self._app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+        corpo = evento(tenant="legacy", charge="chg-1")
+        r1 = self._post(c, corpo)
+        assert r1.status_code == 200 and not r1.json().get("replay")
+        exp1 = m.SUBS.get("legacy").expires_at
+        r2 = self._post(c, corpo)                       # MESMO charge_id
+        assert r2.status_code == 200 and r2.json().get("replay") is True
+        assert m.SUBS.get("legacy").expires_at == exp1  # não estendeu (idempotente)
+
+    def test_valor_errado_e_recusado(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = self._app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+        assert self._post(c, evento(tenant="legacy", value=100)).status_code == 422
+        assert m.SUBS.get("legacy") is None             # não ativou nada
+
+    def test_moeda_nao_brl_e_recusada(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = self._app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+        assert self._post(c, evento(tenant="legacy", currency="USD")).status_code == 422
+
+    def test_plano_fora_do_catalogo_e_recusado(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = self._app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+        corpo = evento(tenant="legacy", plano="starter", value=15000)
+        assert self._post(c, corpo).status_code == 422
+
+    def test_sem_identificador_e_recusado(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = self._app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+        assert self._post(c, evento(tenant="legacy", charge="")).status_code == 422
+
+    def test_db_indisponivel_depois_do_pagamento_responde_5xx(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+
+        from tradingagents.billing.store import BillingUnavailable
+        m = self._app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+
+        class _Boom:
+            def record_paid_charge(self, *a, **k):
+                raise BillingUnavailable("db down")
+        m.SUBS = _Boom()
+        r = self._post(c, evento(tenant="legacy", charge="chg-9"))
+        assert r.status_code == 503                      # Woovi reenvia; nada perdido
