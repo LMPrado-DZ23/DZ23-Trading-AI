@@ -77,12 +77,19 @@ if DATABASE_URL and not os.environ.get("DATABASE_URL"):
 JOB_STORE = _build_job_store()
 PASSWORD = os.environ.get("ACCESS_PASSWORD", "")
 MULTI_TENANT_ENABLED = os.environ.get("MULTI_TENANT_ENABLED", "false").lower() == "true"
+# SAAS_MODE (§7): trava fail-closed do produto SaaS. Ligado, EXIGE multi-tenant
+# + signing key + billing store transacional (DATABASE_URL/Postgres). Config
+# ausente NUNCA cai no modo gratuito legado — o boot falha alto e claro, em vez
+# de degradar em silêncio para um modo sem cobrança.
+from tradingagents import saas_config as _saas  # noqa: E402
+
+SAAS_MODE = _saas.is_truthy(os.environ.get("SAAS_MODE"))
 _TENANT_SIGNING_KEY = os.environ.get("TENANT_TOKEN_SIGNING_KEY")
 TENANT_STORE = None
 if MULTI_TENANT_ENABLED:
-    # Configuração errada NÃO pode matar o contêiner: o dono ficaria com um
-    # 502 mudo, sem página para ler o que fazer. Desliga o multi-tenant,
-    # mantém o serviço de pé e diz exatamente como corrigir.
+    # Fora do SAAS_MODE, configuração errada NÃO mata o contêiner: desliga o
+    # multi-tenant, mantém o serviço de pé e diz como corrigir. Em SAAS_MODE, ao
+    # contrário, propaga o erro (fail-closed) — ver _enforce_saas_mode().
     try:
         if not _TENANT_SIGNING_KEY:
             raise ValueError("TENANT_TOKEN_SIGNING_KEY é obrigatório")
@@ -93,11 +100,41 @@ if MULTI_TENANT_ENABLED:
             TENANT_STORE = TenantStore(DATA / "identity.db",
                                        signing_key=_TENANT_SIGNING_KEY)
     except Exception as _exc:
+        if SAAS_MODE:
+            raise RuntimeError(
+                f"SAAS_MODE ligado mas o multi-tenant não inicializou: {_exc}. "
+                "SaaS não pode cair no modo legado — corrija a configuração "
+                "(TENANT_TOKEN_SIGNING_KEY 32+, DATABASE_URL) e reinicie.") from _exc
         MULTI_TENANT_ENABLED = False
         HEALTH["avisos"].append(
             f"multi-tenant desligado: {_exc}. Defina TENANT_TOKEN_SIGNING_KEY "
             "com 32+ caracteres aleatórios e reinicie para habilitar contas.")
 TENANT_BOOTSTRAP_TOKEN = os.environ.get("TENANT_BOOTSTRAP_TOKEN", "")
+
+
+def _enforce_saas_mode() -> None:
+    """Trava fail-closed do SAAS_MODE (§7). Chamada DEPOIS que TENANT_STORE e o
+    billing store (SUBS) existem. Em SAAS_MODE exige, sem exceção:
+      - MULTI_TENANT_ENABLED de fato ligado (não caiu para legado);
+      - TENANT_STORE inicializado;
+      - signing key presente;
+      - DATABASE_URL (banco transacional) — SQLite não sustenta SaaS;
+      - billing store REAL (não o sentinela _UnavailableStore).
+    Qualquer requisito ausente aborta o boot — nunca degrada para o modo
+    gratuito legado."""
+    if not SAAS_MODE:
+        return
+    faltas = _saas.missing_saas_requirements(
+        multi_tenant=MULTI_TENANT_ENABLED,
+        tenant_store_ok=TENANT_STORE is not None,
+        signing_key=_TENANT_SIGNING_KEY,
+        database_url=os.environ.get("DATABASE_URL"),
+        billing_store_ok=not isinstance(SUBS, _UnavailableStore),
+    )
+    if faltas:
+        raise RuntimeError(
+            "SAAS_MODE ligado mas faltam requisitos (fail-closed, sem cair no "
+            "modo gratuito legado): " + "; ".join(faltas) + ".")
 STATIC = Path(__file__).parent / "static"
 AGENCY_AUDIT = AuditLog(DATA / "agency-events.jsonl")
 AGENCY_EVENT_BUS = EventBus(AGENCY_AUDIT)
@@ -1011,7 +1048,6 @@ from tradingagents.billing.woovi import (  # noqa: E402
     BillingError,
     WebhookRejected,
     WooviClient,
-    apply_paid_event,
     verify_webhook,
 )
 
@@ -1029,6 +1065,9 @@ class _UnavailableStore:
         raise BillingUnavailable("billing store não inicializado (Postgres)")
 
     def save(self, sub):
+        raise BillingUnavailable("billing store não inicializado (Postgres)")
+
+    def record_paid_charge(self, charge_id, tenant_id, plan_code, amount_cents, now=None):
         raise BillingUnavailable("billing store não inicializado (Postgres)")
 
 
@@ -1050,6 +1089,7 @@ def _build_subscription_store():
 
 
 SUBS = _build_subscription_store()
+_enforce_saas_mode()   # §7: aborta o boot se SAAS_MODE ligado sem os requisitos
 
 
 def estado_da_conta(tenant_id: str):
@@ -1151,8 +1191,26 @@ def trial_start(request: Request, principal=Depends(auth)):
     if not principal.can("admin"):
         raise HTTPException(403, "apenas o administrador do tenant inicia o teste")
     tenant = request_tenant(request)
+    # O ESTADO ATUAL decide (§4): só NOT_STARTED pode iniciar. TRIALING é
+    # idempotente (devolve o mesmo teste, sem estender). ACTIVE / TRIAL_EXPIRED
+    # / PAST_DUE / SUSPENDED NUNCA reiniciam o teste — 409. Billing indisponível
+    # é fail-closed (503), nunca inventa trial.
+    estado_atual, sub_atual = estado_da_conta(tenant)
+    if estado_atual == ACCT.UNKNOWN_BILLING:
+        raise HTTPException(503, {"erro": "cobrança indisponível",
+                                  "estado": ACCT.UNKNOWN_BILLING})
+    if estado_atual == ACCT.TRIALING and sub_atual is not None:
+        return {**ACCT.describe(estado_atual), "plan": sub_atual.plan_code,
+                "expires_at": sub_atual.expires_at.isoformat(), "idempotent": True}
+    if estado_atual != ACCT.NOT_STARTED:
+        raise HTTPException(409, {
+            "erro": "teste indisponível",
+            "estado": estado_atual,
+            "motivo": "o teste de 24h começa uma única vez, só a partir de uma "
+                      "conta nova; ele não reinicia após expirar/vencer/suspender.",
+        })
     try:
-        sub = SUBS.start_trial_for(tenant)
+        sub = SUBS.start_trial_for(tenant)   # INSERT condicional: uso único real
     except BillingUnavailable:
         raise HTTPException(503, {"erro": "cobrança indisponível",
                                   "estado": ACCT.UNKNOWN_BILLING}) from None
@@ -1236,8 +1294,13 @@ async def billing_checkout(req: Request, _=Depends(auth)):
 
 @app.post("/v1/webhooks/woovi")
 async def woovi_webhook(request: Request):
-    """PÚBLICO por necessidade — e por isso verificado por assinatura RSA
-    sobre o corpo BRUTO. Sem assinatura válida, nada é ativado."""
+    """PÚBLICO por necessidade — verificado por assinatura RSA sobre o corpo
+    BRUTO. Além da assinatura, valida (§8): tipo do evento, correlação, plano do
+    catálogo, MOEDA (BRL), VALOR == preço do plano, tenant existente e um
+    identificador de cobrança. Aplica com IDEMPOTÊNCIA DURÁVEL (ledger por
+    charge_id): reenvio não credita duas vezes. Se o banco falhar DEPOIS do
+    pagamento, responde 5xx e a Woovi reenvia — nada é perdido nem creditado
+    pela metade (a aplicação é atômica)."""
     raw = await request.body()
     assinatura = (request.headers.get("x-webhook-signature")
                   or request.headers.get("signature") or "")
@@ -1249,17 +1312,45 @@ async def woovi_webhook(request: Request):
     if (evento.get("event") or charge.get("status", "")).upper() not in (
             "OPENPIX:CHARGE_COMPLETED", "COMPLETED", "PAID"):
         return {"ok": True, "ignorado": "evento não é de pagamento concluído"}
-    correlation = charge.get("correlationID", "")
+
+    # Correlação: dz23-<tenant>-<plano>-<AAAAMM>. Parse pela DIREITA para
+    # aceitar tenant com hífen (plano e período não têm hífen).
+    correlation = str(charge.get("correlationID", ""))
     partes = correlation.split("-")
-    if len(partes) < 3 or partes[0] != "dz23":
+    if len(partes) < 4 or partes[0] != "dz23":
         return {"ok": True, "ignorado": "cobrança não pertence a este sistema"}
-    tenant, plano = partes[1], partes[2]
-    charge_id = charge.get("identifier") or correlation
-    atual = SUBS.get(tenant)
-    nova = apply_paid_event(atual, tenant, plano, charge_id)
-    SUBS.save(nova)
-    return {"ok": True, "tenant": tenant, "plano": nova.plan_code,
-            "expira_em": nova.expires_at.isoformat()}
+    plano = partes[-2]
+    tenant = "-".join(partes[1:-2])
+
+    if not CAT.is_valid_code(plano):
+        raise HTTPException(422, "plano fora do catálogo")
+    moeda = str(charge.get("currency") or "BRL").upper()      # PIX é BRL
+    if moeda != "BRL":
+        raise HTTPException(422, "moeda não suportada (apenas BRL)")
+    esperado = CAT.CATALOGO[plano].preco_cents
+    valor = charge.get("value")
+    if not isinstance(valor, int) or valor != esperado:       # valor tem de bater
+        raise HTTPException(422, "valor pago não confere com o plano")
+    charge_id = str(charge.get("identifier") or charge.get("id") or "").strip()
+    if not charge_id:                                          # sem id, sem replay-safety
+        raise HTTPException(422, "cobrança sem identificador")
+    if MULTI_TENANT_ENABLED and TENANT_STORE and tenant != "legacy" \
+            and not TENANT_STORE.tenant_exists(tenant):
+        raise HTTPException(404, "tenant desconhecido")
+
+    try:
+        aplicado, sub = SUBS.record_paid_charge(charge_id, tenant, plano, valor)
+    except BillingUnavailable:
+        # Pagamento recebido, banco fora do ar: NÃO confirma. 503 -> Woovi
+        # reenvia; a transação é tudo-ou-nada, então reprocessa limpo.
+        raise HTTPException(503, {"erro": "cobrança recebida mas o banco está "
+                                          "indisponível; reenvie o webhook"}) from None
+    if not aplicado:                                          # replay/idempotente
+        return {"ok": True, "replay": True, "tenant": tenant,
+                "plano": (sub.plan_code if sub else plano)}
+    assert sub is not None
+    return {"ok": True, "tenant": tenant, "plano": sub.plan_code,
+            "expira_em": sub.expires_at.isoformat()}
 
 # ================================================================== CADASTRO
 # Autoatendimento: o cliente cria a própria agência, recebe o período de

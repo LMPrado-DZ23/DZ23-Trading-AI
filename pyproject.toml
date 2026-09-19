@@ -113,20 +113,21 @@ ignore = ["E501"]
 combine-as-imports = true
 
 # ------------------------------------------------------------------ TYPECHECK
-# Gate de tipos REAL (não permissivo) com escopo inicial realista: os módulos
-# de billing, catálogo, analytics e tenancy — a lógica de dinheiro/acesso que
-# mais dói se quebrar. Comando canônico do gate: `mypy` (usa [tool.mypy.files]).
+# Gate de tipos REAL (não permissivo) cobrindo a LÓGICA de cada domínio pedido
+# (§9): billing + catálogo (billing/*), ENTITLEMENTS (billing/write_policy.py),
+# AUTH (tenancy.py + saas_config.py), analytics. Comando canônico: `mypy`.
 #
-# DÍVIDA REGISTRADA (ampliar gradualmente, §7): `service/app.py`
-# (auth/entitlements) é grande e ainda sem anotações completas; entra no escopo
-# num próximo bloco, módulo a módulo, para não travar a entrega com uma enxurrada
-# de erros de uma vez. `write_policy` já é a peça central e está no escopo.
+# A cola FastAPI de auth/entitlements dentro de `service/app.py` (dependências,
+# middleware) permanece como DÍVIDA REGISTRADA: entra por partes num próximo
+# bloco, para não travar a entrega com uma enxurrada de erros de uma vez. A
+# DECISÃO de entitlements (write_policy) e a de auth (tenancy) já estão tipadas.
 [tool.mypy]
 python_version = "3.12"
 files = [
     "tradingagents/billing",
     "tradingagents/analytics.py",
     "tradingagents/tenancy.py",
+    "tradingagents/saas_config.py",
 ]
 # Terceiros sem stubs (psycopg, cryptography, httpx) não devem virar ruído.
 ignore_missing_imports = true
@@ -139,7 +140,8 @@ no_implicit_optional = true
 strict_equality = true
 
 [[tool.mypy.overrides]]
-# No escopo inicial, exigir que TODA def pública seja tipada (aí o gate morde).
-module = ["tradingagents.billing.*", "tradingagents.analytics", "tradingagents.tenancy"]
+# No escopo, exigir que TODA def pública seja tipada (aí o gate morde).
+module = ["tradingagents.billing.*", "tradingagents.analytics",
+          "tradingagents.tenancy", "tradingagents.saas_config"]
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
