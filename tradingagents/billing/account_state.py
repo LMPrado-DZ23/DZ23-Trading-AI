@@ -22,6 +22,9 @@ TRIAL_EXPIRED = "TRIAL_EXPIRED"
 ACTIVE = "ACTIVE"
 PAST_DUE = "PAST_DUE"
 SUSPENDED = "SUSPENDED"
+# Billing indisponível (banco canônico fora do ar). FAIL-CLOSED: sem saber se
+# a conta pode escrever, NÃO deixa escrever — nunca concede acesso por outage.
+UNKNOWN_BILLING = "UNKNOWN_BILLING"
 
 # Só estes estados PODEM escrever. Qualquer outro é somente-leitura — o
 # default seguro é negar a escrita, não permitir.
@@ -65,11 +68,12 @@ def describe(state: str) -> dict:
         ACTIVE: "Assinatura ativa",
         PAST_DUE: "Pagamento vencido — somente leitura",
         SUSPENDED: "Conta suspensa — somente leitura",
+        UNKNOWN_BILLING: "Cobrança indisponível — somente leitura",
     }
     return {"state": state, "read_only": is_read_only(state),
             "label": rotulos.get(state, state)}
 
 
 __all__ = ["NOT_STARTED", "TRIALING", "TRIAL_EXPIRED", "ACTIVE", "PAST_DUE",
-           "SUSPENDED", "WRITABLE", "TRIAL_HOURS", "derive_state",
-           "is_read_only", "describe"]
+           "SUSPENDED", "UNKNOWN_BILLING", "WRITABLE", "TRIAL_HOURS",
+           "derive_state", "is_read_only", "describe"]

@@ -918,7 +918,10 @@ def runtime_for_tenant_id(tenant_id: str):
 # com a chave pública) — nada que venha do navegador libera acesso.
 from tradingagents.analytics import ConversionCounter  # noqa: E402
 from tradingagents.billing import account_state as ACCT  # noqa: E402
-from tradingagents.billing.store import SubscriptionStore  # noqa: E402
+from tradingagents.billing.store import (  # noqa: E402
+    BillingUnavailable,
+    SubscriptionStore,
+)
 from tradingagents.billing.woovi import (  # noqa: E402
     PLANS,
     BillingError,
@@ -929,21 +932,50 @@ from tradingagents.billing.woovi import (  # noqa: E402
 )
 
 
+class _UnavailableStore:
+    """Sentinela FAIL-CLOSED: quando o Postgres canônico não sobe no boot, o
+    billing fica DESCONHECIDO. Não cai para SQLite (fonte concorrente que
+    poderia inventar trials); toda leitura levanta BillingUnavailable, e as
+    rotas mutáveis ficam bloqueadas até o banco voltar."""
+
+    def get(self, tenant_id):
+        raise BillingUnavailable("billing store não inicializado (Postgres)")
+
+    def start_trial_for(self, tenant_id):
+        raise BillingUnavailable("billing store não inicializado (Postgres)")
+
+    def save(self, sub):
+        raise BillingUnavailable("billing store não inicializado (Postgres)")
+
+
 def _build_subscription_store():
-    """Mesma regra do resto: banco fora do ar degrada, não derruba. Sem isso,
-    um Postgres indisponível impediria o cliente até de PAGAR."""
+    """FONTE CANÔNICA ÚNICA. Com DATABASE_URL, é Postgres — indisponível no
+    boot vira UNKNOWN (somente-leitura), NUNCA um SQLite paralelo que poderia
+    conceder acesso gravável ou reiniciar trials durante um outage."""
     dsn = os.environ.get("DATABASE_URL")
     if dsn:
         try:
             return SubscriptionStore(DATA / "subscriptions.db", dsn)
         except Exception as exc:
             HEALTH["avisos"].append(
-                "assinaturas: PostgreSQL indisponível "
-                f"({type(exc).__name__}); usando o banco local do volume.")
+                "assinaturas: PostgreSQL indisponível no boot "
+                f"({type(exc).__name__}); billing em UNKNOWN (somente-leitura).")
+            return _UnavailableStore()
+    # Sem DATABASE_URL: SQLite local é a única fonte (dev/Paper).
     return SubscriptionStore(DATA / "subscriptions.db", None)
 
 
 SUBS = _build_subscription_store()
+
+
+def estado_da_conta(tenant_id: str):
+    """(estado_canônico, sub|None). FAIL-CLOSED: billing indisponível =>
+    UNKNOWN_BILLING (somente-leitura). NÃO inicia nem estende trial."""
+    try:
+        sub = SUBS.get(tenant_id)
+    except BillingUnavailable:
+        return ACCT.UNKNOWN_BILLING, None
+    return ACCT.derive_state(sub), sub
 CONV = ConversionCounter()   # conversão anônima (sem PII), em memória
 
 
@@ -953,18 +985,10 @@ def _woovi_public_key() -> str:
 
 
 def require_plan(request: Request, feature: str = "mesa"):
-    """Portão de acesso. Assinatura vencida bloqueia o que custa dinheiro
-    (mesa, análises), mas NUNCA a página de pagamento nem o login — senão o
-    cliente não consegue nem pagar para voltar."""
-    tenant = request_tenant(request)
-    sub = SUBS.ensure(tenant)
-    if not sub.is_active():
-        raise HTTPException(402, {
-            "erro": "assinatura expirada",
-            "plano_atual": sub.plan_code,
-            "acao": "Assine em Plano e pagamento para continuar usando",
-        })
-    return sub
+    """Alias legado de `require_write`: bloqueia escrita quando a conta está
+    somente-leitura (trial expirado, vencida, suspensa, billing desconhecido),
+    mas NUNCA o pagamento nem o login."""
+    return require_write(request)
 
 
 @app.get("/v1/billing/planos")
@@ -977,20 +1001,22 @@ def billing_plans(_=Depends(auth)):
 
 @app.get("/v1/billing/status")
 def billing_status(request: Request, _=Depends(auth)):
-    sub = SUBS.ensure(request_tenant(request))
-    return {"plano": sub.plan_code, "nome": sub.plan.name, "status": sub.status,
-            "ativo": sub.is_active(), "expira_em": sub.expires_at.isoformat(),
-            "estado": ACCT.derive_state(sub),
-            "gateway_configurado": WooviClient().configured}
+    estado, sub = estado_da_conta(request_tenant(request))
+    base = {"estado": estado, "gateway_configurado": WooviClient().configured}
+    if sub is None:
+        return {**base, "plano": None, "status": estado, "ativo": False,
+                "expira_em": None}
+    return {**base, "plano": sub.plan_code, "nome": sub.plan.name,
+            "status": sub.status, "ativo": estado == ACCT.ACTIVE,
+            "expira_em": sub.expires_at.isoformat()}
 
 
 def require_write(request: Request):
-    """Portão de ESCRITA (trial de 24h / assinatura). Quando a conta está
-    somente-leitura (TRIAL_EXPIRED / PAST_DUE / SUSPENDED / NOT_STARTED), a
-    escrita é bloqueada — leitura e exportação continuam, e NADA é apagado."""
+    """Portão CENTRAL de ESCRITA. Bloqueia quando a conta está somente-leitura
+    (TRIAL_EXPIRED / PAST_DUE / SUSPENDED / NOT_STARTED / UNKNOWN_BILLING) —
+    leitura, exportação, pagamento e login seguem, e NADA é apagado."""
     tenant = request_tenant(request)
-    sub = SUBS.ensure(tenant)
-    estado = ACCT.derive_state(sub)
+    estado, _ = estado_da_conta(tenant)
     if ACCT.is_read_only(estado):
         raise HTTPException(402, {
             "erro": "conta somente-leitura",
@@ -998,13 +1024,31 @@ def require_write(request: Request):
             "acao": "Assine em Plano e pagamento para voltar a operar. "
                     "Seus dados continuam salvos.",
         })
-    return sub
+    return estado
 
 
 @app.get("/v1/account/state")
 def account_state_endpoint(request: Request, _=Depends(auth)):
-    """Estado server-side da conta para a UI (sem PII)."""
-    sub = SUBS.ensure(request_tenant(request))
+    """Estado server-side da conta para a UI (sem PII). NÃO inicia trial."""
+    estado, sub = estado_da_conta(request_tenant(request))
+    return {**ACCT.describe(estado),
+            "plan": sub.plan_code if sub else None,
+            "expires_at": sub.expires_at.isoformat() if sub else None}
+
+
+@app.post("/v1/trial/start")
+def trial_start(request: Request, principal=Depends(auth)):
+    """Inicia o teste de 24h EXPLICITAMENTE (idempotente, exatamente uma vez).
+    Nem leitura, nem login, nem GET de estado iniciam trial — só esta rota.
+    Pré-condições operacionais (e-mail verificado, política de convite) são
+    aplicadas na camada de signup/convite; aqui a garantia é exatamente-uma-vez
+    e sem renovação após expirar."""
+    tenant = request_tenant(request)
+    try:
+        sub = SUBS.start_trial_for(tenant)
+    except BillingUnavailable:
+        raise HTTPException(503, {"erro": "cobrança indisponível",
+                                  "estado": ACCT.UNKNOWN_BILLING}) from None
     estado = ACCT.derive_state(sub)
     return {**ACCT.describe(estado), "plan": sub.plan_code,
             "expires_at": sub.expires_at.isoformat()}
@@ -1140,7 +1184,7 @@ async def tenant_signup(request: Request):
         if "unique" in str(exc).lower() or "duplicate" in str(exc).lower():
             raise HTTPException(409, "este e-mail já tem conta; faça login") from None
         raise HTTPException(500, "não foi possível criar a conta agora") from None
-    sub = SUBS.ensure(tenant_id)      # teste começa na criação
+    sub = SUBS.start_trial_for(tenant_id)   # trial explícito na criação (1x)
     token = TENANT_STORE.login(email, senha, tenant_id)
     return {"ok": True, "tenant_id": tenant_id, "access_token": token,
             "plano": sub.plan_code, "teste_expira_em": sub.expires_at.isoformat(),
@@ -1291,7 +1335,7 @@ def oauth_callback(provider: str, code: str = "", state: str = ""):
         tenant_id = TENANT_STORE.create_tenant(f"Agência de {nome}")
         user_id = TENANT_STORE.create_user(email, senha_interna)
         TENANT_STORE.add_member(tenant_id, user_id, "admin")
-        SUBS.ensure(tenant_id)
+        SUBS.start_trial_for(tenant_id)     # trial explícito na criação (1x)
         token = TENANT_STORE.login(email, senha_interna, tenant_id)
         novo = True
     else:
