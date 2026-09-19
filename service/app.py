@@ -19,7 +19,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from tradingagents.agency_runtime import AgencyRuntime
@@ -343,6 +343,55 @@ async def security_headers(request, call_next):
     resp.headers["X-Frame-Options"] = "DENY"
     resp.headers["Referrer-Policy"] = "no-referrer"
     return resp
+
+
+# ENTITLEMENTS CENTRAL: toda rota MUTÁVEL (POST/PUT/PATCH/DELETE) exige conta
+# com acesso ativo, POR PADRÃO (fail-closed). A allowlist são as operações
+# seguras mesmo em somente-leitura: autenticação, pagamento, início/retomada
+# de assinatura e REDUÇÃO de risco. Qualquer rota mutável nova cai no bloqueio
+# até ser classificada — nunca fica de fora por esquecimento.
+_ENTITLEMENT_METODOS = {"POST", "PUT", "PATCH", "DELETE"}
+_WRITE_ALLOWLIST = {
+    "/v1/auth/login", "/v1/auth/logout", "/v1/auth/bootstrap",
+    "/v1/auth/signup", "/v1/billing/checkout", "/v1/trial/start",
+    "/v1/analytics/event",
+    # REDUÇÃO de risco / parada — sempre permitidas (nunca aumentam exposição):
+    "/v1/execution/kill-switch", "/v1/live/parada-emergencia",
+}
+_WRITE_ALLOW_PREFIX = ("/v1/auth/oauth/", "/v1/billing/webhook", "/webhook")
+
+
+def _tenant_autenticado(request: Request):
+    """Resolve o tenant do bearer SEM depender do fluxo de rota. Token ausente
+    ou inválido -> None (a auth da rota devolve 401; o gate não interfere)."""
+    if not MULTI_TENANT_ENABLED or not TENANT_STORE:
+        return None
+    authz = request.headers.get("authorization", "")
+    if authz[:7].lower() != "bearer ":
+        return None
+    try:
+        return TENANT_STORE.authenticate(authz[7:].strip()).tenant_id
+    except Exception:                                # noqa: BLE001
+        return None
+
+
+@app.middleware("http")
+async def entitlements_guard(request, call_next):
+    if MULTI_TENANT_ENABLED and request.method.upper() in _ENTITLEMENT_METODOS:
+        path = request.url.path.rstrip("/") or "/"
+        if path not in _WRITE_ALLOWLIST \
+                and not path.startswith(_WRITE_ALLOW_PREFIX):
+            tenant = _tenant_autenticado(request)
+            if tenant is not None:      # só decide quando há sessão válida
+                estado, _ = estado_da_conta(tenant)
+                if ACCT.is_read_only(estado):
+                    return JSONResponse(status_code=402, content={
+                        "erro": "conta somente-leitura",
+                        "estado": estado,
+                        "acao": "Assine em Plano e pagamento para voltar a "
+                                "operar. Seus dados continuam salvos.",
+                    })
+    return await call_next(request)
 
 # Provedores gratuitos/locais de primeira classe: todos falam o protocolo
 # OpenAI-compatível do núcleo, cada um com sua URL e sua chave própria
