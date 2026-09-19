@@ -972,7 +972,6 @@ from tradingagents.billing.store import (  # noqa: E402
     SubscriptionStore,
 )
 from tradingagents.billing.woovi import (  # noqa: E402
-    PLANS,
     BillingError,
     WebhookRejected,
     WooviClient,
@@ -1176,10 +1175,14 @@ async def woovi_webhook(request: Request):
 # teste e pode assinar. Sem isto não há produto para vender — só instalação
 # manual pelo dono.
 #
-# DECISÃO ASSUMIDA: cadastro aberto por padrão (SIGNUP_ENABLED=true). Para
-# um SaaS que se vende sozinho, exigir token do administrador mataria a
-# conversão. Quem quiser produto fechado põe SIGNUP_ENABLED=false.
-SIGNUP_ENABLED = os.environ.get("SIGNUP_ENABLED", "true").strip().lower() != "false"
+# DECISÃO ASSUMIDA: cadastro FECHADO por padrão (fail-closed). O signup
+# público cria tenants, usuários e dados reais; abri-lo é decisão explícita.
+# Ausência da variável, valor inválido ou erro de digitação ⇒ DESLIGADO;
+# só um valor afirmativo declarado ("true"/"1"/"yes"/"sim"/"on") liga. Os
+# portões de verificação de e-mail, rate-limit e convite são pré-requisitos
+# desta chave (ver §5) e devem estar prontos antes de ligá-la em produção.
+_SIGNUP_SIM = frozenset({"1", "true", "yes", "sim", "on"})
+SIGNUP_ENABLED = str(os.environ.get("SIGNUP_ENABLED", "")).strip().lower() in _SIGNUP_SIM
 _SIGNUP_ATTEMPTS: dict = {}
 SIGNUP_MAX, SIGNUP_WINDOW = 5, 3600
 
@@ -1212,9 +1215,9 @@ def _validar_email(email: str) -> str:
 def signup_status():
     """Público: o painel precisa saber se mostra 'Criar conta'."""
     return {"habilitado": SIGNUP_ENABLED and MULTI_TENANT_ENABLED and bool(TENANT_STORE),
-            "dias_de_teste": PLANS["trial"].period_days,
-            "planos": [{"codigo": p.code, "nome": p.name, "preco": p.price_brl}
-                       for p in PLANS.values() if p.price_cents > 0]}
+            "horas_de_teste": CAT.TRIAL_HORAS,
+            "planos": [{"codigo": p["code"], "nome": p["nome"], "preco": p["preco"]}
+                       for p in CAT.resumo()]}
 
 
 @app.post("/v1/auth/signup")
@@ -1231,16 +1234,14 @@ async def tenant_signup(request: Request):
         raise HTTPException(422, "informe o nome da sua agência")
     _validar_senha(senha)
     try:
-        tenant_id = TENANT_STORE.create_tenant(nome)
-        user_id = TENANT_STORE.create_user(email, senha)
-        TENANT_STORE.add_member(tenant_id, user_id, "admin")
-    except ValueError as exc:
-        raise HTTPException(409, str(exc)) from None
-    except Exception as exc:
-        # e-mail repetido chega como erro de banco: vira mensagem humana,
-        # nunca um 500 com detalhe interno.
-        if "unique" in str(exc).lower() or "duplicate" in str(exc).lower():
-            raise HTTPException(409, "este e-mail já tem conta; faça login") from None
+        # Criação ATÔMICA (tenant + usuário + vínculo). Falha desfaz tudo:
+        # sem tenant órfão. Mensagem genérica de propósito — não confirma se
+        # o e-mail já existe (anti-enumeração).
+        tenant_id, _user_id = TENANT_STORE.create_account(nome, email, senha)
+    except AuthError:
+        raise HTTPException(409, "não foi possível concluir o cadastro; "
+                                 "se já tiver conta, faça login") from None
+    except Exception:
         raise HTTPException(500, "não foi possível criar a conta agora") from None
     sub = SUBS.start_trial_for(tenant_id)   # trial explícito na criação (1x)
     token = TENANT_STORE.login(email, senha, tenant_id)
@@ -1390,9 +1391,17 @@ def oauth_callback(provider: str, code: str = "", state: str = ""):
     if tenant_id is None:
         if not SIGNUP_ENABLED:
             raise HTTPException(403, "cadastro fechado neste servidor")
-        tenant_id = TENANT_STORE.create_tenant(f"Agência de {nome}")
-        user_id = TENANT_STORE.create_user(email, senha_interna)
-        TENANT_STORE.add_member(tenant_id, user_id, "admin")
+        try:
+            tenant_id, user_id = TENANT_STORE.create_account(   # atômico
+                f"Agência de {nome}", email, senha_interna)
+        except AuthError:
+            # Corrida: e-mail passou a existir entre a checagem e a criação.
+            tenant_id, user_id = TENANT_STORE.find_membership_by_email(email)
+            if tenant_id is None:
+                raise HTTPException(409, "não foi possível concluir o cadastro") from None
+            token = TENANT_STORE.issue_token_for_user(user_id, tenant_id)
+            return {"ok": True, "tenant_id": tenant_id, "access_token": token,
+                    "email": email, "conta_nova": False}
         SUBS.start_trial_for(tenant_id)     # trial explícito na criação (1x)
         token = TENANT_STORE.login(email, senha_interna, tenant_id)
         novo = True

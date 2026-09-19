@@ -121,6 +121,35 @@ class TenantStore:
         with self._connect() as c:
             c.execute("INSERT OR REPLACE INTO memberships(tenant_id,user_id,role,created_at) VALUES(?,?,?,?)", (tenant_id, user_id, role, time.time()))
 
+    def create_account(self, agency_name: str, email: str, password: str, *,
+                       role: str = "admin", tenant_id: str | None = None,
+                       user_id: str | None = None) -> tuple[str, str]:
+        """Cria tenant + usuário + vínculo em UMA transação.
+
+        Atômico: qualquer falha desfaz tudo — nunca fica tenant órfão nem
+        usuário sem vínculo. E-mail repetido (UNIQUE) vira AuthError; o
+        chamador responde de forma genérica (anti-enumeração). A senha é
+        validada e o hash calculado ANTES de abrir a transação.
+        """
+        if role not in ROLES:
+            raise AuthError("papel inválido")
+        tenant_id = tenant_id or "ten_" + secrets.token_urlsafe(12)
+        user_id = user_id or "usr_" + secrets.token_urlsafe(12)
+        pwd_hash = self._hash_password(password)
+        now = time.time()
+        try:
+            with self._connect() as c:      # commit no sucesso, rollback na exceção
+                c.execute("INSERT INTO tenants(id,name,created_at) VALUES(?,?,?)",
+                          (tenant_id, agency_name.strip(), now))
+                c.execute("INSERT INTO users(id,email,password_hash,created_at) "
+                          "VALUES(?,?,?,?)",
+                          (user_id, email.strip().lower(), pwd_hash, now))
+                c.execute("INSERT INTO memberships(tenant_id,user_id,role,created_at) "
+                          "VALUES(?,?,?,?)", (tenant_id, user_id, role, now))
+        except sqlite3.IntegrityError as exc:
+            raise AuthError("não foi possível concluir o cadastro") from exc
+        return tenant_id, user_id
+
     def login(self, email: str, password: str, tenant_id: str, *, ttl_seconds: int = 3600) -> str:
         with self._connect() as c:
             row = c.execute("SELECT * FROM users WHERE email=? AND status='active'", (email.strip().lower(),)).fetchone()
@@ -317,6 +346,30 @@ class PostgresTenantStore(TenantStore):
         with self._connect() as c:
             c.execute("""INSERT INTO memberships(tenant_id,user_id,role,created_at) VALUES(%s,%s,%s,%s)
                 ON CONFLICT (tenant_id,user_id) DO UPDATE SET role=EXCLUDED.role""", (tenant_id, user_id, role, time.time()))
+
+    def create_account(self, agency_name: str, email: str, password: str, *,
+                       role: str = "admin", tenant_id: str | None = None,
+                       user_id: str | None = None) -> tuple[str, str]:
+        """Versão transacional para Postgres: tenant + usuário + vínculo numa
+        única transação (commit no sucesso, rollback em qualquer falha)."""
+        if role not in ROLES:
+            raise AuthError("papel inválido")
+        tenant_id = tenant_id or "ten_" + secrets.token_urlsafe(12)
+        user_id = user_id or "usr_" + secrets.token_urlsafe(12)
+        pwd_hash = self._hash_password(password)
+        now = time.time()
+        try:
+            with self._connect() as c:      # psycopg: commit no exit, rollback na exceção
+                c.execute("INSERT INTO tenants(id,name,created_at) VALUES(%s,%s,%s)",
+                          (tenant_id, agency_name.strip(), now))
+                c.execute("INSERT INTO users(id,email,password_hash,created_at) "
+                          "VALUES(%s,%s,%s,%s)",
+                          (user_id, email.strip().lower(), pwd_hash, now))
+                c.execute("INSERT INTO memberships(tenant_id,user_id,role,created_at) "
+                          "VALUES(%s,%s,%s,%s)", (tenant_id, user_id, role, now))
+        except self._psycopg.errors.UniqueViolation as exc:
+            raise AuthError("não foi possível concluir o cadastro") from exc
+        return tenant_id, user_id
 
     def _verify_credentials(self, email: str, password: str) -> str:
         with self._connect() as c:
