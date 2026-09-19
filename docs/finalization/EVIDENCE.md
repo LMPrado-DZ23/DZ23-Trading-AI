@@ -91,3 +91,27 @@ ruff check .   => All checks passed
   `/v1/status/operacao` de produção; PAPER ativo.
 - RLS ativo nas 6 tabelas do Supabase (chave publicável recebe `42501`).
 - Nenhum segredo versionado (`.env.example` só com nomes).
+
+### F3 — valoração por componente (`10eb598`)
+- Vermelho: `tests/test_fee_patch_f3.py` A–K (11 testes) contra o comportamento
+  agregado antigo (cotação única sobre 2 BNB dava 600/1200, não 900).
+- Correção: `valorar_taxa(cotacoes={fee_component_id:{rate,fonte,em}})`; cada
+  componente valorado com sua cotação/fonte/instante e fingerprint próprio;
+  `find_fee_valuation_component` no ledger; incidente resolve só quando todos os
+  componentes que possui (linhagem por fill_id) estão valorados. Modo agregado
+  (cotação única / componente único) preservado por dispatch em `valuation.modo`.
+- Mutação: 6 mutantes (fill_id-identidade, agregado-permitido, resolve-parcial,
+  adota-divergente, ignora-source, ignora-valued_at) ⇒ todos morrem.
+- Regressão local: 310 passed, 1 pré-existente (permissão Windows).
+
+### F4 — liquidação do LIABILITY:FEE_FUNDING (`2cf2cf5`)
+- Vermelho: `tests/test_fee_patch_f4.py` (F4a–g) — o passivo funcional ficava
+  em -600 para sempre depois de valorar + aportar o ativo.
+- Correção: `Ledger.liquidar_fee_funding(fee_component_id)` extingue o passivo
+  do componente contra `CONTRIBUTED_CAPITAL` (ambos funcionais), amarrado ao
+  `fee_component_id`, idempotente (settlement único), com gate de ativo já
+  financiado (`ASSET:<moeda> >= 0`) e exigência de valoração. Persiste no
+  roundtrip export/restore; lado nativo intacto; funcional continua fechando.
+- Mutação: 4 mutantes (idempotência, gate de ativo, sinal do passivo, valoração
+  obrigatória) ⇒ todos morrem.
+- Regressão local: 327 passed.

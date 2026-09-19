@@ -2,6 +2,17 @@
 
 > Documento de retomada. Se a sessão cair, comece por aqui.
 
+## Auditoria em andamento (NÃO mover este SHA)
+
+- **Patch F1/F2 (B1–B10)** congelado em `correcao-auditoria` @ **`e51ce536`**.
+- **DRAFT PR #3** → https://github.com/LMPrado-DZ23/tradingagents-dz23/pull/3
+  (base `main` ← head `correcao-auditoria`). **Sem merge, sem auto-merge.**
+- Gate 1 (suíte completa) roda no CI **deste PR**. Só entregar para auditoria
+  com todos os checks obrigatórios verdes.
+- Continuação (F3/F4) vive na branch **`fase1-f3-f4`**, a partir de `e51ce536`,
+  para não transformar o SHA em auditoria num alvo móvel. Nada de deploy destes
+  commits antes do Gate 1 verde e da auditoria de F1/F2.
+
 ## Onde estamos
 
 | | |
@@ -81,13 +92,17 @@ real como fonte de verdade, conforme a regra do próprio prompt.
 
 ## Próximos três itens
 
-1. **F3** — valoração por OCORRÊNCIA: uma cotação por horário/ocorrência, não
-   uma cotação única aplicada a taxas de instantes diferentes.
-2. **F4** — liquidação do passivo funcional `LIABILITY:FEE_FUNDING` (hoje
-   nunca zera): o aporte/compra do ativo descoberto quita o passivo.
+1. **F3** — ✅ FECHADO (`10eb598`, branch `fase1-f3-f4`). Valoração POR
+   COMPONENTE: `valorar_taxa(cotacoes={fee_component_id: {rate,fonte,em}})`;
+   cada componente valorado com sua cotação/fonte/instante e fingerprint. Modo
+   agregado (cotação única) intacto por dispatch. 11 testes (A–K) + 6 mutantes.
+2. **F4** — ✅ FECHADO (`2cf2cf5`). `liquidar_fee_funding(fee_component_id)`
+   extingue o passivo funcional por componente contra `CONTRIBUTED_CAPITAL`,
+   exatamente uma vez, com gate de ativo financiado. 7 testes + 4 mutantes.
 3. **Máquina do fill** (`RECEIVED → APPLYING → COMMITTED`) — **PARAR PARA
-   AUDITORIA antes de iniciar**, conforme o prompt mestre. Não começar sem
-   sinal verde do arquiteto/aprovador.
+   AUDITORIA / NOVO CHECKPOINT antes de iniciar**, conforme o prompt mestre e a
+   instrução do dono. Não começar sem sinal verde. (F5/F6 do fee pipeline
+   também pendentes, ver BLOCKERS.)
 
 > O patch F1/F2 (B1–B10) está completo e publicado em `correcao-auditoria`.
 > ATENÇÃO: o CI (`ci.yml`) NÃO dispara em push para essa branch (só
@@ -96,9 +111,6 @@ real como fonte de verdade, conforme a regra do próprio prompt.
 > só o subconjunto do kernel (py3.14). Antes de F3/F4 e de qualquer redeploy,
 > gate 1 verde no CI.
 
-Depois de B2–B6: F3 (valoração por ocorrência), F4 (`LIABILITY:FEE_FUNDING`),
-e a máquina do fill `RECEIVED → APPLYING → COMMITTED` (parar para auditoria
-antes desta).
 
 ## Dependências externas
 
