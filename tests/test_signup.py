@@ -39,23 +39,33 @@ class TestCadastro:
         # planos vêm do catálogo canônico (não mais starter/pro legados)
         assert any(p["codigo"] == "dz23_monthly" for p in d["planos"])
 
-    def test_signup_creates_tenant_trial_and_session(self, tmp_path, monkeypatch):
+    def test_signup_creates_tenant_and_session_but_no_trial(self, tmp_path, monkeypatch):
         m = _app(tmp_path, monkeypatch)
         c = TestClient(m.app)
         r = c.post("/v1/auth/signup", json=conta())
         assert r.status_code == 200, r.text
         d = r.json()
-        assert d["tenant_id"] and d["access_token"] and d["plano"] == "trial"
-        # a sessão devolvida já funciona:
-        me = c.get("/v1/auth/me", headers={"Authorization": f"Bearer {d['access_token']}"})
+        # §3: criar conta NÃO inicia trial — nasce NOT_STARTED (somente-leitura).
+        assert d["tenant_id"] and d["access_token"]
+        assert d["estado"] == m.ACCT.NOT_STARTED and "plano" not in d
+        assert m.SUBS.get(d["tenant_id"]) is None
+        h = {"Authorization": f"Bearer {d['access_token']}"}
+        me = c.get("/v1/auth/me", headers=h)
         assert me.status_code == 200 and me.json()["role"] == "admin"
+        # o trial só começa por AÇÃO explícita do administrador:
+        t = c.post("/v1/trial/start", headers=h)
+        assert t.status_code == 200 and t.json()["state"] == m.ACCT.TRIALING
 
-    def test_new_tenant_can_use_the_desk_immediately(self, tmp_path, monkeypatch):
+    def test_new_tenant_uses_the_desk_only_after_starting_trial(self, tmp_path, monkeypatch):
         m = _app(tmp_path, monkeypatch)
         c = TestClient(m.app)
         tok = c.post("/v1/auth/signup", json=conta()).json()["access_token"]
-        r = c.get("/v1/desk/status", headers={"Authorization": f"Bearer {tok}"})
-        assert r.status_code == 200
+        h = {"Authorization": f"Bearer {tok}"}
+        # §3: criar conta NÃO dá acesso — a mesa (produto pago) exige plano/trial.
+        assert c.get("/v1/desk/status", headers=h).status_code == 402
+        # inicia o teste explicitamente e a mesa libera:
+        assert c.post("/v1/trial/start", headers=h).status_code == 200
+        assert c.get("/v1/desk/status", headers=h).status_code == 200
 
     def test_two_tenants_are_isolated(self, tmp_path, monkeypatch):
         m = _app(tmp_path, monkeypatch)
@@ -65,6 +75,7 @@ class TestCadastro:
         assert a["tenant_id"] != b["tenant_id"]
         ha = {"Authorization": f"Bearer {a['access_token']}"}
         hb = {"Authorization": f"Bearer {b['access_token']}"}
+        c.post("/v1/trial/start", headers=ha)   # A precisa de acesso p/ escrever
         c.post("/v1/config", headers=ha, json={"vars": {"GROQ_API_KEY": "gsk-do-A"}})
         cfg_b = c.get("/v1/config", headers=hb).json()["config"]["GROQ_API_KEY"]
         assert cfg_b["set"] is False        # B não enxerga a chave de A
@@ -126,10 +137,12 @@ class TestIsolamentoDeSegredos:
 
 class TestTelaDeCadastro:
     def test_signup_form_exists_in_panel(self):
+        # A tela de entrada tem formulário de cadastro real, ligado aos
+        # endpoints, e alterna entre login e cadastro por abas (trocarAba).
         from pathlib import Path
         html = Path("service/static/index.html").read_text(encoding="utf-8")
-        for needle in ['id="signupForm"', "criarConta()", "/v1/auth/signup",
-                       "/v1/auth/signup-status", "mostrarLogin()"]:
+        for needle in ['id="signupForm"', "criarConta(", "/v1/auth/signup",
+                       "/v1/auth/signup-status", "trocarAba("]:
             assert needle in html, f"faltou: {needle}"
 
 

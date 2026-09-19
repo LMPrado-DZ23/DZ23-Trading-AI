@@ -67,12 +67,16 @@ class TestVerSenha:
             "há botão de olho fora do bloco do campo: ele aparece solto")
 
     def test_every_password_field_in_the_auth_area_is_covered(self):
-        """Eu havia chutado nomes de campo que não existiam (signupPassword),
-        e o cadastro ficou sem o botão."""
-        for campo in ("loginPassword", "bootPassword", "bootToken", "suSenha",
-                      "newUserPassword"):
+        """Todo campo de senha da área de autenticação tem botão 'ver senha'.
+        Login/cadastro moram em index.html; o bootstrap inicial migrou para a
+        página dedicada setup.html (senha do admin + token de bootstrap)."""
+        setup = Path("service/static/setup.html").read_text(encoding="utf-8")
+        for campo in ("loginPassword", "suSenha", "newUserPassword"):
             assert f'id="{campo}"' in APP, f"{campo} sumiu da tela"
             assert f'data-alvo="{campo}"' in APP, f"{campo} sem botão de ver"
+        for campo in ("senha", "token"):                 # bootstrap inicial (/setup)
+            assert f'id="{campo}"' in setup, f"{campo} sumiu do setup"
+            assert f'data-alvo="{campo}"' in setup, f"{campo} sem botão de ver no setup"
 
     def test_the_toggle_is_a_button_not_a_submit(self):
         assert 'type="button" class="pwd-eye"' in APP, (
@@ -117,14 +121,19 @@ class TestEntrarComGoogle:
 
 class TestConteudoQueVende:
     def test_it_says_what_the_product_does(self):
-        for termo in ("Como funciona", "Planos", "Paper", "risco"):
+        # O produto é uma mesa PAPER/SHADOW com risco governado e um plano único
+        # por período. Termos reais da landing v2 (não os antigos "Planos"/"Paper").
+        for termo in ("Como funciona", "Plano", "PAPER", "SHADOW", "risco"):
             assert termo in SITE, f"falta {termo}"
 
     def test_it_states_the_limits_instead_of_hiding_them(self):
-        """Prometer rentabilidade seria o caminho fácil — e desonesto."""
+        """Prometer rentabilidade seria o caminho fácil — e desonesto. E o site
+        precisa dizer, em alto e bom som, que dinheiro real não opera nesta fase."""
         assert "Não prometemos rentabilidade" in SITE
-        assert "Dinheiro real está bloqueado" in SITE or \
-               "DINHEIRO REAL BLOQUEADO" in SITE
+        baixo = SITE.lower()
+        assert "dinheiro real" in baixo
+        assert ("indisponível" in baixo or "bloqueado" in baixo), (
+            "o site precisa declarar que dinheiro real está indisponível/bloqueado")
 
     def test_it_never_promises_returns(self):
         proibidos = ("lucro garantido", "rentabilidade garantida",
@@ -138,8 +147,12 @@ class TestConteudoQueVende:
         assert "não é recomendação de investimento" in SITE.lower()
 
     def test_it_works_on_a_phone(self):
+        import re
         assert "width=device-width" in SITE
-        assert "@media(max-width:760px)" in SITE
+        # Responsivo por contrato: precisa existir uma media query de largura
+        # máxima (o breakpoint exato é decisão de design, não deste teste).
+        assert re.search(r"@media\s*\([^)]*max-width:\s*\d+px", SITE), (
+            "sem media query de largura máxima o layout não se adapta ao celular")
 
     def test_it_has_sharing_metadata(self):
         for tag in ('property="og:title"', 'property="og:image"',

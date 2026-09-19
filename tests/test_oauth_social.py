@@ -116,7 +116,7 @@ class TestFluxoNoServico:
         d = TestClient(m.app).get("/v1/auth/oauth/google/start").json()
         assert d["url"].startswith("https://accounts.google.com/") and d["state"]
 
-    def test_callback_creates_account_with_trial(self, tmp_path, monkeypatch):
+    def test_callback_creates_account_without_trial(self, tmp_path, monkeypatch):
         m = _app(tmp_path, monkeypatch)
         m._OAUTH_TRANSPORT = transporte()
         c = TestClient(m.app)
@@ -125,7 +125,8 @@ class TestFluxoNoServico:
         assert r.status_code == 200, r.text
         d = r.json()
         assert d["conta_nova"] is True and d["access_token"]
-        assert m.SUBS.get(d["tenant_id"]).plan_code == "trial"
+        # §3: login social cria a conta mas NÃO inicia trial (nasce NOT_STARTED).
+        assert m.SUBS.get(d["tenant_id"]) is None
         me = c.get("/v1/auth/me", headers={"Authorization": f"Bearer {d['access_token']}"})
         assert me.status_code == 200
 

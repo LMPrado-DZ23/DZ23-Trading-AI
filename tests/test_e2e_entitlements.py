@@ -213,3 +213,94 @@ class TestBannerSomenteLeitura:
         html = Path("service/static/index.html").read_text(encoding="utf-8")
         assert "roBanner" in html
         assert "/v1/account/state" in html and "read_only" in html
+
+
+def _expira(m, tid: str):
+    """Inicia e VENCE o trial do tenant (conta somente-leitura por expiração)."""
+    from datetime import datetime, timedelta, timezone
+    m.SUBS.start_trial_for(tid)
+    sub = m.SUBS.get(tid)
+    sub.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
+    m.SUBS.save(sub)
+
+
+class TestGuardActionAware:
+    """§4: o guard é ciente da AÇÃO. De-escalação/segurança passam em conta
+    vencida; abrir exposição e resetar o kill-switch são bloqueados."""
+
+    def test_expired_pode_engatar_mas_nao_resetar_kill_switch(self, mt):
+        m, c = mt
+        h = _tenant(m, "tena", "a@a.com")
+        _expira(m, "tena")
+        eng = c.post("/v1/execution/kill-switch", headers=h, json={"action": "engage"})
+        assert eng.status_code == 200 and eng.json()["enabled"] is True
+        rst = c.post("/v1/execution/kill-switch", headers=h, json={"action": "reset"})
+        assert rst.status_code == 402                # reset reabilita execução -> bloqueado
+
+    def test_expired_pode_cancelar_job(self, mt):
+        m, c = mt
+        h = _tenant(m, "tena", "a@a.com")
+        _expira(m, "tena")
+        assert c.post("/v1/jobs/qualquer-id/cancel", headers=h).status_code == 200
+
+    def test_expired_pode_reconciliar(self, mt):
+        m, c = mt
+        h = _tenant(m, "tena", "a@a.com")
+        _expira(m, "tena")
+        # O guard NÃO bloqueia (de-escalação/segurança); o handler pode ou não
+        # ter provider remoto, mas nunca deve devolver 402 por entitlements.
+        assert c.post("/v1/execution/reconciliation", headers=h).status_code != 402
+
+    def test_expired_pode_parada_de_emergencia(self, mt):
+        m, c = mt
+        h = _tenant(m, "tena", "a@a.com")
+        _expira(m, "tena")
+        assert c.post("/v1/live/parada-emergencia", headers=h).status_code != 402
+
+    def test_expired_nao_pode_abrir_posicao_paper(self, mt):
+        m, c = mt
+        h = _tenant(m, "tena", "a@a.com")
+        _expira(m, "tena")
+        assert c.post("/v1/execution/paper", headers=h, json={}).status_code == 402
+
+    def test_expired_nao_pode_criar_job(self, mt):
+        m, c = mt
+        h = _tenant(m, "tena", "a@a.com")
+        _expira(m, "tena")
+        r = c.post("/v1/jobs", headers=h, json={"ticker": "AAPL", "trade_date": "2026-01-02"})
+        assert r.status_code == 402
+
+
+class TestTrialSoPorAcaoExplicita:
+    """§3: o trial NUNCA começa sozinho; só POST /v1/trial/start, uma vez."""
+
+    def test_trial_start_exige_admin(self, mt):
+        m, c = mt
+        m.TENANT_STORE.create_account("Ag", "admin@a.com", SENHA, tenant_id="tena")
+        uid = m.TENANT_STORE.create_user("viewer@a.com", SENHA)
+        m.TENANT_STORE.add_member("tena", uid, "viewer")
+        tok = m.TENANT_STORE.login("viewer@a.com", SENHA, "tena")
+        r = c.post("/v1/trial/start", headers={"Authorization": "Bearer " + tok})
+        assert r.status_code == 403                  # viewer não inicia o teste
+
+    def test_expirado_nao_reinicia(self, mt):
+        m, c = mt
+        h = _tenant(m, "tena", "a@a.com")
+        _expira(m, "tena")
+        r = c.post("/v1/trial/start", headers=h)
+        assert r.status_code == 200 and r.json()["state"] == m.ACCT.TRIAL_EXPIRED
+
+    def test_restart_nao_estende_o_trial(self, tmp_path, monkeypatch):
+        import importlib
+
+        from fastapi.testclient import TestClient
+        m = _reload_multitenant(tmp_path, monkeypatch)
+        h = _tenant(m, "tena", "a@a.com")
+        fim = TestClient(m.app).post("/v1/trial/start", headers=h).json()["expires_at"]
+        # "reinício": recarrega o módulo apontando pro MESMO DATA_DIR; a
+        # assinatura persiste e o trial NÃO é estendido nem recriado.
+        import service.app as m2
+        importlib.reload(m2)
+        h2 = {"Authorization": "Bearer " + m2.TENANT_STORE.login("a@a.com", SENHA, "tena")}
+        fim2 = TestClient(m2.app).post("/v1/trial/start", headers=h2).json()["expires_at"]
+        assert fim2 == fim
