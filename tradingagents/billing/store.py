@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 from .woovi import Subscription, start_trial
 
@@ -26,7 +27,7 @@ class SubscriptionStore:
         self.dsn = (database_url or "").strip() or None
         self._init()
 
-    def _connect(self):
+    def _connect(self) -> Any:      # sqlite3.Connection | psycopg.Connection
         if self.dsn:
             import psycopg
             from psycopg.rows import dict_row

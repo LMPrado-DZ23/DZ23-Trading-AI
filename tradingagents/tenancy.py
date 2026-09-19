@@ -10,6 +10,7 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 ROLES = frozenset({"viewer", "analyst", "operator", "risk_manager", "admin", "auditor"})
 ROLE_PERMISSIONS = {
@@ -53,13 +54,13 @@ class TenantStore:
             raise ValueError("TENANT_TOKEN_SIGNING_KEY deve ter pelo menos 32 caracteres")
         self._init()
 
-    def _connect(self):
+    def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys=ON")
         return conn
 
-    def _init(self):
+    def _init(self) -> None:
         with self._connect() as c:
             c.executescript("""
             CREATE TABLE IF NOT EXISTS tenants (
@@ -199,7 +200,7 @@ class TenantStore:
         return {"select": [{"tenant_id": t["id"], "name": t["name"],
                             "role": t["role"]} for t in tenants]}
 
-    def find_membership_by_email(self, email: str):
+    def find_membership_by_email(self, email: str) -> tuple[str | None, str | None]:
         """Login social: descobre a qual agência o e-mail pertence."""
         email = (email or "").strip().lower()
         with self._connect() as c:
@@ -299,10 +300,10 @@ class PostgresTenantStore(TenantStore):
         self._dict_row = dict_row
         self._init()
 
-    def _connect(self):
+    def _connect(self) -> Any:      # psycopg.Connection
         return self._psycopg.connect(self.path, row_factory=self._dict_row)
 
-    def _init(self):
+    def _init(self) -> None:
         with self._connect() as c:
             c.execute("""
             CREATE TABLE IF NOT EXISTS tenants (

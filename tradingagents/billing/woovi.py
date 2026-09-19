@@ -18,6 +18,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -130,10 +131,15 @@ def verify_webhook(raw_body: bytes, signature_b64: str, public_key_pem: str) -> 
             pem = base64.b64decode(pem).decode()
         except Exception as exc:
             raise WebhookRejected("chave pública inválida") from exc
+    from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
     try:
         key = load_pem_public_key(pem.encode())
     except Exception as exc:
         raise WebhookRejected("chave pública ilegível") from exc
+    # A Woovi assina com RSA. Estreitar o tipo é também defesa: uma chave de
+    # outro algoritmo (curva, Ed25519...) não valida assinatura RSA-PKCS1v15.
+    if not isinstance(key, RSAPublicKey):
+        raise WebhookRejected("chave pública do webhook não é RSA")
     try:
         key.verify(base64.b64decode(signature_b64), raw_body,
                    padding.PKCS1v15(), hashes.SHA256())
@@ -158,7 +164,7 @@ class WooviClient:
     requisição, nunca de arquivo versionado, nunca para log."""
 
     def __init__(self, token: str | None = None, base_url: str = WOOVI_API,
-                 transport=None):
+                 transport: Callable[[dict], dict] | None = None):
         self.token = (token or os.environ.get("WOOVI_TOKEN") or "").strip()
         self.base_url = base_url.rstrip("/")
         self._transport = transport            # injetável para teste

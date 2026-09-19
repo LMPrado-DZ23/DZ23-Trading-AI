@@ -15,6 +15,7 @@ configuração, ligar a mesa, envio), mantendo leitura e exportação.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 
 NOT_STARTED = "NOT_STARTED"
 TRIALING = "TRIALING"
@@ -34,15 +35,18 @@ WRITABLE = frozenset({TRIALING, ACTIVE})
 TRIAL_HOURS = 24
 
 
-def derive_state(sub, now: datetime | None = None) -> str:
-    """Mapeia a assinatura (ou a ausência dela) para um estado canônico."""
+def derive_state(sub: Any, now: datetime | None = None) -> str:
+    """Mapeia a assinatura (ou a ausência dela) para um estado canônico.
+
+    `sub` é duck-typed (qualquer objeto com status/plan_code/expires_at, ou
+    None) para não acoplar este módulo puro ao dataclass de cobrança."""
     now = now or datetime.now(timezone.utc)
     if sub is None:
         return NOT_STARTED
     status = (getattr(sub, "status", "") or "").strip().lower()
     is_trial = getattr(sub, "plan_code", "") == "trial"
     expires_at = getattr(sub, "expires_at", None)
-    vigente = bool(expires_at) and now < expires_at
+    vigente = expires_at is not None and now < expires_at
     if status in ("suspended", "canceled", "cancelled"):
         return SUSPENDED
     if status == "trialing":

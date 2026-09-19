@@ -6,3 +6,10 @@ results/
 eval_results/
 *.db
 .pytest_cache/
+.mypy_cache/
+# Artefatos de build do setuptools (gerados por `pip install`); nunca versionar.
+build/
+dist/
+*.egg-info/
+# Diretório de tarball do CI local (verificação em contêiner).
+.ci/

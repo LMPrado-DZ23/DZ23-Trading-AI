@@ -43,6 +43,7 @@ dev = [
     "httpx>=0.27.0",
     "ccxt>=4.5.0",
     "ruff>=0.15",
+    "mypy>=1.11",
     "pytest>=8.0",
     "pytest-subtests>=0.13",
     # Leitura de TOML nos testes: stdlib `tomllib` só a partir do 3.11.
@@ -87,7 +88,10 @@ filterwarnings = [
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-extend-exclude = ["results", "worklog"]
+# `build/` e `dist/` são artefatos do setuptools (gerados por `pip install`) —
+# nunca versionados; excluídos para o comando canônico `ruff check .` passar
+# sem depender de limpeza manual.
+extend-exclude = ["results", "worklog", "build", "dist"]
 
 [tool.ruff.lint]
 # Standard "good defaults" rule set (pyflakes + pycodestyle + isort + bugbear +
@@ -107,3 +111,35 @@ ignore = ["E501"]
 # Keep multiple aliased names from one module in a single combined import block
 # (e.g. the vendor re-exports in interface.py) instead of one statement per name.
 combine-as-imports = true
+
+# ------------------------------------------------------------------ TYPECHECK
+# Gate de tipos REAL (não permissivo) com escopo inicial realista: os módulos
+# de billing, catálogo, analytics e tenancy — a lógica de dinheiro/acesso que
+# mais dói se quebrar. Comando canônico do gate: `mypy` (usa [tool.mypy.files]).
+#
+# DÍVIDA REGISTRADA (ampliar gradualmente, §7): `service/app.py`
+# (auth/entitlements) é grande e ainda sem anotações completas; entra no escopo
+# num próximo bloco, módulo a módulo, para não travar a entrega com uma enxurrada
+# de erros de uma vez. `write_policy` já é a peça central e está no escopo.
+[tool.mypy]
+python_version = "3.12"
+files = [
+    "tradingagents/billing",
+    "tradingagents/analytics.py",
+    "tradingagents/tenancy.py",
+]
+# Terceiros sem stubs (psycopg, cryptography, httpx) não devem virar ruído.
+ignore_missing_imports = true
+# Checagens que pegam bug de verdade, sem exigir 100% de anotação de saída:
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unused_configs = true
+no_implicit_optional = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+# No escopo inicial, exigir que TODA def pública seja tipada (aí o gate morde).
+module = ["tradingagents.billing.*", "tradingagents.analytics", "tradingagents.tenancy"]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
