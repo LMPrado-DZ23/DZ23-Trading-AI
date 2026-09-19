@@ -223,22 +223,26 @@ async def stop_workers():
 _FAILS: dict = {}
 MAX_FAILS, LOCK_SECONDS = 5, 900
 
-_TRUSTED_PROXY_HOPS = int(os.environ.get("TRUSTED_PROXY_HOPS", "0") or 0)
+_TRUSTED_PROXIES = frozenset(
+    p.strip() for p in os.environ.get("TRUSTED_PROXIES", "").split(",") if p.strip())
 
 
 def _client_ip(request: Request) -> str:
-    """IP do cliente com proxies CONFIÁVEIS explícitos (§4). Por padrão
-    (TRUSTED_PROXY_HOPS=0) NÃO confia em X-Forwarded-For — usa o IP direto —
-    porque um cliente pode forjar esse header e escapar do rate limit. Com N
-    proxies confiáveis à frente, o IP real é o N-ésimo da direita do XFF."""
-    direto = request.client.host if request.client else "?"
-    hops = _TRUSTED_PROXY_HOPS
-    if hops > 0:
+    """IP do cliente com ALLOWLIST de proxies confiáveis (§6). Só confia em
+    X-Forwarded-For quando o PEER DIRETO (request.client.host) é um proxy
+    declarado em TRUSTED_PROXIES; então pega o IP mais à direita do XFF que não
+    seja um proxy confiável. Sem allowlist, usa o peer direto (um cliente pode
+    forjar o header e escapar do rate limit)."""
+    peer = request.client.host if request.client else "?"
+    if peer in _TRUSTED_PROXIES:
         xff = [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",")
                if p.strip()]
-        if len(xff) >= hops:
-            return xff[-hops]
-    return direto
+        for cand in reversed(xff):
+            if cand not in _TRUSTED_PROXIES:
+                return cand
+        if xff:
+            return xff[0]
+    return peer
 
 def _tenant_permission(request: Request) -> str:
     if request.url.path.startswith("/v1/admin"):
@@ -364,6 +368,10 @@ def tenant_logout(request: Request, c: HTTPAuthorizationCredentials = Depends(be
     # idempotente e uma falha de revogação (token já expirado, etc.) não deve
     # impedir o usuário de sair.
     if MULTI_TENANT_ENABLED and TENANT_STORE and c:
+        principal = getattr(request.state, "principal", None)
+        if isinstance(principal, Principal):
+            with contextlib.suppress(Exception):
+                TENANT_STORE.revoke_step_up_for_session(principal.token_id)  # §5
         with contextlib.suppress(Exception):
             TENANT_STORE.revoke(c.credentials)
     return {"ok": True}
@@ -381,11 +389,29 @@ async def auth_step_up(req: Request, principal=Depends(auth)):
     if purpose not in _STEPUP_PURPOSES:
         raise HTTPException(422, f"purpose deve ser um de {sorted(_STEPUP_PURPOSES)}")
     if isinstance(principal, Principal) and TENANT_STORE:
+        # §5: export/import exige ADMIN já na EMISSÃO; rate-limit persistente;
+        # token vinculado à SESSÃO (principal.token_id).
+        if not principal.can("admin"):
+            raise HTTPException(403, "step-up de export/import exige administrador")
+        # §6: conta OAuth-only não tem senha do usuário — step-up por senha não é
+        # fluxo válido. Bloqueia export/import até haver reautenticação do provedor.
+        if TENANT_STORE.is_oauth_only(principal.user_id):
+            raise HTTPException(403, {"erro": "conta OAuth: export/import exige "
+                                              "reautenticação pelo provedor (não implementada)",
+                                      "blocked_by": "STEP_UP_PROVIDER_REAUTH_REQUIRED"})
+        ip = _client_ip(req)
+        espera = TENANT_STORE.login_lock_seconds(ip, principal.email)
+        if espera > 0:
+            raise HTTPException(429, {"erro": "muitas tentativas de step-up",
+                                      "retry_after_s": espera})
         try:
             TENANT_STORE._verify_credentials(principal.email, senha)
         except AuthError:
+            TENANT_STORE.record_login_failure(ip, principal.email)
             raise HTTPException(401, "credencial inválida para step-up") from None
-        token = TENANT_STORE.create_step_up(principal.tenant_id, principal.user_id, purpose)
+        TENANT_STORE.clear_login_failures(ip, principal.email)
+        token = TENANT_STORE.create_step_up(principal.tenant_id, principal.user_id,
+                                            purpose, session_id=principal.token_id)
     else:
         if not PASSWORD or not hmac.compare_digest(senha, PASSWORD):
             raise HTTPException(401, "credencial inválida para step-up")
@@ -398,6 +424,8 @@ async def auth_step_up(req: Request, principal=Depends(auth)):
 async def create_tenant(req: Request, _=Depends(auth)):
     if not MULTI_TENANT_ENABLED or not TENANT_STORE:
         raise HTTPException(404, "multi-tenant desabilitado")
+    # §9: criar tenant é operação da PLATAFORMA — tenant-admin NÃO pode.
+    require_platform_admin(req)
     body = await _json_body(req)
     try:
         tenant_id = TENANT_STORE.create_tenant(str(body["name"]))
@@ -410,24 +438,28 @@ async def create_tenant(req: Request, _=Depends(auth)):
 async def create_tenant_user(req: Request, _=Depends(auth)):
     if not MULTI_TENANT_ENABLED or not TENANT_STORE:
         raise HTTPException(404, "multi-tenant desabilitado")
+    require_admin(req)                              # só admin do tenant
     body = await _json_body(req)
+    # §9: valida o ALVO e o papel ANTES de criar nada (sem usuário órfão).
+    target_tenant = str(body.get("tenant_id", request_tenant(req)))
+    if target_tenant != request_tenant(req):
+        raise HTTPException(403, "administrador só gerencia o próprio tenant")
+    role = str(body.get("role", "viewer"))
+    if "email" not in body or "password" not in body:
+        raise HTTPException(422, "email e password obrigatórios")
     try:
-        user_id = TENANT_STORE.create_user(str(body["email"]), str(body["password"]))
-        target_tenant = str(body.get("tenant_id", request_tenant(req)))
-        if target_tenant != request_tenant(req):
-            raise AuthError("administrador só pode gerenciar o próprio tenant")
-        TENANT_STORE.add_member(target_tenant, user_id, str(body.get("role", "viewer")))
-    except (KeyError, ValueError) as exc:
-        raise HTTPException(422, str(exc)) from None
+        user_id = TENANT_STORE.add_user_to_tenant(   # atômico + validado
+            target_tenant, str(body["email"]), str(body["password"]), role)
     except AuthError as exc:
-        raise HTTPException(403, str(exc)) from None
-    return {"user_id": user_id, "tenant_id": target_tenant, "role": str(body.get("role", "viewer"))}
+        raise HTTPException(422, str(exc)) from None
+    return {"user_id": user_id, "tenant_id": target_tenant, "role": role}
 
 
 @app.get("/v1/admin/users")
 def list_tenant_users(request: Request, _=Depends(auth)):
     if not MULTI_TENANT_ENABLED or not TENANT_STORE:
         return {"users": []}
+    require_admin(request)                           # §7: diagnóstico do tenant é de admin
     return {"users": TENANT_STORE.list_members(request_tenant(request))}
 
 
@@ -591,6 +623,25 @@ def request_tenant(request: Request) -> str:
     return principal.tenant_id if isinstance(principal, Principal) else "legacy"
 
 
+_PLATFORM_ADMIN_EMAILS = frozenset(
+    e.strip().lower() for e in os.environ.get("PLATFORM_ADMIN_EMAILS", "").split(",") if e.strip())
+
+
+def is_platform_admin(request: Request) -> bool:
+    """Platform-admin (dono da PLATAFORMA) ≠ admin de tenant (§9). Em
+    multi-tenant, é quem está em PLATFORM_ADMIN_EMAILS. No self-host legado, o
+    portador do ACCESS_PASSWORD é o dono."""
+    principal = getattr(request.state, "principal", None)
+    if isinstance(principal, Principal):
+        return principal.email.strip().lower() in _PLATFORM_ADMIN_EMAILS
+    return not MULTI_TENANT_ENABLED
+
+
+def require_platform_admin(request: Request) -> None:
+    if not is_platform_admin(request):
+        raise HTTPException(403, "requer administrador da PLATAFORMA")
+
+
 def require_admin(request: Request):
     """Exige papel de ADMINISTRADOR do tenant. No self-host legado (sem
     multi-tenant), quem porta o ACCESS_PASSWORD é o admin único. Viewer,
@@ -654,11 +705,12 @@ def _require_step_up(request: Request, purpose: str) -> None:
     principal = getattr(request.state, "principal", None)
     if isinstance(principal, Principal) and TENANT_STORE:
         ok = TENANT_STORE.consume_step_up(token, principal.tenant_id,
-                                          principal.user_id, purpose)
+                                          principal.user_id, purpose,
+                                          session_id=principal.token_id)
     else:
         ok = _legacy_stepup_consume(token, purpose)
     if not ok:
-        raise HTTPException(401, "step-up inválido, expirado ou já usado")
+        raise HTTPException(401, "step-up inválido, expirado, de outra sessão ou já usado")
 
 
 def upd(jid, tenant_id, **kw):
@@ -666,6 +718,17 @@ def upd(jid, tenant_id, **kw):
 
 _cancel = set()
 _lock = threading.Lock()
+
+
+class _JobCancelled(Exception):
+    """Sinal interno de cancelamento cooperativo entre fases do job."""
+
+
+def _abort_if_cancelled(jid, tenant_id):
+    # §7: checkpoint cooperativo — a fonte da verdade é o banco (entre instâncias).
+    if JOB_STORE.is_cancelled(jid, tenant_id) or (tenant_id, jid) in _cancel:
+        raise _JobCancelled()
+
 
 def run_job(jid, ticker, date, tenant_id="legacy"):
     with _lock:  # um job por vez: env é global do processo
@@ -678,6 +741,7 @@ def run_job(jid, ticker, date, tenant_id="legacy"):
             return
         upd(jid, tenant_id, status="running")
         try:
+            _abort_if_cancelled(jid, tenant_id)                  # checkpoint 1
             runtime.agency.set_agent_status("market-scanner", "ANALYZING")
             runtime.agency.set_agent_status("strategy-agent", "ANALYZING")
             cfg = load_cfg(tenant_id)
@@ -694,10 +758,17 @@ def run_job(jid, ticker, date, tenant_id="legacy"):
             llm_conf, llm_env = resolve_llm(cfg)
             conf.update(llm_conf)
             os.environ.update(llm_env)
+            _abort_if_cancelled(jid, tenant_id)                  # checkpoint 2 (antes do LLM)
             graph = TradingAgentsGraph(config=conf)
             t_up = ticker.upper()
             asset_type = "crypto" if ("/" in t_up or t_up.endswith(("-USD", "-USDT", "-BTC"))) else "stock"
+            # BLOCKED_BY_ARCHITECTURE: graph.propagate() é uma chamada MONOLÍTICA
+            # (LangGraph) sem hook de cancelamento cooperativo interno. O cancel é
+            # honrado ENTRE fases (checkpoints 1-3), NÃO no meio da chamada do LLM.
+            # Cancelar durante a propagação exigiria refatorar o grafo para
+            # streaming/checkpoints por nó — fora do escopo deste patch.
             state, decision = graph.propagate(ticker, date, asset_type=asset_type)
+            _abort_if_cancelled(jid, tenant_id)                  # checkpoint 3 (antes de gravar)
             reports = {k: v for k, v in (state or {}).items()
                        if isinstance(v, str) and ("report" in k or "decision" in k)}
             # guarda o mark de transporte + identidade: é o que permite EXECUTAR
@@ -709,6 +780,9 @@ def run_job(jid, ticker, date, tenant_id="legacy"):
                 result=json.dumps(reports, ensure_ascii=False, default=str)[:200000])
             runtime.agency.set_agent_status("strategy-agent", "PAPER_TRADING")
             runtime.agency.set_agent_status("market-scanner", "WAITING_SETUP")
+        except _JobCancelled:
+            upd(jid, tenant_id, status="cancelled")
+            _cancel.discard((tenant_id, jid))
         except Exception as e:
             runtime.agency.set_agent_status("strategy-agent", "ERROR")
             upd(jid, tenant_id, status="failed",
@@ -732,6 +806,28 @@ async def _json_body(req: Request) -> dict:
     if not isinstance(body, dict):
         raise HTTPException(422, "corpo da requisição deve ser um objeto JSON")
     return body
+
+
+async def _json_body_limited(req: Request, max_bytes: int) -> dict:
+    """Como _json_body, mas com TETO de tamanho (§4): corta o corpo pelo
+    Content-Length e pelos bytes reais antes de desserializar."""
+    declarado = req.headers.get("content-length", "")
+    if declarado.isdigit() and int(declarado) > max_bytes:
+        raise HTTPException(413, "corpo grande demais")
+    raw = await req.body()
+    if len(raw) > max_bytes:
+        raise HTTPException(413, "corpo grande demais")
+    try:
+        data = json.loads(raw or b"{}")
+    except ValueError as exc:
+        raise HTTPException(422, "corpo não é JSON válido") from exc
+    if not isinstance(data, dict):
+        raise HTTPException(422, "corpo deve ser um objeto JSON")
+    return data
+
+
+_EXPORT_BODY_MAX = 4096                  # só a frase-senha
+_IMPORT_BODY_MAX = 12 * 1024 * 1024      # envelope cifrado (ciphertext <= 8 MiB)
 
 
 @app.get("/healthz")
@@ -906,7 +1002,12 @@ def cancel(jid: str, request: Request, _=Depends(auth)):
     _cancel.add((tenant_id, jid))                       # cache em memória (opcional)
     if job["status"] == "queued":
         upd(jid, tenant_id, status="cancelled")         # UPDATE ... WHERE id AND tenant
-    return {"ok": True, "cancelado": jid}
+        return {"ok": True, "cancelado": jid, "estado": "cancelled"}
+    if job["status"] == "running":
+        # §7: cancelamento cooperativo — sinalizado (durável); o job encerra no
+        # próximo checkpoint entre fases.
+        return {"ok": True, "cancelado": jid, "estado": "solicitado"}
+    return {"ok": True, "cancelado": jid, "estado": job["status"]}
 
 
 @app.get("/v1/broker/status")
@@ -1431,6 +1532,9 @@ async def billing_checkout(req: Request, _=Depends(auth)):
             **WooviClient.charge_view(resposta)}
 
 
+_WEBHOOK_BODY_MAX = 64 * 1024        # webhook é pequeno; corta DoS de corpo grande
+
+
 @app.post("/v1/webhooks/woovi")
 async def woovi_webhook(request: Request):
     """PÚBLICO por necessidade — verificado por assinatura RSA sobre o corpo
@@ -1440,7 +1544,13 @@ async def woovi_webhook(request: Request):
     charge_id): reenvio não credita duas vezes. Se o banco falhar DEPOIS do
     pagamento, responde 5xx e a Woovi reenvia — nada é perdido nem creditado
     pela metade (a aplicação é atômica)."""
+    # §3: limita o corpo ANTES de lê-lo (Content-Length) e depois (bytes reais).
+    declarado = request.headers.get("content-length", "")
+    if declarado.isdigit() and int(declarado) > _WEBHOOK_BODY_MAX:
+        raise HTTPException(413, "corpo do webhook grande demais")
     raw = await request.body()
+    if len(raw) > _WEBHOOK_BODY_MAX:
+        raise HTTPException(413, "corpo do webhook grande demais")
     assinatura = (request.headers.get("x-webhook-signature")
                   or request.headers.get("signature") or "")
     try:
@@ -1740,7 +1850,7 @@ def oauth_callback(provider: str, code: str = "", state: str = ""):
                                      "(verificação de e-mail não comprovada)")
         try:
             tenant_id, user_id = TENANT_STORE.create_account(   # atômico
-                f"Agência de {nome}", email, senha_interna)
+                f"Agência de {nome}", email, senha_interna, oauth_only=True)
         except AuthError:
             # Corrida: e-mail passou a existir entre a checagem e a criação.
             tenant_id, user_id = TENANT_STORE.find_membership_by_email(email)
@@ -2106,22 +2216,49 @@ def desk_evaluation(request: Request, _=Depends(auth)):
             "aviso": "retrospectivo e simulado; não é promessa de lucro"}
 
 
+_LAST_BACKUP = [0.0]
+
+
+def _backup_rate_limit(min_interval: int = 30) -> None:
+    agora = time.time()
+    if agora - _LAST_BACKUP[0] < min_interval:
+        raise HTTPException(429, "backup muito frequente; aguarde")
+    _LAST_BACKUP[0] = agora
+
+
 @app.post("/v1/backup")
-def backup_now(_=Depends(auth)):
-    """Pacote de recuperação em /data/backups. O download é pelo volume — o
-    serviço não expõe segredos por HTTP."""
+def backup_now(request: Request, _=Depends(auth)):
+    """Backup de recuperação da PLATAFORMA (global, todos os inquilinos).
+
+    §7/§8: em SAAS_MODE o backup GLOBAL é operação INTERNA da plataforma e NÃO
+    é exposto por HTTP (403); fora do SaaS exige PLATFORM-ADMIN, é rate-limited,
+    e a resposta NUNCA traz caminho interno — só nome e tamanho.
+    """
+    if SAAS_MODE:
+        raise HTTPException(403, {"erro": "backup global é operação interna da "
+                                          "plataforma; não disponível por HTTP em SaaS",
+                                  "blocked_by": "PLATFORM_INTERNAL_ONLY"})
+    require_platform_admin(request)
+    _backup_rate_limit()
     from tradingagents.desk.backup import BackupError, create_backup
     stamp = time.strftime("%Y%m%d-%H%M%S")
+    destino = DATA / "backups" / f"dz23-backup-{stamp}.tar.gz"
     try:
-        out = create_backup(DATA, DATA / "backups" / f"dz23-backup-{stamp}.tar.gz")
+        out = create_backup(DATA, destino)
     except BackupError as exc:
         raise HTTPException(422, str(exc)) from exc
-    return {"ok": True, **out}
+    tam = out.get("bytes") if isinstance(out, dict) else None
+    if tam is None and destino.exists():
+        tam = destino.stat().st_size
+    return {"ok": True, "arquivo": destino.name, "bytes": tam}   # sem path interno
 
 
 @app.get("/v1/backups")
 def list_backups(request: Request, _=Depends(auth)):
-    require_admin(request)          # §7: listar backups é operação de admin
+    if SAAS_MODE:
+        raise HTTPException(403, {"erro": "listagem de backup global é interna da plataforma",
+                                  "blocked_by": "PLATFORM_INTERNAL_ONLY"})
+    require_platform_admin(request)          # §8: backup global é da plataforma
     d = DATA / "backups"
     if not d.exists():
         return {"backups": []}
@@ -2514,23 +2651,25 @@ def pagina_publica(tenant_id: str):
 
 
 # ===================================================== MUDANÇA DE SERVIDOR
-@app.get("/v1/mudanca/exportar")
-def exportar_tudo(request: Request, _=Depends(auth)):
-    """Exporta TUDO o que importa do inquilino — CIFRADO (§2).
+@app.post("/v1/mudanca/exportar")
+async def exportar_tudo(request: Request, _=Depends(auth)):
+    """Exporta TUDO o que importa do inquilino — CIFRADO (§2/§4).
 
-    O pacote inclui SEGREDOS (chaves de IA/corretora), então:
+    É POST (a frase-senha vai no CORPO, não em header/URL, e GET não deve
+    consumir token). Inclui SEGREDOS, então:
       - exige papel de ADMIN (viewer/auditor levam 403);
-      - exige STEP-UP (X-Reauth-Password) — a sessão sozinha não basta;
-      - devolve um arquivo CIFRADO (AES-256-GCM, chave da senha do step-up),
-        como attachment e com Cache-Control: no-store — nunca segredos em JSON
-        comum nem em cache de navegador.
+      - exige TOKEN de step-up single-use (a sessão sozinha não basta);
+      - frase-senha FORTE (>=12) no corpo;
+      - devolve arquivo CIFRADO (AES-256-GCM + AAD do tenant), attachment,
+        Cache-Control: no-store — nunca segredos em JSON comum nem em cache.
     """
     require_admin(request)
     _require_step_up(request, "export")           # token single-use, não senha crua
-    frase = request.headers.get("x-export-passphrase", "")
-    if not frase:
-        raise HTTPException(400, {"erro": "frase-senha de export necessária",
-                                  "header": "X-Export-Passphrase"})
+    corpo = await _json_body_limited(request, _EXPORT_BODY_MAX)
+    frase = str(corpo.get("passphrase", ""))
+    if len(frase) < portable.MIN_PASSPHRASE:
+        raise HTTPException(422, {"erro": "frase-senha fraca",
+                                  "minimo": portable.MIN_PASSPHRASE})
     tid = request_tenant(request)
     d = _DESKS.get(tid)
     armazem = d.get("armazem") if d else None
@@ -2567,13 +2706,16 @@ async def importar_tudo(req: Request, _=Depends(auth)):
     administrativa server-side auditada — nunca por dado vindo do cliente."""
     require_admin(req)
     tid = request_tenant(req)
-    pacote = await _json_body(req)
+    # §4: corpo com teto. A frase-senha vem no CORPO (nunca em header). Para
+    # pacote cifrado, o body é {"pacote": <envelope>, "passphrase": "..."}; um
+    # pacote plano pode vir direto no corpo (compat).
+    corpo = await _json_body_limited(req, _IMPORT_BODY_MAX)
+    frase = str(corpo.get("passphrase", ""))
+    pacote = corpo["pacote"] if isinstance(corpo.get("pacote"), dict) else corpo
     if pacote.get("formato") == portable.MAGIC:      # export cifrado
         _require_step_up(req, "import")              # token single-use
-        frase = req.headers.get("x-export-passphrase", "")
-        if not frase:
-            raise HTTPException(400, {"erro": "frase-senha de export necessária",
-                                      "header": "X-Export-Passphrase"})
+        if len(frase) < portable.MIN_PASSPHRASE:
+            raise HTTPException(422, {"erro": "frase-senha ausente/fraca no corpo"})
         # AAD liga o pacote ao tenant de origem: importar o de OUTRO tenant é 403.
         if portable.envelope_aad(pacote).get("tenant") not in (tid, None):
             raise HTTPException(403, "este pacote pertence a outro tenant")
@@ -2581,7 +2723,7 @@ async def importar_tudo(req: Request, _=Depends(auth)):
             pacote = portable.decrypt_package(pacote, frase)
         except Exception:
             raise HTTPException(400, "pacote cifrado ilegível (frase errada ou adulterado)") from None
-    if pacote.get("formato") != "dz23.mudanca/1":
+    if not isinstance(pacote, dict) or pacote.get("formato") != "dz23.mudanca/1":
         raise HTTPException(422, "formato de pacote desconhecido")
     restaurado = []
     ignorado = []
@@ -2589,7 +2731,10 @@ async def importar_tudo(req: Request, _=Depends(auth)):
         # Presente no pacote (export antigo) mas DELIBERADAMENTE ignorado.
         ignorado.append("assinatura (só muda por pagamento/webhook ou admin)")
 
+    # §4: valida o SCHEMA de cada parte antes de restaurar (nada de tipo errado).
     cfg = pacote.get("configuracao") or {}
+    if not isinstance(cfg, dict):
+        raise HTTPException(422, "configuração do pacote inválida")
     if cfg:
         limpo = {k: v for k, v in cfg.items()
                  if k in ALLOWED_KEYS and isinstance(v, str) and v.strip()}
@@ -2597,17 +2742,22 @@ async def importar_tudo(req: Request, _=Depends(auth)):
             save_cfg({**load_cfg(tid), **limpo}, tid)
             restaurado.append(f"configuração ({len(limpo)} itens)")
 
+    aprend = pacote.get("aprendizado")
+    mesa = pacote.get("mesa")
+    if aprend is not None and not (isinstance(aprend, dict) and isinstance(aprend.get("desfechos", []), list)):
+        raise HTTPException(422, "aprendizado do pacote inválido")
+    if mesa is not None and not isinstance(mesa, dict):
+        raise HTTPException(422, "estado da mesa do pacote inválido")
+
     _desk_reset(tid)
     d = _desk_of(req)
     armazem = d.get("armazem")
     if armazem:
-        if pacote.get("aprendizado"):
-            armazem.salvar(tid, "aprendizado", pacote["aprendizado"])
-            restaurado.append(
-                f"aprendizado ({len(pacote['aprendizado'].get('desfechos', []))} "
-                "operações)")
-        if pacote.get("mesa"):
-            armazem.salvar(tid, "mesa", pacote["mesa"])
+        if aprend:
+            armazem.salvar(tid, "aprendizado", aprend)
+            restaurado.append(f"aprendizado ({len(aprend.get('desfechos', []))} operações)")
+        if mesa:
+            armazem.salvar(tid, "mesa", mesa)
             restaurado.append("estado da mesa")
 
     # NÃO restaura assinatura do pacote (§1): ver require_admin/ignorado acima.

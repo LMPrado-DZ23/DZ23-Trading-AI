@@ -36,6 +36,9 @@ class JobStore:
 
     def _init(self):
         with self._connect() as c:
+            if self.backend == "postgres":
+                from tradingagents.dbschema import SCHEMA_LOCK_KEY
+                c.execute("SELECT pg_advisory_xact_lock(%s)", (SCHEMA_LOCK_KEY,))
             if self.backend == "sqlite":
                 legacy = c.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='jobs'").fetchone()
                 if legacy and "idem TEXT UNIQUE" in (legacy[0] or ""):
@@ -56,14 +59,18 @@ class JobStore:
                     SELECT id,idem,ticker,trade_date,status,error,decision,result,created,updated,tenant_id
                     FROM jobs_legacy""")
                 c.execute("DROP TABLE jobs_legacy")
-        # Migração idempotente da coluna de cancelamento (tabelas anteriores),
-        # em transação própria para não envenenar a de cima no Postgres.
-        try:
-            with self._connect() as c2:
-                c2.execute(self._sql(
-                    "ALTER TABLE jobs ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0"))
-        except Exception:
-            pass
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """§1: migração VERSIONADA e verificada de jobs.cancel_requested (tabelas
+        anteriores). Não engole erro real — só o 'coluna já existe' é idempotente."""
+        from tradingagents.dbschema import add_column_if_missing, run_migrations
+
+        def _m1(c: Any, d: str) -> None:
+            add_column_if_missing(c, d, "jobs", "cancel_requested",
+                                  "INTEGER NOT NULL DEFAULT 0")
+
+        run_migrations(self._connect, self.backend, [(1, _m1)])
 
     def find_idempotent(self, tenant_id: str, idem: str) -> str | None:
         with self._connect() as c:

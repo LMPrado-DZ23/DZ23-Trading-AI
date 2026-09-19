@@ -50,6 +50,9 @@ ROUTE_POLICY: dict[tuple[str, str], WriteAccess] = {
     ("POST", "/v1/live/parada-emergencia"): WriteAccess.ALLOW_READONLY,
     # Rota legada (410, não executa nada): deixe o cliente ver o 410.
     ("POST", "/v1/broker/order"): WriteAccess.ALLOW_READONLY,
+    # Exportar dados do próprio tenant é LEITURA/portabilidade (admin+step-up
+    # gateiam à parte); permitido mesmo em conta somente-leitura.
+    ("POST", "/v1/mudanca/exportar"): WriteAccess.ALLOW_READONLY,
     # --- Depende da ação (validada no servidor) ----------------------------
     ("POST", "/v1/execution/kill-switch"): WriteAccess.ACTION_AWARE,
     # --- Cria trabalho / exposição / estado novo: BLOQUEADAS ---------------
@@ -81,9 +84,10 @@ _KILL_SWITCH_ACTIONS: dict[str, WriteAccess] = {
 # expõem segredos/dados de conta e precisam de CAPABILITY. Matriz por (método,
 # template) -> capability exigida. "admin+stepup" = admin E reautenticação.
 SENSITIVE_READS: dict[tuple[str, str], str] = {
-    ("GET", "/v1/mudanca/exportar"): "admin+stepup",   # exporta SEGREDOS
-    ("GET", "/v1/backups"): "admin",                    # lista backups
-    ("GET", "/v1/admin/users"): "admin",                # diagnóstico/admin
+    # Export de segredos agora é POST (§4, ver ROUTE_POLICY); aqui ficam as
+    # LEITURAS (GET) que precisam de capability.
+    ("GET", "/v1/backups"): "platform-admin",           # backup GLOBAL da plataforma
+    ("GET", "/v1/admin/users"): "admin",                # diagnóstico/admin (tenant DB)
 }
 
 

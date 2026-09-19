@@ -82,3 +82,17 @@ class TestStepUpTokens:
         with sqlite3.connect(db) as con:
             linhas = con.execute("SELECT token_hash FROM step_up_tokens").fetchall()
         assert linhas and all(tok not in row[0] for row in linhas)   # nunca em claro
+
+    def test_vinculado_a_sessao(self, tmp_path):
+        # §5: token emitido para a sessão A NÃO vale em OUTRA sessão (session binding).
+        st = _store(tmp_path / "id.db")
+        tok = st.create_step_up("t", "u", "export", session_id="sesA")
+        assert st.consume_step_up(tok, "t", "u", "export", session_id="sesB") is False
+        assert st.consume_step_up(tok, "t", "u", "export", session_id="sesA") is True
+
+    def test_revogacao_por_sessao(self, tmp_path):
+        # §5: logout/reset revoga os tokens daquela sessão.
+        st = _store(tmp_path / "id.db")
+        tok = st.create_step_up("t", "u", "export", session_id="sesA")
+        st.revoke_step_up_for_session("sesA")
+        assert st.consume_step_up(tok, "t", "u", "export", session_id="sesA") is False

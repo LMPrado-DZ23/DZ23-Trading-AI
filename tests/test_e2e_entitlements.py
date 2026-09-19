@@ -409,13 +409,11 @@ class TestImportarNaoAtivaAssinatura:
         c.post("/v1/trial/start", headers=ha)
         c.post("/v1/trial/start", headers=hb)
         toka = _stepup_token(c, ha, "export")
-        env = c.get("/v1/mudanca/exportar",
-                    headers={**ha, "X-Step-Up-Token": toka,
-                             "X-Export-Passphrase": "fr"}).json()
+        env = c.post("/v1/mudanca/exportar", headers={**ha, "X-Step-Up-Token": toka},
+                     json={"passphrase": "frase-forte-aa"}).json()
         tokb = _stepup_token(c, hb, "import")
-        r = c.post("/v1/mudanca/importar",
-                   headers={**hb, "X-Step-Up-Token": tokb, "X-Export-Passphrase": "fr"},
-                   json=env)
+        r = c.post("/v1/mudanca/importar", headers={**hb, "X-Step-Up-Token": tokb},
+                   json={"pacote": env, "passphrase": "frase-forte-aa"})
         assert r.status_code == 403
 
 
@@ -434,10 +432,10 @@ class TestExportarProtegido:
         h = _tenant(m, "tena", "a@a.com")
         c.post("/v1/trial/start", headers=h)
         c.post("/v1/config", headers=h, json={"vars": {"GROQ_API_KEY": "gsk-super-secreto"}})
-        assert c.get("/v1/mudanca/exportar", headers=h).status_code == 401   # sem token
+        assert c.post("/v1/mudanca/exportar", headers=h, json={}).status_code == 401  # sem token
         tok = _stepup_token(c, h, "export")
-        hh = {**h, "X-Step-Up-Token": tok, "X-Export-Passphrase": "frase-forte-xyz"}
-        r = c.get("/v1/mudanca/exportar", headers=hh)
+        hh = {**h, "X-Step-Up-Token": tok}
+        r = c.post("/v1/mudanca/exportar", headers=hh, json={"passphrase": "frase-forte-xyz"})
         assert r.status_code == 200
         assert r.headers["content-type"] == "application/octet-stream"
         assert r.headers["cache-control"].startswith("no-store")
@@ -445,7 +443,8 @@ class TestExportarProtegido:
         dados = decrypt_package(r.json(), "frase-forte-xyz")
         assert dados["configuracao"]["GROQ_API_KEY"] == "gsk-super-secreto"
         # token single-use: reusar o mesmo falha
-        assert c.get("/v1/mudanca/exportar", headers=hh).status_code == 401
+        assert c.post("/v1/mudanca/exportar", headers=hh,
+                      json={"passphrase": "frase-forte-xyz"}).status_code == 401
 
     def test_step_up_credencial_errada_nao_emite_token(self, mt):
         m, c = mt
@@ -462,26 +461,45 @@ class TestExportarProtegido:
         c.post("/v1/config", headers=h, json={"vars": {"GROQ_API_KEY": "gsk-x"}})
         from cryptography.exceptions import InvalidTag
         tok = _stepup_token(c, h, "export")
-        r = c.get("/v1/mudanca/exportar",
-                  headers={**h, "X-Step-Up-Token": tok, "X-Export-Passphrase": "certa-123"})
+        r = c.post("/v1/mudanca/exportar", headers={**h, "X-Step-Up-Token": tok},
+                   json={"passphrase": "certa-forte-123"})
         with pytest.raises(InvalidTag):
-            decrypt_package(r.json(), "frase-ERRADA")        # AEAD falha
+            decrypt_package(r.json(), "frase-ERRADA-forte")   # AEAD falha
 
     def test_viewer_recebe_403(self, mt):
         m, c = mt
         hv = _viewer(m, "tena", "admin@a.com", "viewer@a.com")
-        # require_admin dispara ANTES do step-up: viewer nem chega a exportar.
-        assert c.get("/v1/mudanca/exportar", headers=hv).status_code == 403
+        # viewer não tem permissão nem admin: export (POST) é barrado (401/403).
+        assert c.post("/v1/mudanca/exportar", headers=hv,
+                      json={"passphrase": "x" * 12}).status_code in (401, 403)
 
     def test_backups_exige_admin(self, mt):
         m, c = mt
         hv = _viewer(m, "tena", "admin@a.com", "viewer@a.com")
         assert c.get("/v1/backups", headers=hv).status_code == 403
 
+    def test_backup_global_indisponivel_para_tenant_admin(self, mt):
+        # §8: backup GLOBAL exige platform-admin; um admin de tenant não é.
+        m, c = mt
+        h = _tenant(m, "tena", "a@a.com")            # admin do tenant, não platform
+        c.post("/v1/trial/start", headers=h)
+        assert c.post("/v1/backup", headers=h).status_code == 403
+        assert c.get("/v1/backups", headers=h).status_code == 403
+
     def test_admin_users_get_exige_admin(self, mt):
         m, c = mt
         hv = _viewer(m, "tena", "admin@a.com", "viewer@a.com")
         assert c.get("/v1/admin/users", headers=hv).status_code == 403
+
+    def test_step_up_bloqueado_para_conta_oauth(self, mt):
+        # §6: conta OAuth-only não faz step-up por senha — export/import bloqueados.
+        m, c = mt
+        m.TENANT_STORE.create_account("Ag", "o@a.com", SENHA, tenant_id="tena", oauth_only=True)
+        tok = m.TENANT_STORE.login("o@a.com", SENHA, "tena")
+        r = c.post("/v1/auth/step-up", headers={"Authorization": "Bearer " + tok},
+                   json={"password": SENHA, "purpose": "export"})
+        assert r.status_code == 403
+        assert r.json()["detail"]["blocked_by"] == "STEP_UP_PROVIDER_REAUTH_REQUIRED"
 
 
 class TestCancelCrossTenant:

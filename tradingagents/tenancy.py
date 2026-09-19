@@ -18,6 +18,15 @@ LOGIN_MAX_FAILS = 5
 LOGIN_WINDOW = 900          # janela de contagem de falhas (s)
 LOGIN_BASE_LOCK = 30       # trava inicial ao estourar o limite (s)
 LOGIN_MAX_LOCK = 3600      # teto do backoff exponencial (s)
+# Limiares SEPARADOS (max_fails, base_lock) por tipo de chave (§6). O par é
+# estrito; IP e identidade têm limiar alto para não trancar NAT/vítima cedo.
+_LOGIN_KINDS = {"pair": (5, 30), "ip": (50, 15), "email": (12, 30)}
+
+
+def _dummy_scrypt() -> None:
+    """scrypt DESCARTÁVEL com o mesmo custo do hash real: o tempo de resposta a
+    um e-mail inexistente não deve denunciar a existência de contas (§6)."""
+    hashlib.scrypt(b"x" * 12, salt=b"\0" * 16, n=2 ** 14, r=8, p=1)
 
 ROLES = frozenset({"viewer", "analyst", "operator", "risk_manager", "admin", "auditor"})
 ROLE_PERMISSIONS = {
@@ -76,7 +85,8 @@ class TenantStore:
             );
             CREATE TABLE IF NOT EXISTS users (
                 id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL,
-                created_at REAL NOT NULL, status TEXT NOT NULL DEFAULT 'active'
+                created_at REAL NOT NULL, status TEXT NOT NULL DEFAULT 'active',
+                oauth_only INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS memberships (
                 tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -96,93 +106,136 @@ class TenantStore:
             CREATE TABLE IF NOT EXISTS step_up_tokens (
                 token_hash TEXT PRIMARY KEY, tenant_id TEXT NOT NULL,
                 user_id TEXT NOT NULL, purpose TEXT NOT NULL,
+                session_id TEXT NOT NULL DEFAULT '',
                 expires_at REAL NOT NULL, used_at REAL
             );
             CREATE INDEX IF NOT EXISTS idx_memberships_user ON memberships(user_id);
             CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at);
             """)
+        self._migrate()
+
+    def _dialect(self) -> str:
+        return "sqlite"
+
+    def _migrate(self) -> None:
+        """§1/§6: migração versionada e verificada do schema de identidade
+        (ex.: users.oauth_only em bancos antigos)."""
+        from tradingagents.dbschema import add_column_if_missing, run_migrations
+
+        def _m1(c: Any, d: str) -> None:
+            add_column_if_missing(c, d, "users", "oauth_only", "INTEGER NOT NULL DEFAULT 0")
+
+        run_migrations(self._connect, self._dialect(), [(1, _m1)])
 
     def _sql(self, query: str) -> str:
         """SQLite usa '?'. Postgres sobrescreve para '%s'."""
         return query
 
+    def _hmac(self, s: str) -> str:
+        return hmac.new(self.signing_key, s.encode(), hashlib.sha256).hexdigest()
+
     def _login_key(self, ip: str, email: str) -> str:
-        # HMAC (com a signing key) do par IP|e-mail normalizado: a chave do rate
-        # limit NÃO guarda PII em claro e não é forjável sem a signing key.
-        base = f"{(ip or '?').strip()}|{(email or '').strip().lower()}"
-        return hmac.new(self.signing_key, base.encode(), hashlib.sha256).hexdigest()
+        # Compat: chave do PAR ip|email (HMAC; sem PII em claro).
+        ipn = (ip or "?").strip()
+        em = (email or "").strip().lower()
+        return self._hmac(f"pair|{ipn}|{em}")
+
+    def _login_keys(self, ip: str, email: str) -> dict[str, str]:
+        """Chaves SEPARADAS (§6): por PAR (ip+email), por IP e por identidade.
+        Limiar mais alto no IP/identidade evita lockout global de uma vítima."""
+        ipn = (ip or "?").strip()
+        em = (email or "").strip().lower()
+        return {"pair": self._hmac(f"pair|{ipn}|{em}"),
+                "ip": self._hmac(f"ip|{ipn}"),
+                "email": self._hmac(f"email|{em}")}
 
     def _token_hash(self, token: str) -> str:
         return hmac.new(self.signing_key, token.encode(), hashlib.sha256).hexdigest()
 
     def create_step_up(self, tenant_id: str, user_id: str, purpose: str,
-                       ttl_seconds: int = 300) -> str:
-        """Emite um TOKEN de step-up: aleatório, escopado (tenant/user/purpose),
-        curto (<=5min), single-use. Guardado HASHEADO (HMAC) — nunca em claro.
-        Devolve o token puro UMA vez (não é recuperável depois)."""
+                       session_id: str = "", ttl_seconds: int = 300) -> str:
+        """Emite um TOKEN de step-up: aleatório, escopado (tenant/user/purpose/
+        SESSÃO), curto (<=5min), single-use. Guardado HASHEADO (HMAC) — nunca em
+        claro. Devolve o token puro UMA vez (não é recuperável depois)."""
         token = secrets.token_urlsafe(32)
         now = time.time()
         with self._connect() as c:
             c.execute(self._sql("DELETE FROM step_up_tokens WHERE expires_at < ?"), (now,))
             c.execute(self._sql(
                 "INSERT INTO step_up_tokens(token_hash,tenant_id,user_id,purpose,"
-                "expires_at,used_at) VALUES(?,?,?,?,?,NULL)"),
-                (self._token_hash(token), tenant_id, user_id, purpose, now + ttl_seconds))
+                "session_id,expires_at,used_at) VALUES(?,?,?,?,?,?,NULL)"),
+                (self._token_hash(token), tenant_id, user_id, purpose,
+                 session_id, now + ttl_seconds))
         return token
 
     def consume_step_up(self, token: str, tenant_id: str, user_id: str,
-                        purpose: str) -> bool:
-        """Valida e REVOGA o token numa única operação atômica (single-use):
-        só a PRIMEIRA chamada com um token válido/não-expirado/no-escopo passa."""
+                        purpose: str, session_id: str = "") -> bool:
+        """Valida e REVOGA o token numa única operação atômica (single-use). Além
+        de tenant/user/purpose, exige a MESMA sessão que o emitiu — um token
+        vazado para outra sessão não vale."""
         now = time.time()
         with self._connect() as c:
             cur = c.execute(self._sql(
                 "UPDATE step_up_tokens SET used_at=? WHERE token_hash=? "
                 "AND used_at IS NULL AND expires_at>=? AND tenant_id=? "
-                "AND user_id=? AND purpose=?"),
-                (now, self._token_hash(token), now, tenant_id, user_id, purpose))
+                "AND user_id=? AND purpose=? AND session_id=?"),
+                (now, self._token_hash(token), now, tenant_id, user_id, purpose, session_id))
         return (getattr(cur, "rowcount", 0) or 0) == 1
 
-    def login_lock_seconds(self, ip: str, email: str) -> int:
-        """Segundos restantes de bloqueio para (ip, e-mail), ou 0 se liberado."""
-        now = time.time()
+    def revoke_step_up_for_session(self, session_id: str) -> None:
+        """Revoga todos os step-up de uma sessão (chamado no logout)."""
         with self._connect() as c:
-            row = c.execute(self._sql("SELECT locked_until FROM login_attempts WHERE key=?"),
-                            (self._login_key(ip, email),)).fetchone()
-        if not row:
-            return 0
-        rem = float(row["locked_until"] or 0) - now
-        return int(rem) + 1 if rem > 0 else 0
+            c.execute(self._sql("DELETE FROM step_up_tokens WHERE session_id=?"),
+                      (session_id,))
+
+    def login_lock_seconds(self, ip: str, email: str) -> int:
+        """Bloqueio efetivo = o MAIOR entre os limites por par/IP/identidade."""
+        now = time.time()
+        pior = 0.0
+        with self._connect() as c:
+            for k in self._login_keys(ip, email).values():
+                row = c.execute(self._sql(
+                    "SELECT locked_until FROM login_attempts WHERE key=?"), (k,)).fetchone()
+                if row:
+                    rem = float(row["locked_until"] or 0) - now
+                    pior = max(pior, rem)
+        return int(pior) + 1 if pior > 0 else 0
 
     def record_login_failure(self, ip: str, email: str) -> int:
-        """Conta uma falha e aplica backoff/lockout. Persistente (sobrevive a
-        restart, compartilhado entre instâncias). Devolve o total na janela."""
+        """Incrementa (SQL ATÔMICO) os três contadores e aplica backoff. Faz
+        cleanup/TTL de linhas velhas. Limiares separados evitam lockout global."""
         now = time.time()
-        key = self._login_key(ip, email)
         with self._connect() as c:
-            row = c.execute(self._sql("SELECT fails, first_at FROM login_attempts WHERE key=?"),
-                            (key,)).fetchone()
-            if row and (now - float(row["first_at"])) <= LOGIN_WINDOW:
-                fails = int(row["fails"]) + 1
-                first_at = float(row["first_at"])
-            else:
-                fails, first_at = 1, now
-            locked_until = 0.0
-            if fails >= LOGIN_MAX_FAILS:
-                locked_until = now + min(
-                    LOGIN_MAX_LOCK, LOGIN_BASE_LOCK * (2 ** (fails - LOGIN_MAX_FAILS)))
-            c.execute(self._sql(
-                "INSERT INTO login_attempts(key,fails,first_at,locked_until) "
-                "VALUES(?,?,?,?) ON CONFLICT (key) DO UPDATE SET "
-                "fails=excluded.fails, first_at=excluded.first_at, "
-                "locked_until=excluded.locked_until"),
-                (key, fails, first_at, locked_until))
-        return fails
+            # cleanup/TTL: some com o que já não tranca e saiu da janela.
+            c.execute(self._sql("DELETE FROM login_attempts WHERE locked_until < ? "
+                                "AND first_at < ?"), (now, now - LOGIN_WINDOW))
+            pair_fails = 0
+            for kind, k in self._login_keys(ip, email).items():
+                maxf, base = _LOGIN_KINDS[kind]
+                # incremento ATÔMICO; reinicia a janela se a linha ficou velha.
+                c.execute(self._sql(
+                    "INSERT INTO login_attempts(key,fails,first_at,locked_until) "
+                    "VALUES(?,1,?,0) ON CONFLICT (key) DO UPDATE SET "
+                    "fails = CASE WHEN login_attempts.first_at < ? THEN 1 "
+                    "             ELSE login_attempts.fails + 1 END, "
+                    "first_at = CASE WHEN login_attempts.first_at < ? THEN ? "
+                    "                ELSE login_attempts.first_at END"),
+                    (k, now, now - LOGIN_WINDOW, now - LOGIN_WINDOW, now))
+                row = c.execute(self._sql("SELECT fails FROM login_attempts WHERE key=?"),
+                                (k,)).fetchone()
+                fails = int(row["fails"]) if row else 1
+                if kind == "pair":
+                    pair_fails = fails
+                if fails >= maxf:
+                    lock = min(LOGIN_MAX_LOCK, base * (2 ** (fails - maxf)))
+                    c.execute(self._sql("UPDATE login_attempts SET locked_until=? WHERE key=?"),
+                              (now + lock, k))
+        return pair_fails
 
     def clear_login_failures(self, ip: str, email: str) -> None:
         with self._connect() as c:
-            c.execute(self._sql("DELETE FROM login_attempts WHERE key=?"),
-                      (self._login_key(ip, email),))
+            for k in self._login_keys(ip, email).values():
+                c.execute(self._sql("DELETE FROM login_attempts WHERE key=?"), (k,))
 
     @staticmethod
     def _hash_password(password: str, salt: bytes | None = None) -> str:
@@ -220,9 +273,33 @@ class TenantStore:
         with self._connect() as c:
             c.execute("INSERT OR REPLACE INTO memberships(tenant_id,user_id,role,created_at) VALUES(?,?,?,?)", (tenant_id, user_id, role, time.time()))
 
+    def add_user_to_tenant(self, tenant_id: str, email: str, password: str,
+                           role: str = "viewer") -> str:
+        """§9: cria usuário + vínculo num tenant EXISTENTE, ATÔMICO e validando
+        ANTES (papel válido e tenant existe). Funciona em SQLite e Postgres
+        (via self._sql). E-mail repetido vira AuthError; nada fica pela metade."""
+        if role not in ROLES:
+            raise AuthError("papel inválido")
+        if not self.tenant_exists(tenant_id):
+            raise AuthError("tenant inexistente")
+        user_id = "usr_" + secrets.token_urlsafe(12)
+        pwd = self._hash_password(password)        # valida tamanho antes da tx
+        now = time.time()
+        try:
+            with self._connect() as c:
+                c.execute(self._sql("INSERT INTO users(id,email,password_hash,created_at) "
+                                    "VALUES(?,?,?,?)"),
+                          (user_id, email.strip().lower(), pwd, now))
+                c.execute(self._sql("INSERT INTO memberships(tenant_id,user_id,role,"
+                                    "created_at) VALUES(?,?,?,?)"),
+                          (tenant_id, user_id, role, now))
+        except Exception as exc:                   # noqa: BLE001
+            raise AuthError("não foi possível criar o usuário (e-mail já existe?)") from exc
+        return user_id
+
     def create_account(self, agency_name: str, email: str, password: str, *,
                        role: str = "admin", tenant_id: str | None = None,
-                       user_id: str | None = None) -> tuple[str, str]:
+                       user_id: str | None = None, oauth_only: bool = False) -> tuple[str, str]:
         """Cria tenant + usuário + vínculo em UMA transação.
 
         Atômico: qualquer falha desfaz tudo — nunca fica tenant órfão nem
@@ -240,14 +317,22 @@ class TenantStore:
             with self._connect() as c:      # commit no sucesso, rollback na exceção
                 c.execute("INSERT INTO tenants(id,name,created_at) VALUES(?,?,?)",
                           (tenant_id, agency_name.strip(), now))
-                c.execute("INSERT INTO users(id,email,password_hash,created_at) "
-                          "VALUES(?,?,?,?)",
-                          (user_id, email.strip().lower(), pwd_hash, now))
+                c.execute("INSERT INTO users(id,email,password_hash,created_at,oauth_only) "
+                          "VALUES(?,?,?,?,?)",
+                          (user_id, email.strip().lower(), pwd_hash, now, 1 if oauth_only else 0))
                 c.execute("INSERT INTO memberships(tenant_id,user_id,role,created_at) "
                           "VALUES(?,?,?,?)", (tenant_id, user_id, role, now))
         except sqlite3.IntegrityError as exc:
             raise AuthError("não foi possível concluir o cadastro") from exc
         return tenant_id, user_id
+
+    def is_oauth_only(self, user_id: str) -> bool:
+        """Conta criada por OAuth (senha interna aleatória): step-up por senha NÃO
+        é fluxo válido (§6). O chamador bloqueia export/import dessas contas."""
+        with self._connect() as c:
+            row = c.execute(self._sql("SELECT oauth_only FROM users WHERE id=?"),
+                            (user_id,)).fetchone()
+        return bool(row and (row["oauth_only"] if hasattr(row, "keys") else row[0]))
 
     def login(self, email: str, password: str, tenant_id: str, *, ttl_seconds: int = 3600) -> str:
         with self._connect() as c:
@@ -268,12 +353,16 @@ class TenantStore:
 
     def _verify_credentials(self, email: str, password: str) -> str:
         """Prova e-mail+senha SEM escopo de tenant. Falha SEMPRE com o mesmo
-        erro genérico (anti-enumeração): não revela se o e-mail existe."""
+        erro genérico (anti-enumeração). Faz um scrypt DUMMY quando o e-mail não
+        existe, para o tempo de resposta não denunciar contas (§6)."""
         with self._connect() as c:
             row = c.execute("SELECT id,password_hash FROM users WHERE email=? "
                             "AND status='active'",
                             (email.strip().lower(),)).fetchone()
-        if not row or not self._verify_password(password, row["password_hash"]):
+        if not row:
+            _dummy_scrypt()
+            raise AuthError("credenciais inválidas")
+        if not self._verify_password(password, row["password_hash"]):
             raise AuthError("credenciais inválidas")
         return row["id"]
 
@@ -402,7 +491,10 @@ class PostgresTenantStore(TenantStore):
         return self._psycopg.connect(self.path, row_factory=self._dict_row)
 
     def _init(self) -> None:
+        from tradingagents.dbschema import SCHEMA_LOCK_KEY
         with self._connect() as c:
+            # Serializa a criação de tabelas entre processos (corrida de pg_type).
+            c.execute("SELECT pg_advisory_xact_lock(%s)", (SCHEMA_LOCK_KEY,))
             c.execute("""
             CREATE TABLE IF NOT EXISTS tenants (
                 id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at DOUBLE PRECISION NOT NULL,
@@ -410,7 +502,8 @@ class PostgresTenantStore(TenantStore):
             );
             CREATE TABLE IF NOT EXISTS users (
                 id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL,
-                created_at DOUBLE PRECISION NOT NULL, status TEXT NOT NULL DEFAULT 'active'
+                created_at DOUBLE PRECISION NOT NULL, status TEXT NOT NULL DEFAULT 'active',
+                oauth_only INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS memberships (
                 tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
@@ -430,11 +523,16 @@ class PostgresTenantStore(TenantStore):
             CREATE TABLE IF NOT EXISTS step_up_tokens (
                 token_hash TEXT PRIMARY KEY, tenant_id TEXT NOT NULL,
                 user_id TEXT NOT NULL, purpose TEXT NOT NULL,
+                session_id TEXT NOT NULL DEFAULT '',
                 expires_at DOUBLE PRECISION NOT NULL, used_at DOUBLE PRECISION
             );
             CREATE INDEX IF NOT EXISTS idx_memberships_user ON memberships(user_id);
             CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at);
             """)
+        self._migrate()
+
+    def _dialect(self) -> str:
+        return "postgres"
 
     def _sql(self, query: str) -> str:
         return query.replace("?", "%s")
@@ -460,7 +558,7 @@ class PostgresTenantStore(TenantStore):
 
     def create_account(self, agency_name: str, email: str, password: str, *,
                        role: str = "admin", tenant_id: str | None = None,
-                       user_id: str | None = None) -> tuple[str, str]:
+                       user_id: str | None = None, oauth_only: bool = False) -> tuple[str, str]:
         """Versão transacional para Postgres: tenant + usuário + vínculo numa
         única transação (commit no sucesso, rollback em qualquer falha)."""
         if role not in ROLES:
@@ -473,9 +571,9 @@ class PostgresTenantStore(TenantStore):
             with self._connect() as c:      # psycopg: commit no exit, rollback na exceção
                 c.execute("INSERT INTO tenants(id,name,created_at) VALUES(%s,%s,%s)",
                           (tenant_id, agency_name.strip(), now))
-                c.execute("INSERT INTO users(id,email,password_hash,created_at) "
-                          "VALUES(%s,%s,%s,%s)",
-                          (user_id, email.strip().lower(), pwd_hash, now))
+                c.execute("INSERT INTO users(id,email,password_hash,created_at,oauth_only) "
+                          "VALUES(%s,%s,%s,%s,%s)",
+                          (user_id, email.strip().lower(), pwd_hash, now, 1 if oauth_only else 0))
                 c.execute("INSERT INTO memberships(tenant_id,user_id,role,created_at) "
                           "VALUES(%s,%s,%s,%s)", (tenant_id, user_id, role, now))
         except self._psycopg.errors.UniqueViolation as exc:
@@ -487,7 +585,10 @@ class PostgresTenantStore(TenantStore):
             row = c.execute("SELECT id,password_hash FROM users WHERE email=%s "
                             "AND status='active'",
                             (email.strip().lower(),)).fetchone()
-        if not row or not self._verify_password(password, row["password_hash"]):
+        if not row:
+            _dummy_scrypt()                     # §6: iguala o tempo p/ e-mail inexistente
+            raise AuthError("credenciais inválidas")
+        if not self._verify_password(password, row["password_hash"]):
             raise AuthError("credenciais inválidas")
         return row["id"]
 

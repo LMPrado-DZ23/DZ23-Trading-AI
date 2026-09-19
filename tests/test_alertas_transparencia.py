@@ -156,16 +156,16 @@ class TestMudancaDeServidor:
                       json={"password": "s3nh4", "purpose": purpose}).json()["step_up_token"]
 
     def test_export_carries_everything_that_matters(self, tmp_path, monkeypatch):
-        # §1/§2: export exige TOKEN de step-up (não senha crua) + frase; vem
-        # CIFRADO (sem segredo em claro), attachment no-store; token é single-use.
+        # §1/§2/§4: export é POST (frase no CORPO), exige TOKEN de step-up
+        # single-use; vem CIFRADO (sem segredo em claro), attachment no-store.
         from tradingagents.portable import decrypt_package
         m, c, h = self._app(tmp_path, monkeypatch)
         c.post("/v1/config", headers=h, json={"vars": {"GROQ_API_KEY": "gsk-x"}})
         c.get("/v1/desk/status", headers=h)
-        assert c.get("/v1/mudanca/exportar", headers=h).status_code == 401   # sem step-up
+        assert c.post("/v1/mudanca/exportar", headers=h, json={}).status_code == 401  # sem token
         tok = self._stepup(c, h, "export")
-        hh = {**h, "X-Step-Up-Token": tok, "X-Export-Passphrase": "frase-forte-123"}
-        r = c.get("/v1/mudanca/exportar", headers=hh)
+        hh = {**h, "X-Step-Up-Token": tok}
+        r = c.post("/v1/mudanca/exportar", headers=hh, json={"passphrase": "frase-forte-123"})
         assert r.status_code == 200
         assert r.headers["content-type"] == "application/octet-stream"
         assert r.headers["cache-control"].startswith("no-store")
@@ -174,7 +174,8 @@ class TestMudancaDeServidor:
         assert dados["formato"] == "dz23.mudanca/1"
         assert dados["configuracao"]["GROQ_API_KEY"] == "gsk-x"
         # token single-use: reusar falha
-        assert c.get("/v1/mudanca/exportar", headers=hh).status_code == 401
+        assert c.post("/v1/mudanca/exportar", headers=hh,
+                      json={"passphrase": "frase-forte-123"}).status_code == 401
 
     def test_import_restores_on_a_fresh_server(self, tmp_path, monkeypatch):
         from decimal import Decimal as D
@@ -189,9 +190,8 @@ class TestMudancaDeServidor:
             mem.registrar(Desfecho("trend_following", "tendencia_alta", "BTC/USDT",
                                    D("0.02"), agora(), 0.8))
         tok = self._stepup(c, h, "export")
-        pacote = c.get("/v1/mudanca/exportar",
-                       headers={**h, "X-Step-Up-Token": tok,
-                                "X-Export-Passphrase": "frase-forte-123"}).json()
+        env = c.post("/v1/mudanca/exportar", headers={**h, "X-Step-Up-Token": tok},
+                     json={"passphrase": "frase-forte-123"}).json()
 
         # "servidor novo": outro diretório, tudo zerado
         novo = tmp_path / "servidor-novo"
@@ -202,9 +202,8 @@ class TestMudancaDeServidor:
         c2 = TestClient(m.app)
         tok2 = c2.post("/v1/auth/step-up", headers=h,
                        json={"password": "s3nh4", "purpose": "import"}).json()["step_up_token"]
-        r = c2.post("/v1/mudanca/importar",
-                    headers={**h, "X-Step-Up-Token": tok2,
-                             "X-Export-Passphrase": "frase-forte-123"}, json=pacote)
+        r = c2.post("/v1/mudanca/importar", headers={**h, "X-Step-Up-Token": tok2},
+                    json={"pacote": env, "passphrase": "frase-forte-123"})
         assert r.status_code == 200
         assert any("aprendizado" in x for x in r.json()["restaurado"])
         cfg = c2.get("/v1/config", headers=h).json()["config"]

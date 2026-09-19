@@ -15,7 +15,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from ..dbschema import SCHEMA_LOCK_KEY, add_column_if_missing, run_migrations
 from .woovi import Subscription, apply_paid_event, start_trial
+
+# Namespace FIXO do lock por-tenant. hashtextextended(text, int8) devolve BIGINT
+# (64 bits), com semente fixa: chave determinística, server-side, sem colisão de
+# namespace com o lock de schema (SCHEMA_LOCK_KEY) e sem usar hash() do Python.
+_TENANT_LOCK_SEED = 0x647A32335F544E54    # "dz23_TNT"
 
 
 class BillingUnavailable(RuntimeError):
@@ -31,8 +37,13 @@ class ChargeConflict(RuntimeError):
         self.charge_id, self.seen, self.new = charge_id, seen, new
 
 
-def _fingerprint(tenant_id: str, plan_code: str, amount_cents: int, currency: str) -> str:
-    return f"{tenant_id}|{plan_code}|{amount_cents}|{currency.upper()}"
+def _fingerprint(*, provider: str, event_id: str, charge_id: str, tenant_id: str,
+                 plan_code: str, amount_cents: int, currency: str, correlation: str,
+                 payload_hash: str) -> str:
+    """Fingerprint CANÔNICO do pagamento (§3): qualquer divergência num destes
+    campos, sob o mesmo charge_id, é conflito — nunca 'replay ok'."""
+    return "|".join([provider, event_id, charge_id, tenant_id, plan_code,
+                     str(amount_cents), currency.upper(), correlation, payload_hash])
 
 
 class SubscriptionStore:
@@ -49,6 +60,14 @@ class SubscriptionStore:
         conn = sqlite3.connect(self.sqlite_path, timeout=30)
         conn.row_factory = sqlite3.Row
         return conn
+
+    def _integrity_errors(self) -> tuple[type[Exception], ...]:
+        """Exceções de violação de UNICIDADE por dialeto — para converter a
+        colisão de UNIQUE(provider,event_id) em ChargeConflict (não em 5xx)."""
+        if self.dsn:
+            import psycopg
+            return (psycopg.errors.UniqueViolation,)
+        return (sqlite3.IntegrityError,)
 
     def _init(self) -> None:
         ddl_sub = ("CREATE TABLE IF NOT EXISTS subscriptions ("
@@ -83,6 +102,9 @@ class SubscriptionStore:
         with self._connect() as c:
             if self.dsn:
                 with c.cursor() as cur:
+                    # Serializa a criação de tabelas entre processos (corrida de
+                    # pg_type do CREATE TABLE IF NOT EXISTS no Postgres).
+                    cur.execute("SELECT pg_advisory_xact_lock(%s)", (SCHEMA_LOCK_KEY,))
                     cur.execute(ddl_sub)
                     cur.execute(ddl_evt)
                     cur.execute(ddl_conf)
@@ -91,6 +113,32 @@ class SubscriptionStore:
                 c.execute(ddl_evt)
                 c.execute(ddl_conf)
                 c.commit()
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """§1: leva um `webhook_events` ANTIGO ao schema atual, versionado e
+        verificado. CREATE IF NOT EXISTS não adiciona coluna a tabela existente."""
+        dialect = "postgres" if self.dsn else "sqlite"
+        colunas = [
+            ("currency", "TEXT NOT NULL DEFAULT 'BRL'"),
+            ("provider", "TEXT NOT NULL DEFAULT 'woovi'"),
+            ("event_id", "TEXT NOT NULL DEFAULT ''"),
+            ("correlation", "TEXT NOT NULL DEFAULT ''"),
+            ("payload_hash", "TEXT NOT NULL DEFAULT ''"),
+            ("fingerprint", "TEXT NOT NULL DEFAULT ''"),
+        ]
+
+        def _m1(c: Any, d: str) -> None:
+            for nome, ddl in colunas:
+                add_column_if_missing(c, d, "webhook_events", nome, ddl)
+
+        def _m2(c: Any, d: str) -> None:
+            # §3: UNICIDADE de (provider,event_id) — ÍNDICE PARCIAL que ignora o
+            # event_id legado vazio ('') para não conflitar com dados antigos.
+            c.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_webhook_events_provider_event "
+                      "ON webhook_events(provider, event_id) WHERE event_id <> ''")
+
+        run_migrations(self._connect, dialect, [(1, _m1), (2, _m2)])
 
     def get(self, tenant_id: str) -> Subscription | None:
         """Lê a assinatura. Banco fora do ar => BillingUnavailable (fail-closed)."""
@@ -188,7 +236,10 @@ class SubscriptionStore:
         """
         now = now or datetime.now(timezone.utc)
         stamp = now.isoformat()
-        fp = _fingerprint(tenant_id, plan_code, amount_cents, currency)
+        fp = _fingerprint(provider=provider, event_id=event_id, charge_id=charge_id,
+                          tenant_id=tenant_id, plan_code=plan_code,
+                          amount_cents=amount_cents, currency=currency,
+                          correlation=correlation, payload_hash=payload_hash)
         cols = ("charge_id,tenant_id,plan_code,amount_cents,currency,provider,"
                 "event_id,correlation,payload_hash,fingerprint,processed_at")
         vals = (charge_id, tenant_id, plan_code, amount_cents, currency.upper(),
@@ -197,14 +248,27 @@ class SubscriptionStore:
             with self._connect() as c:
                 if self.dsn:
                     with c.cursor() as cur:
-                        cur.execute(f"INSERT INTO webhook_events ({cols}) VALUES "
-                                    "(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
-                                    "ON CONFLICT (charge_id) DO NOTHING", vals)
+                        # §2: trava por TENANT durante a transação — dois charges
+                        # distintos do mesmo tenant se serializam (sem lost update).
+                        cur.execute(
+                            "SELECT pg_advisory_xact_lock(hashtextextended(%s, %s))",
+                            (tenant_id, _TENANT_LOCK_SEED))
+                        try:
+                            cur.execute(f"INSERT INTO webhook_events ({cols}) VALUES "
+                                        "(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+                                        "ON CONFLICT (charge_id) DO NOTHING", vals)
+                        except self._integrity_errors() as exc:   # UNIQUE(provider,event_id)
+                            raise ChargeConflict(charge_id, "event_id-unico", fp) from exc
                         aplicado = cur.rowcount == 1
                         if not aplicado:
                             cur.execute("SELECT fingerprint FROM webhook_events "
                                         "WHERE charge_id=%s", (charge_id,))
                             self._check_fp(cur.fetchone(), fp, charge_id)
+                        if aplicado and event_id:      # §3: event_id reusado sob OUTRO charge
+                            cur.execute("SELECT 1 FROM webhook_events WHERE event_id=%s "
+                                        "AND charge_id<>%s LIMIT 1", (event_id, charge_id))
+                            if cur.fetchone():
+                                raise ChargeConflict(charge_id, "event_id-reusado", fp)
                         cur.execute("SELECT * FROM subscriptions WHERE tenant_id=%s",
                                     (tenant_id,))
                         row = cur.fetchone()
@@ -223,14 +287,27 @@ class SubscriptionStore:
                             (r["tenant_id"], r["plan_code"], r["status"],
                              r["expires_at"], r["last_charge_id"]))
                 else:
+                    # §2: BEGIN IMMEDIATE pega o write-lock ANTES do SELECT, então
+                    # um segundo pagamento concorrente espera, relê a expiração já
+                    # atualizada e SOMA o período (sem lost update). SQLite é
+                    # single-writer; isto serializa writers com segurança.
+                    c.execute("BEGIN IMMEDIATE")
                     q = (f"INSERT INTO webhook_events ({cols}) VALUES "
                          "(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(charge_id) DO NOTHING")
-                    cur = c.execute(q, vals)
+                    try:
+                        cur = c.execute(q, vals)
+                    except self._integrity_errors() as exc:   # UNIQUE(provider,event_id)
+                        raise ChargeConflict(charge_id, "event_id-unico", fp) from exc
                     aplicado = cur.rowcount == 1
                     if not aplicado:
                         got = c.execute("SELECT fingerprint FROM webhook_events "
                                         "WHERE charge_id=?", (charge_id,)).fetchone()
                         self._check_fp(got, fp, charge_id)
+                    if aplicado and event_id:          # §3: event_id reusado sob OUTRO charge
+                        dup = c.execute("SELECT 1 FROM webhook_events WHERE event_id=? "
+                                        "AND charge_id<>? LIMIT 1", (event_id, charge_id)).fetchone()
+                        if dup:
+                            raise ChargeConflict(charge_id, "event_id-reusado", fp)
                     row = c.execute("SELECT * FROM subscriptions WHERE tenant_id=?",
                                     (tenant_id,)).fetchone()
                     atual = Subscription.from_row(dict(row)) if row else None
@@ -248,7 +325,13 @@ class SubscriptionStore:
                          r["expires_at"], r["last_charge_id"]))
                     c.commit()
         except ChargeConflict as conf:
-            self._record_conflict(conf, provider, event_id, stamp)   # incidente durável
+            # §3: o conflito NÃO é best-effort. Se o incidente não persistir,
+            # respondemos 5xx (BillingUnavailable), nunca um 409 "durável" falso.
+            try:
+                self._record_conflict(conf, provider, event_id, stamp)
+            except Exception as exc:                 # noqa: BLE001
+                raise BillingUnavailable(
+                    f"conflito não pôde ser persistido: {exc}") from exc
             raise
         except Exception as exc:                     # noqa: BLE001 - degrada seguro
             raise BillingUnavailable(str(exc)) from exc
@@ -262,21 +345,18 @@ class SubscriptionStore:
 
     def _record_conflict(self, conf: ChargeConflict, provider: str, event_id: str,
                          stamp: str) -> None:
-        """Grava o conflito num ledger DURÁVEL (incidente). Best-effort: uma
-        falha ao registrar não deve mascarar o 409 do conflito."""
+        """Grava o conflito num ledger DURÁVEL (incidente). NÃO é best-effort:
+        se levantar, o chamador transforma em 5xx (nunca 409 'durável' falso)."""
         q = ("INSERT INTO webhook_conflicts (charge_id,seen_fingerprint,"
              "new_fingerprint,provider,event_id,at) VALUES (%s,%s,%s,%s,%s,%s)")
         params = (conf.charge_id, conf.seen, conf.new, provider, event_id, stamp)
-        try:
-            with self._connect() as c:
-                if self.dsn:
-                    with c.cursor() as cur:
-                        cur.execute(q, params)
-                else:
-                    c.execute(q.replace("%s", "?"), params)
-                    c.commit()
-        except Exception:                            # noqa: BLE001
-            pass
+        with self._connect() as c:
+            if self.dsn:
+                with c.cursor() as cur:
+                    cur.execute(q, params)
+            else:
+                c.execute(q.replace("%s", "?"), params)
+                c.commit()
 
     def count_conflicts(self, charge_id: str) -> int:
         with self._connect() as c:

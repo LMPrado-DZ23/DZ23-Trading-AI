@@ -85,10 +85,12 @@ class TestCapabilidadeDeLeiturasSensiveis:
     expõem segredos/backups/diagnóstico exigem capability e existem no app."""
 
     def test_leituras_sensiveis_classificadas(self):
-        assert capability_for_read("GET", "/v1/mudanca/exportar") == "admin+stepup"
-        assert capability_for_read("GET", "/v1/backups") == "admin"
+        assert capability_for_read("GET", "/v1/backups") == "platform-admin"
         assert capability_for_read("GET", "/v1/admin/users") == "admin"
         assert capability_for_read("GET", "/v1/agency/health") is None   # não sensível
+        # export de segredos virou POST (§4) e está na ROUTE_POLICY:
+        assert capability_for_read("GET", "/v1/mudanca/exportar") is None
+        assert policy_for("POST", "/v1/mudanca/exportar") is WriteAccess.ALLOW_READONLY
 
     def test_toda_leitura_sensivel_existe_no_app(self):
         reais = set()
