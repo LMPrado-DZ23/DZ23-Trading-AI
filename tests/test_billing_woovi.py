@@ -75,23 +75,28 @@ class TestAssinaturaDoWebhook:
 
 
 class TestAssinatura:
-    def test_new_tenant_starts_on_trial(self, tmp_path):
+    def test_new_tenant_has_no_subscription(self, tmp_path):
         st = SubscriptionStore(tmp_path / "s.db")
-        sub = st.ensure("t1")
+        assert st.get("t1") is None            # NÃO inicia trial sozinho
+        sub = st.start_trial_for("t1")         # trial só por ação explícita
         assert sub.plan_code == "trial" and sub.is_active()
 
     def test_payment_activates_and_extends(self, tmp_path):
         st = SubscriptionStore(tmp_path / "s.db")
-        sub = st.save(apply_paid_event(st.ensure("t1"), "t1", "starter", "c1"))
-        assert sub.status == "active" and sub.plan_code == "starter"
-        depois = st.save(apply_paid_event(sub, "t1", "starter", "c2"))
+        sub = st.save(apply_paid_event(st.get("t1"), "t1", "dz23_monthly", "c1"))
+        assert sub.status == "active" and sub.plan_code == "dz23_monthly"
+        depois = st.save(apply_paid_event(sub, "t1", "dz23_monthly", "c2"))
         assert depois.expires_at > sub.expires_at          # renovou
 
     def test_repeated_webhook_does_not_extend_twice(self, tmp_path):
         st = SubscriptionStore(tmp_path / "s.db")
-        primeiro = st.save(apply_paid_event(st.ensure("t1"), "t1", "starter", "c1"))
-        repetido = apply_paid_event(primeiro, "t1", "starter", "c1")
+        primeiro = st.save(apply_paid_event(st.get("t1"), "t1", "dz23_monthly", "c1"))
+        repetido = apply_paid_event(primeiro, "t1", "dz23_monthly", "c1")
         assert repetido.expires_at == primeiro.expires_at
+
+    def test_webhook_rejeita_codigo_desconhecido(self):
+        with pytest.raises(BillingError, match="não é cobrável"):
+            apply_paid_event(None, "t1", "codigo_que_nao_existe", "c9")
 
     def test_expired_subscription_is_not_active(self, tmp_path):
         st = SubscriptionStore(tmp_path / "s.db")
@@ -102,8 +107,8 @@ class TestAssinatura:
 
     def test_tenants_do_not_share_subscription(self, tmp_path):
         st = SubscriptionStore(tmp_path / "s.db")
-        st.save(apply_paid_event(st.ensure("a"), "a", "pro", "c1"))
-        assert st.ensure("b").plan_code == "trial"
+        st.save(apply_paid_event(st.get("a"), "a", "dz23_annual", "c1"))
+        assert st.get("b") is None             # b não ganha trial por acesso
 
 
 class TestCobranca:
@@ -158,19 +163,16 @@ class TestPortaoDeAcesso:
         r = c.get("/v1/desk/status", headers={"Authorization": "Bearer s3nh4"})
         assert r.status_code == 200
 
-    def test_expired_subscription_blocks_the_desk_with_402(self, tmp_path, monkeypatch):
-        from datetime import datetime, timedelta, timezone
-
+    def test_billing_pages_stay_reachable_in_legacy(self, tmp_path, monkeypatch):
+        # No modo self-host (ACCESS_PASSWORD) NÃO há cobrança: o desk não é
+        # bloqueado por assinatura. As páginas de pagamento seguem acessíveis.
+        # O bloqueio 402 por assinatura vencida é do modo multi-tenant e está
+        # coberto nos testes de entitlements (e2e).
         from fastapi.testclient import TestClient
         m = self._app(tmp_path, monkeypatch)
         c = TestClient(m.app)
         h = {"Authorization": "Bearer s3nh4"}
-        sub = m.SUBS.ensure("legacy")
-        sub.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
-        sub.status = "expired"
-        m.SUBS.save(sub)
-        assert c.get("/v1/desk/status", headers=h).status_code == 402
-        # ... mas o caminho para pagar continua aberto:
+        assert c.get("/v1/desk/status", headers=h).status_code == 200
         assert c.get("/v1/billing/status", headers=h).status_code == 200
         assert c.get("/v1/billing/planos", headers=h).status_code == 200
 
@@ -204,7 +206,7 @@ class TestPortaoDeAcesso:
         r = c.post("/v1/webhooks/woovi", content=corpo,
                    headers={"x-webhook-signature": base64.b64encode(b"lixo").decode()})
         assert r.status_code == 401
-        assert m.SUBS.ensure("legacy").plan_code == "trial"   # nada mudou
+        assert m.SUBS.get("legacy") is None                   # nada foi ativado
 
 
 class TestPainelDePagamento:

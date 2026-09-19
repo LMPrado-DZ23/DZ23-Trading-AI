@@ -47,14 +47,37 @@ class Plan:
 
 
 PLANS: dict[str, Plan] = {
-    "trial": Plan("trial", "Teste", 0, 7, 1,
-                  ("análises", "mesa em modo treino")),
+    # Trial de 24h (o modelo comercial atual). period_days=1 só para exibição;
+    # a janela real é de 24 HORAS (ver start_trial).
+    "trial": Plan("trial", "Teste 24h", 0, 1, 1, ("teste de 24 horas",)),
+    # Planos legados mantidos apenas para compatibilidade interna/testes; NÃO
+    # são oferecidos publicamente (billing_plans usa o catálogo canônico).
     "starter": Plan("starter", "Starter", 9900, 30, 1,
                     ("análises ilimitadas", "mesa autônoma", "corretora testnet")),
     "pro": Plan("pro", "Pro", 24900, 30, 3,
                 ("tudo do Starter", "3 mesas", "feed de mercado real",
                  "backtest e avaliação")),
 }
+
+# CATÁLOGO CANÔNICO (fonte única de preço/período). Os planos comerciais
+# dz23_* entram aqui para o checkout/webhook os reconhecerem; o período é
+# contado em MESES DE CALENDÁRIO no crédito (não aproximação de dias).
+from . import catalog as _catalogo  # noqa: E402
+
+for _p in _catalogo.CATALOGO.values():
+    PLANS[_p.code] = Plan(_p.code, _p.nome, _p.preco_cents, _p.meses * 30, 3,
+                          ("produto completo — PAPER e SHADOW",))
+_MESES_POR_CODE = {c: p.meses for c, p in _catalogo.CATALOGO.items()}
+
+
+def _add_months(dt: datetime, months: int) -> datetime:
+    """Soma meses por CALENDÁRIO (contrato explícito), não 30 dias."""
+    import calendar
+    total = dt.month - 1 + months
+    year = dt.year + total // 12
+    month = total % 12 + 1
+    day = min(dt.day, calendar.monthrange(year, month)[1])
+    return dt.replace(year=year, month=month, day=day)
 
 
 @dataclass
@@ -187,13 +210,18 @@ def apply_paid_event(sub: Subscription | None, tenant_id: str, plan_code: str,
     """Aplica um pagamento confirmado. Reentrante: o MESMO charge_id não
     estende o plano duas vezes (webhooks repetem, é normal)."""
     now = now or datetime.now(timezone.utc)
-    plan = PLANS.get(plan_code, PLANS["starter"])
+    plan = PLANS.get(plan_code)
+    if plan is None or plan.price_cents <= 0:
+        # Webhook NÃO ativa código desconhecido nem plano não-cobrável.
+        raise BillingError(f"plano {plan_code!r} não é cobrável")
     if sub and sub.last_charge_id and sub.last_charge_id == charge_id:
         return sub                                   # já creditado
     base = sub.expires_at if (sub and sub.is_active(now)) else now
+    meses = _MESES_POR_CODE.get(plan.code)
+    expires = _add_months(base, meses) if meses \
+        else base + timedelta(days=plan.period_days)
     return Subscription(tenant_id=tenant_id, plan_code=plan.code, status="active",
-                        expires_at=base + timedelta(days=plan.period_days),
-                        last_charge_id=charge_id)
+                        expires_at=expires, last_charge_id=charge_id)
 
 
 def start_trial(tenant_id: str, now: datetime | None = None) -> Subscription:

@@ -966,7 +966,7 @@ def runtime_for_tenant_id(tenant_id: str):
 # PIX via Woovi. O servidor só ativa plano com webhook ASSINADO (verificado
 # com a chave pública) — nada que venha do navegador libera acesso.
 from tradingagents.analytics import ConversionCounter  # noqa: E402
-from tradingagents.billing import account_state as ACCT  # noqa: E402
+from tradingagents.billing import account_state as ACCT, catalog as CAT  # noqa: E402
 from tradingagents.billing.store import (  # noqa: E402
     BillingUnavailable,
     SubscriptionStore,
@@ -1042,10 +1042,14 @@ def require_plan(request: Request, feature: str = "mesa"):
 
 @app.get("/v1/billing/planos")
 def billing_plans(_=Depends(auth)):
-    return {"planos": [{"codigo": p.code, "nome": p.name, "preco": p.price_brl,
-                        "preco_centavos": p.price_cents, "dias": p.period_days,
-                        "recursos": list(p.features)}
-                       for p in PLANS.values()]}
+    # Catálogo CANÔNICO (mesma fonte da landing). Não expõe starter/pro legados.
+    return {"planos": [{"codigo": p["code"], "nome": p["nome"],
+                        "preco": p["preco"], "preco_centavos": p["preco_cents"],
+                        "meses": p["meses"], "equiv_mensal": p["equiv_mensal"],
+                        "desconto_pct": p["desconto_pct"], "economia": p["economia"],
+                        "maior_economia": p["maior_economia"],
+                        "recursos": ["produto completo — PAPER e SHADOW"]}
+                       for p in CAT.resumo()]}
 
 
 @app.get("/v1/billing/status")
@@ -1064,6 +1068,10 @@ def require_write(request: Request):
     """Portão CENTRAL de ESCRITA. Bloqueia quando a conta está somente-leitura
     (TRIAL_EXPIRED / PAST_DUE / SUSPENDED / NOT_STARTED / UNKNOWN_BILLING) —
     leitura, exportação, pagamento e login seguem, e NADA é apagado."""
+    # Cobrança/trial só existem no modo multi-tenant (SaaS). Self-host/dev
+    # (ACCESS_PASSWORD) não tem assinatura e não é bloqueado.
+    if not MULTI_TENANT_ENABLED:
+        return ACCT.ACTIVE
     tenant = request_tenant(request)
     estado, _ = estado_da_conta(tenant)
     if ACCT.is_read_only(estado):
@@ -1122,8 +1130,9 @@ def analytics_summary(_=Depends(auth)):
 async def billing_checkout(req: Request, _=Depends(auth)):
     """Gera a cobrança PIX. Não ativa nada: quem ativa é o webhook assinado."""
     body = await _json_body(req)
-    plano = str(body.get("plano", "starter")).strip().lower()
-    if plano not in PLANS or PLANS[plano].price_cents <= 0:
+    plano = str(body.get("plano", "")).strip()
+    # Checkout aceita SOMENTE o catálogo canônico ativo.
+    if not CAT.is_valid_code(plano):
         raise HTTPException(422, "plano inválido")
     tenant = request_tenant(req)
     correlation = f"dz23-{tenant}-{plano}-{time.strftime('%Y%m')}"
