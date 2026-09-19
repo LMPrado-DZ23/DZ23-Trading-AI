@@ -13,6 +13,10 @@ def _app(tmp_path, monkeypatch, **env):
     monkeypatch.setenv("MULTI_TENANT_ENABLED", "true")
     monkeypatch.setenv("TENANT_BOOTSTRAP_TOKEN", "boot-token-de-teste")
     monkeypatch.setenv("TENANT_TOKEN_SIGNING_KEY", "chave-de-assinatura-de-teste-0123456789")
+    # O cadastro é FAIL-CLOSED por padrão (ver §5 do patch e o teste
+    # test_signup_can_be_disabled_*). Estes testes de FLUXO o ligam de
+    # propósito; o padrão desligado é coberto em test_e2e_entitlements.
+    monkeypatch.setenv("SIGNUP_ENABLED", "true")
     for k, v in env.items():
         monkeypatch.setenv(k, v)
     import service.app as m
@@ -31,8 +35,9 @@ class TestCadastro:
     def test_status_is_public_and_shows_plans(self, tmp_path, monkeypatch):
         m = _app(tmp_path, monkeypatch)
         d = TestClient(m.app).get("/v1/auth/signup-status").json()
-        assert d["habilitado"] is True and d["dias_de_teste"] > 0
-        assert any(p["codigo"] == "starter" for p in d["planos"])
+        assert d["habilitado"] is True and d["horas_de_teste"] > 0
+        # planos vêm do catálogo canônico (não mais starter/pro legados)
+        assert any(p["codigo"] == "dz23_monthly" for p in d["planos"])
 
     def test_signup_creates_tenant_trial_and_session(self, tmp_path, monkeypatch):
         m = _app(tmp_path, monkeypatch)

@@ -25,6 +25,9 @@ def _app(tmp_path, monkeypatch, **extra):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     monkeypatch.setenv("MULTI_TENANT_ENABLED", "true")
     monkeypatch.setenv("TENANT_TOKEN_SIGNING_KEY", "chave-de-assinatura-bem-longa-0123456789")
+    # Criação de conta via OAuth também é gated pelo SIGNUP_ENABLED (fail-closed,
+    # §5). Estes testes de fluxo o ligam; o padrão desligado é coberto alhures.
+    monkeypatch.setenv("SIGNUP_ENABLED", "true")
     for k, v in {**ENV, **extra}.items():
         monkeypatch.setenv(k, v)
     import service.app as m
