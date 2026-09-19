@@ -16,6 +16,9 @@ h1{font-size:22px;margin:0 0 4px}.muted{color:var(--muted)}.bad{color:var(--red)
 .btn{width:100%;border:0;border-radius:10px;padding:12px 16px;font-weight:800;cursor:pointer;background:var(--green);color:#062418;font:inherit}
 .btn:disabled{opacity:.5;cursor:not-allowed}.msg{min-height:22px;margin-top:12px;font-size:13px}
 a{color:var(--cyan)}
+.pwd-wrap{position:relative}.pwd-wrap .input{padding-right:40px}
+.pwd-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:0;color:var(--muted);cursor:pointer;padding:6px 8px;border-radius:8px;line-height:1}
+.pwd-eye:hover{color:var(--cyan)}.pwd-eye:focus-visible{outline:2px solid var(--cyan)}
 </style></head>
 <body>
 <main class="card">
@@ -24,8 +27,8 @@ a{color:var(--cyan)}
   <form id="form" onsubmit="return criar(event)" novalidate>
     <div class="field"><label for="org">Nome da organização</label><input class="input" id="org" autocomplete="organization" required></div>
     <div class="field"><label for="email">E-mail do administrador</label><input class="input" id="email" type="email" autocomplete="email" required></div>
-    <div class="field"><label for="senha">Senha do administrador (mínimo 12 caracteres)</label><input class="input" id="senha" type="password" autocomplete="new-password" minlength="12" required></div>
-    <div class="field"><label for="token">Token de bootstrap do servidor</label><input class="input" id="token" type="password" autocomplete="off" required></div>
+    <div class="field"><label for="senha">Senha do administrador (mínimo 12 caracteres)</label><div class="pwd-wrap"><input class="input" id="senha" type="password" autocomplete="new-password" minlength="12" required><button type="button" class="pwd-eye" data-alvo="senha" onclick="verSenha(this)" aria-label="Mostrar senha" title="Mostrar senha">👁</button></div></div>
+    <div class="field"><label for="token">Token de bootstrap do servidor</label><div class="pwd-wrap"><input class="input" id="token" type="password" autocomplete="off" required><button type="button" class="pwd-eye" data-alvo="token" onclick="verSenha(this)" aria-label="Mostrar token" title="Mostrar token">👁</button></div></div>
     <button class="btn" id="btn" type="submit">Criar área e administrador</button>
   </form>
   <div class="msg" id="msg" role="alert" aria-live="assertive"></div>
@@ -33,6 +36,15 @@ a{color:var(--cyan)}
 <script>
 const $=id=>document.getElementById(id);
 function msg(t,c='bad'){$('msg').innerHTML='<span class="'+c+'">'+t+'</span>'}
+function verSenha(botao){
+  const campo=$(botao.dataset.alvo); if(!campo) return;
+  const oculto=campo.type==='password';
+  campo.type=oculto?'text':'password';
+  botao.textContent=oculto?'🙈':'👁';
+  const rotulo=(oculto?'Ocultar ':'Mostrar ')+(botao.dataset.alvo==='token'?'token':'senha');
+  botao.setAttribute('aria-label',rotulo); botao.title=rotulo;
+  campo.focus();
+}
 async function estado(){try{const s=await fetch('/v1/auth/status').then(r=>r.json());
   if(!s.bootstrap_required){$('form').style.display='none';msg('Configuração já concluída. <a href="/app">Ir para o login</a>.','ok')}}
   catch(e){}}
