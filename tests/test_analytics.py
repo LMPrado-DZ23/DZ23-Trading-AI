@@ -27,3 +27,17 @@ def test_origem_e_sanitizada_e_limitada():
     det = c.summary()["detalhado"]
     chave = next(iter(det))
     assert "@" not in chave and "<" not in chave and " " not in chave
+
+
+def test_teto_de_chaves_dobra_origens_novas_em_other():
+    from tradingagents.analytics import _MAX_CHAVES
+    c = ConversionCounter()
+    # inunda com origens sempre novas para o MESMO evento
+    for i in range(_MAX_CHAVES + 50):
+        c.record("page_view", f"o{i}")
+    det = c.summary()["detalhado"]
+    # memória finita: no máximo o teto + a chave de transbordo 'other'
+    assert len(det) <= _MAX_CHAVES + 1
+    assert "page_view:other" in det
+    # nenhum evento foi perdido na contagem total
+    assert c.summary()["por_evento"]["page_view"] == _MAX_CHAVES + 50

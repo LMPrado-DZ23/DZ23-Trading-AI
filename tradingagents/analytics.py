@@ -3,6 +3,11 @@
 Conta apenas EVENTOS anônimos (nome + origem), de uma lista fixa. Não guarda
 IP, e-mail, user-agent, id de usuário nem qualquer identificador. Serve para
 saber "quantos cliques em Solicitar acesso à beta", não "quem clicou".
+
+DECISÃO ASSUMIDA (A): agregado BEST-EFFORT e NÃO-DURÁVEL — contadores em
+memória do processo. Reinício zera; múltiplas instâncias não somam. É um
+sinal de tendência, não fonte contábil. Por ser efêmero e agregado, não vira
+armazenamento de PII e o teto de chaves mantém a memória finita.
 """
 from __future__ import annotations
 
@@ -16,6 +21,10 @@ EVENTOS = frozenset({
     "login_view", "signup_view",
 })
 _ORIGEM_MAX = 32
+# Teto de pares (evento, origem) distintos guardados. Origem é rótulo livre do
+# cliente; sem teto, mandar origens sempre novas cresceria a memória sem limite.
+# Atingido o teto, origens novas dobram em 'other' — chaves permanecem finitas.
+_MAX_CHAVES = 512
 
 
 class ConversionCounter:
@@ -34,8 +43,13 @@ class ConversionCounter:
     def record(self, event: str, origem: str = "none") -> bool:
         if event not in EVENTOS:
             return False
+        chave = (event, self._origem_limpa(origem))
         with self._lock:
-            self._counts[(event, self._origem_limpa(origem))] += 1
+            # Teto de chaves: origem nova depois do limite vira 'other'. Evita
+            # crescimento de memória sem limite por origens arbitrárias.
+            if chave not in self._counts and len(self._counts) >= _MAX_CHAVES:
+                chave = (event, "other")
+            self._counts[chave] += 1
         return True
 
     def summary(self) -> dict:

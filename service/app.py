@@ -19,7 +19,12 @@ from decimal import Decimal
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    JSONResponse,
+    Response,
+    StreamingResponse,
+)
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from tradingagents.agency_runtime import AgencyRuntime
@@ -1110,19 +1115,59 @@ def trial_start(request: Request, principal=Depends(auth)):
             "expires_at": sub.expires_at.isoformat()}
 
 
-@app.post("/v1/analytics/event")
+_ANALYTICS_HITS: dict = {}
+_ANALYTICS_MAX, _ANALYTICS_WINDOW = 120, 60      # 120 eventos/min por IP
+_ANALYTICS_BODY_MAX = 2048                        # bytes; evento é minúsculo
+
+
+def _analytics_rate_limit(ip: str) -> None:
+    agora = time.time()
+    janela = [t for t in _ANALYTICS_HITS.get(ip, []) if agora - t < _ANALYTICS_WINDOW]
+    if len(janela) >= _ANALYTICS_MAX:
+        raise HTTPException(429, "muitos eventos deste endereço")
+    janela.append(agora)
+    _ANALYTICS_HITS[ip] = janela
+
+
+async def _analytics_body(req: Request) -> dict:
+    """Leitura ENDURECIDA do corpo do evento: exige application/json, limita
+    o tamanho (Content-Length e bytes reais) e devolve sempre um objeto."""
+    ctype = req.headers.get("content-type", "").split(";")[0].strip().lower()
+    if ctype != "application/json":
+        raise HTTPException(415, "envie application/json")
+    declarado = req.headers.get("content-length", "")
+    if declarado.isdigit() and int(declarado) > _ANALYTICS_BODY_MAX:
+        raise HTTPException(413, "corpo grande demais")
+    raw = await req.body()
+    if len(raw) > _ANALYTICS_BODY_MAX:
+        raise HTTPException(413, "corpo grande demais")
+    try:
+        data = json.loads(raw or b"{}")
+    except ValueError as exc:
+        raise HTTPException(422, "corpo não é JSON válido") from exc
+    if not isinstance(data, dict):
+        raise HTTPException(422, "corpo deve ser um objeto JSON")
+    return data
+
+
+@app.post("/v1/analytics/event", status_code=204)
 async def analytics_event(req: Request):
     """Evento de conversão ANÔNIMO (público). Sem PII: só nome+origem da
-    allowlist; nada de IP, e-mail ou identificador é guardado."""
-    body = await _json_body(req)
-    CONV.record(str(body.get("event", "")), str(body.get("source", "none")))
-    return {"ok": True}
+    allowlist; nada de IP, e-mail ou identificador é guardado. Endurecido:
+    content-type, tamanho e rate-limit; responde 204 sem corpo. O agregado é
+    best-effort NÃO-durável (memória) — não é fonte contábil."""
+    _analytics_rate_limit(_client_ip(req))
+    body = await _analytics_body(req)
+    # Chaves limitadas: event pela allowlist; source recortado antes do teto.
+    CONV.record(str(body.get("event", ""))[:64], str(body.get("source", "none"))[:64])
+    return Response(status_code=204)
 
 
 @app.get("/v1/analytics/summary")
 def analytics_summary(_=Depends(auth)):
-    """Agregado de conversão (sem PII) — para o time, atrás de login."""
-    return CONV.summary()
+    """Agregado de conversão (sem PII) — para o time, atrás de login.
+    Best-effort e NÃO-durável: reinício zera; várias instâncias não somam."""
+    return {**CONV.summary(), "durabilidade": "best-effort (memória, não contábil)"}
 
 
 @app.post("/v1/billing/checkout")
