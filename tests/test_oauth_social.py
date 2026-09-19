@@ -84,16 +84,28 @@ class TestStateAntiCsrf:
 
 
 class TestPerfil:
+    def test_verified_email_is_accepted(self):
+        assert email_of({"email": "A@X.com", "email_verified": True}) == "a@x.com"
+
     def test_unverified_email_is_refused(self):
         with pytest.raises(OAuthError, match="não verificado"):
             email_of({"email": "a@x.com", "email_verified": False})
+
+    def test_missing_email_verified_is_refused(self):
+        # §6: ausência de email_verified é PROVA NEGATIVA -> rejeita (fail-closed).
+        with pytest.raises(OAuthError, match="não verificado"):
+            email_of({"email": "a@x.com"})
 
     def test_missing_email_is_refused(self):
         with pytest.raises(OAuthError, match="e-mail"):
             email_of({"name": "sem email"})
 
-    def test_microsoft_preferred_username_is_accepted(self):
-        assert email_of({"preferred_username": "A@X.com"}) == "a@x.com"
+    def test_preferred_username_is_not_a_verified_email(self):
+        # §6: UPN não é e-mail verificado; sem o claim `email`+verified, recusa.
+        with pytest.raises(OAuthError, match="verificáv|e-mail"):
+            email_of({"preferred_username": "A@X.com"})
+        with pytest.raises(OAuthError, match="não verificado"):
+            email_of({"preferred_username": "u@x.com", "email": "u@x.com"})
 
     def test_secret_never_leaks_in_error(self):
         def explode(provider, payload):

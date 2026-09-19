@@ -151,14 +151,30 @@ class TestMudancaDeServidor:
         m._DESKS.clear()
         return m, TestClient(m.app), {"Authorization": "Bearer s3nh4"}
 
+    def _stepup(self, c, h, purpose):
+        return c.post("/v1/auth/step-up", headers=h,
+                      json={"password": "s3nh4", "purpose": purpose}).json()["step_up_token"]
+
     def test_export_carries_everything_that_matters(self, tmp_path, monkeypatch):
+        # §1/§2: export exige TOKEN de step-up (não senha crua) + frase; vem
+        # CIFRADO (sem segredo em claro), attachment no-store; token é single-use.
+        from tradingagents.portable import decrypt_package
         m, c, h = self._app(tmp_path, monkeypatch)
         c.post("/v1/config", headers=h, json={"vars": {"GROQ_API_KEY": "gsk-x"}})
         c.get("/v1/desk/status", headers=h)
-        d = c.get("/v1/mudanca/exportar", headers=h).json()
-        assert d["formato"] == "dz23.mudanca/1"
-        assert d["configuracao"]["GROQ_API_KEY"] == "gsk-x"
-        assert "SEGREDOS" in d["aviso"]          # avisa o que está levando
+        assert c.get("/v1/mudanca/exportar", headers=h).status_code == 401   # sem step-up
+        tok = self._stepup(c, h, "export")
+        hh = {**h, "X-Step-Up-Token": tok, "X-Export-Passphrase": "frase-forte-123"}
+        r = c.get("/v1/mudanca/exportar", headers=hh)
+        assert r.status_code == 200
+        assert r.headers["content-type"] == "application/octet-stream"
+        assert r.headers["cache-control"].startswith("no-store")
+        assert b"gsk-x" not in r.content                 # segredo nunca em claro
+        dados = decrypt_package(r.json(), "frase-forte-123")
+        assert dados["formato"] == "dz23.mudanca/1"
+        assert dados["configuracao"]["GROQ_API_KEY"] == "gsk-x"
+        # token single-use: reusar falha
+        assert c.get("/v1/mudanca/exportar", headers=hh).status_code == 401
 
     def test_import_restores_on_a_fresh_server(self, tmp_path, monkeypatch):
         from decimal import Decimal as D
@@ -172,7 +188,10 @@ class TestMudancaDeServidor:
         for _ in range(12):
             mem.registrar(Desfecho("trend_following", "tendencia_alta", "BTC/USDT",
                                    D("0.02"), agora(), 0.8))
-        pacote = c.get("/v1/mudanca/exportar", headers=h).json()
+        tok = self._stepup(c, h, "export")
+        pacote = c.get("/v1/mudanca/exportar",
+                       headers={**h, "X-Step-Up-Token": tok,
+                                "X-Export-Passphrase": "frase-forte-123"}).json()
 
         # "servidor novo": outro diretório, tudo zerado
         novo = tmp_path / "servidor-novo"
@@ -181,7 +200,11 @@ class TestMudancaDeServidor:
         m._FAILS.clear()
         m._DESKS.clear()
         c2 = TestClient(m.app)
-        r = c2.post("/v1/mudanca/importar", headers=h, json=pacote)
+        tok2 = c2.post("/v1/auth/step-up", headers=h,
+                       json={"password": "s3nh4", "purpose": "import"}).json()["step_up_token"]
+        r = c2.post("/v1/mudanca/importar",
+                    headers={**h, "X-Step-Up-Token": tok2,
+                             "X-Export-Passphrase": "frase-forte-123"}, json=pacote)
         assert r.status_code == 200
         assert any("aprendizado" in x for x in r.json()["restaurado"])
         cfg = c2.get("/v1/config", headers=h).json()["config"]
@@ -197,14 +220,15 @@ class TestMudancaDeServidor:
         assert r.status_code == 422
 
     def test_importing_twice_does_not_duplicate(self, tmp_path, monkeypatch):
+        # Pacote PLANO (formato dz23.mudanca/1) não exige step-up; importar 2x
+        # é idempotente. (O pacote cifrado exige token; testado acima.)
         m, c, h = self._app(tmp_path, monkeypatch)
         c.get("/v1/desk/status", headers=h)
-        pacote = c.get("/v1/mudanca/exportar", headers=h).json()
-        pacote["aprendizado"] = {"desfechos": [
+        pacote = {"formato": "dz23.mudanca/1", "aprendizado": {"desfechos": [
             {"estrategia": "breakout", "regime": "tendencia_alta",
              "instrumento": "BTC/USDT", "retorno": "0.01",
-             "fechado_em": "2026-09-01T00:00:00+00:00", "forca_do_sinal": 0.5}]}
-        c.post("/v1/mudanca/importar", headers=h, json=pacote)
+             "fechado_em": "2026-09-01T00:00:00+00:00", "forca_do_sinal": 0.5}]}}
+        assert c.post("/v1/mudanca/importar", headers=h, json=pacote).status_code == 200
         c.post("/v1/mudanca/importar", headers=h, json=pacote)
         d = c.get("/v1/desk/aprendizado", headers=h).json()
         linha = next(e for e in d["estrategias"] if e["estrategia"] == "breakout")

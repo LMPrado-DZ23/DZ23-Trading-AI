@@ -10,7 +10,11 @@ def test_sqlite_job_store_is_tenant_scoped_and_idempotent(tmp_path):
     assert store.find_idempotent("tenant-b", "idem-1") is None
     assert store.list("tenant-a")[0]["id"] == "a1"
     assert store.get("a1", "tenant-b") is None
-    store.update("a1", status="completed", result='{"ok": true}')
+    # UPDATE de OUTRO tenant não toca o job (rowcount 0, zero efeito).
+    assert store.update("a1", "tenant-b", status="completed") == 0
+    assert store.get("a1", "tenant-a")["status"] == "queued"
+    # UPDATE do dono funciona.
+    assert store.update("a1", "tenant-a", status="completed", result='{"ok": true}') == 1
     assert store.get("a1", "tenant-a")["result"] == {"ok": True}
     assert store.healthcheck() == {"backend": "sqlite", "status": "ok"}
 

@@ -12,6 +12,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+# Rate limit de login (§4): persistente no banco de identidade — sobrevive a
+# restart e é COMPARTILHADO entre instâncias (ao contrário de contador em RAM).
+LOGIN_MAX_FAILS = 5
+LOGIN_WINDOW = 900          # janela de contagem de falhas (s)
+LOGIN_BASE_LOCK = 30       # trava inicial ao estourar o limite (s)
+LOGIN_MAX_LOCK = 3600      # teto do backoff exponencial (s)
+
 ROLES = frozenset({"viewer", "analyst", "operator", "risk_manager", "admin", "auditor"})
 ROLE_PERMISSIONS = {
     "viewer": {"read"},
@@ -82,9 +89,100 @@ class TenantStore:
                 tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
                 expires_at REAL NOT NULL, revoked_at REAL
             );
+            CREATE TABLE IF NOT EXISTS login_attempts (
+                key TEXT PRIMARY KEY, fails INTEGER NOT NULL,
+                first_at REAL NOT NULL, locked_until REAL NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS step_up_tokens (
+                token_hash TEXT PRIMARY KEY, tenant_id TEXT NOT NULL,
+                user_id TEXT NOT NULL, purpose TEXT NOT NULL,
+                expires_at REAL NOT NULL, used_at REAL
+            );
             CREATE INDEX IF NOT EXISTS idx_memberships_user ON memberships(user_id);
             CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at);
             """)
+
+    def _sql(self, query: str) -> str:
+        """SQLite usa '?'. Postgres sobrescreve para '%s'."""
+        return query
+
+    def _login_key(self, ip: str, email: str) -> str:
+        # HMAC (com a signing key) do par IP|e-mail normalizado: a chave do rate
+        # limit NÃO guarda PII em claro e não é forjável sem a signing key.
+        base = f"{(ip or '?').strip()}|{(email or '').strip().lower()}"
+        return hmac.new(self.signing_key, base.encode(), hashlib.sha256).hexdigest()
+
+    def _token_hash(self, token: str) -> str:
+        return hmac.new(self.signing_key, token.encode(), hashlib.sha256).hexdigest()
+
+    def create_step_up(self, tenant_id: str, user_id: str, purpose: str,
+                       ttl_seconds: int = 300) -> str:
+        """Emite um TOKEN de step-up: aleatório, escopado (tenant/user/purpose),
+        curto (<=5min), single-use. Guardado HASHEADO (HMAC) — nunca em claro.
+        Devolve o token puro UMA vez (não é recuperável depois)."""
+        token = secrets.token_urlsafe(32)
+        now = time.time()
+        with self._connect() as c:
+            c.execute(self._sql("DELETE FROM step_up_tokens WHERE expires_at < ?"), (now,))
+            c.execute(self._sql(
+                "INSERT INTO step_up_tokens(token_hash,tenant_id,user_id,purpose,"
+                "expires_at,used_at) VALUES(?,?,?,?,?,NULL)"),
+                (self._token_hash(token), tenant_id, user_id, purpose, now + ttl_seconds))
+        return token
+
+    def consume_step_up(self, token: str, tenant_id: str, user_id: str,
+                        purpose: str) -> bool:
+        """Valida e REVOGA o token numa única operação atômica (single-use):
+        só a PRIMEIRA chamada com um token válido/não-expirado/no-escopo passa."""
+        now = time.time()
+        with self._connect() as c:
+            cur = c.execute(self._sql(
+                "UPDATE step_up_tokens SET used_at=? WHERE token_hash=? "
+                "AND used_at IS NULL AND expires_at>=? AND tenant_id=? "
+                "AND user_id=? AND purpose=?"),
+                (now, self._token_hash(token), now, tenant_id, user_id, purpose))
+        return (getattr(cur, "rowcount", 0) or 0) == 1
+
+    def login_lock_seconds(self, ip: str, email: str) -> int:
+        """Segundos restantes de bloqueio para (ip, e-mail), ou 0 se liberado."""
+        now = time.time()
+        with self._connect() as c:
+            row = c.execute(self._sql("SELECT locked_until FROM login_attempts WHERE key=?"),
+                            (self._login_key(ip, email),)).fetchone()
+        if not row:
+            return 0
+        rem = float(row["locked_until"] or 0) - now
+        return int(rem) + 1 if rem > 0 else 0
+
+    def record_login_failure(self, ip: str, email: str) -> int:
+        """Conta uma falha e aplica backoff/lockout. Persistente (sobrevive a
+        restart, compartilhado entre instâncias). Devolve o total na janela."""
+        now = time.time()
+        key = self._login_key(ip, email)
+        with self._connect() as c:
+            row = c.execute(self._sql("SELECT fails, first_at FROM login_attempts WHERE key=?"),
+                            (key,)).fetchone()
+            if row and (now - float(row["first_at"])) <= LOGIN_WINDOW:
+                fails = int(row["fails"]) + 1
+                first_at = float(row["first_at"])
+            else:
+                fails, first_at = 1, now
+            locked_until = 0.0
+            if fails >= LOGIN_MAX_FAILS:
+                locked_until = now + min(
+                    LOGIN_MAX_LOCK, LOGIN_BASE_LOCK * (2 ** (fails - LOGIN_MAX_FAILS)))
+            c.execute(self._sql(
+                "INSERT INTO login_attempts(key,fails,first_at,locked_until) "
+                "VALUES(?,?,?,?) ON CONFLICT (key) DO UPDATE SET "
+                "fails=excluded.fails, first_at=excluded.first_at, "
+                "locked_until=excluded.locked_until"),
+                (key, fails, first_at, locked_until))
+        return fails
+
+    def clear_login_failures(self, ip: str, email: str) -> None:
+        with self._connect() as c:
+            c.execute(self._sql("DELETE FROM login_attempts WHERE key=?"),
+                      (self._login_key(ip, email),))
 
     @staticmethod
     def _hash_password(password: str, salt: bytes | None = None) -> str:
@@ -325,9 +423,21 @@ class PostgresTenantStore(TenantStore):
                 tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
                 expires_at BIGINT NOT NULL, revoked_at DOUBLE PRECISION
             );
+            CREATE TABLE IF NOT EXISTS login_attempts (
+                key TEXT PRIMARY KEY, fails INTEGER NOT NULL,
+                first_at DOUBLE PRECISION NOT NULL, locked_until DOUBLE PRECISION NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS step_up_tokens (
+                token_hash TEXT PRIMARY KEY, tenant_id TEXT NOT NULL,
+                user_id TEXT NOT NULL, purpose TEXT NOT NULL,
+                expires_at DOUBLE PRECISION NOT NULL, used_at DOUBLE PRECISION
+            );
             CREATE INDEX IF NOT EXISTS idx_memberships_user ON memberships(user_id);
             CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(expires_at);
             """)
+
+    def _sql(self, query: str) -> str:
+        return query.replace("?", "%s")
 
     def create_tenant(self, name: str, *, tenant_id: str | None = None) -> str:
         tenant_id = tenant_id or "ten_" + secrets.token_urlsafe(12)

@@ -37,6 +37,7 @@ ROUTE_POLICY: dict[tuple[str, str], WriteAccess] = {
     ("POST", "/v1/auth/login"): WriteAccess.ALLOW_READONLY,
     ("POST", "/v1/auth/logout"): WriteAccess.ALLOW_READONLY,
     ("POST", "/v1/auth/signup"): WriteAccess.ALLOW_READONLY,
+    ("POST", "/v1/auth/step-up"): WriteAccess.ALLOW_READONLY,
     # --- Pagamento / telemetria / webhook público / início de trial --------
     ("POST", "/v1/billing/checkout"): WriteAccess.ALLOW_READONLY,
     ("POST", "/v1/webhooks/woovi"): WriteAccess.ALLOW_READONLY,
@@ -76,6 +77,20 @@ _KILL_SWITCH_ACTIONS: dict[str, WriteAccess] = {
     "reset": WriteAccess.BLOCK_READONLY,
 }
 
+# LEITURAS SENSÍVEIS (§7): GET não passa pelo guard de escrita, mas alguns
+# expõem segredos/dados de conta e precisam de CAPABILITY. Matriz por (método,
+# template) -> capability exigida. "admin+stepup" = admin E reautenticação.
+SENSITIVE_READS: dict[tuple[str, str], str] = {
+    ("GET", "/v1/mudanca/exportar"): "admin+stepup",   # exporta SEGREDOS
+    ("GET", "/v1/backups"): "admin",                    # lista backups
+    ("GET", "/v1/admin/users"): "admin",                # diagnóstico/admin
+}
+
+
+def capability_for_read(method: str, template: str) -> str | None:
+    """Capability exigida por uma leitura sensível, ou None se não é sensível."""
+    return SENSITIVE_READS.get((method.upper(), template))
+
 
 def policy_for(method: str, template: str) -> WriteAccess | None:
     """Classe de escrita da rota, ou None se NÃO classificada (o guard trata
@@ -88,5 +103,5 @@ def kill_switch_action_access(action: str) -> WriteAccess:
     return _KILL_SWITCH_ACTIONS.get(action.strip().lower(), WriteAccess.BLOCK_READONLY)
 
 
-__all__ = ["MUTATING_METHODS", "WriteAccess", "ROUTE_POLICY",
-           "policy_for", "kill_switch_action_access"]
+__all__ = ["MUTATING_METHODS", "WriteAccess", "ROUTE_POLICY", "SENSITIVE_READS",
+           "policy_for", "kill_switch_action_access", "capability_for_read"]

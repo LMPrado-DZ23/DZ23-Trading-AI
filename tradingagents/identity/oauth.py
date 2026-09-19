@@ -157,17 +157,36 @@ def exchange_code(provider: Provider, code: str, verifier: str, *, env=None,
         raise OAuthError(f"falha no login social ({type(exc).__name__})") from exc
 
 
+# Provedores autorizados a CRIAR conta: só os que provam verificação de e-mail
+# por regra do provider (Google envia email_verified). Microsoft NÃO entra — o
+# userinfo atual não dá prova suficiente; login de conta EXISTENTE continua,
+# criação de conta nova via Microsoft fica desabilitada até implementação
+# comprovada (contrato/teste do provider).
+ACCOUNT_CREATION_PROVIDERS = frozenset({"google"})
+
+_VERDADEIRO = frozenset({"true", "1", "yes"})
+
+
 def email_of(perfil: dict) -> str:
-    """Aceita apenas e-mail VERIFICADO: sem isso, alguém cria conta no
-    provedor com o e-mail de outra pessoa e entra na agência dela."""
-    email = (perfil.get("email") or perfil.get("preferred_username") or "").strip().lower()
+    """Aceita apenas e-mail com PROVA POSITIVA de verificação.
+
+    Endurecido (§6):
+      - usa SOMENTE o claim `email`; `preferred_username` (UPN) NÃO é e-mail
+        verificado e não é aceito sem contrato específico de provedor;
+      - `email_verified` precisa ser afirmativamente verdadeiro. AUSENTE/None =>
+        REJEITA (fail-closed): sem essa prova, alguém entra com o e-mail de
+        outra pessoa.
+    """
+    email = str(perfil.get("email") or "").strip().lower()
     if not email or "@" not in email:
-        raise OAuthError("provedor não forneceu e-mail")
+        raise OAuthError("provedor não forneceu e-mail verificável")
     verificado = perfil.get("email_verified")
-    if verificado is False or str(verificado).lower() == "false":
+    ok = verificado is True or str(verificado).strip().lower() in _VERDADEIRO
+    if not ok:
         raise OAuthError("e-mail não verificado no provedor")
     return email
 
 
 __all__ = ["PROVIDERS", "Provider", "StateStore", "OAuthError", "authorize_url",
-           "exchange_code", "email_of", "challenge_from"]
+           "exchange_code", "email_of", "challenge_from",
+           "ACCOUNT_CREATION_PROVIDERS"]

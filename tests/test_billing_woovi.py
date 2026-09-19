@@ -269,6 +269,23 @@ class TestWebhookEndurecido:
         c = TestClient(m.app)
         assert self._post(c, evento(tenant="legacy", currency="USD")).status_code == 422
 
+    def test_moeda_ausente_e_recusada(self, tmp_path, monkeypatch):
+        # §5 fail-closed: sem currency, NÃO assume BRL — recusa.
+        from fastapi.testclient import TestClient
+        m = self._app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+        assert self._post(c, evento(tenant="legacy", currency=None)).status_code == 422
+
+    def test_mesmo_charge_id_payload_divergente_e_conflito(self, tmp_path, monkeypatch):
+        # §5: mesmo charge_id com plano/valor diferentes => 409, nunca 'replay ok'.
+        from fastapi.testclient import TestClient
+        m = self._app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+        primeiro = evento(tenant="legacy", plano="dz23_monthly", charge="chg-c", value=15000)
+        assert self._post(c, primeiro).status_code == 200
+        divergente = evento(tenant="legacy", plano="dz23_annual", charge="chg-c", value=120000)
+        assert self._post(c, divergente).status_code == 409
+
     def test_plano_fora_do_catalogo_e_recusado(self, tmp_path, monkeypatch):
         from fastapi.testclient import TestClient
         m = self._app(tmp_path, monkeypatch)

@@ -55,7 +55,10 @@ def derive_state(sub: Any, now: datetime | None = None) -> str:
         return ACTIVE if vigente else PAST_DUE
     if status == "expired":
         return TRIAL_EXPIRED if is_trial else PAST_DUE
-    return NOT_STARTED
+    # Existe assinatura, mas com status IRRECONHECÍVEL (corrompido/adulterado):
+    # trava (fail-closed). NUNCA vira NOT_STARTED — senão a conta pareceria nova
+    # e poderia iniciar um trial por cima de uma assinatura existente.
+    return SUSPENDED
 
 
 def is_read_only(state: str) -> bool:

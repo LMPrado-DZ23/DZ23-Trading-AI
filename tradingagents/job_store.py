@@ -45,7 +45,8 @@ class JobStore:
                     id TEXT PRIMARY KEY, idem TEXT NOT NULL, ticker TEXT NOT NULL,
                     trade_date TEXT NOT NULL, status TEXT NOT NULL, error TEXT,
                     decision TEXT, result TEXT, created DOUBLE PRECISION NOT NULL,
-                    updated DOUBLE PRECISION NOT NULL, tenant_id TEXT NOT NULL
+                    updated DOUBLE PRECISION NOT NULL, tenant_id TEXT NOT NULL,
+                    cancel_requested INTEGER NOT NULL DEFAULT 0
                 )
             """))
             c.execute(self._sql("CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_tenant_idem ON jobs(tenant_id, idem)"))
@@ -55,6 +56,14 @@ class JobStore:
                     SELECT id,idem,ticker,trade_date,status,error,decision,result,created,updated,tenant_id
                     FROM jobs_legacy""")
                 c.execute("DROP TABLE jobs_legacy")
+        # Migração idempotente da coluna de cancelamento (tabelas anteriores),
+        # em transação própria para não envenenar a de cima no Postgres.
+        try:
+            with self._connect() as c2:
+                c2.execute(self._sql(
+                    "ALTER TABLE jobs ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0"))
+        except Exception:
+            pass
 
     def find_idempotent(self, tenant_id: str, idem: str) -> str | None:
         with self._connect() as c:
@@ -67,12 +76,17 @@ class JobStore:
             c.execute(self._sql("""INSERT INTO jobs(id,idem,ticker,trade_date,status,created,updated,tenant_id)
                 VALUES(%s,%s,%s,%s,%s,%s,%s,%s)"""), (job_id, idem, ticker, trade_date, "queued", now, now, tenant_id))
 
-    def update(self, job_id: str, **values: Any) -> None:
+    def update(self, job_id: str, tenant_id: str, **values: Any) -> int:
+        """Atualiza SEMPRE com escopo de tenant: UPDATE ... WHERE id AND
+        tenant_id. Um job_id de outro inquilino não é tocado (rowcount 0)."""
         values["updated"] = time.time()
         keys = list(values)
-        query = f"UPDATE jobs SET {','.join(f'{key}=%s' for key in keys)} WHERE id=%s"
+        query = (f"UPDATE jobs SET {','.join(f'{key}=%s' for key in keys)} "
+                 "WHERE id=%s AND tenant_id=%s")
         with self._connect() as c:
-            c.execute(self._sql(query), (*[values[key] for key in keys], job_id))
+            cur = c.execute(self._sql(query),
+                            (*[values[key] for key in keys], job_id, tenant_id))
+            return getattr(cur, "rowcount", 0) or 0
 
     def list(self, tenant_id: str, limit: int = 50) -> list[dict[str, Any]]:
         with self._connect() as c:
@@ -93,6 +107,26 @@ class JobStore:
         with self._connect() as c:
             row = c.execute(self._sql("SELECT status FROM jobs WHERE id=%s AND tenant_id=%s"), (job_id, tenant_id)).fetchone()
         return row["status"] if row else None
+
+    def request_cancel(self, job_id: str, tenant_id: str) -> int:
+        """Persiste o pedido de cancelamento — FONTE DA VERDADE no banco (não o
+        set em memória). Só marca o job do PRÓPRIO tenant; devolve o rowcount
+        (0 = job de outro tenant ou inexistente => zero efeito)."""
+        with self._connect() as c:
+            cur = c.execute(self._sql(
+                "UPDATE jobs SET cancel_requested=1, updated=%s "
+                "WHERE id=%s AND tenant_id=%s"), (time.time(), job_id, tenant_id))
+        return getattr(cur, "rowcount", 0) or 0
+
+    def is_cancelled(self, job_id: str, tenant_id: str) -> bool:
+        """Cancelamento observável por QUALQUER instância (lê o banco)."""
+        with self._connect() as c:
+            row = c.execute(self._sql(
+                "SELECT status, cancel_requested FROM jobs WHERE id=%s AND tenant_id=%s"),
+                (job_id, tenant_id)).fetchone()
+        if not row:
+            return False
+        return row["status"] == "cancelled" or bool(row["cancel_requested"])
 
     def healthcheck(self) -> dict[str, str]:
         with self._connect() as c:

@@ -10,7 +10,9 @@ from __future__ import annotations
 from tradingagents.billing.write_policy import (
     MUTATING_METHODS,
     ROUTE_POLICY,
+    SENSITIVE_READS,
     WriteAccess,
+    capability_for_read,
     kill_switch_action_access,
     policy_for,
 )
@@ -76,3 +78,23 @@ class TestPolicyLookup:
 
     def test_metodo_normalizado(self):
         assert policy_for("post", "/v1/config") is WriteAccess.BLOCK_READONLY
+
+
+class TestCapabilidadeDeLeiturasSensiveis:
+    """§7: a matriz de capabilities não cobre só rotas mutáveis — GETs que
+    expõem segredos/backups/diagnóstico exigem capability e existem no app."""
+
+    def test_leituras_sensiveis_classificadas(self):
+        assert capability_for_read("GET", "/v1/mudanca/exportar") == "admin+stepup"
+        assert capability_for_read("GET", "/v1/backups") == "admin"
+        assert capability_for_read("GET", "/v1/admin/users") == "admin"
+        assert capability_for_read("GET", "/v1/agency/health") is None   # não sensível
+
+    def test_toda_leitura_sensivel_existe_no_app(self):
+        reais = set()
+        for route in __import__("service.app", fromlist=["app"]).app.routes:
+            path = getattr(route, "path", None)
+            for method in (getattr(route, "methods", None) or set()):
+                reais.add((method, path))
+        faltando = sorted(k for k in SENSITIVE_READS if k not in reais)
+        assert not faltando, f"leitura sensível sem rota real: {faltando}"
