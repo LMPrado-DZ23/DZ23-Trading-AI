@@ -26,6 +26,7 @@ from fastapi.responses import (
     StreamingResponse,
 )
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from starlette.routing import Match
 
 from tradingagents.agency_runtime import AgencyRuntime
 from tradingagents.domain import (
@@ -350,20 +351,17 @@ async def security_headers(request, call_next):
     return resp
 
 
-# ENTITLEMENTS CENTRAL: toda rota MUTÁVEL (POST/PUT/PATCH/DELETE) exige conta
-# com acesso ativo, POR PADRÃO (fail-closed). A allowlist são as operações
-# seguras mesmo em somente-leitura: autenticação, pagamento, início/retomada
-# de assinatura e REDUÇÃO de risco. Qualquer rota mutável nova cai no bloqueio
-# até ser classificada — nunca fica de fora por esquecimento.
-_ENTITLEMENT_METODOS = {"POST", "PUT", "PATCH", "DELETE"}
-_WRITE_ALLOWLIST = {
-    "/v1/auth/login", "/v1/auth/logout", "/v1/auth/bootstrap",
-    "/v1/auth/signup", "/v1/billing/checkout", "/v1/trial/start",
-    "/v1/analytics/event",
-    # REDUÇÃO de risco / parada — sempre permitidas (nunca aumentam exposição):
-    "/v1/execution/kill-switch", "/v1/live/parada-emergencia",
-}
-_WRITE_ALLOW_PREFIX = ("/v1/auth/oauth/", "/v1/billing/webhook", "/webhook")
+# ENTITLEMENTS CENTRAL: toda rota MUTÁVEL (POST/PUT/PATCH/DELETE) é classificada
+# em `write_policy` (determinístico, sem IA), por (método, TEMPLATE de rota) —
+# não por prefixo genérico, que poderia liberar uma ação perigosa dentro da
+# mesma rota. O guard resolve o template casado e aplica a política:
+#   ALLOW_READONLY -> passa;  BLOCK_READONLY / não-classificada -> bloqueia
+#   (fail-closed);  ACTION_AWARE -> o handler decide (ele pode ler o corpo com
+#   segurança e validar a AÇÃO no servidor, ex.: kill-switch engage vs reset).
+# Rota mutável nova sem classificação cai no bloqueio; `tests/test_route_policy`
+# falha se alguém esquecer de classificá-la. (Os métodos mutáveis vêm de
+# WP.MUTATING_METHODS, lidos em tempo de request para não depender da ordem de
+# import — o módulo write_policy é importado mais abaixo, com o resto do billing.)
 
 
 def _tenant_autenticado(request: Request):
@@ -380,22 +378,44 @@ def _tenant_autenticado(request: Request):
         return None
 
 
+def _template_da_rota(request: Request) -> str:
+    """Template FastAPI da rota casada (ex.: '/v1/jobs/{jid}/cancel'), para a
+    política classificar por rota EXATA — não por prefixo. Sem casar, devolve o
+    caminho cru (a política não terá entrada e o guard bloqueia por padrão)."""
+    for route in request.app.routes:
+        try:
+            match, _ = route.matches(request.scope)
+        except Exception:                            # noqa: BLE001
+            continue
+        if match == Match.FULL:
+            return getattr(route, "path", request.url.path)
+    return request.url.path
+
+
+def _conta_readonly_do_request(request: Request) -> str | None:
+    """Estado somente-leitura da conta do bearer, ou None quando não há sessão
+    válida (aí a auth da rota devolve 401; o gate não intervém)."""
+    tenant = _tenant_autenticado(request)
+    if tenant is None:
+        return None
+    estado, _ = estado_da_conta(tenant)
+    return estado if ACCT.is_read_only(estado) else None
+
+
 @app.middleware("http")
 async def entitlements_guard(request, call_next):
-    if MULTI_TENANT_ENABLED and request.method.upper() in _ENTITLEMENT_METODOS:
-        path = request.url.path.rstrip("/") or "/"
-        if path not in _WRITE_ALLOWLIST \
-                and not path.startswith(_WRITE_ALLOW_PREFIX):
-            tenant = _tenant_autenticado(request)
-            if tenant is not None:      # só decide quando há sessão válida
-                estado, _ = estado_da_conta(tenant)
-                if ACCT.is_read_only(estado):
-                    return JSONResponse(status_code=402, content={
-                        "erro": "conta somente-leitura",
-                        "estado": estado,
-                        "acao": "Assine em Plano e pagamento para voltar a "
-                                "operar. Seus dados continuam salvos.",
-                    })
+    if MULTI_TENANT_ENABLED and request.method.upper() in WP.MUTATING_METHODS:
+        acesso = WP.policy_for(request.method, _template_da_rota(request))
+        # ALLOW passa; ACTION_AWARE é decidida no handler; BLOCK/None bloqueia.
+        if acesso not in (WP.WriteAccess.ALLOW_READONLY, WP.WriteAccess.ACTION_AWARE):
+            estado = _conta_readonly_do_request(request)
+            if estado is not None:
+                return JSONResponse(status_code=402, content={
+                    "erro": "conta somente-leitura",
+                    "estado": estado,
+                    "acao": "Assine em Plano e pagamento para voltar a "
+                            "operar. Seus dados continuam salvos.",
+                })
     return await call_next(request)
 
 # Provedores gratuitos/locais de primeira classe: todos falam o protocolo
@@ -920,6 +940,13 @@ async def execution_kill_switch(req: Request, _=Depends(auth)):
     body = await _json_body(req)
     runtime = runtime_for(req)
     action = str(body.get("action", "engage")).lower()
+    if action not in ("engage", "reset"):
+        raise HTTPException(422, "action deve ser engage ou reset")
+    # Policy por AÇÃO validada no servidor: ENGAGE reduz risco (liberado mesmo
+    # em conta somente-leitura); RESET reabilita a execução → exige escrita e é
+    # bloqueado em read-only (require_write levanta 402), salvo conta ativa.
+    if WP.kill_switch_action_access(action) is not WP.WriteAccess.ALLOW_READONLY:
+        require_write(req)
     if action == "engage":
         state = runtime.kill_switch.engage(str(body.get("reason", "bloqueio administrativo")), actor=str(body.get("actor", "api")))
     elif action == "reset":
@@ -971,7 +998,11 @@ def runtime_for_tenant_id(tenant_id: str):
 # PIX via Woovi. O servidor só ativa plano com webhook ASSINADO (verificado
 # com a chave pública) — nada que venha do navegador libera acesso.
 from tradingagents.analytics import ConversionCounter  # noqa: E402
-from tradingagents.billing import account_state as ACCT, catalog as CAT  # noqa: E402
+from tradingagents.billing import (  # noqa: E402
+    account_state as ACCT,
+    catalog as CAT,
+    write_policy as WP,
+)
 from tradingagents.billing.store import (  # noqa: E402
     BillingUnavailable,
     SubscriptionStore,
@@ -1100,10 +1131,25 @@ def account_state_endpoint(request: Request, _=Depends(auth)):
 @app.post("/v1/trial/start")
 def trial_start(request: Request, principal=Depends(auth)):
     """Inicia o teste de 24h EXPLICITAMENTE (idempotente, exatamente uma vez).
-    Nem leitura, nem login, nem GET de estado iniciam trial — só esta rota.
-    Pré-condições operacionais (e-mail verificado, política de convite) são
-    aplicadas na camada de signup/convite; aqui a garantia é exatamente-uma-vez
-    e sem renovação após expirar."""
+    ÚNICO caminho para começar o trial — nem criar conta, nem login (senha ou
+    OAuth), nem GET de estado iniciam. Pré-condições (fail-closed):
+      1) sessão autenticada de MEMBRO real de tenant (não self-host/legacy);
+      2) papel ADMIN do tenant (onboarding: quem controla a conta é quem inicia);
+      3) trial NUNCA usado antes — garantido por `start_trial_for` (INSERT
+         condicional): concorrência não cria dois; restart/outage não estende;
+         TRIAL_EXPIRED não volta a TRIALING.
+    Aprovação por convite é por construção: o cadastro público está FECHADO,
+    então todo tenant nasce de bootstrap/admin (convite explícito). Verificação
+    de e-mail é infra pendente (§6) e NÃO é reimplementada aqui.
+
+    DECISÃO ASSUMIDA: sem provedor de verificação de e-mail no ambiente, a
+    pré-condição 'e-mail verificado' é substituída pela 'aprovação por convite
+    por construção' acima; quando o signup público abrir, este gate ganha a
+    checagem de e-mail antes de liberar."""
+    if not isinstance(principal, Principal):
+        raise HTTPException(403, "início de teste exige conta multi-tenant autenticada")
+    if not principal.can("admin"):
+        raise HTTPException(403, "apenas o administrador do tenant inicia o teste")
     tenant = request_tenant(request)
     try:
         sub = SUBS.start_trial_for(tenant)
@@ -1288,16 +1334,20 @@ async def tenant_signup(request: Request):
                                  "se já tiver conta, faça login") from None
     except Exception:
         raise HTTPException(500, "não foi possível criar a conta agora") from None
-    sub = SUBS.start_trial_for(tenant_id)   # trial explícito na criação (1x)
+    # §3: criar conta NÃO inicia trial nem concede acesso. A conta nasce
+    # NOT_STARTED (somente-leitura). O teste de 24h só começa por AÇÃO
+    # explícita do administrador em POST /v1/trial/start.
     token = TENANT_STORE.login(email, senha, tenant_id)
     return {"ok": True, "tenant_id": tenant_id, "access_token": token,
-            "plano": sub.plan_code, "teste_expira_em": sub.expires_at.isoformat(),
-            "proximo_passo": "Configure a IA (Groq é grátis) e rode a primeira análise"}
+            "estado": ACCT.NOT_STARTED,
+            "proximo_passo": "Inicie seu teste de 24h em /v1/trial/start quando "
+                             "quiser começar — criar conta não inicia o teste."}
 
 
 # ============================================================ LOGIN SOCIAL
 # OAuth só PROVA identidade; quem concede acesso continua sendo o tenant
-# store. Conta nova pelo social entra com teste grátis, igual ao cadastro.
+# store. Conta nova pelo social nasce NOT_STARTED — o teste de 24h só começa
+# por ação explícita em /v1/trial/start (§3), nunca no login/cadastro.
 from tradingagents.identity.oauth import (  # noqa: E402
     PROVIDERS,
     OAuthError,
@@ -1447,7 +1497,8 @@ def oauth_callback(provider: str, code: str = "", state: str = ""):
             token = TENANT_STORE.issue_token_for_user(user_id, tenant_id)
             return {"ok": True, "tenant_id": tenant_id, "access_token": token,
                     "email": email, "conta_nova": False}
-        SUBS.start_trial_for(tenant_id)     # trial explícito na criação (1x)
+        # §3: login social cria a conta, mas NÃO inicia trial. A conta nasce
+        # NOT_STARTED; o teste de 24h começa só em POST /v1/trial/start.
         token = TENANT_STORE.login(email, senha_interna, tenant_id)
         novo = True
     else:
