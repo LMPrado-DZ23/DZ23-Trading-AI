@@ -1501,8 +1501,10 @@ class ExecutionCoordinator:
         # 1) LIVRO: reconstruído dos lançamentos (mantém a auditabilidade).
         lancamentos = doc.get("lancamentos")
         if lancamentos:
-            from .ledger import Ledger as _L
-            self.ledger = _L.from_transactions(
+            # §5: recarrega NO LUGAR (mesma instância). Trocar self.ledger por um
+            # objeto novo deixava desk['ledger'] e o positions_provider ligados ao
+            # livro ANTIGO — duas verdades sobre o mesmo dinheiro após restore.
+            self.ledger.recarregar_de(
                 lancamentos, currency=doc.get("moeda") or "USDT")
             self._migrar_reserva_global(doc, self.ledger)
             # UMA referência econômica: o risco precisa ler o livro NOVO.

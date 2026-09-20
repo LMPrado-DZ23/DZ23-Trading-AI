@@ -1156,6 +1156,17 @@ class Ledger:
             led._txs.append(tx)
         return led
 
+    def recarregar_de(self, docs: list[dict], currency: str = "USDT") -> None:
+        """§5: recarrega o livro NO LUGAR (mesma instância). Reidrata a partir
+        dos lançamentos SEM trocar o objeto — assim TODAS as referências (o
+        coordenador, o painel via desk['ledger'] e o positions_provider ligado a
+        ESTE livro) enxergam a MESMA verdade financeira após a restauração.
+        Antes, o restore criava um Ledger novo e as referências antigas ficavam
+        obsoletas (duas verdades sobre o mesmo dinheiro)."""
+        novo = Ledger.from_transactions(docs, currency=currency)
+        self.currency = novo.currency
+        self._txs = novo._txs
+
     def open_positions(self) -> set[str]:
         """Instrumentos com posição viva (saldo de custo > 0)."""
         return {acc.split(":", 1)[1] for acc, bal in self.balances().items()
