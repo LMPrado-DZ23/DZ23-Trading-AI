@@ -472,6 +472,30 @@ def _stepup_token(c, h, purpose):
                   json={"password": SENHA, "purpose": purpose}).json()["step_up_token"]
 
 
+class TestTickerXSS:
+    """§2: ticker malicioso é recusado no servidor (allowlist); nunca entra no
+    ledger. Símbolos legítimos (ação e cripto) continuam funcionando."""
+
+    def test_ticker_malicioso_recusado(self, mt):
+        m, c = mt
+        h = _tenant(m, "tena", "a@a.com")
+        c.post("/v1/trial/start", headers=h)                 # conta writable
+        for xss in ("<img src=x onerror=alert(1)>",
+                    "<img src=x onerror=&#97;lert(1)>",
+                    "abc\"><script>alert(1)</script>"):
+            r = c.post("/v1/jobs", headers=h,
+                       json={"ticker": xss, "trade_date": "2026-01-02"})
+            assert r.status_code == 422, (xss, r.status_code)
+
+    @pytest.mark.parametrize("sym", ["NVDA", "BTC-USD", "BTC/USDT", "PETR4.SA", "ETH:USDT"])
+    def test_simbolos_legitimos_passam(self, mt, sym):
+        m, c = mt
+        h = _tenant(m, "tena", "a@a.com")
+        c.post("/v1/trial/start", headers=h)
+        r = c.post("/v1/jobs", headers=h, json={"ticker": sym, "trade_date": "2026-01-02"})
+        assert r.status_code == 200 and "id" in r.json()
+
+
 class TestExportarProtegido:
     """§1/§2: export exige admin + TOKEN de step-up (não senha crua), é cifrado
     (AEAD + AAD do tenant) e não-cacheável; viewer=403; token single-use."""

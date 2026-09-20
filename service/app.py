@@ -11,6 +11,7 @@ import hmac
 import json
 import logging
 import os
+import re
 import secrets
 import threading
 import time
@@ -957,12 +958,22 @@ async def set_cfg(req: Request, _=Depends(auth)):
         _desk_reset(tenant_id)
     return {"saved": saved}
 
+# §2: símbolo começa com alfanumérico e só admite [A-Z0-9 . _ : / -], até 20 chars.
+_TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9._:/-]{0,19}$")
+
+
 @app.post("/v1/jobs")
 async def new_job(req: Request, _=Depends(auth)):
     require_write(req)                    # somente-leitura bloqueia a escrita
     b = await _json_body(req)
     t, d = str(b.get("ticker", "")).strip().upper(), str(b.get("trade_date", "")).strip()
-    if not t or len(d) != 10:
+    # §2 (XSS): allowlist estrita de SÍMBOLO. Aceita ações e cripto (NVDA,
+    # BTC-USD, BTC/USDT, PETR4.SA, ETH:USDT) e RECUSA qualquer coisa com <, >,
+    # &, aspas, espaço ou '=' — o vetor de XSS nunca entra no ledger. A
+    # camada de render também escapa (defesa em profundidade p/ dados antigos).
+    if not t or not _TICKER_RE.match(t):
+        raise HTTPException(422, "ticker inválido — use um símbolo como NVDA, BTC-USD ou BTC/USDT")
+    if len(d) != 10:
         raise HTTPException(422, "ticker e trade_date (AAAA-MM-DD) obrigatórios")
     try:
         datetime.strptime(d, "%Y-%m-%d")
