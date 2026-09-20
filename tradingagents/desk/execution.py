@@ -249,6 +249,9 @@ class ExecutionCoordinator:
         self.reconciliacao_pendente = False
         self.motivo_bloqueio = ""
         self._by_key: dict[str, str] = {}     # idempotency_key -> order_id
+        # §4: hook de PERSISTÊNCIA DURÁVEL do OMS. Chamado ANTES do despacho
+        # externo (ver submit_intent). None = sem persistência (testes puros).
+        self.persist_hook = None
         # §1: FRONTEIRA DE EXECUÇÃO. O modo efetivo da corretora precisa concordar
         # com o mandato. PAPER/SHADOW (qualquer mandato != LIVE) NUNCA podem usar
         # uma corretora em modo 'live' — nem por frase de confirmação nem por
@@ -954,6 +957,25 @@ class ExecutionCoordinator:
         # §1: defesa em profundidade — reconfirma a fronteira ANTES de despachar
         # (a config efetiva pode ter mudado desde a construção).
         self._assert_destino_compativel()
+        # §4: PERSISTE a intenção/estado ANTES do despacho externo. Se não for
+        # possível LEMBRAR da ordem (persistência falhou), NÃO envia — desfaz a
+        # reserva e recusa. Assim, um crash entre o envio e a persistência do fim
+        # do ciclo nunca deixa uma ordem viva sem rastro (o restore diria
+        # exige_reconciliacao=False sobre uma ordem que pode estar na corretora).
+        if self.persist_hook is not None:
+            try:
+                self.persist_hook()
+            except Exception as exc:  # noqa: BLE001 — falha de persistência bloqueia o envio
+                rec.state = OrderState.REJECTED
+                rec.note = f"persistência pré-envio falhou: {type(exc).__name__}"[:200]
+                if ei.kind is Kind.ENTRY:
+                    self.liberar_reserva_restante(
+                        ei.reservation_id,
+                        motivo="persistência pré-envio falhou; nada foi enviado",
+                        order_id=rec.order_id)
+                self.oms_version += 1
+                raise ExecutionRefused(
+                    f"persistência pré-envio falhou; ordem NÃO enviada: {exc}") from exc
         try:
             resultado = self.broker.submit(
                 coid, ei.instrument, ei.side.value, ei.quantity,

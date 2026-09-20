@@ -1956,6 +1956,10 @@ def _desk_boot(tenant_id: str) -> dict:
     # Identidade e destino do relatório de reconciliação.
     coord.tenant_id = tenant_id
     coord.armazem = armazem
+    # §4: persistência DURÁVEL do OMS ANTES de cada despacho externo. Diferente do
+    # save de fim de ciclo (best-effort), este LEVANTA em falha — e o coordenador
+    # BLOQUEIA o envio se não conseguir lembrar da ordem.
+    coord.persist_hook = lambda: armazem.salvar(tenant_id, "oms", coord.snapshot_estado())
     # A mesa passa a saber o que a corretora PODE provar; sem corretora real,
     # a matriz fica DESCONHECIDA — e desconhecida não vira confiança.
     if broker is not None and hasattr(broker, "capacidades"):
