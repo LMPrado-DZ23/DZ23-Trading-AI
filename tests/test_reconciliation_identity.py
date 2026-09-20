@@ -6,8 +6,6 @@ Exercita o ADAPTADOR REAL (CCXTDeskBroker em testnet); faz fake só do TRANSPORT
 (o objeto exchange do ccxt), não do adaptador. Requer ccxt (roda no CI Docker)."""
 from __future__ import annotations
 
-import pytest
-
 from tradingagents.desk.brokers import CCXTDeskBroker
 
 

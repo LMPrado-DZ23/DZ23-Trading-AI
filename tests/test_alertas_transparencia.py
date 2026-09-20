@@ -214,21 +214,34 @@ class TestMudancaDeServidor:
         assert linha["operacoes"] == 12          # o histórico atravessou
 
     def test_unknown_package_is_refused(self, tmp_path, monkeypatch):
+        # §7: importar é operação de admin com step-up para TODO formato. Sem
+        # token, o portão fecha ANTES de olhar o conteúdo (401) — nem começa a
+        # processar um pacote arbitrário. Com token, um formato desconhecido é
+        # rejeitado no schema (422). Ambas as recusas são exercidas aqui.
         m, c, h = self._app(tmp_path, monkeypatch)
-        r = c.post("/v1/mudanca/importar", headers=h, json={"formato": "outro"})
+        assert c.post("/v1/mudanca/importar", headers=h,
+                      json={"formato": "outro"}).status_code == 401   # sem step-up
+        tok = self._stepup(c, h, "import")
+        r = c.post("/v1/mudanca/importar", headers={**h, "X-Step-Up-Token": tok},
+                   json={"formato": "outro"})
         assert r.status_code == 422
 
     def test_importing_twice_does_not_duplicate(self, tmp_path, monkeypatch):
-        # Pacote PLANO (formato dz23.mudanca/1) não exige step-up; importar 2x
-        # é idempotente. (O pacote cifrado exige token; testado acima.)
+        # §7: mesmo o pacote PLANO (dz23.mudanca/1) exige step-up — a
+        # compatibilidade não abre desvio na política. Importar 2x é idempotente;
+        # como o token é single-use, cada importação emite o seu.
         m, c, h = self._app(tmp_path, monkeypatch)
         c.get("/v1/desk/status", headers=h)
         pacote = {"formato": "dz23.mudanca/1", "aprendizado": {"desfechos": [
             {"estrategia": "breakout", "regime": "tendencia_alta",
              "instrumento": "BTC/USDT", "retorno": "0.01",
              "fechado_em": "2026-09-01T00:00:00+00:00", "forca_do_sinal": 0.5}]}}
-        assert c.post("/v1/mudanca/importar", headers=h, json=pacote).status_code == 200
-        c.post("/v1/mudanca/importar", headers=h, json=pacote)
+        # sem token nem o pacote plano passa (era a brecha do achado #7)
+        assert c.post("/v1/mudanca/importar", headers=h, json=pacote).status_code == 401
+        for _ in range(2):
+            tok = self._stepup(c, h, "import")
+            assert c.post("/v1/mudanca/importar", headers={**h, "X-Step-Up-Token": tok},
+                          json=pacote).status_code == 200
         d = c.get("/v1/desk/aprendizado", headers=h).json()
         linha = next(e for e in d["estrategias"] if e["estrategia"] == "breakout")
         assert linha["operacoes"] == 1
