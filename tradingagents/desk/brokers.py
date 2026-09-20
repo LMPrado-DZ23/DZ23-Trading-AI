@@ -95,46 +95,64 @@ class CCXTDeskBroker:
     # dublês nos testes: o caminho real nunca foi exercitado. O adaptador
     # traduz a resposta do CCXT para uma estrutura canônica — o coordenador
     # não pode interpretar objeto específico de exchange.
-    def fetch_order_by_client_id(self, client_order_id: str) -> dict:
+    def _exchange_id_genuino(self, client_order_id: str, exchange_order_id: str) -> str:
+        """§3: SÓ o id que a EXCHANGE emitiu prova ausência via fetch_order. O
+        nosso clientOrderId ('dz23-...') NÃO é id da exchange — usá-lo em
+        fetch_order faz a corretora dizer OrderNotFound e liberaria reserva de uma
+        ordem viva. Resolve o id genuíno do parâmetro ou do mapa de envios; o
+        nosso prefixo 'dz23-' nunca conta como id de exchange."""
+        xid = (exchange_order_id
+               or self.submitted.get(client_order_id, {}).get("exchange_id", "")
+               or "")
+        return "" if str(xid).startswith("dz23-") else str(xid)
+
+    def fetch_order_by_client_id(self, client_order_id: str,
+                                 exchange_order_id: str = "") -> dict:
         """Estado da ordem na corretora, com TRÊS respostas distintas.
 
-        O contrato anterior devolvia None tanto para "a corretora confirma
-        que não existe" quanto para "não apareci na janela que consultei" —
-        e o coordenador DEVOLVIA O CAPITAL nos dois casos. Uma ordem antiga,
-        fora das últimas 50, liberava reserva estando viva.
+        §3: CONTRATO DE IDENTIDADE. A prova de ausência (CONFIRMED_NOT_FOUND) só
+        acontece na consulta DIRETA pelo ID GENUÍNO DA EXCHANGE — respeitando a
+        semântica do fetch_order do CCXT (que espera o id da exchange, não o
+        clientOrderId). Sem esse id (ex.: timeout antes do ACK), a consulta por
+        client id é apenas VARREDURA: pode ENCONTRAR, nunca provar ausência
+        (UNKNOWN). Uma consulta pelo identificador errado NUNCA libera reservas.
 
         resultado:
           FOUND               -> `ordem` preenchida
-          CONFIRMED_NOT_FOUND -> a corretora respondeu que não conhece
+          CONFIRMED_NOT_FOUND -> a corretora, pelo ID DELA, respondeu que não conhece
           UNKNOWN             -> não foi possível provar ausência
         """
         ex = self.bridge._ex
-        # 1) consulta DIRETA por id, quando a corretora suporta: é a única
-        #    que prova ausência.
-        if hasattr(ex, "fetch_order"):
+        xid = self._exchange_id_genuino(client_order_id, exchange_order_id)
+        # 1) consulta DIRETA pelo id DA EXCHANGE — única que prova ausência.
+        if xid and hasattr(ex, "fetch_order"):
             try:
-                o = ex.fetch_order(client_order_id)
+                o = ex.fetch_order(xid)
                 if o:
                     return {"resultado": "FOUND", "ordem": self._ordem_canonica(o)}
             except Exception as exc:
                 if _e_ordem_inexistente(exc):
                     return {"resultado": "CONFIRMED_NOT_FOUND", "ordem": None,
-                            "motivo": f"corretora respondeu {type(exc).__name__}"}
+                            "motivo": f"corretora respondeu {type(exc).__name__} "
+                                      f"para o id da exchange {xid!r}"}
                 # qualquer outra falha é desconhecimento, não ausência
                 return {"resultado": "UNKNOWN", "ordem": None,
                         "motivo": f"consulta direta falhou ({type(exc).__name__})"}
 
-        # 2) varredura do histórico: pode ENCONTRAR, nunca provar ausência.
+        # 2) varredura do histórico por CLIENT ID: pode ENCONTRAR, nunca provar
+        #    ausência (sem id da exchange, absense é sempre INCONCLUSIVA).
         if not hasattr(ex, "fetch_orders"):
             return {"resultado": "UNKNOWN", "ordem": None,
-                    "motivo": "corretora não expõe consulta de ordens"}
+                    "motivo": "sem id da exchange e sem consulta de ordens: inconclusivo"}
         try:
             ordens = ex.fetch_orders(None, None, self.JANELA_HISTORICO)
         except Exception as exc:
             return {"resultado": "UNKNOWN", "ordem": None,
                     "motivo": f"consulta de histórico falhou ({type(exc).__name__})"}
+        enviado = self.submitted.get(client_order_id, {}).get("sent_coid", "")
         for o in ordens or []:
-            if client_order_id in self._identidades(o):
+            ids = self._identidades(o)
+            if client_order_id in ids or (enviado and enviado in ids):
                 return {"resultado": "FOUND", "ordem": self._ordem_canonica(o)}
         return {"resultado": "UNKNOWN", "ordem": None,
                 "motivo": (f"ordem não apareceu nas últimas "
@@ -283,6 +301,11 @@ class CCXTDeskBroker:
         order = out.get("order") or {}
         result = {
             "id": order.get("id") or out.get("client_order_id"),
+            # §3: id GENUÍNO da exchange (vazio se não houve ACK com id) e o
+            # clientOrderId EFETIVAMENTE enviado (dz23-...). O contrato de
+            # identidade da reconciliação depende de distinguir os três.
+            "exchange_id": order.get("id") or "",
+            "sent_coid": out.get("client_order_id", ""),
             "status": order.get("status") or "acknowledged",
             "filled": Decimal(str(order.get("filled") or 0)),
             "average": Decimal(str(order.get("average") or order.get("price") or 0)),

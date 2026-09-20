@@ -2823,10 +2823,10 @@ def desk_reconciliar(request: Request, _=Depends(auth)):
     coord = d["coordinator"]
     corretora = coord.broker
 
-    def consultar(client_order_id: str):
+    def consultar(client_order_id: str, exchange_order_id: str = ""):
         if not hasattr(corretora, "fetch_order_by_client_id"):
             raise RuntimeError("corretora não expõe consulta por ordem")
-        return corretora.fetch_order_by_client_id(client_order_id)
+        return corretora.fetch_order_by_client_id(client_order_id, exchange_order_id)
 
     def consultar_posicoes():
         if not hasattr(corretora, "fetch_positions"):

@@ -322,7 +322,13 @@ class ExecutionCoordinator:
                 continue
             chave = rec.client_order_id or rec.order_id
             try:
-                remota = consultar_corretora(chave)
+                # §3: passa também o id GENUÍNO da exchange (external_id) para a
+                # consulta poder PROVAR ausência pelo id certo. Callback de 1
+                # argumento continua funcionando (compat).
+                try:
+                    remota = consultar_corretora(chave, rec.external_id or "")
+                except TypeError:
+                    remota = consultar_corretora(chave)
             except Exception as exc:
                 relatorio["divergencias"].append(
                     f"{rec.order_id}: consulta falhou ({type(exc).__name__})")
