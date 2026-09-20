@@ -245,6 +245,10 @@ def _client_ip(request: Request) -> str:
     return peer
 
 def _tenant_permission(request: Request) -> str:
+    # §10: encerrar a PRÓPRIA sessão é direito de todo usuário autenticado —
+    # 'read' é a capacidade que todos os papéis têm (inclui viewer e auditor).
+    if request.url.path == "/v1/auth/logout":
+        return "read"
     if request.url.path.startswith("/v1/admin"):
         return "admin"
     if request.method in {"GET", "HEAD"}:
@@ -364,16 +368,20 @@ def auth_me(principal=Depends(auth)):
 
 @app.post("/v1/auth/logout")
 def tenant_logout(request: Request, c: HTTPAuthorizationCredentials = Depends(bearer), _=Depends(auth)):
-    # Logout SEMPRE responde ok para qualquer sessão autenticada — revogar é
-    # idempotente e uma falha de revogação (token já expirado, etc.) não deve
-    # impedir o usuário de sair.
+    # §10: logout revoga o bearer E o step-up da PRÓPRIA sessão. Revogar um sid
+    # inexistente é no-op idempotente (UPDATE 0 linhas, não levanta). Mas FALHA de
+    # PERSISTÊNCIA (banco fora) NÃO pode ser apresentada como revogação confirmada:
+    # nesse caso respondemos 503, porque o bearer pode continuar válido.
     if MULTI_TENANT_ENABLED and TENANT_STORE and c:
         principal = getattr(request.state, "principal", None)
-        if isinstance(principal, Principal):
-            with contextlib.suppress(Exception):
+        try:
+            TENANT_STORE.revoke(c.credentials)                       # invalida o bearer
+            if isinstance(principal, Principal):
                 TENANT_STORE.revoke_step_up_for_session(principal.token_id)  # §5
-        with contextlib.suppress(Exception):
-            TENANT_STORE.revoke(c.credentials)
+        except Exception as exc:  # noqa: BLE001 — persistência falhou; não mentir
+            raise HTTPException(
+                503, "logout não confirmado (falha ao revogar a sessão); tente novamente"
+            ) from exc
     return {"ok": True}
 
 
@@ -2712,8 +2720,12 @@ async def importar_tudo(req: Request, _=Depends(auth)):
     corpo = await _json_body_limited(req, _IMPORT_BODY_MAX)
     frase = str(corpo.get("passphrase", ""))
     pacote = corpo["pacote"] if isinstance(corpo.get("pacote"), dict) else corpo
+    # §7: reautenticação (step-up) é exigida para TODO formato aceito — plano
+    # (dz23.mudanca/1) ou cifrado. Compatibilidade NÃO é desvio da política de
+    # segurança. Token single-use, vinculado à sessão; conta OAuth-only não
+    # consegue emitir (STEP_UP_PROVIDER_REAUTH_REQUIRED) e fica bloqueada aqui.
+    _require_step_up(req, "import")
     if pacote.get("formato") == portable.MAGIC:      # export cifrado
-        _require_step_up(req, "import")              # token single-use
         if len(frase) < portable.MIN_PASSPHRASE:
             raise HTTPException(422, {"erro": "frase-senha ausente/fraca no corpo"})
         # AAD liga o pacote ao tenant de origem: importar o de OUTRO tenant é 403.
@@ -2731,23 +2743,25 @@ async def importar_tudo(req: Request, _=Depends(auth)):
         # Presente no pacote (export antigo) mas DELIBERADAMENTE ignorado.
         ignorado.append("assinatura (só muda por pagamento/webhook ou admin)")
 
-    # §4: valida o SCHEMA de cada parte antes de restaurar (nada de tipo errado).
+    # §4/§7: valida o SCHEMA de TODAS as partes ANTES de aplicar qualquer uma.
+    # Pacote inválido não pode deixar a configuração PARCIALMENTE alterada.
     cfg = pacote.get("configuracao") or {}
     if not isinstance(cfg, dict):
         raise HTTPException(422, "configuração do pacote inválida")
-    if cfg:
-        limpo = {k: v for k, v in cfg.items()
-                 if k in ALLOWED_KEYS and isinstance(v, str) and v.strip()}
-        if limpo:
-            save_cfg({**load_cfg(tid), **limpo}, tid)
-            restaurado.append(f"configuração ({len(limpo)} itens)")
-
     aprend = pacote.get("aprendizado")
     mesa = pacote.get("mesa")
     if aprend is not None and not (isinstance(aprend, dict) and isinstance(aprend.get("desfechos", []), list)):
         raise HTTPException(422, "aprendizado do pacote inválido")
     if mesa is not None and not isinstance(mesa, dict):
         raise HTTPException(422, "estado da mesa do pacote inválido")
+
+    # tudo validado => aplica (config primeiro, depois mesa/aprendizado)
+    if cfg:
+        limpo = {k: v for k, v in cfg.items()
+                 if k in ALLOWED_KEYS and isinstance(v, str) and v.strip()}
+        if limpo:
+            save_cfg({**load_cfg(tid), **limpo}, tid)
+            restaurado.append(f"configuração ({len(limpo)} itens)")
 
     _desk_reset(tid)
     d = _desk_of(req)

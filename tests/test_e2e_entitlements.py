@@ -378,6 +378,45 @@ def _viewer(m, tid, admin_email, viewer_email):
     return {"Authorization": "Bearer " + m.TENANT_STORE.login(viewer_email, SENHA, tid)}
 
 
+def _member(m, tid, admin_email, member_email, role):
+    """Cria o tenant (admin) e um MEMBRO com o papel pedido; header do membro."""
+    m.TENANT_STORE.create_account("Ag", admin_email, SENHA, tenant_id=tid)
+    uid = m.TENANT_STORE.create_user(member_email, SENHA)
+    m.TENANT_STORE.add_member(tid, uid, role)
+    return {"Authorization": "Bearer " + m.TENANT_STORE.login(member_email, SENHA, tid)}
+
+
+class TestLogout:
+    """§10: todo usuário autenticado encerra a PRÓPRIA sessão; logout invalida o
+    bearer; falha de persistência não é apresentada como revogação confirmada."""
+
+    @pytest.mark.parametrize("role", ["viewer", "auditor", "admin"])
+    def test_qualquer_papel_faz_logout(self, mt, role):
+        m, c = mt
+        h = (_tenant(m, "tena", "a@a.com") if role == "admin"
+             else _member(m, "tena", f"adm-{role}@a.com", f"{role}@a.com", role))
+        r = c.post("/v1/auth/logout", headers=h)
+        assert r.status_code == 200 and r.json()["ok"] is True
+
+    def test_logout_invalida_o_bearer(self, mt):
+        m, c = mt
+        h = _tenant(m, "tena", "a@a.com")
+        assert c.post("/v1/auth/logout", headers=h).status_code == 200
+        assert c.get("/v1/billing/status", headers=h).status_code == 401  # bearer morto
+
+    def test_falha_de_revogacao_nao_confirma(self, mt, monkeypatch):
+        m, c = mt
+        h = _tenant(m, "tena", "a@a.com")
+
+        def boom(*a, **k):
+            raise RuntimeError("store indisponível")
+
+        monkeypatch.setattr(m.TENANT_STORE, "revoke", boom)
+        r = c.post("/v1/auth/logout", headers=h)
+        assert r.status_code == 503                        # não mente 'ok'
+        assert c.get("/v1/billing/status", headers=h).status_code == 200  # bearer ainda vale
+
+
 class TestImportarNaoAtivaAssinatura:
     """§1: importar não pode ativar/estender assinatura pelo pacote do usuário."""
 
@@ -385,14 +424,25 @@ class TestImportarNaoAtivaAssinatura:
         m, c = mt
         h = _tenant(m, "tena", "a@a.com")
         c.post("/v1/trial/start", headers=h)                 # TRIALING (writable), admin
+        tok = _stepup_token(c, h, "import")                  # §7: import exige step-up
         pacote = {"formato": "dz23.mudanca/1", "assinatura": {
             "plan_code": "dz23_annual", "status": "active",
             "expires_at": "2099-01-01T00:00:00+00:00", "last_charge_id": "forjado"}}
-        r = c.post("/v1/mudanca/importar", headers=h, json=pacote)
+        r = c.post("/v1/mudanca/importar", headers={**h, "X-Step-Up-Token": tok}, json=pacote)
         assert r.status_code == 200
         assert any("assinatura" in x for x in r.json()["ignorado"])
         st = c.get("/v1/billing/status", headers=h).json()
         assert st["plano"] == "trial" and st["pago"] is False   # segue trial
+
+    def test_import_plano_sem_stepup_recusado(self, mt):
+        # §7: formato PLANO (dz23.mudanca/1) SEM step-up é recusado — compat não
+        # fura a política de reautenticação. E nada de config é alterado.
+        m, c = mt
+        h = _tenant(m, "tena", "a@a.com")
+        c.post("/v1/trial/start", headers=h)
+        r = c.post("/v1/mudanca/importar", headers=h,
+                   json={"formato": "dz23.mudanca/1", "configuracao": {"MODO": "x"}})
+        assert r.status_code == 401   # falta o token de step-up
 
     def test_viewer_nao_importa(self, mt):
         m, c = mt

@@ -38,12 +38,19 @@ class ChargeConflict(RuntimeError):
 
 
 def _fingerprint(*, provider: str, event_id: str, charge_id: str, tenant_id: str,
-                 plan_code: str, amount_cents: int, currency: str, correlation: str,
-                 payload_hash: str) -> str:
-    """Fingerprint CANÔNICO do pagamento (§3): qualquer divergência num destes
-    campos, sob o mesmo charge_id, é conflito — nunca 'replay ok'."""
+                 plan_code: str, amount_cents: int, currency: str,
+                 correlation: str) -> str:
+    """Identidade SEMÂNTICA do pagamento (§3): só o conteúdo econômico que
+    realmente distingue/contradiz um pagamento — provider, event_id, charge_id,
+    tenant, plano, valor, moeda e correlação.
+
+    NÃO inclui o `payload_hash` (hash do corpo BRUTO): reformatar o JSON (mesma
+    semântica, bytes diferentes) não pode virar conflito nem replay recreditado.
+    O `payload_hash` é guardado à parte, como EVIDÊNCIA do corpo recebido, e a
+    verificação de assinatura sobre o corpo bruto acontece no webhook — aqui é só
+    identidade de idempotência."""
     return "|".join([provider, event_id, charge_id, tenant_id, plan_code,
-                     str(amount_cents), currency.upper(), correlation, payload_hash])
+                     str(amount_cents), currency.upper(), correlation])
 
 
 class SubscriptionStore:
@@ -239,7 +246,7 @@ class SubscriptionStore:
         fp = _fingerprint(provider=provider, event_id=event_id, charge_id=charge_id,
                           tenant_id=tenant_id, plan_code=plan_code,
                           amount_cents=amount_cents, currency=currency,
-                          correlation=correlation, payload_hash=payload_hash)
+                          correlation=correlation)
         cols = ("charge_id,tenant_id,plan_code,amount_cents,currency,provider,"
                 "event_id,correlation,payload_hash,fingerprint,processed_at")
         vals = (charge_id, tenant_id, plan_code, amount_cents, currency.upper(),
