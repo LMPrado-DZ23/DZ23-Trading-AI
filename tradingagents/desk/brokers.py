@@ -297,12 +297,19 @@ class CCXTDeskBroker:
 
 
 def build_desk_broker(cfg: dict, *, final_state: dict, journal_path: str | None = None,
-                      paper_price: Decimal = Decimal("100")):
+                      paper_price: Decimal = Decimal("100"),
+                      platform_allows_live: bool = False):
     """Escolhe a corretora da mesa a partir da configuração salva.
 
     Sem `TRADINGAGENTS_DESK_BROKER=ccxt` explícito, a mesa opera em PAPER —
     o padrão nunca toca corretora externa por acidente.
+
+    §1: BLOQUEIO DE PLATAFORMA. `platform_allows_live` (padrão False) é a decisão
+    da PLATAFORMA (LIVE_TRADING/REAL_MONEY_EXECUTION do serviço). Se a plataforma
+    não autoriza LIVE, nenhuma config de corretora pode operar live — a frase de
+    confirmação e as credenciais do ccxt_bridge NÃO contornam este bloqueio.
     """
+    from ..brokers.ccxt_bridge import BrokerSecurityError
     from .execution import PaperBroker
     if (cfg.get("TRADINGAGENTS_DESK_BROKER") or "paper").strip().lower() != "ccxt":
         return PaperBroker(paper_price), "paper"
@@ -310,6 +317,11 @@ def build_desk_broker(cfg: dict, *, final_state: dict, journal_path: str | None 
            ("TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
             "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET", "LIVE_TRADING_CONFIRM",
             "LIVE_MAX_ORDER_VALUE", "LIVE_MAX_DAILY_LOSS")}
+    modo = (env.get("TRADINGAGENTS_BROKER_MODE") or "").strip().lower()
+    if modo == "live" and not platform_allows_live:
+        raise BrokerSecurityError(
+            "plataforma não autoriza operação LIVE (LIVE_TRADING/REAL_MONEY_EXECUTION "
+            "desligados); frase de confirmação e credenciais não contornam o bloqueio")
     broker = CCXTDeskBroker(env, final_state=final_state, journal_path=journal_path)
     return broker, broker.mode
 

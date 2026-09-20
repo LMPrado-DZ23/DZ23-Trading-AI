@@ -1896,6 +1896,15 @@ def oauth_callback(provider: str, code: str = "", state: str = ""):
 _DESKS: dict[str, dict] = {}
 
 
+def _platform_allows_live() -> bool:
+    """§1: decisão da PLATAFORMA sobre dinheiro real. AMBAS as flags do serviço
+    precisam estar ligadas (LIVE_TRADING e REAL_MONEY_EXECUTION); ausência => NÃO.
+    É o bloqueio que a frase de confirmação e as credenciais NÃO contornam."""
+    def _on(name: str) -> bool:
+        return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+    return _on("LIVE_TRADING") and _on("REAL_MONEY_EXECUTION")
+
+
 def _desk_boot(tenant_id: str) -> dict:
     from decimal import Decimal
 
@@ -1941,7 +1950,7 @@ def _desk_boot(tenant_id: str) -> dict:
     data_dir = DATA / "desks" / tenant_id
     broker, broker_mode = build_desk_broker(
         cfg, final_state={}, journal_path=str(data_dir / "broker.jsonl"),
-        paper_price=Decimal("100"))
+        paper_price=Decimal("100"), platform_allows_live=_platform_allows_live())
     coord = ExecutionCoordinator(mandate, ledger, risk,
                                  worker_id=f"worker-{tenant_id}", broker=broker)
     # Identidade e destino do relatório de reconciliação.

@@ -249,6 +249,22 @@ class ExecutionCoordinator:
         self.reconciliacao_pendente = False
         self.motivo_bloqueio = ""
         self._by_key: dict[str, str] = {}     # idempotency_key -> order_id
+        # §1: FRONTEIRA DE EXECUÇÃO. O modo efetivo da corretora precisa concordar
+        # com o mandato. PAPER/SHADOW (qualquer mandato != LIVE) NUNCA podem usar
+        # uma corretora em modo 'live' — nem por frase de confirmação nem por
+        # credenciais. Combinação incompatível é recusada JÁ na construção.
+        self._assert_destino_compativel()
+
+    def _modo_corretora(self) -> str:
+        """Modo EFETIVO declarado pela corretora ('paper'|'testnet'|'live')."""
+        return str(getattr(self.broker, "mode", "paper") or "paper").strip().lower()
+
+    def _assert_destino_compativel(self) -> None:
+        if self._modo_corretora() == "live" and self.mandate.mode is not Mode.LIVE:
+            raise ExecutionRefused(
+                f"fronteira de execução: mandato {self.mandate.mode.value} não pode "
+                "despachar para corretora em modo 'live' (destino real bloqueado; "
+                "frase de confirmação e credenciais não contornam)")
 
     # -- envio ---------------------------------------------------------
     def exigir_reconciliacao(self, motivo: str) -> None:
@@ -929,6 +945,9 @@ class ExecutionCoordinator:
                                     reservation_id=ei.reservation_id)
 
         # 5. ENVIO
+        # §1: defesa em profundidade — reconfirma a fronteira ANTES de despachar
+        # (a config efetiva pode ter mudado desde a construção).
+        self._assert_destino_compativel()
         try:
             resultado = self.broker.submit(
                 coid, ei.instrument, ei.side.value, ei.quantity,
