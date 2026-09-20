@@ -145,7 +145,7 @@ class SubscriptionStore:
             c.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_webhook_events_provider_event "
                       "ON webhook_events(provider, event_id) WHERE event_id <> ''")
 
-        run_migrations(self._connect, dialect, [(1, _m1), (2, _m2)])
+        run_migrations(self._connect, dialect, [(1, _m1), (2, _m2)], component="billing")
 
     def get(self, tenant_id: str) -> Subscription | None:
         """Lê a assinatura. Banco fora do ar => BillingUnavailable (fail-closed)."""
