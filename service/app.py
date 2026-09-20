@@ -2085,7 +2085,13 @@ def _desk_boot(tenant_id: str) -> dict:
         orch, coord, snapshot_provider=snaps_fn, price_provider=prices_fn,
         state_path=data_dir / "state.json", on_cycle=_record,
         armazem=armazem, tenant_id=tenant_id,
-        interval_seconds=int(os.environ.get("DESK_INTERVAL_SECONDS", "300")))
+        interval_seconds=int(os.environ.get("DESK_INTERVAL_SECONDS", "300")),
+        # §8: o laço revalida billing a cada ciclo. Conta somente-leitura (trial
+        # expirado/suspenso) ou billing indisponível (UNKNOWN_BILLING => read-only)
+        # pausa novo trabalho, sem liquidar posições. Self-host não tem billing.
+        entitlement_check=(
+            (lambda tid=tenant_id: not ACCT.is_read_only(estado_da_conta(tid)[0]))
+            if MULTI_TENANT_ENABLED else None))
     return desk
 
 
@@ -2162,12 +2168,18 @@ def desk_cycle(request: Request, _=Depends(auth), __=Depends(require_plan)):
 
 
 @app.post("/v1/desk/scheduler/{action}")
-def desk_scheduler(action: str, request: Request, _=Depends(auth), __=Depends(require_plan)):
+def desk_scheduler(action: str, request: Request, _=Depends(auth)):
     """Liga/desliga o laço autônomo. Ligado, roda sozinho — fechar o
-    navegador não interrompe nada. Start reconcilia ANTES de retomar."""
+    navegador não interrompe nada. Start reconcilia ANTES de retomar.
+
+    §8 (ACTION_AWARE): `start` AUMENTA exposição => exige conta com assinatura
+    (require_write bloqueia trial expirado/suspenso/billing indisponível).
+    `stop` REDUZ risco => sempre acessível, mesmo somente-leitura — nunca deixar
+    o dono sem conseguir PARAR a mesa. Parar NÃO liquida posições."""
     d = _desk_of(request)
     sched = d["scheduler"]
     if action == "start":
+        require_write(request)               # só o start passa pelo gate de billing
         recuperacao = sched.recover()
         return {"ok": True, "iniciado": sched.start(), "recuperacao": recuperacao,
                 "status": sched.status()}

@@ -472,6 +472,23 @@ def _stepup_token(c, h, purpose):
                   json={"password": SENHA, "purpose": purpose}).json()["step_up_token"]
 
 
+class TestSchedulerBillingAcao:
+    """§8: start (aumenta exposição) exige assinatura; stop (reduz risco) é
+    sempre acessível — o dono nunca fica sem conseguir PARAR a mesa."""
+
+    def test_stop_acessivel_start_bloqueado_quando_readonly(self, mt, monkeypatch):
+        m, c = mt
+        h = _tenant(m, "tena", "a@a.com")
+        c.post("/v1/trial/start", headers=h)                 # TRIALING (writable)
+        c.get("/v1/desk/status", headers=h)                  # constrói a mesa apto
+        monkeypatch.setattr(m, "estado_da_conta",
+                            lambda tid: (m.ACCT.TRIAL_EXPIRED, None))  # vira read-only
+        # parar (reduz risco) continua acessível mesmo somente-leitura
+        assert c.post("/v1/desk/scheduler/stop", headers=h).status_code == 200
+        # iniciar (aumenta exposição) é bloqueado por billing
+        assert c.post("/v1/desk/scheduler/start", headers=h).status_code == 402
+
+
 class TestTickerXSS:
     """§2: ticker malicioso é recusado no servidor (allowlist); nunca entra no
     ledger. Símbolos legítimos (ação e cripto) continuam funcionando."""
