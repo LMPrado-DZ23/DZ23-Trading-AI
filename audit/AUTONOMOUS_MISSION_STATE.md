@@ -154,3 +154,48 @@
 4. Executar a auditoria independente pendente.
 5. Corrigir achados internos, repetir gates e publicar somente após verificação.
 6. Manter blockers externos documentados sem declarar conclusão integral se impedirem critérios essenciais.
+
+
+## Rodada de melhorias solicitada em 2026-09-24
+
+| Campo | Valor |
+| --- | --- |
+| mission_id | `DZ23-IMPROVEMENTS-20260924` |
+| state | `EXECUTING` |
+| objective | Aplicar as melhorias recomendadas na auditoria técnica, com correções locais, testes de regressão e gates verificáveis. |
+| scope | Fail-closed multi-tenant; proxy confiável; estado crítico/alertas; escrita atômica; dependências/CI; testes e documentação. |
+| out_of_scope | Push, merge, publicação, deploy externo, habilitação de dinheiro real e integração externa não disponível. |
+| rollback | `git diff` atual e commit `527757a`; nenhuma operação destrutiva será executada. |
+| next_action | Inspecionar contratos/testes existentes e implementar as correções em pequenos lotes. |
+
+### Gates da rodada
+
+- [ ] Testes de regressão para cada correção.
+- [ ] `ruff check .` sem relaxar regras.
+- [ ] `python -m compileall -q tradingagents service scripts cli`.
+- [ ] Suíte completa em ambiente sem endpoints globais contaminantes.
+- [ ] Smoke multi-tenant e validação de configuração.
+- [ ] Auditoria final de diff e ausência de secrets/artefatos.
+
+### Decisões assumidas
+
+- O modo multi-tenant explicitamente solicitado não fará fallback silencioso para senha legada; continuará com diagnóstico público, mas bloqueará rotas autenticadas até a correção.
+- `X-Forwarded-For` só será aceito quando o peer imediato estiver em redes explicitamente confiáveis; caso contrário, será usado o IP direto do socket.
+- Estado crítico será persistido no volume local existente, com extensão compatível com Postgres/Redis futuro, sem adicionar serviço externo obrigatório nesta rodada.
+- O lockfile será introduzido apenas se puder ser gerado de forma reprodutível sem alterar indiscriminadamente o ambiente; o CI ganhará auditoria explícita das dependências.
+
+
+## Fechamento da rodada DZ23-IMPROVEMENTS-20260924
+
+| Campo | Valor |
+| --- | --- |
+| state | `COMPLETED` |
+| completed_at | `2026-09-24T20:33:00-03:00` |
+| result | Melhorias locais aplicadas e validadas; nenhum push/deploy externo executado. |
+| tests | `1283 passed, 2 skipped, 71 subtests` |
+| lint | `ruff check . PASS` |
+| compile | `compileall PASS` |
+| lock | `uv lock --check PASS` |
+| security | `pip-audit --local: No known vulnerabilities found` |
+| smoke | API e multi-tenant PASS |
+| next_external_step | Revisão humana do diff e abertura de PR/merge conforme autorização do mantenedor. |

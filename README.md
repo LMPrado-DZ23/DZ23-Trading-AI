@@ -49,8 +49,8 @@ prestam contas — enquanto o dono acompanha tudo numa mesa visual.
 ## Começar em 2 minutos (local)
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[desk,dev]"
+uv sync --locked --extra desk --extra dev
+source .venv/bin/activate
 ACCESS_PASSWORD=uma-senha-de-teste DATA_DIR=./data \
   uvicorn service.app:app --port 8080
 ```

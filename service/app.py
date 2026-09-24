@@ -7,7 +7,9 @@ inteiros ao navegador (exibição mascarada)."""
 import asyncio
 import contextlib
 import hmac
+import ipaddress
 import json
+import logging
 import os
 import secrets
 import threading
@@ -23,6 +25,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from tradingagents.agency_runtime import AgencyRuntime
+from tradingagents.desk.storage import escrever_json_atomico
 from tradingagents.domain import (
     MarketSnapshot,
     OrderRequest,
@@ -42,7 +45,9 @@ DATA = Path(os.environ.get("DATA_DIR", "/data"))
 DATA.mkdir(parents=True, exist_ok=True)
 CFG_PATH = DATA / "config.json"
 DB = DATA / "jobs.db"
+LIVE_HALT_PATH = DATA / "live-halts.json"
 HEALTH: dict = {"armazenamento": "?", "avisos": []}
+LOGGER = logging.getLogger("tradingagents.service")
 
 
 def _build_job_store():
@@ -70,6 +75,7 @@ if DATABASE_URL and not os.environ.get("DATABASE_URL"):
 
 JOB_STORE = _build_job_store()
 PASSWORD = os.environ.get("ACCESS_PASSWORD", "")
+MULTI_TENANT_REQUESTED = os.environ.get("MULTI_TENANT_ENABLED", "false").lower() == "true"
 MULTI_TENANT_ENABLED = os.environ.get("MULTI_TENANT_ENABLED", "false").lower() == "true"
 _TENANT_SIGNING_KEY = os.environ.get("TENANT_TOKEN_SIGNING_KEY")
 TENANT_STORE = None
@@ -162,9 +168,23 @@ _FAILS: dict = {}
 MAX_FAILS, LOCK_SECONDS = 5, 900
 
 def _client_ip(request: Request) -> str:
+    peer = request.client.host if request.client else "?"
+    trusted = []
+    for item in os.environ.get("TRUSTED_PROXY_NETWORKS", "").split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            trusted.append(ipaddress.ip_network(item, strict=False))
+        except ValueError:
+            LOGGER.warning("ignoring invalid TRUSTED_PROXY_NETWORKS entry")
+    try:
+        peer_ip = ipaddress.ip_address(peer)
+    except ValueError:
+        peer_ip = None
+    proxy_trusted = peer_ip is not None and any(peer_ip in network for network in trusted)
     fwd = request.headers.get("x-forwarded-for", "")
-    return (fwd.split(",")[0].strip() if fwd else None) or (
-        request.client.host if request.client else "?")
+    return (fwd.split(",")[0].strip() if fwd and proxy_trusted else None) or peer
 
 def _tenant_permission(request: Request) -> str:
     if request.url.path.startswith("/v1/admin"):
@@ -185,6 +205,8 @@ def _tenant_permission(request: Request) -> str:
 
 
 def auth(request: Request, c: HTTPAuthorizationCredentials = Depends(bearer)):
+    if MULTI_TENANT_REQUESTED and not MULTI_TENANT_ENABLED:
+        raise HTTPException(503, "multi-tenant solicitado, mas indisponível; corrija a configuração")
     if MULTI_TENANT_ENABLED:
         if not TENANT_STORE or not c:
             raise HTTPException(401, "sessão multi-tenant obrigatória")
@@ -388,7 +410,7 @@ def load_cfg(tenant_id: str = "legacy") -> dict:
 
 def save_cfg(cfg: dict, tenant_id: str = "legacy"):
     path = tenant_cfg_path(tenant_id)
-    path.write_text(json.dumps(cfg, indent=2))
+    escrever_json_atomico(path, cfg)
     os.chmod(path, 0o600)
 
 
@@ -1211,9 +1233,14 @@ def _desk_boot(tenant_id: str) -> dict:
                 mesa_deveria_rodar=True, mesa_rodando=True,
                 erros_do_ciclo=sched_.state.errors if sched_ else 0)
             if alertas:
-                _notificador(tenant_id).enviar(alertas)
-        except Exception:
-            pass          # alerta nunca pode derrubar o ciclo
+                resultado = _notificador(tenant_id).enviar(alertas)
+                if resultado.get("falhas"):
+                    METRICS.inc("alerts.delivery_failed", len(resultado["falhas"]))
+                    LOGGER.warning("alert delivery failed: %s", len(resultado["falhas"]))
+        except Exception as exc:
+            METRICS.inc("alerts.delivery_callback_failed")
+            LOGGER.exception("alert callback failed: %s", type(exc).__name__)
+            # O alerta não derruba o ciclo, mas a falha permanece observável.
         desk["cycles"].append({"em": _now().isoformat(), "origem": feed_kind,
                                "resumo": out.get("resumo", ""),
                                "vetos": out.get("vetos", []),
@@ -1233,7 +1260,7 @@ def _desk_boot(tenant_id: str) -> dict:
 
 def _desk_of(request: Request) -> dict:
     tid = request_tenant(request)
-    if tid in _LIVE_HALTED:
+    if _live_halted(tid):
         raise HTTPException(
             423, "parada de emergência acionada: libere em Plano e risco "
                  "antes de operar novamente")
@@ -1465,10 +1492,31 @@ def database_health(_=Depends(auth)):
 # ============================================================ DINHEIRO REAL
 # Autorizado pelo dono. Três fechaduras independentes: a frase exata, o teto
 # por ordem e o teto de perda diária — mais a parada de emergência.
-from tradingagents.brokers.ccxt_bridge import LIVE_CONFIRM_PHRASE  # noqa: E402
+from tradingagents.brokers.ccxt_bridge import LIVE_CONFIRM_PHRASE  # noqa: E402  # isort: skip
 
 # Inquilinos com parada de emergência acionada — trava independente da mesa.
-_LIVE_HALTED: set = set()
+def _load_live_halts() -> set[str]:
+    try:
+        body = json.loads(LIVE_HALT_PATH.read_text(encoding="utf-8"))
+        return {str(item) for item in body if isinstance(item, str)}
+    except (OSError, TypeError, ValueError):
+        return set()
+
+
+_LIVE_HALTED: set[str] = _load_live_halts()
+
+
+def _persist_live_halts() -> None:
+    escrever_json_atomico(LIVE_HALT_PATH, sorted(_LIVE_HALTED))
+    os.chmod(LIVE_HALT_PATH, 0o600)
+
+
+def _live_halted(tenant_id: str) -> bool:
+    # Recarrega para que outra instância veja a parada sem depender da memória
+    # do worker que recebeu o clique.
+    _LIVE_HALTED.clear()
+    _LIVE_HALTED.update(_load_live_halts())
+    return tenant_id in _LIVE_HALTED
 
 
 @app.get("/v1/live/status")
@@ -1514,6 +1562,7 @@ def live_emergency(request: Request, _=Depends(auth)):
     assim marcamos a parada, porque o dono clicou para parar."""
     tid = request_tenant(request)
     _LIVE_HALTED.add(tid)
+    _persist_live_halts()
     d = _DESKS.get(tid)
     if d is None:
         return {"ok": True, "parado": True, "a_encerrar": [],
@@ -1540,6 +1589,7 @@ async def live_resume(req: Request, _=Depends(auth)):
         raise HTTPException(422, f"repita exatamente: {LIVE_CONFIRM_PHRASE}")
     tid = request_tenant(req)
     _LIVE_HALTED.discard(tid)
+    _persist_live_halts()
     _DESKS.pop(tid, None)          # reconstrói limpo no próximo uso
     return {"ok": True, "liberado": True,
             "aviso": "envios liberados; confira os tetos antes de retomar"}

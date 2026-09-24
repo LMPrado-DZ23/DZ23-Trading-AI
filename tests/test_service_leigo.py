@@ -121,6 +121,16 @@ class TestBruteForceLock:
         assert h["X-Content-Type-Options"] == "nosniff"
         assert h["X-Frame-Options"] == "DENY"
 
+    def test_forwarded_for_is_ignored_without_trusted_proxy(self, tmp_path, monkeypatch):
+        c, m = self._client(tmp_path, monkeypatch)
+        request = type("Request", (), {
+            "client": type("Client", (), {"host": "127.0.0.1"})(),
+            "headers": {"x-forwarded-for": "203.0.113.10"},
+        })()
+        assert m._client_ip(request) == "127.0.0.1"
+        monkeypatch.setenv("TRUSTED_PROXY_NETWORKS", "127.0.0.1/32")
+        assert m._client_ip(request) == "203.0.113.10"
+
 
 class TestPainelMesaDeAgentes:
     """MA-08: a aba existe de verdade no HTML servido, com botões ligados a
@@ -205,6 +215,25 @@ class TestArranqueResiliente:
         monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:1/nada")
         m = _load_app(tmp_path, monkeypatch)
         assert TestClient(m.app).get("/").status_code == 200
+
+    def test_requested_multitenant_never_falls_back_to_legacy_auth(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        monkeypatch.setenv("MULTI_TENANT_ENABLED", "true")
+        monkeypatch.setenv("TENANT_TOKEN_SIGNING_KEY", "curta")
+        m = _load_app(tmp_path, monkeypatch)
+        response = TestClient(m.app).get(
+            "/v1/config", headers={"Authorization": "Bearer s3nh4"})
+        assert response.status_code == 503
+
+
+class TestEmergencyStopPersistence:
+    def test_live_halt_survives_memory_reload(self, tmp_path, monkeypatch):
+        m = _load_app(tmp_path, monkeypatch)
+        m._LIVE_HALTED.clear()
+        m._LIVE_HALTED.add("tenant-a")
+        m._persist_live_halts()
+        m._LIVE_HALTED.clear()
+        assert m._live_halted("tenant-a") is True
 
 
 class TestOnboarding:

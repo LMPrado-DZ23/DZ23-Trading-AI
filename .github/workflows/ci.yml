@@ -23,18 +23,21 @@ jobs:
         python-version: ${{ (github.event_name == 'pull_request' || github.ref == 'refs/heads/main') && fromJSON('["3.10","3.11","3.12","3.13"]') || fromJSON('["3.12"]') }}
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: pip
-      - name: Install (with dev extras)
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[desk,dev]"
+      - name: Install locked project with dev extras
+        run: uv sync --locked --extra desk --extra dev
       - name: Run test suite
-        run: pytest -q
+        env:
+          OPENAI_BASE_URL: ""
+          OPENAI_API_BASE: ""
+        run: uv run pytest -q
       - name: Compile application modules
-        run: python -m compileall -q tradingagents service scripts
+        run: uv run python -m compileall -q tradingagents service scripts
 
   smoke-install:
     name: clean-install smoke
@@ -47,7 +50,7 @@ jobs:
           cache: pip
       - name: Fresh install (no dev extras) and import
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip wheel
           pip install .
           # Catches undeclared runtime deps (e.g. #994 python-dotenv): a bare
           # install must import the package and the CLI module.
@@ -58,34 +61,55 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
-      - name: Install ruff
-        run: pip install "ruff>=0.15"
+      - name: Install locked dev tools
+        run: uv sync --locked --extra dev
       - name: Lint the repository
         # The repo is fully clean under the strict select, so we lint everything
         # (results/ and worklog/ are excluded via pyproject extend-exclude).
-        run: ruff check .
+        run: uv run ruff check .
+
+  dependency-audit:
+    name: dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install locked project and audit tool
+        run: |
+          uv sync --locked --extra desk
+          uv pip install --python .venv/bin/python pip-audit
+      - name: Audit installed project dependencies
+        run: uv run pip-audit --local --progress-spinner off
 
   smoke:
     name: public smoke checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
-      - name: Install project
+      - name: Install locked project
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[desk,dev]"
-          pip install pyyaml
+          uv sync --locked --extra desk --extra dev
+          uv pip install --python .venv/bin/python pyyaml
       - name: Run API and multi-tenant smoke tests
         run: |
-          python scripts/smoke_agency_api.py
-          python scripts/smoke_multitenant.py
+          uv run python scripts/smoke_agency_api.py
+          uv run python scripts/smoke_multitenant.py
       - name: Validate compose YAML
-        run: python -c "import yaml, pathlib; yaml.safe_load(pathlib.Path('docker-compose.yml').read_text())"
+        run: uv run python -c "import yaml, pathlib; yaml.safe_load(pathlib.Path('docker-compose.yml').read_text())"

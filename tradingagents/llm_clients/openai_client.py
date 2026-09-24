@@ -293,7 +293,7 @@ class OpenAIClient(BaseLLMClient):
             # OLLAMA_BASE_URL) > provider default. None means use the SDK default.
             env_base_url = os.environ.get(spec.base_url_env) if spec.base_url_env else None
             base_url = self.base_url or env_base_url or spec.base_url
-            if not base_url:
+            if not base_url and self.provider == "openai":
                 # Rodada-6 finding: with no explicit base_url, the pinned
                 # LangChain/OpenAI SDKs would later resolve OPENAI_BASE_URL /
                 # OPENAI_API_BASE from the environment — an endpoint the

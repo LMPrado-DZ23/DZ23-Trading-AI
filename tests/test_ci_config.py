@@ -20,7 +20,8 @@ class TestCustoDoPipeline:
             "a matriz completa deve rodar em main/PR, não a cada push")
 
     def test_dependency_cache_is_enabled_everywhere(self):
-        assert RAW.count("cache: pip") >= 4
+        assert RAW.count("astral-sh/setup-uv@v5") >= 4
+        assert RAW.count("uv sync --locked") >= 4
 
     def test_documentation_changes_do_not_burn_minutes(self):
         ignorados = CI["on"]["push"]["paths-ignore"]
@@ -34,4 +35,6 @@ class TestCustoDoPipeline:
         assert "main" in branches and "unificacao" in branches
 
     def test_product_extras_are_installed(self):
-        assert '".[desk,dev]"' in RAW, "o CI precisa instalar o produto completo"
+        assert RAW.count("--extra desk --extra dev") >= 2, (
+            "o CI precisa instalar o produto completo com os extras travados"
+        )
