@@ -22,7 +22,7 @@ jobs:
       matrix:
         python-version: ${{ (github.event_name == 'pull_request' || github.ref == 'refs/heads/main') && fromJSON('["3.10","3.11","3.12","3.13"]') || fromJSON('["3.12"]') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
@@ -43,7 +43,7 @@ jobs:
     name: clean-install smoke
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -60,7 +60,7 @@ jobs:
     name: ruff (strict, full repo)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
@@ -78,7 +78,7 @@ jobs:
     name: dependency audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
@@ -96,7 +96,7 @@ jobs:
     name: public smoke checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
