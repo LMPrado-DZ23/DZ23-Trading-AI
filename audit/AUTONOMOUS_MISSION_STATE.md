@@ -310,3 +310,18 @@ STATUS: CONTINUE
 | Git | sem force-push; publicação autorizada em `origin/main` |
 
 STATUS: READY_TO_PUBLISH
+
+
+## Fechamento publicado
+
+| Campo | Valor |
+| --- | --- |
+| state | `COMPLETED` |
+| completed_at | `2026-09-24T21:15:24-03:00` |
+| commit | `686f137b6e148124e7a33a6d962acc331b390a96` |
+| remote | `origin/main` |
+| remote_verified | `true` |
+| working_tree | `clean` |
+| rollback | `git revert 686f137` ou retorno controlado ao `db5533e` |
+
+STATUS: COMPLETED
