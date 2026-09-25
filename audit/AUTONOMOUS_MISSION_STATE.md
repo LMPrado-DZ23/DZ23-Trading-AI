@@ -362,3 +362,14 @@ Correções aplicadas após revisão independente: execução agora recebe `tena
 Diagnóstico dos checks remotos do commit anterior: todos os jobs falharam em 2–3 segundos com `steps: []`, `runner_id: 0` e `runner_name` vazio. Isso indica indisponibilidade/configuração de runner do GitHub Actions, antes de executar qualquer comando do workflow; não é falha de Ruff ou da suíte local. O novo push permitirá rechecagem remota quando o runner estiver disponível.
 
 STATUS: READY_TO_PUBLISH
+
+
+## Fase: diagnóstico operacional honesto
+
+A agência agora não declara `READY` quando os handlers LLM necessários estão ausentes. O endpoint `/v1/agency/health` expõe `runtime=DEGRADED`, contagem `configured/required` dos handlers e o status do worker; nenhuma chave ou mensagem sensível é exposta. Foi adicionado teste de regressão para essa condição.
+
+O GitHub Actions do commit `caffa8e` repetiu falha pré-step em todos os jobs: `runner_id=0`, `runner_name` vazio e `steps=[]`. O código local não reproduz a falha: gates de lint, compilação e testes focados passam. A disponibilidade do runner permanece bloqueio externo, não será mascarada no workflow.
+
+Próxima ação: concluir suíte local, publicar diagnóstico de health e aguardar runner válido para confirmação remota.
+
+STATUS: CONTINUE

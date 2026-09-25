@@ -202,6 +202,13 @@ class TestAgenciaGeralTarefas:
         stopped = c.post("/v1/agency/worker/stop", headers=h)
         assert stopped.status_code == 200 and stopped.json()["running"] is False
 
+    def test_health_reports_missing_llm_handlers(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = _load_app(tmp_path, monkeypatch)
+        body = TestClient(m.app).get("/v1/agency/health", headers={"Authorization": "Bearer s3nh4"}).json()
+        assert body["runtime"] == "DEGRADED"
+        assert body["llm_handlers"]["configured"] < body["llm_handlers"]["required"]
+
 
 class TestDiagnosticoDoFeed:
     """Quando o mercado não chega, o painel diz o motivo e a próxima ação —

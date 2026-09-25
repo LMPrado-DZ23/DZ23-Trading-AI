@@ -744,7 +744,17 @@ def agency_events(request: Request, after: int = 0, _=Depends(auth)):
 @app.get("/v1/agency/health")
 def agency_health(request: Request, _=Depends(auth)):
     runtime = runtime_for(request)
-    return {"runtime": "READY", "event_sequence": runtime.agency.event_bus.latest_sequence, "agents": len(runtime.agency.agents), "meetings": len(runtime.agency.meetings), "audit_log": "tenant-scoped persistent event stream"}
+    configured = sum(agent_id in runtime.agency.executor.handlers for agent_id in _AGENCY_LLM_AGENT_IDS)
+    required = len(_AGENCY_LLM_AGENT_IDS)
+    return {
+        "runtime": "READY" if configured == required else "DEGRADED",
+        "event_sequence": runtime.agency.event_bus.latest_sequence,
+        "agents": len(runtime.agency.agents),
+        "llm_handlers": {"configured": configured, "required": required},
+        "worker": runtime.agency.worker_status(request_tenant(request)),
+        "meetings": len(runtime.agency.meetings),
+        "audit_log": "tenant-scoped persistent event stream",
+    }
 
 
 @app.get("/v1/agency/tasks")
