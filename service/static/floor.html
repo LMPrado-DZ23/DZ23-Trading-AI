@@ -18,6 +18,7 @@ async function createMission(ev){ev.preventDefault();const input=$('objective');
 async function approveTask(id){const r=await fetch('/v1/agency/tasks/'+encodeURIComponent(id)+'/approve',{method:'POST',headers:auth()});if(!r.ok)alert('Aprovação recusada');refresh()}
 function renderTasks(d){const tasks=(d.tasks&&d.tasks.tasks)||[];$('tasks').innerHTML=tasks.length?tasks.slice(-12).reverse().map(t=>`<div class="task"><b>${t.kind}</b><small>${t.agent_id} · ${t.status}</small>${t.status==='REVIEW_REQUIRED'?`<button type="button" onclick="approveTask('${t.task_id}')">Aprovar tarefa</button>`:''}</div>`).join(''):'Nenhuma tarefa.'}
 function render(d){
+  $('runtime').textContent=d.worker?.running?'WORKER RUNNING':(d.worker?.last_error?'WORKER ERROR':'READY');
   const agentes=(d.agents||d.agents_all||[]).length?(d.agents||d.agents_all)
     :(d.desks||[]).flatMap(x=>(x.agents||[]).map(id=>({agent_id:id,desk_id:x.desk_id,status:x.status})));
   desenharSala(agentes);

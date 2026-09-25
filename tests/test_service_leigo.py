@@ -190,6 +190,18 @@ class TestAgenciaGeralTarefas:
         run = c.post("/v1/agency/tasks/run", headers=h).json()
         assert run["tasks"][0]["status"] == "FAILED"  # sem handler real, nunca finge sucesso
 
+    def test_worker_lifecycle_is_explicit_and_idempotent(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = _load_app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+        h = {"Authorization": "Bearer s3nh4"}
+        started = c.post("/v1/agency/worker/start", headers=h, json={"poll_interval": 0.1, "cycle_timeout": 1})
+        assert started.status_code == 200 and started.json()["running"] is True
+        status = c.get("/v1/agency/worker/status", headers=h)
+        assert status.status_code == 200 and status.json()["tenant_id"] == "legacy"
+        stopped = c.post("/v1/agency/worker/stop", headers=h)
+        assert stopped.status_code == 200 and stopped.json()["running"] is False
+
 
 class TestDiagnosticoDoFeed:
     """Quando o mercado não chega, o painel diz o motivo e a próxima ação —

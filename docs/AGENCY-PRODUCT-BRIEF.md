@@ -50,6 +50,7 @@ O usuário é o proprietário/operador da agência. Ele define objetivos, delega
 | Trading não ultrapassa Paper/Testnet | invariantes no domínio e teste de tentativa LIVE |
 | Agência se recupera após reinício | teste de persistência e retomada |
 | Operador vê estado real | snapshot, eventos, health e métricas |
+| Operação contínua é controlável | start/stop/status por tenant, sem auto-start e com teste de lifecycle |
 
 ## Fora do escopo desta fase
 

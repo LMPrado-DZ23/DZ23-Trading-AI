@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from threading import Barrier, Lock
+from threading import Barrier, Lock, Thread
 
 from tradingagents.agency import AgencyExecutor, AgencyTask, TaskStatus
 
 
-def task(task_id: str, agent_id: str, *, deps=(), approval=False) -> AgencyTask:
-    return AgencyTask(task_id, "mission-1", "tenant-1", agent_id, "research", {},
+def task(task_id: str, agent_id: str, *, deps=(), approval=False, tenant="tenant-1") -> AgencyTask:
+    return AgencyTask(task_id, "mission-1", tenant, agent_id, "research", {},
                       f"idem-{task_id}", tuple(deps), approval)
 
 
@@ -75,3 +75,36 @@ def test_event_stream_contains_task_lifecycle():
     executor.run_until_idle()
     event_types = [item.event.event_type for item in executor.event_bus.replay()]
     assert event_types == ["agency.task.submitted", "agency.task.started", "agency.task.succeeded"]
+
+
+def test_run_is_tenant_scoped():
+    executor = AgencyExecutor()
+    called: list[str] = []
+    executor.register_handler("a", lambda current: called.append(current.tenant_id) or {"ok": True})
+    executor.register_handler("b", lambda current: called.append(current.tenant_id) or {"ok": True})
+    executor.submit(task("a", "a", tenant="tenant-a"))
+    executor.submit(task("b", "b", tenant="tenant-b"))
+    executor.run_until_idle(tenant_id="tenant-a")
+    assert called == ["tenant-a"]
+    assert executor.tasks["b"].status is TaskStatus.QUEUED
+
+
+def test_concurrent_run_calls_do_not_duplicate_handler():
+    executor = AgencyExecutor()
+    calls = 0
+    lock = Lock()
+
+    def handler(current):
+        nonlocal calls
+        with lock:
+            calls += 1
+        return {"ok": True}
+
+    executor.register_handler("research", handler)
+    executor.submit(task("a", "research"))
+    threads = [Thread(target=executor.run_until_idle) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert calls == 1

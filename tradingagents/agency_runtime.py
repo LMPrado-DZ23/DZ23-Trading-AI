@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from tradingagents.agency import AgencyExecutor, AgencyTask
 from tradingagents.agency.store import AgencyTaskStore
+from tradingagents.agency.worker import AgencyWorker
 from tradingagents.telemetry import AuditEvent, AuditLog
 from tradingagents.telemetry.event_bus import EventBus
 
@@ -37,11 +38,12 @@ class Meeting:
 
 class AgencyRuntime:
     def __init__(self, audit_log: AuditLog | None = None, event_bus: EventBus | None = None,
-                 store: AgencyTaskStore | None = None):
+                 store: AgencyTaskStore | None = None, max_workers: int = 16):
         self.audit_log = audit_log
         self.event_bus = event_bus or EventBus()
-        self.executor = AgencyExecutor(event_bus=self.event_bus, store=store)
+        self.executor = AgencyExecutor(event_bus=self.event_bus, store=store, max_workers=max_workers)
         self.store = store
+        self.worker = AgencyWorker(self)
         self.meetings: dict[str, Meeting] = {}
         self.agents: dict[str, dict[str, Any]] = {}
         self.desks: dict[str, dict[str, Any]] = {}
@@ -71,7 +73,7 @@ class AgencyRuntime:
         return meeting
 
     def snapshot(self) -> dict[str, Any]:
-        return {"agents": list(self.agents.values()), "desks": list(self.desks.values()), "meetings": [asdict(meeting) for meeting in self.meetings.values()], "tasks": self.executor.snapshot(), "sequence": self.event_bus.latest_sequence}
+        return {"agents": list(self.agents.values()), "desks": list(self.desks.values()), "meetings": [asdict(meeting) for meeting in self.meetings.values()], "tasks": self.executor.snapshot(), "worker": self.worker.status(), "sequence": self.event_bus.latest_sequence}
 
     def register_task_handler(self, agent_id: str, handler) -> None:
         """Registra execução real; ausência de handler não vira sucesso falso."""
@@ -127,9 +129,24 @@ class AgencyRuntime:
     def run_tasks(self, tenant_id: str, *, timeout: float = 30.0) -> dict[str, Any]:
         if not tenant_id.strip():
             raise ValueError("tenant_id obrigatório")
-        self.executor.run_until_idle(timeout=timeout)
+        self.executor.run_until_idle(timeout=timeout, tenant_id=tenant_id)
         return {"tasks": self.tasks_for_tenant(tenant_id),
                 "workers": self.executor.max_workers}
+
+    def start_worker(self, tenant_id: str, *, poll_interval: float = 1.0, cycle_timeout: float = 30.0) -> dict[str, Any]:
+        return self.worker.start(tenant_id, poll_interval=poll_interval, cycle_timeout=cycle_timeout)
+
+    def stop_worker(self, tenant_id: str) -> dict[str, Any]:
+        status = self.worker.status()
+        if status["tenant_id"] and status["tenant_id"] != tenant_id:
+            raise KeyError(tenant_id)
+        return self.worker.stop()
+
+    def worker_status(self, tenant_id: str) -> dict[str, Any]:
+        status = self.worker.status()
+        if status["tenant_id"] and status["tenant_id"] != tenant_id:
+            raise KeyError(tenant_id)
+        return status
 
     def recall_memory(self, tenant_id: str, *, query: str = "", limit: int = 20) -> list[dict[str, Any]]:
         if not self.store:

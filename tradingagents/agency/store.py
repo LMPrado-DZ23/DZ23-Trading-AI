@@ -73,12 +73,17 @@ class AgencyTaskStore:
                 task.status.value, task.attempts, task.error, result, time.time(), lease_until,
                 task.task_id, task.tenant_id))
 
-    def claim(self, task_id: str, *, lease_seconds: float) -> bool:
+    def claim(self, task_id: str, *, tenant_id: str | None = None, lease_seconds: float) -> bool:
         """Obtém lease apenas se a tarefa ainda estiver pronta para execução."""
         with self._connect() as conn:
-            cur = conn.execute("""UPDATE agency_tasks SET status='RUNNING', lease_until=?, updated=?
-                WHERE task_id=? AND status IN ('QUEUED','WAITING_DEPENDENCY')""",
-                (time.time() + lease_seconds, time.time(), task_id))
+            if tenant_id is None:
+                cur = conn.execute("""UPDATE agency_tasks SET status='RUNNING', lease_until=?, updated=?
+                    WHERE task_id=? AND status IN ('QUEUED','WAITING_DEPENDENCY')""",
+                    (time.time() + lease_seconds, time.time(), task_id))
+            else:
+                cur = conn.execute("""UPDATE agency_tasks SET status='RUNNING', lease_until=?, updated=?
+                    WHERE task_id=? AND tenant_id=? AND status IN ('QUEUED','WAITING_DEPENDENCY')""",
+                    (time.time() + lease_seconds, time.time(), task_id, tenant_id))
             return cur.rowcount == 1
 
     def load(self) -> list[AgencyTask]:

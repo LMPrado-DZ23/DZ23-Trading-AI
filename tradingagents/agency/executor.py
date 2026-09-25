@@ -34,6 +34,7 @@ class AgencyExecutor:
         self.handlers: dict[str, TaskHandler] = {}
         self._idempotency: dict[tuple[str, str], str] = {}
         self._lock = Lock()
+        self._run_lock = Lock()
         self._stop = False
         if self.store:
             self.store.recover_expired()
@@ -60,6 +61,9 @@ class AgencyExecutor:
             missing = [dep for dep in task.dependencies if dep not in self.tasks]
             if missing:
                 raise ValueError(f"dependência inexistente: {missing[0]}")
+            foreign = [dep for dep in task.dependencies if self.tasks[dep].tenant_id != task.tenant_id]
+            if foreign:
+                raise ValueError(f"dependência pertence a outro tenant: {foreign[0]}")
             if task.requires_approval or task.kind in _SENSITIVE_TASK_KINDS or task.payload.get("external_action") is True:
                 task.requires_approval = True
                 task.status = TaskStatus.REVIEW_REQUIRED
@@ -92,15 +96,19 @@ class AgencyExecutor:
             self._emit("agency.task.cancelled", task, {"status": task.status.value})
             return task
 
-    def run_until_idle(self, *, timeout: float = 30.0) -> dict[str, Any]:
+    def run_until_idle(self, *, timeout: float = 30.0, tenant_id: str | None = None) -> dict[str, Any]:
+        with self._run_lock:
+            return self._run_until_idle(timeout=timeout, tenant_id=tenant_id)
+
+    def _run_until_idle(self, *, timeout: float, tenant_id: str | None) -> dict[str, Any]:
         """Drena tarefas executáveis; retorna quando não há trabalho ativo."""
         futures: dict[Future, str] = {}
         with ThreadPoolExecutor(max_workers=self.max_workers, thread_name_prefix="dz23-agent") as pool:
             deadline = self._monotonic() + timeout
             while self._monotonic() < deadline and not self._stop:
-                self._mark_blocked_dependencies()
-                for task in self._ready_tasks(futures):
-                    if self.store and not self.store.claim(task.task_id, lease_seconds=max(timeout, 30)):
+                self._mark_blocked_dependencies(tenant_id)
+                for task in self._ready_tasks(futures, tenant_id):
+                    if self.store and not self.store.claim(task.task_id, tenant_id=tenant_id, lease_seconds=max(timeout, 30)):
                         continue
                     task.status = TaskStatus.RUNNING
                     task.attempts += 1
@@ -109,7 +117,7 @@ class AgencyExecutor:
                     self._emit("agency.task.started", task, {"attempt": task.attempts})
                     futures[pool.submit(self._run_handler, task)] = task.task_id
                 if not futures:
-                    if not self._has_runnable_work():
+                    if not self._has_runnable_work(tenant_id):
                         break
                     self._sleep(0.01)
                     continue
@@ -170,10 +178,12 @@ class AgencyExecutor:
                 self._persist(task)
                 self._emit("agency.task.failed", task, {"status": task.status.value, "error": task.error})
 
-    def _ready_tasks(self, futures: dict[Future, str]) -> list[AgencyTask]:
+    def _ready_tasks(self, futures: dict[Future, str], tenant_id: str | None = None) -> list[AgencyTask]:
         active_agents = {self.tasks[task_id].agent_id for task_id in futures.values()}
         ready = []
         for task in self.tasks.values():
+            if tenant_id is not None and task.tenant_id != tenant_id:
+                continue
             if task.status not in {TaskStatus.QUEUED, TaskStatus.RETRYING, TaskStatus.WAITING_DEPENDENCY}:
                 continue
             if task.agent_id in active_agents:
@@ -183,8 +193,10 @@ class AgencyExecutor:
                 active_agents.add(task.agent_id)
         return ready
 
-    def _mark_blocked_dependencies(self) -> None:
+    def _mark_blocked_dependencies(self, tenant_id: str | None = None) -> None:
         for task in self.tasks.values():
+            if tenant_id is not None and task.tenant_id != tenant_id:
+                continue
             if task.status not in {TaskStatus.QUEUED, TaskStatus.RETRYING, TaskStatus.WAITING_DEPENDENCY}:
                 continue
             dependency_states = [self.tasks[dep].status for dep in task.dependencies]
@@ -197,8 +209,10 @@ class AgencyExecutor:
                 task.status = TaskStatus.WAITING_DEPENDENCY
                 self._persist(task)
 
-    def _has_runnable_work(self) -> bool:
-        return any(task.status in {TaskStatus.QUEUED, TaskStatus.RETRYING} for task in self.tasks.values())
+    def _has_runnable_work(self, tenant_id: str | None = None) -> bool:
+        return any(task.status in {TaskStatus.QUEUED, TaskStatus.RETRYING} and
+                   (tenant_id is None or task.tenant_id == tenant_id)
+                   for task in self.tasks.values())
 
     def _task(self, task_id: str) -> AgencyTask:
         try:

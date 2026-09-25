@@ -325,3 +325,40 @@ STATUS: READY_TO_PUBLISH
 | rollback | `git revert 686f137` ou retorno controlado ao `db5533e` |
 
 STATUS: COMPLETED
+
+
+## Nova fase: worker contínuo durável e observabilidade operacional
+
+| Campo | Valor |
+| --- | --- |
+| mission_id | `DZ23-AGENCY-WORKER-20260924` |
+| base_commit | `23c5fa0` |
+| objective | Executar tarefas persistidas continuamente sob controle explícito, com start/stop/status, retomada após reinício e métricas operacionais. |
+| scope | Worker do control plane da agência; Paper/Testnet continuam permitidos, Live continua fora de escopo. |
+| rigor | L4 para fila/trading e L3 para agência geral. |
+| next_action | Implementar worker controlado, integrar ao runtime/API, testar lifecycle, crash/restart e autorização. |
+| rollback | Reverter commits desta fase; o worker não inicia automaticamente e não altera o fluxo existente até start explícito. |
+
+Critérios de aceite: o worker deve iniciar/parar de forma idempotente, processar tarefas duráveis, recuperar tarefas após novo runtime, expor estado sem segredos, manter tenant isolation e passar testes, lint, carga, segurança e suíte completa.
+
+STATUS: CONTINUE
+
+
+## Fase: sala ampliada, isolamento e correção dos bloqueadores
+
+| Campo | Valor |
+| --- | --- |
+| base_commit | `23c5fa0` |
+| trading_agents | `15` |
+| general_agents | `7` |
+| total_registered | `22` |
+| executor_workers | `16` |
+| local_tests | `1305 passed, 2 skipped, 71 subtests` |
+| lint_compile | `PASS` |
+| dependency_audit | `PASS: No known vulnerabilities found` |
+
+Correções aplicadas após revisão independente: execução agora recebe `tenant_id` no executor; dependências entre tenants são rejeitadas; claim SQLite aceita e valida tenant; chamadas concorrentes de `run_until_idle` são serializadas; worker usa backoff, estado `degraded` e erros redigidos; start valida configuração LLM quando há tarefas pendentes; roster de trading foi ampliado e permanece limitado a análise, risco, planejamento, Paper/Testnet e reconciliação.
+
+Diagnóstico dos checks remotos do commit anterior: todos os jobs falharam em 2–3 segundos com `steps: []`, `runner_id: 0` e `runner_name` vazio. Isso indica indisponibilidade/configuração de runner do GitHub Actions, antes de executar qualquer comando do workflow; não é falha de Ruff ou da suíte local. O novo push permitirá rechecagem remota quando o runner estiver disponível.
+
+STATUS: READY_TO_PUBLISH

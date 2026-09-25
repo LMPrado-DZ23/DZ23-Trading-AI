@@ -27,3 +27,5 @@ def test_trading_floor_reuses_multitenant_session():
     html = (ROOT / "service/static/floor.html").read_text()
     assert "sessionStorage.getItem('dz23_token')" in html
     assert "prompt('Senha do painel')" not in html
+    assert "WORKER RUNNING" in html
+    assert "/v1/agency/missions" in html

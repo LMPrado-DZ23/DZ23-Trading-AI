@@ -82,6 +82,8 @@ O módulo de trading reutiliza `Signal`, `TradeDecision`, `RiskDecision`, `Order
 
 PostgreSQL é a fonte durável para objetivos, tarefas, resultados, aprovações, auditoria e leases. Redis poderá ser introduzido para locks e rate limits distribuídos quando a concorrência real exigir. O armazenamento local permanece fallback de desenvolvimento, não garantia de produção. O painel usa snapshots e streams de eventos, não estado inventado no cliente.
 
+O worker contínuo é um componente controlado por tenant, iniciado somente por `POST /v1/agency/worker/start` e encerrado por `POST /v1/agency/worker/stop`. `GET /v1/agency/worker/status` expõe apenas estado operacional lógico. O processo é idempotente no start, permanece em modo daemon, captura falhas por ciclo e retoma tarefas duráveis pelo mesmo executor após reinício. A inicialização do serviço não liga o worker automaticamente; essa decisão evita executar tarefas inesperadas durante deploy ou recuperação.
+
 ## Observabilidade
 
 Métricas mínimas: tarefas por status, latência por agente, retries, falhas, tokens/custo, fila, leases expirados, aprovações pendentes, bloqueios de política, eventos de trading, reconciliações e estado do kill switch. Logs devem conter correlation ID, tenant, mission ID, task ID e agent ID, sem segredos.

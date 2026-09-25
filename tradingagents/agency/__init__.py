@@ -8,10 +8,12 @@ módulo governado separado.
 from .contracts import AgencyTask, AgentSpec, EvidenceRef, TaskResult, TaskStatus
 from .executor import AgencyExecutor
 from .llm_handler import LLMTaskHandler, LLMTaskPolicy, build_llm_handler
+from .worker import AgencyWorker
 
 __all__ = [
     "AgentSpec",
     "AgencyExecutor",
+    "AgencyWorker",
     "AgencyTask",
     "EvidenceRef",
     "LLMTaskHandler",

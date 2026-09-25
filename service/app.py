@@ -125,11 +125,18 @@ for _agent_id, _desk, _role in (
     ("market-scanner", "research", "Market Scanner"),
     ("technical-analyst", "research", "Technical Analyst"),
     ("sentiment-analyst", "research", "Sentiment Analyst"),
+    ("fundamental-analyst", "research", "Fundamental Analyst"),
+    ("macro-analyst", "research", "Macro Analyst"),
+    ("quant-researcher", "research", "Quant Researcher"),
+    ("alternative-data-agent", "research", "Alternative Data Analyst"),
     ("strategy-agent", "strategy", "Strategy Researcher"),
     ("risk-advisor", "risk", "Risk Advisor"),
     ("portfolio-manager", "portfolio", "Portfolio Manager"),
     ("execution-planner", "execution", "Execution Planner"),
     ("reconciliation-agent", "monitoring", "Reconciliation"),
+    ("orderbook-analyst", "execution", "Order Book Analyst"),
+    ("trading-compliance-agent", "risk", "Trading Compliance"),
+    ("trade-journal-agent", "monitoring", "Trade Journal"),
     ("research-agent", "research", "Business Research"),
     ("news-agent", "intelligence", "News Intelligence"),
     ("operations-agent", "operations", "Operations Manager"),
@@ -211,6 +218,8 @@ def _tenant_permission(request: Request) -> str:
         return "admin"
     if request.url.path.startswith("/v1/agency"):
         path = request.url.path
+        if "/worker" in path and request.method != "GET":
+            return "agency_run"
         if path.endswith("/approve"):
             return "agency_approve"
         if path.endswith("/run"):
@@ -432,11 +441,18 @@ _GENERAL_AGENT_IDS = (
     "research-agent", "news-agent", "operations-agent", "content-agent",
     "finance-agent", "crm-agent", "market-intelligence-agent",
 )
+_TRADING_AGENT_IDS = (
+    "market-scanner", "technical-analyst", "sentiment-analyst", "fundamental-analyst",
+    "macro-analyst", "quant-researcher", "alternative-data-agent", "strategy-agent",
+    "risk-advisor", "portfolio-manager", "execution-planner", "orderbook-analyst",
+    "trading-compliance-agent", "trade-journal-agent", "reconciliation-agent",
+)
+_AGENCY_LLM_AGENT_IDS = _GENERAL_AGENT_IDS + _TRADING_AGENT_IDS
 
 
 def configure_agency_llm(runtime, tenant_id: str) -> str | None:
     """Configura handlers LLM por instância; retorna diagnóstico sem segredo."""
-    if all(agent_id in runtime.agency.executor.handlers for agent_id in _GENERAL_AGENT_IDS):
+    if all(agent_id in runtime.agency.executor.handlers for agent_id in _AGENCY_LLM_AGENT_IDS):
         return None
     try:
         cfg = load_cfg(tenant_id)
@@ -459,8 +475,23 @@ def configure_agency_llm(runtime, tenant_id: str) -> str | None:
             "finance-agent": "análise financeira sem execução de pagamentos",
             "crm-agent": "gestão e qualificação de CRM",
             "market-intelligence-agent": "inteligência competitiva e de mercado",
+            "market-scanner": "varredura de ativos e mercados",
+            "technical-analyst": "análise técnica, sem envio de ordens",
+            "sentiment-analyst": "sentimento de mercado e fontes públicas",
+            "fundamental-analyst": "análise fundamentalista",
+            "macro-analyst": "cenário macroeconômico",
+            "quant-researcher": "pesquisa quantitativa e backtests",
+            "alternative-data-agent": "dados alternativos e qualidade de fontes",
+            "strategy-agent": "pesquisa de estratégia e hipóteses",
+            "risk-advisor": "análise e bloqueio de risco, nunca aprovação própria",
+            "portfolio-manager": "análise de alocação e exposição",
+            "execution-planner": "planejamento Paper/Testnet, sem submissão",
+            "orderbook-analyst": "microestrutura e liquidez",
+            "trading-compliance-agent": "compliance e limites de mandato",
+            "trade-journal-agent": "registro e reconciliação de operações",
+            "reconciliation-agent": "reconciliação Paper/Testnet",
         }
-        for agent_id in _GENERAL_AGENT_IDS:
+        for agent_id in _AGENCY_LLM_AGENT_IDS:
             if agent_id in runtime.agency.executor.handlers:
                 continue
             runtime.agency.register_task_handler(
@@ -803,6 +834,43 @@ async def agency_run_tasks(req: Request, _=Depends(auth)):
     return result
 
 
+@app.get("/v1/agency/worker/status")
+def agency_worker_status(request: Request, _=Depends(auth)):
+    try:
+        return runtime_for(request).agency.worker_status(request_tenant(request))
+    except KeyError:
+        raise HTTPException(403, "worker pertence a outro tenant") from None
+
+
+@app.post("/v1/agency/worker/start")
+async def agency_worker_start(req: Request, _=Depends(auth)):
+    body = {} if req.headers.get("content-length", "0") == "0" else await _json_body(req)
+    try:
+        poll_interval = float(body.get("poll_interval", 1.0))
+        cycle_timeout = float(body.get("cycle_timeout", 30.0))
+        tenant_runtime = runtime_for(req)
+        runtime = tenant_runtime.agency
+        tenant_id = request_tenant(req)
+        diagnostic = configure_agency_llm(tenant_runtime, tenant_id)
+        pending = [task for task in runtime.tasks_for_tenant(tenant_id)
+                   if task["status"] in {"QUEUED", "RETRYING", "WAITING_DEPENDENCY"}]
+        if diagnostic and pending:
+            raise HTTPException(409, diagnostic)
+        return runtime.start_worker(tenant_id, poll_interval=poll_interval, cycle_timeout=cycle_timeout)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(422, f"configuração de worker inválida: {exc}") from exc
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@app.post("/v1/agency/worker/stop")
+def agency_worker_stop(request: Request, _=Depends(auth)):
+    try:
+        return runtime_for(request).agency.stop_worker(request_tenant(request))
+    except KeyError:
+        raise HTTPException(403, "worker pertence a outro tenant") from None
+
+
 @app.get("/v1/office/snapshot")
 def office_snapshot(request: Request, _=Depends(auth)):
     runtime = runtime_for(request)
@@ -980,7 +1048,7 @@ class TenantRuntime:
         self.metrics = MetricsRegistry()
         self.reconciliation = ReconciliationMonitor(self.paper.reconciliation_snapshot, lambda: (_ for _ in ()).throw(RuntimeError("provider remoto de reconciliação não configurado")))
         self.router = ExecutionRouter(risk_engine=RiskEngine(), audit_log=audit, event_bus=bus, kill_switch=self.kill_switch, metrics=self.metrics, reconciliation_guard=lambda: bool(self.reconciliation.last_report and self.reconciliation.last_report.is_safe))
-        for agent_id, desk, role in (("market-scanner", "research", "Market Scanner"), ("technical-analyst", "research", "Technical Analyst"), ("strategy-agent", "strategy", "Strategy Researcher"), ("risk-advisor", "risk", "Risk Advisor"), ("portfolio-manager", "portfolio", "Portfolio Manager"), ("execution-planner", "execution", "Execution Planner"), ("reconciliation-agent", "monitoring", "Reconciliation")):
+        for agent_id, desk, role in (("market-scanner", "research", "Market Scanner"), ("technical-analyst", "research", "Technical Analyst"), ("sentiment-analyst", "research", "Sentiment Analyst"), ("fundamental-analyst", "research", "Fundamental Analyst"), ("macro-analyst", "research", "Macro Analyst"), ("quant-researcher", "research", "Quant Researcher"), ("alternative-data-agent", "research", "Alternative Data Analyst"), ("strategy-agent", "strategy", "Strategy Researcher"), ("risk-advisor", "risk", "Risk Advisor"), ("portfolio-manager", "portfolio", "Portfolio Manager"), ("execution-planner", "execution", "Execution Planner"), ("orderbook-analyst", "execution", "Order Book Analyst"), ("trading-compliance-agent", "risk", "Trading Compliance"), ("trade-journal-agent", "monitoring", "Trade Journal"), ("reconciliation-agent", "monitoring", "Reconciliation")):
             self.agency.register_agent(agent_id, desk, role)
         for agent_id, desk, role in (
             ("research-agent", "research", "Business Research"),
