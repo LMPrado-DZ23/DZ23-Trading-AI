@@ -457,3 +457,24 @@ STATUS: CONTINUE
 A falha integral do mypy permanece documentada como dívida de tipagem pré-existente/ampla e não foi convertida em falso verde; os módulos novos e alterados diretamente passaram no escopo focado. O produto permanece Paper/Shadow por padrão, SAAS fail-closed e sem publicação de operação real.
 
 Estado proposto antes do commit: `READY_FOR_COMMIT`, com publicação ainda separada e sem force-push.
+
+
+## Publicação concluída
+
+| Campo | Valor |
+| --- | --- |
+| state | `PUBLISHED_RC` |
+| branch | `release/dz23-final-rc` |
+| commit_integrado | `a9b709f` |
+| push | concluído sem force-push |
+| origin | `origin/release/dz23-final-rc` |
+| live_orders | `false` |
+| paper_shadow | `true` |
+| full_pytest | `2193 passed, 8 skipped` |
+| smoke | agency + multitenant verdes |
+| external_blocks | Docker ausente; PostgreSQL de integração ausente; Bedrock ausente |
+| typecheck | escopo focado verde; legado integral documentado com 135 erros |
+
+Próximo passo operacional seguro: abrir o workflow remoto da branch e, se necessário, corrigir os gates do runner conforme seus logs. Não habilitar LIVE, saque ou ordens reais nesta RC.
+
+STATUS: COMPLETED_RC
