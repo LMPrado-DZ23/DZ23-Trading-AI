@@ -121,6 +121,16 @@ class TestBruteForceLock:
         assert h["X-Content-Type-Options"] == "nosniff"
         assert h["X-Frame-Options"] == "DENY"
 
+    def test_forwarded_for_is_ignored_without_trusted_proxy(self, tmp_path, monkeypatch):
+        c, m = self._client(tmp_path, monkeypatch)
+        request = type("Request", (), {
+            "client": type("Client", (), {"host": "127.0.0.1"})(),
+            "headers": {"x-forwarded-for": "203.0.113.10"},
+        })()
+        assert m._client_ip(request) == "127.0.0.1"
+        monkeypatch.setenv("TRUSTED_PROXY_NETWORKS", "127.0.0.1/32")
+        assert m._client_ip(request) == "203.0.113.10"
+
 
 class TestPainelMesaDeAgentes:
     """MA-08: a aba existe de verdade no HTML servido, com botões ligados a
@@ -160,6 +170,46 @@ class TestPainelMesaDeAgentes:
         assert len(st["orders"]) == 2
         again = c.post("/v1/desk/cycle", headers=h).json()
         assert again["ordens"] == []                 # segundo ciclo não duplica
+
+
+class TestAgenciaGeralTarefas:
+    def test_task_control_plane_is_tenant_scoped_and_approval_gated(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = _load_app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+        h = {"Authorization": "Bearer s3nh4"}
+        created = c.post("/v1/agency/tasks", headers=h, json={
+            "mission_id": "mission-1", "agent_id": "market-scanner",
+            "kind": "research", "payload": {"topic": "BTC"},
+            "idempotency_key": "task-once", "requires_approval": True})
+        assert created.status_code == 200
+        assert created.json()["task"]["status"] == "REVIEW_REQUIRED"
+        assert c.post("/v1/agency/tasks/run", headers=h).json()["tasks"][0]["status"] == "REVIEW_REQUIRED"
+        approved = c.post(f"/v1/agency/tasks/{created.json()['task']['task_id']}/approve", headers=h)
+        assert approved.status_code == 200 and approved.json()["status"] == "QUEUED"
+        run = c.post("/v1/agency/tasks/run", headers=h).json()
+        assert run["tasks"][0]["status"] == "FAILED"  # sem handler real, nunca finge sucesso
+
+    def test_worker_lifecycle_is_explicit_and_idempotent(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = _load_app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+        h = {"Authorization": "Bearer s3nh4"}
+        started = c.post("/v1/agency/worker/start", headers=h, json={"poll_interval": 0.1, "cycle_timeout": 1})
+        assert started.status_code == 200 and started.json()["running"] is True
+        status = c.get("/v1/agency/worker/status", headers=h)
+        assert status.status_code == 200 and status.json()["tenant_id"] == "legacy"
+        stopped = c.post("/v1/agency/worker/stop", headers=h)
+        assert stopped.status_code == 200 and stopped.json()["running"] is False
+
+    def test_health_reports_missing_llm_handlers(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = _load_app(tmp_path, monkeypatch)
+        body = TestClient(m.app).get("/v1/agency/health", headers={"Authorization": "Bearer s3nh4"}).json()
+        assert body["runtime"] == "DEGRADED"
+        assert body["llm_handlers"]["configured"] < body["llm_handlers"]["required"]
+        assert "/v1/config" in body["next_action"]
+        assert len(body["agent_details"]) >= 15
 
 
 class TestDiagnosticoDoFeed:
@@ -205,6 +255,25 @@ class TestArranqueResiliente:
         monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@127.0.0.1:1/nada")
         m = _load_app(tmp_path, monkeypatch)
         assert TestClient(m.app).get("/").status_code == 200
+
+    def test_requested_multitenant_never_falls_back_to_legacy_auth(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        monkeypatch.setenv("MULTI_TENANT_ENABLED", "true")
+        monkeypatch.setenv("TENANT_TOKEN_SIGNING_KEY", "curta")
+        m = _load_app(tmp_path, monkeypatch)
+        response = TestClient(m.app).get(
+            "/v1/config", headers={"Authorization": "Bearer s3nh4"})
+        assert response.status_code == 503
+
+
+class TestEmergencyStopPersistence:
+    def test_live_halt_survives_memory_reload(self, tmp_path, monkeypatch):
+        m = _load_app(tmp_path, monkeypatch)
+        m._LIVE_HALTED.clear()
+        m._LIVE_HALTED.add("tenant-a")
+        m._persist_live_halts()
+        m._LIVE_HALTED.clear()
+        assert m._live_halted("tenant-a") is True
 
 
 class TestOnboarding:

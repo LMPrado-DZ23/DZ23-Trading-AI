@@ -27,6 +27,8 @@ with TestClient(app) as client:
     me = client.get("/v1/auth/me", headers=headers)
     assert me.status_code == 200 and me.json()["role"] == "admin"
     assert client.get("/v1/auth/status").json()["bootstrap_required"] is False
+    trial = client.post("/v1/trial/start", headers=headers)
+    assert trial.status_code == 200, trial.text
     created = client.post("/v1/admin/users", headers=headers, json={"email": "analyst@acme.test", "password": "another correct password", "role": "analyst"})
     assert created.status_code == 200, created.text
     members = client.get("/v1/admin/users", headers=headers)

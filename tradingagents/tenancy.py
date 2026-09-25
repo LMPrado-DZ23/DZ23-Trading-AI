@@ -31,10 +31,10 @@ def _dummy_scrypt() -> None:
 ROLES = frozenset({"viewer", "analyst", "operator", "risk_manager", "admin", "auditor"})
 ROLE_PERMISSIONS = {
     "viewer": {"read"},
-    "analyst": {"read", "analysis"},
-    "operator": {"read", "analysis", "paper", "shadow", "demo"},
-    "risk_manager": {"read", "analysis", "paper", "shadow", "demo", "risk", "kill_switch"},
-    "admin": {"read", "analysis", "paper", "shadow", "demo", "risk", "kill_switch", "admin"},
+    "analyst": {"read", "analysis", "agency_submit"},
+    "operator": {"read", "analysis", "agency_submit", "agency_run", "paper", "shadow", "demo"},
+    "risk_manager": {"read", "analysis", "agency_submit", "agency_run", "agency_approve", "paper", "shadow", "demo", "risk", "kill_switch"},
+    "admin": {"read", "analysis", "agency_submit", "agency_run", "agency_approve", "agent_admin", "paper", "shadow", "demo", "risk", "kill_switch", "admin"},
     "auditor": {"read", "audit"},
 }
 

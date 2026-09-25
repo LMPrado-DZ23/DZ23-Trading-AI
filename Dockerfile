@@ -10,7 +10,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 WORKDIR /build
 COPY . .
 # [desk] = painel (fastapi/uvicorn), Postgres e corretoras/feed (ccxt).
-RUN pip install --no-cache-dir ".[desk]"
+RUN python -m pip install --no-cache-dir --upgrade pip wheel \
+ && pip install --no-cache-dir ".[desk]"
 
 FROM python:3.12-slim
 

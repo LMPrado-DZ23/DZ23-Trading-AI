@@ -31,6 +31,15 @@ def test_base_url_required(monkeypatch):
 
 
 @pytest.mark.unit
+def test_base_url_required_does_not_inherit_openai_sdk_environment(monkeypatch):
+    monkeypatch.delenv("OPENAI_COMPATIBLE_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://ambient.example/v1")
+    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+    with pytest.raises(ValueError, match="requires a base_url"):
+        create_llm_client(provider="openai_compatible", model="m").get_llm()
+
+
+@pytest.mark.unit
 def test_keyless_local_uses_placeholder_and_chat_completions(monkeypatch):
     monkeypatch.delenv("OPENAI_COMPATIBLE_API_KEY", raising=False)
     llm = create_llm_client(

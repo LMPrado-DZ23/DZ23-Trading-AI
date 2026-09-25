@@ -8,6 +8,7 @@ import asyncio
 import contextlib
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
 import os
@@ -30,7 +31,10 @@ from fastapi.responses import (
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from starlette.routing import Match
 
+from tradingagents.agency import AgencyTask, build_llm_handler
+from tradingagents.agency.store import AgencyTaskStore
 from tradingagents.agency_runtime import AgencyRuntime
+from tradingagents.desk.storage import escrever_json_atomico
 from tradingagents.domain import (
     MarketSnapshot,
     OrderRequest,
@@ -46,11 +50,26 @@ from tradingagents.telemetry import AuditLog, EventBus, MetricsRegistry
 from tradingagents.tenancy import AuthError, PostgresTenantStore, Principal, TenantStore
 from tradingagents.workers import WorkerSupervisor
 
-DATA = Path(os.environ.get("DATA_DIR", "/data"))
-DATA.mkdir(parents=True, exist_ok=True)
+
+def _resolve_data_dir() -> Path:
+    requested = Path(os.environ.get("DATA_DIR", "/data"))
+    try:
+        requested.mkdir(parents=True, exist_ok=True)
+        return requested
+    except OSError as exc:
+        fallback = Path(os.environ.get("TMPDIR", "/tmp")) / "dz23-data"
+        fallback.mkdir(parents=True, exist_ok=True)
+        logging.getLogger("tradingagents.service").warning(
+            "DATA_DIR indisponível (%s); usando fallback temporário", type(exc).__name__)
+        return fallback
+
+
+DATA = _resolve_data_dir()
 CFG_PATH = DATA / "config.json"
 DB = DATA / "jobs.db"
+LIVE_HALT_PATH = DATA / "live-halts.json"
 HEALTH: dict = {"armazenamento": "?", "avisos": []}
+LOGGER = logging.getLogger("tradingagents.service")
 
 
 def _build_job_store():
@@ -78,6 +97,7 @@ if DATABASE_URL and not os.environ.get("DATABASE_URL"):
 
 JOB_STORE = _build_job_store()
 PASSWORD = os.environ.get("ACCESS_PASSWORD", "")
+MULTI_TENANT_REQUESTED = os.environ.get("MULTI_TENANT_ENABLED", "false").lower() == "true"
 MULTI_TENANT_ENABLED = os.environ.get("MULTI_TENANT_ENABLED", "false").lower() == "true"
 # SAAS_MODE (§7): trava fail-closed do produto SaaS. Ligado, EXIGE multi-tenant
 # + signing key + billing store transacional (DATABASE_URL/Postgres). Config
@@ -140,7 +160,8 @@ def _enforce_saas_mode() -> None:
 STATIC = Path(__file__).parent / "static"
 AGENCY_AUDIT = AuditLog(DATA / "agency-events.jsonl")
 AGENCY_EVENT_BUS = EventBus(AGENCY_AUDIT)
-AGENCY = AgencyRuntime(audit_log=AGENCY_AUDIT, event_bus=AGENCY_EVENT_BUS)
+AGENCY = AgencyRuntime(audit_log=AGENCY_AUDIT, event_bus=AGENCY_EVENT_BUS,
+                       store=AgencyTaskStore(DATA / "agency.db"))
 AUDIT_LOG = AuditLog(DATA / "execution-events.jsonl")
 EVENT_BUS = EventBus(AUDIT_LOG)
 PAPER_ADAPTER = PaperAdapter(state_path=DATA / "paper-state.json")
@@ -161,11 +182,25 @@ for _agent_id, _desk, _role in (
     ("market-scanner", "research", "Market Scanner"),
     ("technical-analyst", "research", "Technical Analyst"),
     ("sentiment-analyst", "research", "Sentiment Analyst"),
+    ("fundamental-analyst", "research", "Fundamental Analyst"),
+    ("macro-analyst", "research", "Macro Analyst"),
+    ("quant-researcher", "research", "Quant Researcher"),
+    ("alternative-data-agent", "research", "Alternative Data Analyst"),
     ("strategy-agent", "strategy", "Strategy Researcher"),
     ("risk-advisor", "risk", "Risk Advisor"),
     ("portfolio-manager", "portfolio", "Portfolio Manager"),
     ("execution-planner", "execution", "Execution Planner"),
     ("reconciliation-agent", "monitoring", "Reconciliation"),
+    ("orderbook-analyst", "execution", "Order Book Analyst"),
+    ("trading-compliance-agent", "risk", "Trading Compliance"),
+    ("trade-journal-agent", "monitoring", "Trade Journal"),
+    ("research-agent", "research", "Business Research"),
+    ("news-agent", "intelligence", "News Intelligence"),
+    ("operations-agent", "operations", "Operations Manager"),
+    ("content-agent", "content", "Content Studio"),
+    ("finance-agent", "finance", "Financial Analyst"),
+    ("crm-agent", "crm", "CRM Manager"),
+    ("market-intelligence-agent", "intelligence", "Market Intelligence"),
 ):
     AGENCY.register_agent(_agent_id, _desk, _role)
 
@@ -228,21 +263,29 @@ _TRUSTED_PROXIES = frozenset(
 
 
 def _client_ip(request: Request) -> str:
-    """IP do cliente com ALLOWLIST de proxies confiáveis (§6). Só confia em
-    X-Forwarded-For quando o PEER DIRETO (request.client.host) é um proxy
-    declarado em TRUSTED_PROXIES; então pega o IP mais à direita do XFF que não
-    seja um proxy confiável. Sem allowlist, usa o peer direto (um cliente pode
-    forjar o header e escapar do rate limit)."""
+    """Resolve o IP apenas quando o peer é um proxy explicitamente confiável."""
     peer = request.client.host if request.client else "?"
-    if peer in _TRUSTED_PROXIES:
-        xff = [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",")
-               if p.strip()]
-        for cand in reversed(xff):
-            if cand not in _TRUSTED_PROXIES:
-                return cand
-        if xff:
-            return xff[0]
-    return peer
+    trusted_networks = []
+    for item in os.environ.get("TRUSTED_PROXY_NETWORKS", "").split(","):
+        item = item.strip()
+        if item:
+            try:
+                trusted_networks.append(ipaddress.ip_network(item, strict=False))
+            except ValueError:
+                LOGGER.warning("ignoring invalid TRUSTED_PROXY_NETWORKS entry")
+    try:
+        peer_ip = ipaddress.ip_address(peer)
+    except ValueError:
+        peer_ip = None
+    trusted = peer in _TRUSTED_PROXIES or (
+        peer_ip is not None and any(peer_ip in network for network in trusted_networks))
+    if not trusted:
+        return peer
+    forwarded = [item.strip() for item in request.headers.get("x-forwarded-for", "").split(",") if item.strip()]
+    for candidate in reversed(forwarded):
+        if candidate not in _TRUSTED_PROXIES:
+            return candidate
+    return forwarded[0] if forwarded else peer
 
 def _tenant_permission(request: Request) -> str:
     if request.url.path.startswith("/v1/admin"):
@@ -258,11 +301,24 @@ def _tenant_permission(request: Request) -> str:
     if request.url.path.startswith("/v1/config"):
         return "admin"
     if request.url.path.startswith("/v1/agency"):
+        path = request.url.path
+        if "/worker" in path and request.method != "GET":
+            return "agency_run"
+        if path.endswith("/approve"):
+            return "agency_approve"
+        if path.endswith("/run"):
+            return "agency_run"
+        if "/agents/" in path and request.method != "GET":
+            return "agent_admin"
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            return "agency_submit"
         return "analysis"
     return "analysis"
 
 
 def auth(request: Request, c: HTTPAuthorizationCredentials = Depends(bearer)):
+    if MULTI_TENANT_REQUESTED and not MULTI_TENANT_ENABLED:
+        raise HTTPException(503, "multi-tenant solicitado, mas indisponível; corrija a configuração")
     if MULTI_TENANT_ENABLED:
         if not TENANT_STORE or not c:
             raise HTTPException(401, "sessão multi-tenant obrigatória")
@@ -612,9 +668,82 @@ def load_cfg(tenant_id: str = "legacy") -> dict:
             cfg.update(json.loads(path.read_text()))
     return cfg
 
+
+_GENERAL_AGENT_IDS = (
+    "research-agent", "news-agent", "operations-agent", "content-agent",
+    "finance-agent", "crm-agent", "market-intelligence-agent",
+)
+_TRADING_AGENT_IDS = (
+    "market-scanner", "technical-analyst", "sentiment-analyst", "fundamental-analyst",
+    "macro-analyst", "quant-researcher", "alternative-data-agent", "strategy-agent",
+    "risk-advisor", "portfolio-manager", "execution-planner", "orderbook-analyst",
+    "trading-compliance-agent", "trade-journal-agent", "reconciliation-agent",
+)
+_AGENCY_LLM_AGENT_IDS = _GENERAL_AGENT_IDS + _TRADING_AGENT_IDS
+
+
+def configure_agency_llm(runtime, tenant_id: str) -> str | None:
+    """Configura handlers LLM por instância; retorna diagnóstico sem segredo."""
+    if all(agent_id in runtime.agency.executor.handlers for agent_id in _AGENCY_LLM_AGENT_IDS):
+        return None
+    try:
+        cfg = load_cfg(tenant_id)
+        conf, resolved_env = resolve_llm(cfg)
+        provider = str(conf.get("llm_provider", "")).strip()
+        model = str(conf.get("quick_think_llm") or conf.get("deep_think_llm") or "").strip()
+        if not provider or not model:
+            return "LLM não configurado para a agência"
+        api_key = resolved_env.get("OPENAI_COMPATIBLE_API_KEY")
+        if not api_key:
+            for key_name in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY"):
+                if cfg.get(key_name):
+                    api_key = cfg[key_name]
+                    break
+        role_by_agent = {
+            "research-agent": "pesquisa empresarial",
+            "news-agent": "inteligência de notícias",
+            "operations-agent": "operações e processos",
+            "content-agent": "estratégia e produção de conteúdo",
+            "finance-agent": "análise financeira sem execução de pagamentos",
+            "crm-agent": "gestão e qualificação de CRM",
+            "market-intelligence-agent": "inteligência competitiva e de mercado",
+            "market-scanner": "varredura de ativos e mercados",
+            "technical-analyst": "análise técnica, sem envio de ordens",
+            "sentiment-analyst": "sentimento de mercado e fontes públicas",
+            "fundamental-analyst": "análise fundamentalista",
+            "macro-analyst": "cenário macroeconômico",
+            "quant-researcher": "pesquisa quantitativa e backtests",
+            "alternative-data-agent": "dados alternativos e qualidade de fontes",
+            "strategy-agent": "pesquisa de estratégia e hipóteses",
+            "risk-advisor": "análise e bloqueio de risco, nunca aprovação própria",
+            "portfolio-manager": "análise de alocação e exposição",
+            "execution-planner": "planejamento Paper/Testnet, sem submissão",
+            "orderbook-analyst": "microestrutura e liquidez",
+            "trading-compliance-agent": "compliance e limites de mandato",
+            "trade-journal-agent": "registro e reconciliação de operações",
+            "reconciliation-agent": "reconciliação Paper/Testnet",
+        }
+        for agent_id in _AGENCY_LLM_AGENT_IDS:
+            if agent_id in runtime.agency.executor.handlers:
+                continue
+            runtime.agency.register_task_handler(
+                agent_id,
+                build_llm_handler(
+                    provider=provider,
+                    model=model,
+                    role=role_by_agent[agent_id],
+                    base_url=conf.get("backend_url"),
+                    api_key=api_key,
+                ),
+            )
+        return None
+    except Exception as exc:
+        LOGGER.warning("LLM da agência indisponível para tenant %s: %s", tenant_id, type(exc).__name__)
+        return f"LLM da agência indisponível ({type(exc).__name__})"
+
 def save_cfg(cfg: dict, tenant_id: str = "legacy"):
     path = tenant_cfg_path(tenant_id)
-    path.write_text(json.dumps(cfg, indent=2))
+    escrever_json_atomico(path, cfg)
     os.chmod(path, 0o600)
 
 
@@ -1060,7 +1189,153 @@ def agency_events(request: Request, after: int = 0, _=Depends(auth)):
 @app.get("/v1/agency/health")
 def agency_health(request: Request, _=Depends(auth)):
     runtime = runtime_for(request)
-    return {"runtime": "READY", "event_sequence": runtime.agency.event_bus.latest_sequence, "agents": len(runtime.agency.agents), "meetings": len(runtime.agency.meetings), "audit_log": str(DATA / "agency-events.jsonl")}
+    configured = sum(agent_id in runtime.agency.executor.handlers for agent_id in _AGENCY_LLM_AGENT_IDS)
+    required = len(_AGENCY_LLM_AGENT_IDS)
+    agent_details = [
+        {
+            "agent_id": agent_id,
+            "desk_id": agent["desk_id"],
+            "role": agent["role"],
+            "status": agent["status"],
+            "handler_configured": agent_id in runtime.agency.executor.handlers,
+        }
+        for agent_id, agent in sorted(runtime.agency.agents.items())
+    ]
+    return {
+        "runtime": "READY" if configured == required else "DEGRADED",
+        "event_sequence": runtime.agency.event_bus.latest_sequence,
+        "agents": len(runtime.agency.agents),
+        "llm_handlers": {"configured": configured, "required": required},
+        "agent_details": agent_details,
+        "next_action": None if configured == required else "Configure provider, model e credencial em /v1/config para este tenant",
+        "worker": runtime.agency.worker_status(request_tenant(request)),
+        "meetings": len(runtime.agency.meetings),
+        "audit_log": "tenant-scoped persistent event stream",
+    }
+
+
+@app.get("/v1/agency/tasks")
+def agency_tasks(request: Request, _=Depends(auth)):
+    """Lista apenas tarefas do tenant autenticado."""
+    tenant_id = request_tenant(request)
+    return {"tasks": runtime_for(request).agency.tasks_for_tenant(tenant_id)}
+
+
+@app.get("/v1/agency/memory")
+def agency_memory(request: Request, q: str = "", limit: int = 20, _=Depends(auth)):
+    if limit < 1 or limit > 100:
+        raise HTTPException(422, "limit deve estar entre 1 e 100")
+    return {"memories": runtime_for(request).agency.recall_memory(request_tenant(request), query=q, limit=limit)}
+
+
+@app.get("/v1/agency/missions")
+def agency_missions(request: Request, _=Depends(auth)):
+    return {"missions": runtime_for(request).agency.missions_for_tenant(request_tenant(request))}
+
+
+@app.post("/v1/agency/missions")
+async def agency_create_mission(req: Request, _=Depends(auth)):
+    body = await _json_body(req)
+    agent_ids = tuple(str(item) for item in body.get("agent_ids", _GENERAL_AGENT_IDS))
+    try:
+        mission = runtime_for(req).agency.create_mission(
+            request_tenant(req), str(body.get("objective", "")), agent_ids,
+            requires_approval=bool(body.get("requires_approval", False)))
+    except KeyError:
+        raise HTTPException(422, "agente da missão não encontrado") from None
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(422, f"missão inválida: {exc}") from exc
+    return mission
+
+
+@app.post("/v1/agency/tasks")
+async def agency_submit_task(req: Request, _=Depends(auth)):
+    body = await _json_body(req)
+    tenant_id = request_tenant(req)
+    try:
+        task = AgencyTask(
+            task_id=str(body.get("task_id") or uuid.uuid4()),
+            mission_id=str(body["mission_id"]),
+            tenant_id=tenant_id,
+            agent_id=str(body["agent_id"]),
+            kind=str(body["kind"]),
+            payload=dict(body.get("payload", {})),
+            idempotency_key=str(body.get("idempotency_key") or uuid.uuid4()),
+            dependencies=tuple(str(item) for item in body.get("dependencies", [])),
+            requires_approval=bool(body.get("requires_approval", False)),
+            max_attempts=int(body.get("max_attempts", 2)),
+        )
+        created = runtime_for(req).agency.submit_task(task)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(422, f"tarefa inválida: {exc}") from exc
+    item = next(item for item in runtime_for(req).agency.tasks_for_tenant(tenant_id)
+                if item["task_id"] == created.task_id)
+    return {"task": item}
+
+
+@app.post("/v1/agency/tasks/{task_id}/approve")
+def agency_approve_task(task_id: str, request: Request, _=Depends(auth)):
+    try:
+        task = runtime_for(request).agency.approve_task(task_id, request_tenant(request))
+    except KeyError:
+        raise HTTPException(404, "tarefa não encontrada") from None
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {"task_id": task.task_id, "status": task.status.value}
+
+
+@app.post("/v1/agency/tasks/run")
+async def agency_run_tasks(req: Request, _=Depends(auth)):
+    body = {} if req.headers.get("content-length", "0") == "0" else await _json_body(req)
+    try:
+        timeout = min(max(float(body.get("timeout", 30)), 0.1), 120)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(422, "timeout inválido") from exc
+    runtime = runtime_for(req)
+    diagnostic = configure_agency_llm(runtime, request_tenant(req))
+    result = runtime.agency.run_tasks(request_tenant(req), timeout=timeout)
+    if diagnostic:
+        result["llm"] = {"status": "degraded", "reason": diagnostic}
+    else:
+        result["llm"] = {"status": "ready"}
+    return result
+
+
+@app.get("/v1/agency/worker/status")
+def agency_worker_status(request: Request, _=Depends(auth)):
+    try:
+        return runtime_for(request).agency.worker_status(request_tenant(request))
+    except KeyError:
+        raise HTTPException(403, "worker pertence a outro tenant") from None
+
+
+@app.post("/v1/agency/worker/start")
+async def agency_worker_start(req: Request, _=Depends(auth)):
+    body = {} if req.headers.get("content-length", "0") == "0" else await _json_body(req)
+    try:
+        poll_interval = float(body.get("poll_interval", 1.0))
+        cycle_timeout = float(body.get("cycle_timeout", 30.0))
+        tenant_runtime = runtime_for(req)
+        runtime = tenant_runtime.agency
+        tenant_id = request_tenant(req)
+        diagnostic = configure_agency_llm(tenant_runtime, tenant_id)
+        pending = [task for task in runtime.tasks_for_tenant(tenant_id)
+                   if task["status"] in {"QUEUED", "RETRYING", "WAITING_DEPENDENCY"}]
+        if diagnostic and pending:
+            raise HTTPException(409, diagnostic)
+        return runtime.start_worker(tenant_id, poll_interval=poll_interval, cycle_timeout=cycle_timeout)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(422, f"configuração de worker inválida: {exc}") from exc
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@app.post("/v1/agency/worker/stop")
+def agency_worker_stop(request: Request, _=Depends(auth)):
+    try:
+        return runtime_for(request).agency.stop_worker(request_tenant(request))
+    except KeyError:
+        raise HTTPException(403, "worker pertence a outro tenant") from None
 
 
 @app.get("/v1/office/snapshot")
@@ -1239,14 +1514,25 @@ class TenantRuntime:
         bus = EventBus(audit)
         self.execution_event_bus = bus
         self.agency_audit = AuditLog(root / "agency-events.jsonl")
-        self.agency = AgencyRuntime(audit_log=self.agency_audit, event_bus=EventBus(self.agency_audit))
+        self.agency = AgencyRuntime(audit_log=self.agency_audit, event_bus=EventBus(self.agency_audit),
+                                    store=AgencyTaskStore(root / "agency.db"))
         self.paper = PaperAdapter(state_path=root / "paper-state.json")
         self.shadow = ShadowAdapter(state_path=root / "shadow-state.json")
         self.kill_switch = KillSwitch(root / "kill-switch.json")
         self.metrics = MetricsRegistry()
         self.reconciliation = ReconciliationMonitor(self.paper.reconciliation_snapshot, lambda: (_ for _ in ()).throw(RuntimeError("provider remoto de reconciliação não configurado")))
         self.router = ExecutionRouter(risk_engine=RiskEngine(), audit_log=audit, event_bus=bus, kill_switch=self.kill_switch, metrics=self.metrics, reconciliation_guard=lambda: bool(self.reconciliation.last_report and self.reconciliation.last_report.is_safe))
-        for agent_id, desk, role in (("market-scanner", "research", "Market Scanner"), ("technical-analyst", "research", "Technical Analyst"), ("strategy-agent", "strategy", "Strategy Researcher"), ("risk-advisor", "risk", "Risk Advisor"), ("portfolio-manager", "portfolio", "Portfolio Manager"), ("execution-planner", "execution", "Execution Planner"), ("reconciliation-agent", "monitoring", "Reconciliation")):
+        for agent_id, desk, role in (("market-scanner", "research", "Market Scanner"), ("technical-analyst", "research", "Technical Analyst"), ("sentiment-analyst", "research", "Sentiment Analyst"), ("fundamental-analyst", "research", "Fundamental Analyst"), ("macro-analyst", "research", "Macro Analyst"), ("quant-researcher", "research", "Quant Researcher"), ("alternative-data-agent", "research", "Alternative Data Analyst"), ("strategy-agent", "strategy", "Strategy Researcher"), ("risk-advisor", "risk", "Risk Advisor"), ("portfolio-manager", "portfolio", "Portfolio Manager"), ("execution-planner", "execution", "Execution Planner"), ("orderbook-analyst", "execution", "Order Book Analyst"), ("trading-compliance-agent", "risk", "Trading Compliance"), ("trade-journal-agent", "monitoring", "Trade Journal"), ("reconciliation-agent", "monitoring", "Reconciliation")):
+            self.agency.register_agent(agent_id, desk, role)
+        for agent_id, desk, role in (
+            ("research-agent", "research", "Business Research"),
+            ("news-agent", "intelligence", "News Intelligence"),
+            ("operations-agent", "operations", "Operations Manager"),
+            ("content-agent", "content", "Content Studio"),
+            ("finance-agent", "finance", "Financial Analyst"),
+            ("crm-agent", "crm", "CRM Manager"),
+            ("market-intelligence-agent", "intelligence", "Market Intelligence"),
+        ):
             self.agency.register_agent(agent_id, desk, role)
 
 
@@ -2050,9 +2336,14 @@ def _desk_boot(tenant_id: str) -> dict:
                 mesa_deveria_rodar=True, mesa_rodando=True,
                 erros_do_ciclo=sched_.state.errors if sched_ else 0)
             if alertas:
-                _notificador(tenant_id).enviar(alertas)
-        except Exception:
-            pass          # alerta nunca pode derrubar o ciclo
+                resultado = _notificador(tenant_id).enviar(alertas)
+                if resultado.get("falhas"):
+                    METRICS.inc("alerts.delivery_failed", len(resultado["falhas"]))
+                    LOGGER.warning("alert delivery failed: %s", len(resultado["falhas"]))
+        except Exception as exc:
+            METRICS.inc("alerts.delivery_callback_failed")
+            LOGGER.exception("alert callback failed: %s", type(exc).__name__)
+            # O alerta não derruba o ciclo, mas a falha permanece observável.
         desk["cycles"].append({"em": _now().isoformat(), "origem": feed_kind,
                                "resumo": out.get("resumo", ""),
                                "vetos": out.get("vetos", []),
@@ -2334,7 +2625,7 @@ def database_health(_=Depends(auth)):
 # ============================================================ DINHEIRO REAL
 # Autorizado pelo dono. Três fechaduras independentes: a frase exata, o teto
 # por ordem e o teto de perda diária — mais a parada de emergência.
-from tradingagents.brokers.ccxt_bridge import LIVE_CONFIRM_PHRASE  # noqa: E402
+from tradingagents.brokers.ccxt_bridge import LIVE_CONFIRM_PHRASE  # noqa: E402  # isort: skip
 
 # Parada de emergência DURÁVEL. O conjunto em memória anterior desarmava
 # sozinho a cada reinício — o dono acreditava ter parado tudo e não tinha.
@@ -2401,6 +2692,28 @@ def _parada(tenant_id: str) -> DeskKillSwitch:
     return DeskKillSwitch(armazem, tenant_id)
 
 
+def _load_live_halts() -> set[str]:
+    try:
+        body = json.loads(LIVE_HALT_PATH.read_text(encoding="utf-8"))
+        return {str(item) for item in body if isinstance(item, str)}
+    except (OSError, TypeError, ValueError):
+        return set()
+
+
+_LIVE_HALTED: set[str] = _load_live_halts()
+
+
+def _persist_live_halts() -> None:
+    escrever_json_atomico(LIVE_HALT_PATH, sorted(_LIVE_HALTED))
+    os.chmod(LIVE_HALT_PATH, 0o600)
+
+
+def _live_halted(tenant_id: str) -> bool:
+    _LIVE_HALTED.clear()
+    _LIVE_HALTED.update(_load_live_halts())
+    return tenant_id in _LIVE_HALTED or _parada(tenant_id).bloqueia
+
+
 @app.get("/v1/live/status")
 def live_status(request: Request, _=Depends(auth)):
     """Diz, sem rodeio, se este inquilino pode operar dinheiro real e o que
@@ -2445,6 +2758,8 @@ def live_emergency(request: Request, _=Depends(auth)):
     tid = request_tenant(request)
     parada = _parada(tid)
     parada.acionar("acionada pelo painel", por=tid)
+    _LIVE_HALTED.add(tid)
+    _persist_live_halts()
     d = _DESKS.get(tid)
     if d is None:
         return {"ok": True, "parado": True, "a_encerrar": [],
@@ -2489,6 +2804,8 @@ async def live_resume(req: Request, _=Depends(auth)):
         parada.liberar(frase_correta=True, reconciliado=True, por=tid)
     except KillSwitchError as exc:
         raise HTTPException(409, str(exc)) from None
+    _LIVE_HALTED.discard(tid)
+    _persist_live_halts()
     _DESKS.pop(tid, None)          # reconstrói limpo no próximo uso
     return {"ok": True, "liberado": True,
             "aviso": "envios liberados; confira os tetos antes de retomar"}

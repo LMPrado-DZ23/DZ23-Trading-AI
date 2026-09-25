@@ -71,6 +71,12 @@ ROUTE_POLICY: dict[tuple[str, str], WriteAccess] = {
     ("POST", "/v1/live/liberar"): WriteAccess.BLOCK_READONLY,
     ("POST", "/v1/alertas/verificar"): WriteAccess.BLOCK_READONLY,
     ("POST", "/v1/mudanca/importar"): WriteAccess.BLOCK_READONLY,
+    ("POST", "/v1/agency/missions"): WriteAccess.BLOCK_READONLY,
+    ("POST", "/v1/agency/tasks"): WriteAccess.BLOCK_READONLY,
+    ("POST", "/v1/agency/tasks/run"): WriteAccess.BLOCK_READONLY,
+    ("POST", "/v1/agency/tasks/{task_id}/approve"): WriteAccess.BLOCK_READONLY,
+    ("POST", "/v1/agency/worker/start"): WriteAccess.BLOCK_READONLY,
+    ("POST", "/v1/agency/worker/stop"): WriteAccess.BLOCK_READONLY,
 }
 
 # Ações do kill-switch validadas no servidor: engatar reduz risco (liberado);

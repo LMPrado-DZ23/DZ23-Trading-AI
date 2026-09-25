@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from typing import Any
+from uuid import uuid4
 
+from tradingagents.agency import AgencyExecutor, AgencyTask
+from tradingagents.agency.store import AgencyTaskStore
+from tradingagents.agency.worker import AgencyWorker
 from tradingagents.telemetry import AuditEvent, AuditLog
 from tradingagents.telemetry.event_bus import EventBus
 
@@ -33,9 +37,13 @@ class Meeting:
 
 
 class AgencyRuntime:
-    def __init__(self, audit_log: AuditLog | None = None, event_bus: EventBus | None = None):
+    def __init__(self, audit_log: AuditLog | None = None, event_bus: EventBus | None = None,
+                 store: AgencyTaskStore | None = None, max_workers: int = 16):
         self.audit_log = audit_log
         self.event_bus = event_bus or EventBus()
+        self.executor = AgencyExecutor(event_bus=self.event_bus, store=store, max_workers=max_workers)
+        self.store = store
+        self.worker = AgencyWorker(self)
         self.meetings: dict[str, Meeting] = {}
         self.agents: dict[str, dict[str, Any]] = {}
         self.desks: dict[str, dict[str, Any]] = {}
@@ -65,7 +73,85 @@ class AgencyRuntime:
         return meeting
 
     def snapshot(self) -> dict[str, Any]:
-        return {"agents": list(self.agents.values()), "desks": list(self.desks.values()), "meetings": [asdict(meeting) for meeting in self.meetings.values()], "sequence": self.event_bus.latest_sequence}
+        return {"agents": list(self.agents.values()), "desks": list(self.desks.values()), "meetings": [asdict(meeting) for meeting in self.meetings.values()], "tasks": self.executor.snapshot(), "worker": self.worker.status(), "sequence": self.event_bus.latest_sequence}
+
+    def register_task_handler(self, agent_id: str, handler) -> None:
+        """Registra execução real; ausência de handler não vira sucesso falso."""
+        if agent_id not in self.agents:
+            raise KeyError(agent_id)
+        self.executor.register_handler(agent_id, handler)
+
+    def submit_task(self, task: AgencyTask) -> AgencyTask:
+        if task.agent_id not in self.agents:
+            raise KeyError(task.agent_id)
+        return self.executor.submit(task)
+
+    def create_mission(self, tenant_id: str, objective: str, agent_ids: tuple[str, ...], *, requires_approval: bool = False) -> dict[str, Any]:
+        objective = objective.strip()
+        if not objective:
+            raise ValueError("objective obrigatório")
+        if not agent_ids:
+            raise ValueError("ao menos um agente é obrigatório")
+        unknown = [agent_id for agent_id in agent_ids if agent_id not in self.agents]
+        if unknown:
+            raise KeyError(unknown[0])
+        mission_id = f"mission-{uuid4().hex[:16]}"
+        tasks = []
+        for agent_id in agent_ids:
+            task_id = f"{mission_id}-{agent_id}"
+            tasks.append(self.submit_task(AgencyTask(
+                task_id, mission_id, tenant_id, agent_id, "mission",
+                {"objective": objective, "remember": True},
+                f"{tenant_id}:{mission_id}:{agent_id}",
+                requires_approval=requires_approval)))
+        return {"mission_id": mission_id, "objective": objective,
+                "tasks": [self.executor._serialize(task) for task in tasks]}
+
+    def missions_for_tenant(self, tenant_id: str) -> list[dict[str, Any]]:
+        grouped: dict[str, dict[str, Any]] = {}
+        for item in self.tasks_for_tenant(tenant_id):
+            mission = grouped.setdefault(item["mission_id"], {"mission_id": item["mission_id"], "tasks": []})
+            mission["tasks"].append(item)
+        return list(grouped.values())
+
+    def tasks_for_tenant(self, tenant_id: str) -> list[dict[str, Any]]:
+        if not tenant_id.strip():
+            raise ValueError("tenant_id obrigatório")
+        return [item for item in self.executor.snapshot()["tasks"]
+                if item["tenant_id"] == tenant_id]
+
+    def approve_task(self, task_id: str, tenant_id: str) -> AgencyTask:
+        task = self.executor.tasks.get(task_id)
+        if task is None or task.tenant_id != tenant_id:
+            raise KeyError(task_id)
+        return self.executor.approve(task_id)
+
+    def run_tasks(self, tenant_id: str, *, timeout: float = 30.0) -> dict[str, Any]:
+        if not tenant_id.strip():
+            raise ValueError("tenant_id obrigatório")
+        self.executor.run_until_idle(timeout=timeout, tenant_id=tenant_id)
+        return {"tasks": self.tasks_for_tenant(tenant_id),
+                "workers": self.executor.max_workers}
+
+    def start_worker(self, tenant_id: str, *, poll_interval: float = 1.0, cycle_timeout: float = 30.0) -> dict[str, Any]:
+        return self.worker.start(tenant_id, poll_interval=poll_interval, cycle_timeout=cycle_timeout)
+
+    def stop_worker(self, tenant_id: str) -> dict[str, Any]:
+        status = self.worker.status()
+        if status["tenant_id"] and status["tenant_id"] != tenant_id:
+            raise KeyError(tenant_id)
+        return self.worker.stop()
+
+    def worker_status(self, tenant_id: str) -> dict[str, Any]:
+        status = self.worker.status()
+        if status["tenant_id"] and status["tenant_id"] != tenant_id:
+            raise KeyError(tenant_id)
+        return status
+
+    def recall_memory(self, tenant_id: str, *, query: str = "", limit: int = 20) -> list[dict[str, Any]]:
+        if not self.store:
+            return []
+        return self.store.recall(tenant_id, query=query, limit=limit)
 
     def _emit(self, event: AuditEvent) -> None:
         if self.audit_log:
