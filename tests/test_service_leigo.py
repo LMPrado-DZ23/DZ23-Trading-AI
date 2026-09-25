@@ -172,6 +172,25 @@ class TestPainelMesaDeAgentes:
         assert again["ordens"] == []                 # segundo ciclo não duplica
 
 
+class TestAgenciaGeralTarefas:
+    def test_task_control_plane_is_tenant_scoped_and_approval_gated(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = _load_app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+        h = {"Authorization": "Bearer s3nh4"}
+        created = c.post("/v1/agency/tasks", headers=h, json={
+            "mission_id": "mission-1", "agent_id": "market-scanner",
+            "kind": "research", "payload": {"topic": "BTC"},
+            "idempotency_key": "task-once", "requires_approval": True})
+        assert created.status_code == 200
+        assert created.json()["task"]["status"] == "REVIEW_REQUIRED"
+        assert c.post("/v1/agency/tasks/run", headers=h).json()["tasks"][0]["status"] == "REVIEW_REQUIRED"
+        approved = c.post(f"/v1/agency/tasks/{created.json()['task']['task_id']}/approve", headers=h)
+        assert approved.status_code == 200 and approved.json()["status"] == "QUEUED"
+        run = c.post("/v1/agency/tasks/run", headers=h).json()
+        assert run["tasks"][0]["status"] == "FAILED"  # sem handler real, nunca finge sucesso
+
+
 class TestDiagnosticoDoFeed:
     """Quando o mercado não chega, o painel diz o motivo e a próxima ação —
     não fica mudo (o leigo precisa saber se é firewall ou exchange fora)."""

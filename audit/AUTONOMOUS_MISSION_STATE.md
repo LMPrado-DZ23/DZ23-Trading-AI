@@ -199,3 +199,114 @@
 | security | `pip-audit --local: No known vulnerabilities found` |
 | smoke | API e multi-tenant PASS |
 | next_external_step | Revisão humana do diff e abertura de PR/merge conforme autorização do mantenedor. |
+
+
+## Nova missão: agência geral multiagente com trading Paper/Testnet
+
+| Campo | Valor |
+| --- | --- |
+| mission_id | `DZ23-AGENCY-GENERAL-20260924` |
+| state | `PLANNING` |
+| objective | Evoluir a mesa multiagente para uma agência geral de negócios, com agentes concorrentes de pesquisa, mercado, operações, conteúdo, financeiro, CRM, risco e trading governado. |
+| selected_scope | Agência geral com trading como módulo |
+| operational_mode | Paper/Testnet; Live bloqueado |
+| rigor | L4 para trading/financeiro; L3 para módulos gerais |
+| architecture_assumption | Monólito modular com control plane, fila durável, pool limitado de workers, event bus e persistência PostgreSQL; extrair serviços somente com evidência de escala. |
+| rollback | Commit publicado `db5533e`; alterações da nova fase ainda não iniciadas. |
+| next_action | Finalizar brief/arquitetura e implementar os contratos do núcleo de missões, tarefas, agentes, permissões e resultados. |
+
+### Gates da nova missão
+
+- [ ] Brief e arquitetura versionados.
+- [ ] Contratos de missão/tarefa/agente/resultado com validação server-side.
+- [ ] Execução concorrente limitada, idempotente e recuperável.
+- [ ] Aprovação humana para ações externas e financeiras.
+- [ ] Proveniência e auditoria por resultado.
+- [ ] API/painel para objetivos, tarefas, agentes, eventos e aprovações.
+- [ ] Trading integrado apenas em Paper/Testnet com kill switch e reconciliação.
+- [ ] Suíte completa, testes de concorrência, segurança e reinício.
+- [ ] Auditorias independentes e publicação somente após gates.
+
+### Blockers e limites
+
+- Operação Live não faz parte do aceite desta missão.
+- Credenciais, contas de corretora, publicação externa e pagamentos não serão ativados automaticamente.
+- Execução 24/7 em infraestrutura externa ainda precisa ser escolhida e validada; o desenvolvimento local continuará independente dessa decisão.
+
+
+## Progresso da fase 1 — núcleo e control plane
+
+- [x] Brief de produto geral multiagente criado em `docs/AGENCY-PRODUCT-BRIEF.md`.
+- [x] Arquitetura concorrente e governada criada em `docs/AGENCY-ARCHITECTURE.md`.
+- [x] Contratos `AgentSpec`, `AgencyTask`, `TaskResult`, `EvidenceRef` e `TaskStatus` implementados.
+- [x] `AgencyExecutor` implementado com dependências, concorrência limitada, idempotência, retry, cancelamento, aprovação e eventos.
+- [x] Executor integrado ao `AgencyRuntime` existente.
+- [x] API autenticada para listar/criar/aprovar/executar tarefas criada.
+- [x] Testes de concorrência, dependência, idempotência, aprovação, falha e integração adicionados.
+- [x] Tarefas sem handler real falham explicitamente; não há stub apresentado como agente funcional.
+
+### Evidência desta fase
+
+- 8 testes do executor/runtime passaram.
+- Teste da API de tarefas passou após corrigir requisição vazia com `Content-Length: 0`.
+- Lint e compilação dos módulos alterados passaram.
+
+### Próxima ação
+
+Executar a suíte completa; depois implementar adapters de agentes reais para pesquisa, operações, conteúdo, financeiro, CRM e inteligência de mercado, com provider configurado, orçamento, evidência e revisão humana.
+
+
+## Loop contínuo — agência geral completa e publicação
+
+| Campo | Valor |
+| --- | --- |
+| mission_id | `DZ23-AGENCY-CONTINUOUS-20260924` |
+| state | `EXECUTING` |
+| objective | Implementar adapters LLM reais, agentes gerais, memória tenant-scoped, fila durável com retomada, aprovações completas, painel operacional, Paper/Testnet aprofundado, testes de carga, auditorias e publicação no GitHub. |
+| scope | Agência geral de negócios com trading como módulo governado. |
+| rigor | L4 para finanças/trading e segurança; L3 para módulos gerais. |
+| authorization | O usuário autorizou enviar as novas alterações ao GitHub após gates. Não fazer force-push, deploy irreversível, pagamentos ou operação Live. |
+| base_commit | `db5533e` |
+| current_branch | `main` |
+| rollback | Reverter para `db5533e` ou usar commits atômicos desta missão; não apagar alterações locais existentes. |
+| next_action | Implementar handlers LLM reais e registro de agentes com credenciais por instância, sem mutação de ambiente global durante concorrência. |
+
+### Definition of Done
+
+A missão só será marcada como concluída quando o fluxo objetivo → plano → tarefas concorrentes → handlers reais → evidências/memória → aprovação → resultado puder ser executado por tenant, sobreviver a reinício, aparecer no painel, passar pelo módulo Paper/Testnet, e os gates de lint, testes, carga, segurança, diff e remoto estiverem verdes.
+
+### Riscos controlados
+
+Live permanece bloqueado. Agentes não podem pagar, publicar, enviar mensagens externas, alterar credenciais ou emitir ordens Live sem aprovação/política. Respostas LLM sem evidência serão marcadas como não verificadas; nenhum mock será apresentado como integração real.
+
+### Anti-loop
+
+`attempt_count=1`, `same_failure_count=0`, `last_progress_at=2026-09-24T20:52:34-03:00`. Após três falhas equivalentes, mudar a estratégia; após cinco sem progresso, reduzir para reprodução mínima e registrar bloqueio.
+
+STATUS: CONTINUE
+
+
+## Auditoria independente e correções de segurança
+
+A revisão independente inicialmente bloqueou a publicação por quatro problemas: estado `REVIEW_REQUIRED` não persistido antes do insert; recuperação/timeout sem claim atômico; permissões de agência reduzidas apenas a `analysis`; e aprovação controlável pelo cliente. Também apontou perda de timestamps de evidência e caminho absoluto no health.
+
+Correções aplicadas: o executor agora força `REVIEW_REQUIRED` antes da persistência para tipos sensíveis; o store tem `claim` atômico e recuperação por lease; o executor drena futures locais antes de retornar no timeout; `observed_at` e `finished_at` são restaurados; permissões `agency_submit`, `agency_run`, `agency_approve` e `agent_admin` foram separadas por papel; ações sensíveis são aprovadas server-side; e health não expõe caminho de filesystem.
+
+Evidência após correção: 19 testes focados passaram, `ruff check .`, compilação e `git diff --check` passaram, lockfile e `pip-audit` passaram, e a varredura simples de segredos encontrou zero arquivo/padrão sensível. A suíte completa pós-correção está em execução.
+
+STATUS: CONTINUE
+
+## Gate final antes do GitHub
+
+| Gate | Resultado |
+| --- | --- |
+| Suíte completa pós-correções | `1300 passed, 2 skipped, 71 subtests` |
+| Lint | `ruff check . PASS` |
+| Compilação | `compileall PASS` |
+| Lock/dependências | `uv lock --check PASS; pip-audit: No known vulnerabilities found` |
+| Carga/execução contínua | testes de burst, retry e ciclos repetidos PASS |
+| Segurança | aprovação persistida, claim atômico, permissões específicas, secret scan PASS |
+| Paper/Testnet | travas existentes preservadas; Live continua bloqueado |
+| Git | sem force-push; publicação autorizada em `origin/main` |
+
+STATUS: READY_TO_PUBLISH
