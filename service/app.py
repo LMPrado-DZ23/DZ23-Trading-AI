@@ -12,6 +12,7 @@ import ipaddress
 import json
 import logging
 import os
+import re
 import secrets
 import threading
 import time
@@ -288,6 +289,10 @@ def _client_ip(request: Request) -> str:
     return forwarded[0] if forwarded else peer
 
 def _tenant_permission(request: Request) -> str:
+    # §10: encerrar a PRÓPRIA sessão é direito de todo usuário autenticado —
+    # 'read' é a capacidade que todos os papéis têm (inclui viewer e auditor).
+    if request.url.path == "/v1/auth/logout":
+        return "read"
     if request.url.path.startswith("/v1/admin"):
         return "admin"
     if request.method in {"GET", "HEAD"}:
@@ -420,16 +425,20 @@ def auth_me(principal=Depends(auth)):
 
 @app.post("/v1/auth/logout")
 def tenant_logout(request: Request, c: HTTPAuthorizationCredentials = Depends(bearer), _=Depends(auth)):
-    # Logout SEMPRE responde ok para qualquer sessão autenticada — revogar é
-    # idempotente e uma falha de revogação (token já expirado, etc.) não deve
-    # impedir o usuário de sair.
+    # §10: logout revoga o bearer E o step-up da PRÓPRIA sessão. Revogar um sid
+    # inexistente é no-op idempotente (UPDATE 0 linhas, não levanta). Mas FALHA de
+    # PERSISTÊNCIA (banco fora) NÃO pode ser apresentada como revogação confirmada:
+    # nesse caso respondemos 503, porque o bearer pode continuar válido.
     if MULTI_TENANT_ENABLED and TENANT_STORE and c:
         principal = getattr(request.state, "principal", None)
-        if isinstance(principal, Principal):
-            with contextlib.suppress(Exception):
+        try:
+            TENANT_STORE.revoke(c.credentials)                       # invalida o bearer
+            if isinstance(principal, Principal):
                 TENANT_STORE.revoke_step_up_for_session(principal.token_id)  # §5
-        with contextlib.suppress(Exception):
-            TENANT_STORE.revoke(c.credentials)
+        except Exception as exc:  # noqa: BLE001 — persistência falhou; não mentir
+            raise HTTPException(
+                503, "logout não confirmado (falha ao revogar a sessão); tente novamente"
+            ) from exc
     return {"ok": True}
 
 
@@ -1078,12 +1087,22 @@ async def set_cfg(req: Request, _=Depends(auth)):
         _desk_reset(tenant_id)
     return {"saved": saved}
 
+# §2: símbolo começa com alfanumérico e só admite [A-Z0-9 . _ : / -], até 20 chars.
+_TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9._:/-]{0,19}$")
+
+
 @app.post("/v1/jobs")
 async def new_job(req: Request, _=Depends(auth)):
     require_write(req)                    # somente-leitura bloqueia a escrita
     b = await _json_body(req)
     t, d = str(b.get("ticker", "")).strip().upper(), str(b.get("trade_date", "")).strip()
-    if not t or len(d) != 10:
+    # §2 (XSS): allowlist estrita de SÍMBOLO. Aceita ações e cripto (NVDA,
+    # BTC-USD, BTC/USDT, PETR4.SA, ETH:USDT) e RECUSA qualquer coisa com <, >,
+    # &, aspas, espaço ou '=' — o vetor de XSS nunca entra no ledger. A
+    # camada de render também escapa (defesa em profundidade p/ dados antigos).
+    if not t or not _TICKER_RE.match(t):
+        raise HTTPException(422, "ticker inválido — use um símbolo como NVDA, BTC-USD ou BTC/USDT")
+    if len(d) != 10:
         raise HTTPException(422, "ticker e trade_date (AAAA-MM-DD) obrigatórios")
     try:
         datetime.strptime(d, "%Y-%m-%d")
@@ -2163,6 +2182,15 @@ def oauth_callback(provider: str, code: str = "", state: str = ""):
 _DESKS: dict[str, dict] = {}
 
 
+def _platform_allows_live() -> bool:
+    """§1: decisão da PLATAFORMA sobre dinheiro real. AMBAS as flags do serviço
+    precisam estar ligadas (LIVE_TRADING e REAL_MONEY_EXECUTION); ausência => NÃO.
+    É o bloqueio que a frase de confirmação e as credenciais NÃO contornam."""
+    def _on(name: str) -> bool:
+        return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+    return _on("LIVE_TRADING") and _on("REAL_MONEY_EXECUTION")
+
+
 def _desk_boot(tenant_id: str) -> dict:
     from decimal import Decimal
 
@@ -2208,12 +2236,16 @@ def _desk_boot(tenant_id: str) -> dict:
     data_dir = DATA / "desks" / tenant_id
     broker, broker_mode = build_desk_broker(
         cfg, final_state={}, journal_path=str(data_dir / "broker.jsonl"),
-        paper_price=Decimal("100"))
+        paper_price=Decimal("100"), platform_allows_live=_platform_allows_live())
     coord = ExecutionCoordinator(mandate, ledger, risk,
                                  worker_id=f"worker-{tenant_id}", broker=broker)
     # Identidade e destino do relatório de reconciliação.
     coord.tenant_id = tenant_id
     coord.armazem = armazem
+    # §4: persistência DURÁVEL do OMS ANTES de cada despacho externo. Diferente do
+    # save de fim de ciclo (best-effort), este LEVANTA em falha — e o coordenador
+    # BLOQUEIA o envio se não conseguir lembrar da ordem.
+    coord.persist_hook = lambda: armazem.salvar(tenant_id, "oms", coord.snapshot_estado())
     # A mesa passa a saber o que a corretora PODE provar; sem corretora real,
     # a matriz fica DESCONHECIDA — e desconhecida não vira confiança.
     if broker is not None and hasattr(broker, "capacidades"):
@@ -2357,7 +2389,13 @@ def _desk_boot(tenant_id: str) -> dict:
         orch, coord, snapshot_provider=snaps_fn, price_provider=prices_fn,
         state_path=data_dir / "state.json", on_cycle=_record,
         armazem=armazem, tenant_id=tenant_id,
-        interval_seconds=int(os.environ.get("DESK_INTERVAL_SECONDS", "300")))
+        interval_seconds=int(os.environ.get("DESK_INTERVAL_SECONDS", "300")),
+        # §8: o laço revalida billing a cada ciclo. Conta somente-leitura (trial
+        # expirado/suspenso) ou billing indisponível (UNKNOWN_BILLING => read-only)
+        # pausa novo trabalho, sem liquidar posições. Self-host não tem billing.
+        entitlement_check=(
+            (lambda tid=tenant_id: not ACCT.is_read_only(estado_da_conta(tid)[0]))
+            if MULTI_TENANT_ENABLED else None))
     return desk
 
 
@@ -2434,12 +2472,18 @@ def desk_cycle(request: Request, _=Depends(auth), __=Depends(require_plan)):
 
 
 @app.post("/v1/desk/scheduler/{action}")
-def desk_scheduler(action: str, request: Request, _=Depends(auth), __=Depends(require_plan)):
+def desk_scheduler(action: str, request: Request, _=Depends(auth)):
     """Liga/desliga o laço autônomo. Ligado, roda sozinho — fechar o
-    navegador não interrompe nada. Start reconcilia ANTES de retomar."""
+    navegador não interrompe nada. Start reconcilia ANTES de retomar.
+
+    §8 (ACTION_AWARE): `start` AUMENTA exposição => exige conta com assinatura
+    (require_write bloqueia trial expirado/suspenso/billing indisponível).
+    `stop` REDUZ risco => sempre acessível, mesmo somente-leitura — nunca deixar
+    o dono sem conseguir PARAR a mesa. Parar NÃO liquida posições."""
     d = _desk_of(request)
     sched = d["scheduler"]
     if action == "start":
+        require_write(request)               # só o start passa pelo gate de billing
         recuperacao = sched.recover()
         return {"ok": True, "iniciado": sched.start(), "recuperacao": recuperacao,
                 "status": sched.status()}
@@ -3029,8 +3073,12 @@ async def importar_tudo(req: Request, _=Depends(auth)):
     corpo = await _json_body_limited(req, _IMPORT_BODY_MAX)
     frase = str(corpo.get("passphrase", ""))
     pacote = corpo["pacote"] if isinstance(corpo.get("pacote"), dict) else corpo
+    # §7: reautenticação (step-up) é exigida para TODO formato aceito — plano
+    # (dz23.mudanca/1) ou cifrado. Compatibilidade NÃO é desvio da política de
+    # segurança. Token single-use, vinculado à sessão; conta OAuth-only não
+    # consegue emitir (STEP_UP_PROVIDER_REAUTH_REQUIRED) e fica bloqueada aqui.
+    _require_step_up(req, "import")
     if pacote.get("formato") == portable.MAGIC:      # export cifrado
-        _require_step_up(req, "import")              # token single-use
         if len(frase) < portable.MIN_PASSPHRASE:
             raise HTTPException(422, {"erro": "frase-senha ausente/fraca no corpo"})
         # AAD liga o pacote ao tenant de origem: importar o de OUTRO tenant é 403.
@@ -3048,23 +3096,25 @@ async def importar_tudo(req: Request, _=Depends(auth)):
         # Presente no pacote (export antigo) mas DELIBERADAMENTE ignorado.
         ignorado.append("assinatura (só muda por pagamento/webhook ou admin)")
 
-    # §4: valida o SCHEMA de cada parte antes de restaurar (nada de tipo errado).
+    # §4/§7: valida o SCHEMA de TODAS as partes ANTES de aplicar qualquer uma.
+    # Pacote inválido não pode deixar a configuração PARCIALMENTE alterada.
     cfg = pacote.get("configuracao") or {}
     if not isinstance(cfg, dict):
         raise HTTPException(422, "configuração do pacote inválida")
-    if cfg:
-        limpo = {k: v for k, v in cfg.items()
-                 if k in ALLOWED_KEYS and isinstance(v, str) and v.strip()}
-        if limpo:
-            save_cfg({**load_cfg(tid), **limpo}, tid)
-            restaurado.append(f"configuração ({len(limpo)} itens)")
-
     aprend = pacote.get("aprendizado")
     mesa = pacote.get("mesa")
     if aprend is not None and not (isinstance(aprend, dict) and isinstance(aprend.get("desfechos", []), list)):
         raise HTTPException(422, "aprendizado do pacote inválido")
     if mesa is not None and not isinstance(mesa, dict):
         raise HTTPException(422, "estado da mesa do pacote inválido")
+
+    # tudo validado => aplica (config primeiro, depois mesa/aprendizado)
+    if cfg:
+        limpo = {k: v for k, v in cfg.items()
+                 if k in ALLOWED_KEYS and isinstance(v, str) and v.strip()}
+        if limpo:
+            save_cfg({**load_cfg(tid), **limpo}, tid)
+            restaurado.append(f"configuração ({len(limpo)} itens)")
 
     _desk_reset(tid)
     d = _desk_of(req)
@@ -3094,10 +3144,10 @@ def desk_reconciliar(request: Request, _=Depends(auth)):
     coord = d["coordinator"]
     corretora = coord.broker
 
-    def consultar(client_order_id: str):
+    def consultar(client_order_id: str, exchange_order_id: str = ""):
         if not hasattr(corretora, "fetch_order_by_client_id"):
             raise RuntimeError("corretora não expõe consulta por ordem")
-        return corretora.fetch_order_by_client_id(client_order_id)
+        return corretora.fetch_order_by_client_id(client_order_id, exchange_order_id)
 
     def consultar_posicoes():
         if not hasattr(corretora, "fetch_positions"):

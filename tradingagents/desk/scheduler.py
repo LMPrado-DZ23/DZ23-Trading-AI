@@ -52,7 +52,8 @@ class DeskScheduler:
     def __init__(self, orchestrator, coordinator, *, snapshot_provider,
                  price_provider, state_path: str | Path, on_cycle=None,
                  armazem=None, tenant_id: str = "legacy",
-                 interval_seconds: int = 300, max_snapshot_age_minutes: int = 15):
+                 interval_seconds: int = 300, max_snapshot_age_minutes: int = 15,
+                 entitlement_check=None):
         self.orchestrator = orchestrator
         self.coordinator = coordinator
         self.snapshot_provider = snapshot_provider
@@ -63,6 +64,11 @@ class DeskScheduler:
         self.interval = interval_seconds
         self.max_age = timedelta(minutes=max_snapshot_age_minutes)
         self.on_cycle = on_cycle       # o painel escuta aqui
+        # §8: gate de billing do LAÇO. Callable[[], bool]: True = pode criar nova
+        # exposição; False = conta sem assinatura (expirada/suspensa/billing
+        # indisponível) => PAUSA novo trabalho, sem liquidar posições. None => sem
+        # gate (self-host/testes). O laço nunca revalidava billing (achado §8).
+        self.entitlement_check = entitlement_check
         self.state = self._load()
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
@@ -115,6 +121,20 @@ class DeskScheduler:
         return fresh, discarded
 
     def run_once(self) -> dict:
+        # §8: revalida billing a CADA ciclo. Sem assinatura, NÃO cria exposição
+        # nova — mas o laço segue vivo e as posições NÃO são liquidadas por
+        # inadimplência (a parada/proteção continua com o dono).
+        if self.entitlement_check is not None and not self.entitlement_check():
+            self.state.cycles_run += 1
+            self.state.last_cycle_at = utcnow().isoformat()
+            self.save()
+            out = {"descartados": [], "ordens": [], "pausado_por_billing": True,
+                   "resumo": "pausado: assinatura necessária para novo trabalho "
+                             "(posições preservadas)"}
+            if self.on_cycle:
+                with contextlib.suppress(Exception):
+                    self.on_cycle(out)
+            return out
         snaps, discarded = self.fresh_snapshots()
         out = {"descartados": discarded, "ordens": [], "resumo": "sem dados elegíveis"}
         if snaps:

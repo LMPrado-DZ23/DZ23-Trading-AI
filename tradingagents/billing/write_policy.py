@@ -66,7 +66,9 @@ ROUTE_POLICY: dict[tuple[str, str], WriteAccess] = {
     ("POST", "/v1/execution/paper"): WriteAccess.BLOCK_READONLY,
     ("POST", "/v1/execution/shadow"): WriteAccess.BLOCK_READONLY,
     ("POST", "/v1/desk/cycle"): WriteAccess.BLOCK_READONLY,
-    ("POST", "/v1/desk/scheduler/{action}"): WriteAccess.BLOCK_READONLY,
+    # §8: start (aumenta exposição) exige assinatura; stop (reduz risco) é sempre
+    # acessível. O handler decide pela ação — não bloqueia a parada.
+    ("POST", "/v1/desk/scheduler/{action}"): WriteAccess.ACTION_AWARE,
     ("POST", "/v1/backup"): WriteAccess.BLOCK_READONLY,
     ("POST", "/v1/live/liberar"): WriteAccess.BLOCK_READONLY,
     ("POST", "/v1/alertas/verificar"): WriteAccess.BLOCK_READONLY,

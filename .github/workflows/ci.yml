@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, unificacao, "feat/**"]
+    branches: [main, unificacao, "feat/**", "release/**"]
     paths-ignore:
       - "**/*.md"
       - "docs/**"
@@ -20,7 +20,22 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ${{ (github.event_name == 'pull_request' || github.ref == 'refs/heads/main') && fromJSON('["3.10","3.11","3.12","3.13"]') || fromJSON('["3.12"]') }}
+        python-version: ${{ (github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) && fromJSON('["3.10","3.11","3.12","3.13"]') || fromJSON('["3.12"]') }}
+    # Postgres EFÊMERO e EXCLUSIVo deste job (o service container morre com o job).
+    # Os fixtures de teste fazem DROP TABLE — por isso o alvo tem de ser
+    # descartável: NUNCA um banco real. Só os testes que exigem DZ23_TEST_DATABASE_URL
+    # (migração/concorrência) o usam; o resto roda em SQLite/memória.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: pg
+          POSTGRES_DB: dz23test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -31,10 +46,16 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install locked project with dev extras
         run: uv sync --locked --extra desk --extra dev
-      - name: Run test suite
+      - name: Typecheck (mypy)
+        if: matrix.python-version == '3.12'
+        run: uv run mypy
+      - name: Run test suite (com PostgreSQL descartável)
         env:
           OPENAI_BASE_URL: ""
           OPENAI_API_BASE: ""
+          # DZ23_TEST_DATABASE_URL (dedicada) aponta SÓ para o Postgres efêmero do
+          # job — nunca para DATABASE_URL de produção.
+          DZ23_TEST_DATABASE_URL: postgresql://postgres:pg@localhost:5432/dz23test
         run: uv run pytest -q
       - name: Compile application modules
         run: uv run python -m compileall -q tradingagents service scripts

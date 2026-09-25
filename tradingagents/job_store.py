@@ -70,7 +70,7 @@ class JobStore:
             add_column_if_missing(c, d, "jobs", "cancel_requested",
                                   "INTEGER NOT NULL DEFAULT 0")
 
-        run_migrations(self._connect, self.backend, [(1, _m1)])
+        run_migrations(self._connect, self.backend, [(1, _m1)], component="jobs")
 
     def find_idempotent(self, tenant_id: str, idem: str) -> str | None:
         with self._connect() as c:

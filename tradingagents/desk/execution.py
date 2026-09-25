@@ -249,6 +249,25 @@ class ExecutionCoordinator:
         self.reconciliacao_pendente = False
         self.motivo_bloqueio = ""
         self._by_key: dict[str, str] = {}     # idempotency_key -> order_id
+        # §4: hook de PERSISTÊNCIA DURÁVEL do OMS. Chamado ANTES do despacho
+        # externo (ver submit_intent). None = sem persistência (testes puros).
+        self.persist_hook = None
+        # §1: FRONTEIRA DE EXECUÇÃO. O modo efetivo da corretora precisa concordar
+        # com o mandato. PAPER/SHADOW (qualquer mandato != LIVE) NUNCA podem usar
+        # uma corretora em modo 'live' — nem por frase de confirmação nem por
+        # credenciais. Combinação incompatível é recusada JÁ na construção.
+        self._assert_destino_compativel()
+
+    def _modo_corretora(self) -> str:
+        """Modo EFETIVO declarado pela corretora ('paper'|'testnet'|'live')."""
+        return str(getattr(self.broker, "mode", "paper") or "paper").strip().lower()
+
+    def _assert_destino_compativel(self) -> None:
+        if self._modo_corretora() == "live" and self.mandate.mode is not Mode.LIVE:
+            raise ExecutionRefused(
+                f"fronteira de execução: mandato {self.mandate.mode.value} não pode "
+                "despachar para corretora em modo 'live' (destino real bloqueado; "
+                "frase de confirmação e credenciais não contornam)")
 
     # -- envio ---------------------------------------------------------
     def exigir_reconciliacao(self, motivo: str) -> None:
@@ -306,7 +325,13 @@ class ExecutionCoordinator:
                 continue
             chave = rec.client_order_id or rec.order_id
             try:
-                remota = consultar_corretora(chave)
+                # §3: passa também o id GENUÍNO da exchange (external_id) para a
+                # consulta poder PROVAR ausência pelo id certo. Callback de 1
+                # argumento continua funcionando (compat).
+                try:
+                    remota = consultar_corretora(chave, rec.external_id or "")
+                except TypeError:
+                    remota = consultar_corretora(chave)
             except Exception as exc:
                 relatorio["divergencias"].append(
                     f"{rec.order_id}: consulta falhou ({type(exc).__name__})")
@@ -929,6 +954,28 @@ class ExecutionCoordinator:
                                     reservation_id=ei.reservation_id)
 
         # 5. ENVIO
+        # §1: defesa em profundidade — reconfirma a fronteira ANTES de despachar
+        # (a config efetiva pode ter mudado desde a construção).
+        self._assert_destino_compativel()
+        # §4: PERSISTE a intenção/estado ANTES do despacho externo. Se não for
+        # possível LEMBRAR da ordem (persistência falhou), NÃO envia — desfaz a
+        # reserva e recusa. Assim, um crash entre o envio e a persistência do fim
+        # do ciclo nunca deixa uma ordem viva sem rastro (o restore diria
+        # exige_reconciliacao=False sobre uma ordem que pode estar na corretora).
+        if self.persist_hook is not None:
+            try:
+                self.persist_hook()
+            except Exception as exc:  # noqa: BLE001 — falha de persistência bloqueia o envio
+                rec.state = OrderState.REJECTED
+                rec.note = f"persistência pré-envio falhou: {type(exc).__name__}"[:200]
+                if ei.kind is Kind.ENTRY:
+                    self.liberar_reserva_restante(
+                        ei.reservation_id,
+                        motivo="persistência pré-envio falhou; nada foi enviado",
+                        order_id=rec.order_id)
+                self.oms_version += 1
+                raise ExecutionRefused(
+                    f"persistência pré-envio falhou; ordem NÃO enviada: {exc}") from exc
         try:
             resultado = self.broker.submit(
                 coid, ei.instrument, ei.side.value, ei.quantity,
@@ -1482,8 +1529,10 @@ class ExecutionCoordinator:
         # 1) LIVRO: reconstruído dos lançamentos (mantém a auditabilidade).
         lancamentos = doc.get("lancamentos")
         if lancamentos:
-            from .ledger import Ledger as _L
-            self.ledger = _L.from_transactions(
+            # §5: recarrega NO LUGAR (mesma instância). Trocar self.ledger por um
+            # objeto novo deixava desk['ledger'] e o positions_provider ligados ao
+            # livro ANTIGO — duas verdades sobre o mesmo dinheiro após restore.
+            self.ledger.recarregar_de(
                 lancamentos, currency=doc.get("moeda") or "USDT")
             self._migrar_reserva_global(doc, self.ledger)
             # UMA referência econômica: o risco precisa ler o livro NOVO.

@@ -58,6 +58,35 @@ def test_migracao_pg_schema_antigo_com_dados(clean_pg):
     assert ok and sub.status == "active"           # paga pós-migração
 
 
+def test_migracoes_por_componente_pg(clean_pg):
+    # §6: no MESMO banco Postgres, jobs/identidade/billing NÃO colidem — cada um
+    # migra sob seu component. (O bug original era específico de Postgres, onde
+    # os três compartilham o banco.)
+    import psycopg
+
+    from tradingagents.job_store import JobStore
+    from tradingagents.tenancy import PostgresTenantStore
+    with psycopg.connect(DSN) as c:
+        c.execute("DROP TABLE IF EXISTS jobs, users, sessions, memberships, "
+                  "step_up_tokens, login_failures, schema_versions, "
+                  "schema_migrations CASCADE")
+        c.commit()
+    JobStore("unused.db", DSN)                       # component 'jobs'
+    PostgresTenantStore(DSN, signing_key="k" * 40)   # component 'identity'
+    _store()                                         # component 'billing'
+    with psycopg.connect(DSN) as c:
+        def cols(t: str) -> set:
+            return {r[0] for r in c.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name=%s", (t,))}
+        jobc, usrc, whc = cols("jobs"), cols("users"), cols("webhook_events")
+        comps = {r[0] for r in c.execute("SELECT DISTINCT component FROM schema_versions")}
+    assert "cancel_requested" in jobc
+    assert "oauth_only" in usrc
+    assert "provider" in whc            # billing NÃO falha com 'no such column: provider'
+    assert {"jobs", "identity", "billing"} <= comps
+
+
 def test_migracao_concorrente_pg(clean_pg):
     inicio = threading.Barrier(4)
     err: list[str] = []

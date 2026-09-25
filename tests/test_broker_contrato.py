@@ -103,17 +103,22 @@ class TestConsultaDeOrdem:
     ordem viva."""
 
     def test_direct_lookup_finds_the_order(self):
+        # §3: a consulta direta (que prova ausência) usa o ID GENUÍNO da EXCHANGE
+        # — como o fetch_order do CCXT real espera —, não o clientOrderId.
         class ComBusca(ExchangeFalsa):
             def fetch_order(self, oid, symbol=None):
                 return {"id": "ex-1", "clientOrderId": oid, "status": "CLOSED",
                         "filled": 1.5, "average": 100, "fee": {"cost": 0.1},
                         "info": {"tradeId": "t-99"}}
 
-        r = adaptador(ComBusca()).fetch_order_by_client_id("coid-1")
+        r = adaptador(ComBusca()).fetch_order_by_client_id(
+            "coid-1", exchange_order_id="ex-1")
         assert r["resultado"] == "FOUND"
         assert r["ordem"]["status"] == "closed" and r["ordem"]["fill_id"] == "t-99"
 
     def test_exchange_saying_order_not_found_is_confirmation(self):
+        # §3: só o id DA EXCHANGE prova ausência. Consultar por ele e a exchange
+        # negar => CONFIRMED_NOT_FOUND.
         class OrderNotFound(Exception):
             pass
 
@@ -121,15 +126,32 @@ class TestConsultaDeOrdem:
             def fetch_order(self, oid, symbol=None):
                 raise OrderNotFound("unknown order")
 
-        r = adaptador(Nega()).fetch_order_by_client_id("coid-1")
+        r = adaptador(Nega()).fetch_order_by_client_id(
+            "coid-1", exchange_order_id="ex-1")
         assert r["resultado"] == "CONFIRMED_NOT_FOUND"
+
+    def test_sem_id_da_exchange_nunca_confirma_ausencia(self):
+        # §3: consulta pelo CLIENT ID (sem id da exchange) NUNCA prova ausência.
+        class OrderNotFound(Exception):
+            pass
+
+        class Nega(ExchangeFalsa):
+            def fetch_order(self, oid, symbol=None):
+                raise OrderNotFound("unknown order")
+
+            def fetch_orders(self, symbol=None, since=None, limit=None):
+                return []
+
+        r = adaptador(Nega()).fetch_order_by_client_id("coid-1")   # sem id da exchange
+        assert r["resultado"] == "UNKNOWN"                          # reserva mantida
 
     def test_network_failure_is_unknown_never_confirmation(self):
         class Cai(ExchangeFalsa):
             def fetch_order(self, oid, symbol=None):
                 raise RuntimeError("timeout")
 
-        r = adaptador(Cai()).fetch_order_by_client_id("coid-1")
+        r = adaptador(Cai()).fetch_order_by_client_id(
+            "coid-1", exchange_order_id="ex-1")
         assert r["resultado"] == "UNKNOWN"
 
     def test_order_outside_the_history_window_is_unknown(self):

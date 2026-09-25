@@ -60,16 +60,29 @@ def add_column_if_missing(conn: Any, dialect: str, table: str, column: str,
     return True
 
 
+# §6: o versionamento é POR COMPONENTE. Jobs, identidade e billing compartilham
+# o MESMO banco em Postgres; se a versão fosse global (só `version`), o primeiro
+# a rodar registrava a v1 e os outros PULAVAM a própria migração — coluna some.
+# A tabela nova é chaveada por (component, version). A `schema_migrations` legada
+# (só `version`) é deixada intacta e ignorada: as migrações são idempotentes e
+# VERIFICADAS (add_column_if_missing checa o catálogo), então um banco antigo
+# re-aplica com segurança, sem apagar dado nem confiar num registro global falso.
+_VERSIONS_TABLE = "schema_versions"
+
+
 def _ensure_versions_table(conn: Any, dialect: str) -> None:
     advisory_lock(conn, dialect)         # serializa a criação (corrida de pg_type)
     ts = "DOUBLE PRECISION" if dialect == "postgres" else "REAL"
-    conn.execute("CREATE TABLE IF NOT EXISTS schema_migrations ("
-                 f"version INTEGER PRIMARY KEY, applied_at {ts} NOT NULL)")
+    conn.execute(f"CREATE TABLE IF NOT EXISTS {_VERSIONS_TABLE} ("
+                 "component TEXT NOT NULL, version INTEGER NOT NULL, "
+                 f"applied_at {ts} NOT NULL, PRIMARY KEY (component, version))")
 
 
-def applied_versions(conn: Any, dialect: str) -> set[int]:
+def applied_versions(conn: Any, dialect: str, component: str) -> set[int]:
     _ensure_versions_table(conn, dialect)
-    rows = conn.execute("SELECT version FROM schema_migrations").fetchall()
+    rows = conn.execute(
+        f"SELECT version FROM {_VERSIONS_TABLE} WHERE component={_ph(dialect)}",
+        (component,)).fetchall()
     out = set()
     for r in rows:
         out.add(int(r["version"] if hasattr(r, "keys") else r[0]))
@@ -77,25 +90,34 @@ def applied_versions(conn: Any, dialect: str) -> set[int]:
 
 
 def run_migrations(connect: Callable[[], Any], dialect: str,
-                   migrations: Sequence[tuple[int, Callable[[Any, str], None]]]) -> list[int]:
-    """Aplica migrações pendentes (por versão crescente), CADA UMA em sua
-    transação. Verifica e registra. Devolve as versões aplicadas nesta execução.
-    Não engole erro: qualquer falha aborta a transação daquela migração e sobe.
+                   migrations: Sequence[tuple[int, Callable[[Any, str], None]]],
+                   *, component: str) -> list[int]:
+    """Aplica as migrações pendentes DO COMPONENTE (por versão crescente), CADA
+    UMA em sua transação. Verifica e registra sob (component, version). Devolve as
+    versões aplicadas nesta execução. Não engole erro: qualquer falha aborta a
+    transação daquela migração e sobe.
     """
+    if not component:
+        raise ValueError("run_migrations exige um 'component' não-vazio")
+    with connect() as c0:                # garante a tabela de versões antes do laço
+        _ensure_versions_table(c0, dialect)
+        if dialect != "postgres":
+            c0.commit()
     aplicadas: list[int] = []
-    with connect() as c0:
-        ja = applied_versions(c0, dialect)
     for version, fn in sorted(migrations, key=lambda m: m[0]):
-        if version in ja:
-            continue
+        # As migrações são IDEMPOTENTES e VERIFICADAS (add_column_if_missing checa
+        # o catálogo; CREATE ... IF NOT EXISTS). Rodamos SEMPRE — a versão é
+        # REGISTRO/observabilidade, não um gate. Se o schema divergir do registro
+        # (coluna/índice ausente apesar da versão "aplicada"), a repetição repara.
         with connect() as c:            # transação própria (commit no exit)
             advisory_lock(c, dialect)   # serializa a migração entre processos
             fn(c, dialect)
-            # ON CONFLICT DO NOTHING: dois processos aplicando a MESMA migração
-            # concorrentemente não colidem na PK de schema_migrations.
-            c.execute(f"INSERT INTO schema_migrations(version,applied_at) "
-                      f"VALUES({_ph(dialect)},{_ph(dialect)}) "
-                      f"ON CONFLICT (version) DO NOTHING", (version, time.time()))
+            # ON CONFLICT DO NOTHING: repetir e concorrência não colidem na PK
+            # composta (component, version).
+            c.execute(f"INSERT INTO {_VERSIONS_TABLE}(component,version,applied_at) "
+                      f"VALUES({_ph(dialect)},{_ph(dialect)},{_ph(dialect)}) "
+                      f"ON CONFLICT (component,version) DO NOTHING",
+                      (component, version, time.time()))
             if dialect != "postgres":
                 c.commit()
         aplicadas.append(version)

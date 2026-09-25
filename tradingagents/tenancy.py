@@ -125,7 +125,7 @@ class TenantStore:
         def _m1(c: Any, d: str) -> None:
             add_column_if_missing(c, d, "users", "oauth_only", "INTEGER NOT NULL DEFAULT 0")
 
-        run_migrations(self._connect, self._dialect(), [(1, _m1)])
+        run_migrations(self._connect, self._dialect(), [(1, _m1)], component="identity")
 
     def _sql(self, query: str) -> str:
         """SQLite usa '?'. Postgres sobrescreve para '%s'."""

@@ -103,6 +103,21 @@ def test_fingerprint_moeda_divergente_conflita(tmp_path):
         st.record_paid_charge("c1", "t", "dz23_monthly", 15000, "USD")   # só a moeda muda
 
 
+def test_replay_reformatado_nao_conflita(tmp_path):
+    # §9: mesmo pagamento com o corpo REFORMATADO (payload_hash diferente, mesma
+    # semântica) é replay idempotente — NÃO é conflito e NÃO recredita. A
+    # identidade de idempotência é semântica, não do JSON bruto.
+    st = SubscriptionStore(tmp_path / "s.db")
+    a, _ = st.record_paid_charge("c1", "t", "dz23_monthly", 15000, "BRL",
+                                 event_id="ev", payload_hash="hash-corpoA")
+    exp1 = st.get("t").expires_at
+    b, _ = st.record_paid_charge("c1", "t", "dz23_monthly", 15000, "BRL",
+                                 event_id="ev", payload_hash="hash-corpoB-reformatado")
+    assert a is True and b is False          # 2º = replay, sem conflito
+    assert st.count_conflicts("c1") == 0     # nenhum falso conflito
+    assert st.get("t").expires_at == exp1    # não estendeu a assinatura
+
+
 def test_conflito_sobrevive_restart(tmp_path):
     # §3: o incidente de conflito é DURÁVEL — sobrevive a um "restart" (nova
     # instância do store lê o ledger de conflitos gravado).
