@@ -373,3 +373,12 @@ O GitHub Actions do commit `caffa8e` repetiu falha pré-step em todos os jobs: `
 Próxima ação: concluir suíte local, publicar diagnóstico de health e aguardar runner válido para confirmação remota.
 
 STATUS: CONTINUE
+
+
+## Fase: prontidão detalhada por agente
+
+O health agora retorna uma matriz `agent_details` com agente, desk, papel, status e `handler_configured`, além de `next_action` sem segredos quando a configuração LLM está incompleta. Isso elimina o diagnóstico genérico de falha e orienta o operador para a configuração do tenant em `/v1/config`.
+
+Gates focados: 7 testes passaram; Ruff, compilação e diff check passaram. A suíte completa está em execução antes da publicação.
+
+STATUS: CONTINUE

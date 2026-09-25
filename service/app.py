@@ -746,11 +746,23 @@ def agency_health(request: Request, _=Depends(auth)):
     runtime = runtime_for(request)
     configured = sum(agent_id in runtime.agency.executor.handlers for agent_id in _AGENCY_LLM_AGENT_IDS)
     required = len(_AGENCY_LLM_AGENT_IDS)
+    agent_details = [
+        {
+            "agent_id": agent_id,
+            "desk_id": agent["desk_id"],
+            "role": agent["role"],
+            "status": agent["status"],
+            "handler_configured": agent_id in runtime.agency.executor.handlers,
+        }
+        for agent_id, agent in sorted(runtime.agency.agents.items())
+    ]
     return {
         "runtime": "READY" if configured == required else "DEGRADED",
         "event_sequence": runtime.agency.event_bus.latest_sequence,
         "agents": len(runtime.agency.agents),
         "llm_handlers": {"configured": configured, "required": required},
+        "agent_details": agent_details,
+        "next_action": None if configured == required else "Configure provider, model e credencial em /v1/config para este tenant",
         "worker": runtime.agency.worker_status(request_tenant(request)),
         "meetings": len(runtime.agency.meetings),
         "audit_log": "tenant-scoped persistent event stream",

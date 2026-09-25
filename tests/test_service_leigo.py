@@ -208,6 +208,8 @@ class TestAgenciaGeralTarefas:
         body = TestClient(m.app).get("/v1/agency/health", headers={"Authorization": "Bearer s3nh4"}).json()
         assert body["runtime"] == "DEGRADED"
         assert body["llm_handlers"]["configured"] < body["llm_handlers"]["required"]
+        assert "/v1/config" in body["next_action"]
+        assert len(body["agent_details"]) >= 15
 
 
 class TestDiagnosticoDoFeed:
