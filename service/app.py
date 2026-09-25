@@ -2175,6 +2175,21 @@ def oauth_callback(provider: str, code: str = "", state: str = ""):
             "email": email, "conta_nova": novo}
 
 
+# Compat de redirect_uri: o provedor é configurado (ex.: GOOGLE_REDIRECT_URI) com
+# o caminho /api/oauth/{provider}/callback, mas a rota canônica é
+# /v1/auth/oauth/...  Sem estes aliases o retorno do Google caía em 404 e o login
+# social nunca completava. Servem EXATAMENTE o caminho anunciado ao provedor,
+# reusando as handlers canônicas (mesma lógica, mesma segurança de state).
+@app.get("/api/oauth/{provider}/start")
+def oauth_start_api(provider: str):
+    return oauth_start(provider)
+
+
+@app.get("/api/oauth/{provider}/callback")
+def oauth_callback_api(provider: str, code: str = "", state: str = ""):
+    return oauth_callback(provider, code=code, state=state)
+
+
 # ===================================================================== MESA
 # Mesa autônoma multiagente. UMA POR INQUILINO: nenhum tenant enxerga
 # agentes, carteira, ordens ou ciclos de outro — isolamento é requisito do
