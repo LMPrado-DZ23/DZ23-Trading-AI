@@ -22,6 +22,14 @@ def test_worker_processes_durable_tasks_and_stops_idempotently(tmp_path: Path):
     while monotonic() < deadline and runtime.executor.tasks["t1"].status is not TaskStatus.SUCCEEDED:
         sleep(0.05)
     assert runtime.executor.tasks["t1"].status is TaskStatus.SUCCEEDED
+    # O contador de ciclos é atualizado pela THREAD do worker logo DEPOIS de
+    # processar a tarefa (o status SUCCEEDED torna-se visível durante run_tasks,
+    # antes de `_cycles += 1`). Ler o contador no mesmo instante em que se vê
+    # SUCCEEDED é uma corrida; esperar por ele elimina o flake sem afrouxar a
+    # asserção (segue exigindo ao menos um ciclo do worker).
+    deadline = monotonic() + 3
+    while monotonic() < deadline and runtime.worker_status("tenant-1")["cycles"] < 1:
+        sleep(0.05)
     assert runtime.worker_status("tenant-1")["cycles"] >= 1
 
     stopped = runtime.stop_worker("tenant-1")
