@@ -133,6 +133,11 @@ if MULTI_TENANT_ENABLED:
             f"multi-tenant desligado: {_exc}. Defina TENANT_TOKEN_SIGNING_KEY "
             "com 32+ caracteres aleatórios e reinicie para habilitar contas.")
 TENANT_BOOTSTRAP_TOKEN = os.environ.get("TENANT_BOOTSTRAP_TOKEN", "")
+# Token que autoriza o bootstrap ÚNICO da primeira área. Sem uma env dedicada
+# (TENANT_BOOTSTRAP_TOKEN), o próprio ACCESS_PASSWORD — segredo do dono que já
+# existe no servidor — serve, para o operador não precisar criar mais um segredo
+# só para a configuração inicial. Fica desabilitado se NENHUM segredo existir.
+BOOTSTRAP_TOKEN = TENANT_BOOTSTRAP_TOKEN or PASSWORD
 
 
 def _enforce_saas_mode() -> None:
@@ -356,11 +361,11 @@ def auth(request: Request, c: HTTPAuthorizationCredentials = Depends(bearer)):
 
 @app.post("/v1/auth/bootstrap")
 async def tenant_bootstrap(req: Request):
-    if not MULTI_TENANT_ENABLED or not TENANT_STORE or not TENANT_BOOTSTRAP_TOKEN:
+    if not MULTI_TENANT_ENABLED or not TENANT_STORE or not BOOTSTRAP_TOKEN:
         raise HTTPException(404, "bootstrap multi-tenant desabilitado")
     if TENANT_STORE.tenant_count() > 0:
         raise HTTPException(409, "bootstrap inicial já consumido; crie usuários/tenants pelo painel Admin")
-    if not hmac.compare_digest(req.headers.get("X-Tenant-Bootstrap", ""), TENANT_BOOTSTRAP_TOKEN):
+    if not hmac.compare_digest(req.headers.get("X-Tenant-Bootstrap", ""), BOOTSTRAP_TOKEN):
         raise HTTPException(401, "bootstrap não autorizado")
     body = await _json_body(req)
     try:
