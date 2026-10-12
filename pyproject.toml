@@ -63,6 +63,23 @@ desk = [
 [project.scripts]
 tradingagents = "cli.main:app"
 
+[tool.uv]
+# Pisos de segurança para dependências auditadas pelo CI (pip-audit):
+# - urllib3>=2.8.0 corrige PYSEC-2026-4175/4176/4177 (constraint normal;
+#   o próprio ccxt 4.5.85 já pinna urllib3==2.8.0).
+# - multidict>=6.9.1 corrige CVE-2026-104874. O ccxt >=4.5.65 pinna
+#   multidict==6.7.1 exatamente (versão vulnerável), o que forçaria um
+#   downgrade de 20 versões do ccxt. Sobrescrevemos só esse pin: multidict
+#   6.9.1 é da mesma major 6.x, compatível com aiohttp (>=4.5,<8) e com o
+#   uso que o ccxt faz dele (headers via aiohttp). Comportamento é validado
+#   pela suíte completa de testes.
+constraint-dependencies = [
+    "urllib3>=2.8.0",
+]
+override-dependencies = [
+    "multidict>=6.9.1,<7",
+]
+
 [tool.setuptools.packages.find]
 include = ["tradingagents*", "cli*", "service*"]
 
