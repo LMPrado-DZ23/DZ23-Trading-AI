@@ -4,7 +4,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_dashboard_contains_multitenant_and_operational_surfaces():
-    html = (ROOT / "service/static/index.html").read_text()
+    html = (ROOT / "service/static/index.html").read_text(encoding="utf-8")
     for contract in (
         "/v1/auth/status",
         "/v1/auth/bootstrap",
@@ -27,7 +27,7 @@ def test_dashboard_contains_multitenant_and_operational_surfaces():
 
 
 def test_trading_floor_reuses_multitenant_session():
-    html = (ROOT / "service/static/floor.html").read_text()
+    html = (ROOT / "service/static/floor.html").read_text(encoding="utf-8")
     assert "sessionStorage.getItem('dz23_token')" in html
     assert "prompt('Senha do painel')" not in html
     assert "WORKER RUNNING" in html
