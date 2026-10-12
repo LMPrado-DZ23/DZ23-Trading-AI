@@ -8,6 +8,7 @@ on:
       - "docs/**"
       - ".gitignore"
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}

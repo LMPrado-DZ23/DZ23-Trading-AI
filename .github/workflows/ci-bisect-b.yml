@@ -1,0 +1,17 @@
+name: CI Bisect B (concurrency cancel)
+
+on:
+  push:
+    branches: ["feat/diagnostico-ci-20261012"]
+
+concurrency:
+  group: ci-bisect-b-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bisect-b:
+    name: bisect: concurrency cancel-in-progress
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: echo "concurrency-ok"
