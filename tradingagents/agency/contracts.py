@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from enum import StrEnum
 from typing import Any
+
+from tradingagents.domain.strenum import StrEnum
 
 
 class TaskStatus(StrEnum):
