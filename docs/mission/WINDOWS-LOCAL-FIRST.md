@@ -6,7 +6,7 @@
 1. Aplicativo pessoal single-owner, interface PT-BR, iniciar e encerrar pela interface/atalho Windows, sem abrir terminais automaticamente e sem depender de conta SaaS. Instalação/desinstalação previsíveis; usar empacotamento adequado ao projeto existente sem reescrever toda a stack por conveniência.
 2. Python/FastAPI/CCXT e agentes existentes executados localmente por processo gerenciado pelo aplicativo, bind em 127.0.0.1 e autenticação local (loopback não substitui autenticação). Nenhuma porta pública/firewall liberada por padrão.
 3. Banco local durável inicial SQLite se concorrência controlada em processo único, com WAL/backup/restore, proteção de integridade, permissões e migrações; Postgres opcional para necessidades reais de concorrência, não dependência obrigatória.
-4. Integrar Ollama local como opção, com descoberta explícita dos modelos disponíveis e APIs de provedores externos opcionais. A disponibilidade de IA não deve desativar controle de risco nem bloqueios de ordens.
+4. **IA somente por APIs externas na primeira versão**: permitir configurar provedores/modelos e credenciais na interface protegida; suportar APIs oficiais e OpenAI-compatible mediante validação. **Não exigir nem iniciar Ollama, modelos locais, GPU ou downloads de modelos.** IA local poderá ser módulo opcional futuro, sem alterar o núcleo. Timeout, retries limitados, rate limits, orçamento de tokens/custos, tratamento de indisponibilidade e saída estruturada obrigatórios. Falha da IA não pode desativar risco nem disparar ordem.
 5. Dashboard real e responsivo; paper/shadow/testnet; conectores com integridade de feed e inventário de capabilities. IQ Option isolada como experimental. Não confundir suporte da CCXT com conexão ou negociação homologada.
 6. Agente só pode operar enquanto serviço local estiver ativo e PC conectado. Suspensão, hibernação, reinício, relógio errado, perda de conexão ou encerramento da janela devem acionar política fail-closed e reconciliação antes de retomar. Nunca prometer 24x7 com PC desligado.
 7. Nunca ativar LIVE, funding, alavancagem, depósitos, saques, APIs com permissão de saque ou acesso remoto sem decisão humana adicional. Capital futuro planejado R$ 5.000 não autoriza negociação.
@@ -17,3 +17,10 @@
 
 ## Status real
 Este arquivo é requisito de arquitetura, NÃO implementação nem comprovação de testes. Criar checkpoint específico e inventariar o Windows alvo antes de build/distribuição real. LIVE bloqueado.
+
+## Atualização de produto — APIs de IA externas
+- Agentes utilizarão somente provedores externos configurados pelo proprietário nesta fase.
+- API keys somente em armazenamento local protegido, nunca no Git ou frontend; exibir valores mascarados, testar conectividade sem registrar segredo.
+- Seleção explícita de provedor/modelo no painel, status real da API, medição de uso/custo por agente e fallback só entre provedores autorizados.
+- Sinais de IA são propostas não confiáveis, jamais comandos diretos de corretora; motor determinístico decide permissões e risco.
+- Sem IA local por enquanto; manter integração futura opcional, não dependência de instalação.
