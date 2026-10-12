@@ -31,3 +31,23 @@ Main is unchanged; pull requests #3 and #5 remain separate; LIVE is not authoriz
 4. Reconcile PR #3 and close F3–F6/K1–K6/A1/A2 before any possibility of LIVE.
 
 No merges/deploy/real orders were authorized or executed.
+
+## Checkpoint C001 — 2026-10-12 (UTC date)
+Branch: `feat/personal-trading-lab-20261012`; main and production untouched.
+
+Implemented:
+- `service/personal_exchange_capabilities.py`: static capability projection (CCXT native flags only; emulated features not misrepresented).
+- `tests/test_personal_exchange_capabilities.py`: feature/unsupported/never-LIVE test definitions.
+- `GET /v1/personal/exchanges/{exchange_id}/capabilities`: authenticated local CCXT inspection by installed-id allowlist without keys or requests.
+- `docs/mission/TRADING-BACKLOG.md`: P0/P1/P2/G9 backlog with blockers.
+
+Evidence:
+- Commit of API integration: `4a7bcf7f2b41b27217d896c195b81a5f50dc42c4`.
+- Backlog commit: `d1575a464182b9980efec06cf87fc98bf36218f3`.
+- CI runs 38306875623 and 38306870540 failed on commit `4a7bcf7`, root cause NOT VERIFIED.
+- Prior job log retrieval returned BlobNotFound; do not infer a passing test or specific failure.
+- Unit/integration/E2E suites NOT RUN locally for current branch; no claim of PASS.
+
+Current gates: G0 IN_PROGRESS, G1 NOT_STARTED, G2 IN_PROGRESS, G3 IN_PROGRESS, G4–G8 NOT_STARTED, G9 BLOCKED_BY_EXTERNAL_DEPENDENCY. LIVE remains disabled by project policy; no deployment done.
+
+Next executable step: obtain accessible CI diagnostics / an authorized runner, reproduce pytest/ruff, fix root cause; then financial kernel blockers and single-owner API auth. This checkpoint does not certify readiness.
