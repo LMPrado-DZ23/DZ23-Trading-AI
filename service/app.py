@@ -694,6 +694,58 @@ def cancel(jid: str, request: Request, _=Depends(auth)):
     return {"ok": True}
 
 
+@app.get("/v1/personal/exchanges")
+def personal_exchanges(_=Depends(auth)):
+    """Authenticated read-only list; does not connect, trade, or validate exchange APIs."""
+    from service.personal_exchange_catalog import public_catalog
+    from service.personal_exchange_discovery import (
+        discover_ccxt_catalog,
+        installed_ccxt_exchange_ids,
+    )
+
+    fixed = public_catalog()
+    try:
+        dynamic = discover_ccxt_catalog(installed_ccxt_exchange_ids())
+        inventory = [
+            {"id": item.id, "configured": item.configured,
+             "execution_enabled": item.execution_enabled, "status": item.status}
+            for item in dynamic
+        ]
+        error = None
+    except ImportError:
+        inventory = []
+        error = "CCXT_NOT_INSTALLED"
+    except (AttributeError, TypeError, ValueError):
+        inventory = []
+        error = "CCXT_DISCOVERY_UNAVAILABLE"
+    return {
+        "fixed_rooms": fixed,
+        "ccxt_available": inventory,
+        "discovery_error": error,
+        "execution_enabled": False,
+    }
+
+
+@app.get("/v1/personal/exchanges/{exchange_id}/capabilities")
+def personal_exchange_capabilities(exchange_id: str, _=Depends(auth)):
+    """Inspect local CCXT advertised features without API credentials or network calls."""
+    import ccxt
+    from service.personal_exchange_capabilities import report_capabilities
+    from service.personal_exchange_discovery import installed_ccxt_exchange_ids
+
+    allowed = installed_ccxt_exchange_ids(lambda: ccxt)
+    if exchange_id not in allowed:
+        raise HTTPException(404, "corretora não disponível no adaptador instalado")
+    # Only permit local CCXT classes from the installed package, never a user URL.
+    exchange = getattr(ccxt, exchange_id)({"enableRateLimit": True})
+    try:
+        return report_capabilities(exchange_id, exchange.has)
+    finally:
+        close = getattr(exchange, "close", None)
+        if callable(close):
+            close()
+
+
 @app.get("/v1/broker/status")
 def broker_status(request: Request, _=Depends(auth)):
     """Valida a configuração de corretora SEM enviar ordem nenhuma."""
