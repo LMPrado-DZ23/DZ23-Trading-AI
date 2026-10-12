@@ -2,6 +2,8 @@ from fastapi.testclient import TestClient
 
 
 def test_personal_routes_disabled_by_default(monkeypatch):
+    # Ensure auth password is set before importing the app
+    monkeypatch.setenv("ACCESS_PASSWORD", "test-password")
     monkeypatch.delenv("PERSONAL_TRADING_LAB_ENABLED", raising=False)
     import importlib
     import service.app as app_module
@@ -17,6 +19,8 @@ def test_personal_routes_disabled_by_default(monkeypatch):
 
 
 def test_personal_routes_read_only_when_enabled(monkeypatch):
+    # Ensure auth password is set before importing the app
+    monkeypatch.setenv("ACCESS_PASSWORD", "test-password")
     monkeypatch.setenv("PERSONAL_TRADING_LAB_ENABLED", "true")
     import importlib
     import service.app as app_module
