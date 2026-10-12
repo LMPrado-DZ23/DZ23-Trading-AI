@@ -726,6 +726,26 @@ def personal_exchanges(_=Depends(auth)):
     }
 
 
+@app.get("/v1/personal/exchanges/{exchange_id}/capabilities")
+def personal_exchange_capabilities(exchange_id: str, _=Depends(auth)):
+    """Inspect local CCXT advertised features without API credentials or network calls."""
+    import ccxt
+    from service.personal_exchange_capabilities import report_capabilities
+    from service.personal_exchange_discovery import installed_ccxt_exchange_ids
+
+    allowed = installed_ccxt_exchange_ids(lambda: ccxt)
+    if exchange_id not in allowed:
+        raise HTTPException(404, "corretora não disponível no adaptador instalado")
+    # Only permit local CCXT classes from the installed package, never a user URL.
+    exchange = getattr(ccxt, exchange_id)({"enableRateLimit": True})
+    try:
+        return report_capabilities(exchange_id, exchange.has)
+    finally:
+        close = getattr(exchange, "close", None)
+        if callable(close):
+            close()
+
+
 @app.get("/v1/broker/status")
 def broker_status(request: Request, _=Depends(auth)):
     """Valida a configuração de corretora SEM enviar ordem nenhuma."""
