@@ -1,5 +1,10 @@
 from types import SimpleNamespace
-from service.personal_exchange_discovery import discover_ccxt_catalog, discover_exchange_ids, installed_ccxt_exchange_ids
+
+from service.personal_exchange_discovery import (
+    discover_ccxt_catalog,
+    discover_exchange_ids,
+    installed_ccxt_exchange_ids,
+)
 
 
 def test_deduplicates_and_sorts():

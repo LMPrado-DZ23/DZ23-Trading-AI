@@ -1,5 +1,7 @@
 import unittest
+
 from service.personal_exchange_catalog import EXCHANGES, get_personal_exchange, public_catalog
+
 
 class PersonalExchangeCatalogTests(unittest.TestCase):
     def test_six_unique_exchanges(self):

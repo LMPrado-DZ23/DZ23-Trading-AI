@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from typing import Literal
 
+
 @dataclass(frozen=True)
 class PersonalExchange:
     slug: str

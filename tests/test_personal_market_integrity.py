@@ -1,6 +1,6 @@
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from dataclasses import replace
 
 from service.personal_market_integrity import Quote, QuoteFailure, QuoteGatePolicy, check_quote
 

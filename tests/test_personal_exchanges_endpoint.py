@@ -1,5 +1,6 @@
 """Contract checks for authenticated read-only exchange discovery."""
 from fastapi.routing import APIRoute
+
 from service.app import app, auth
 
 

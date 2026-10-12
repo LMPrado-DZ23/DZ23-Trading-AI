@@ -779,6 +779,7 @@ def personal_exchanges(_=Depends(auth)):
 def personal_exchange_capabilities(exchange_id: str, _=Depends(auth)):
     """Inspect local CCXT advertised features without API credentials or network calls."""
     import ccxt
+
     from service.personal_exchange_capabilities import report_capabilities
     from service.personal_exchange_discovery import installed_ccxt_exchange_ids
 

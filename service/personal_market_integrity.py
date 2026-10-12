@@ -55,8 +55,13 @@ def _price(value: object) -> Decimal | None:
     return number
 
 
-def check_quote(quote: Quote, now: datetime, policy: QuoteGatePolicy = QuoteGatePolicy()) -> QuoteCheck:
+_DEFAULT_POLICY = QuoteGatePolicy()
+
+
+def check_quote(quote: Quote, now: datetime, policy: QuoteGatePolicy | None = None) -> QuoteCheck:
     """Validate inputs only; passing this check never authorizes a trade."""
+    if policy is None:
+        policy = _DEFAULT_POLICY
     reasons: list[QuoteFailure] = []
     if not isinstance(quote.exchange, str) or not quote.exchange.strip() or not isinstance(quote.source, str) or not quote.source.strip():
         reasons.append(QuoteFailure.INVALID_SOURCE)

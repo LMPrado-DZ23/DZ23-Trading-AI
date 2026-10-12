@@ -269,11 +269,10 @@ class TestArranqueResiliente:
 class TestEmergencyStopPersistence:
     def test_live_halt_survives_memory_reload(self, tmp_path, monkeypatch):
         m = _load_app(tmp_path, monkeypatch)
-        m._LIVE_HALTED.clear()
-        m._LIVE_HALTED.add("tenant-a")
-        m._persist_live_halts()
-        m._LIVE_HALTED.clear()
-        assert m._live_halted("tenant-a") is True
+        parada = m._parada("tenant-a")
+        parada.acionar("parada de emergência de teste", por="tenant-a")
+        p2 = m._parada("tenant-a")
+        assert p2.bloqueia is True
 
 
 class TestOnboarding:

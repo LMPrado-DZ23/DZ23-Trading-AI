@@ -3,8 +3,8 @@
 The runtime installed CCXT release is the source of truth. Never expose a
 private API key or enable execution from this registry.
 """
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Callable, Iterable
 
 
 @dataclass(frozen=True)

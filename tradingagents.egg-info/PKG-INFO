@@ -1,0 +1,145 @@
+Metadata-Version: 2.4
+Name: tradingagents
+Version: 0.4.0
+Summary: TradingAgents: Multi-Agents LLM Financial Trading Framework
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+License-File: NOTICE
+Requires-Dist: langchain-core>=0.3.81
+Requires-Dist: backtrader>=1.9.78.123
+Requires-Dist: ccxt>=4.4.0
+Requires-Dist: fastapi>=0.115.0
+Requires-Dist: langchain-anthropic>=0.3.15
+Requires-Dist: langchain-experimental>=0.3.4
+Requires-Dist: langchain-google-genai>=4.0.0
+Requires-Dist: langchain-openai>=0.3.23
+Requires-Dist: langgraph>=0.4.8
+Requires-Dist: langgraph-checkpoint-sqlite>=2.0.0
+Requires-Dist: pandas>=2.3.0
+Requires-Dist: parsel>=1.10.0
+Requires-Dist: python-dotenv>=1.0.0
+Requires-Dist: pytz>=2025.2
+Requires-Dist: psycopg[binary]>=3.2.0
+Requires-Dist: questionary>=2.1.0
+Requires-Dist: redis>=6.2.0
+Requires-Dist: requests>=2.32.4
+Requires-Dist: rich>=14.0.0
+Requires-Dist: typer>=0.21.0
+Requires-Dist: setuptools>=80.9.0
+Requires-Dist: stockstats>=0.6.5
+Requires-Dist: tqdm>=4.67.1
+Requires-Dist: typing-extensions>=4.14.0
+Requires-Dist: uvicorn>=0.34.0
+Requires-Dist: yfinance>=1.4.1
+Provides-Extra: dev
+Requires-Dist: fastapi>=0.115.0; extra == "dev"
+Requires-Dist: httpx>=0.27.0; extra == "dev"
+Requires-Dist: ccxt>=4.5.0; extra == "dev"
+Requires-Dist: ruff>=0.15; extra == "dev"
+Requires-Dist: pytest>=8.0; extra == "dev"
+Requires-Dist: pytest-subtests>=0.13; extra == "dev"
+Requires-Dist: tomli>=2.0.1; python_version < "3.11" and extra == "dev"
+Provides-Extra: bedrock
+Requires-Dist: langchain-aws>=1.5.0; extra == "bedrock"
+Provides-Extra: desk
+Requires-Dist: fastapi>=0.115.0; extra == "desk"
+Requires-Dist: uvicorn>=0.34.0; extra == "desk"
+Requires-Dist: psycopg[binary]>=3.2.0; extra == "desk"
+Requires-Dist: ccxt>=4.5.0; extra == "desk"
+Dynamic: license-file
+
+<p align="center">
+  <img src="service/static/marca/dz23-logo-512.png" alt="DZ23 Trading Platform" width="180">
+</p>
+
+# DZ23 Trading Agency
+
+Agência autônoma de agentes de trading, operável pelo navegador e vendável
+como serviço: vários traders com estratégias distintas trabalham em ciclos,
+disputam capital sob um risco determinístico, executam, reconciliam e
+prestam contas — enquanto o dono acompanha tudo numa mesa visual.
+
+> **Aviso:** software experimental de pesquisa e engenharia. Não é
+> recomendação de investimento, não garante lucro e pode causar perdas.
+> O padrão é **paper/testnet**. Operar com **dinheiro real** é possível e
+> exige quatro fechaduras explícitas do dono — leia
+> [LIVE-DINHEIRO-REAL.md](LIVE-DINHEIRO-REAL.md) antes de ligar.
+
+## O que o sistema faz
+
+**Mesa autônoma (multiagente)**
+- Três traders com estratégias realmente distintas — tendência, reversão à
+  média e rompimento —, cada um com regime de elegibilidade, invalidação da
+  tese e razão explícita quando decide **não** operar.
+- Árbitro de carteira: veta direção oposta no mesmo ativo e resolve disputa
+  por instrumento; um dono operacional por conta/instrumento.
+- Risco determinístico com poder de veto e **reserva atômica** — o mesmo
+  capital nunca é prometido duas vezes.
+- Executor único até a corretora, com máquina de 11 estados, chave
+  idempotente presa ao conteúdo do comando e **reconciliação** pós-timeout
+  (sem reenvio cego, sem liberar reserva enquanto houver efeito possível).
+- Contabilidade em partidas dobradas, com resultado atribuído por trader e
+  correção só por compensação.
+- Agendador persistente: roda sozinho, sobrevive a reinício e **reconcilia
+  antes de retomar**; sinal vencido nunca vira ordem atrasada.
+
+**Plataforma**
+- Multi-tenant com papéis (viewer, analyst, operator, risk manager, admin,
+  auditor) e isolamento testado entre inquilinos.
+- Cadastro self-service com período de teste; login por e-mail/senha ou
+  social (Google e Microsoft, OAuth com PKCE).
+- Cobrança por **PIX (Woovi)**: webhook verificado por assinatura RSA sobre
+  o corpo bruto — corpo adulterado ou sem assinatura não ativa nada.
+- Painel em português: Command Center, Configuração, Análises, **Mesa de
+  Agentes**, **Trading Floor** isométrica, Risco, Plano e pagamento, Admin.
+- Backup e restauração com verificação SHA-256 por arquivo.
+
+**Segurança herdada de auditoria adversarial**
+- Núcleo aprovado em 12 rodadas de auditoria independente (redação de
+  segredos fail-closed, política de transporte, gate de capital).
+- Segredos nunca voltam pela API, não entram em log, journal ou backup
+  comum; arranque resiliente (banco fora do ar **degrada**, não derruba).
+
+## Começar em 2 minutos (local)
+
+```bash
+uv sync --locked --extra desk --extra dev
+source .venv/bin/activate
+ACCESS_PASSWORD=uma-senha-de-teste DATA_DIR=./data \
+  uvicorn service.app:app --port 8080
+```
+
+Abra `http://localhost:8080`, use a senha definida e siga o quadro
+**Seu progresso**. Com Docker:
+
+```bash
+ACCESS_PASSWORD=uma-senha-de-teste docker compose up --build
+```
+
+## Colocar no ar e vender
+- **[INSTALAR.md](INSTALAR.md)** — Supabase, deploy, webhook, primeira venda.
+- **[DOMINIO-E-CADASTROS.md](DOMINIO-E-CADASTROS.md)** — DNS, OAuth, Woovi.
+- **[RUNBOOK.md](RUNBOOK.md)** — operação, incidentes, backup/restauração.
+- **[COMECE-AQUI.md](COMECE-AQUI.md)** — guia do usuário final.
+
+## Qualidade
+
+```bash
+pytest -q          # suíte completa
+ruff check .
+```
+
+A suíte cobre os cenários de aceite da mesa (concorrência, disputa de
+capital, mandato revogado, timeout incerto, fills fora de ordem, kill
+switch, contabilidade que confere na mão) e o produto (isolamento entre
+inquilinos, cobrança, cadastro, painel sem botão morto).
+
+## Créditos e licença
+Fork endurecido de
+[TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents)
+(Apache-2.0). A Trading Floor é código original DZ23, inspirada visualmente
+em [Claw3D](https://github.com/iamlukethedev/Claw3D) e
+[openclaw-office](https://github.com/wickedapp/openclaw-office) (MIT) — ver
+[NOTICE](NOTICE). Corretoras via [ccxt](https://github.com/ccxt/ccxt) (MIT).
+Licença deste projeto: ver [LICENSE](LICENSE).
