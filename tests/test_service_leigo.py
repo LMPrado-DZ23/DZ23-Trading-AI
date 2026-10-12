@@ -418,6 +418,16 @@ class TestDominioOficial:
             assert "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" not in texto
 
 
+def _reconciliar_com_corretora_que_confirma(coord):
+    """Corretora que CONFIRMA o estado local: nenhuma ordem viva e as mesmas
+    posições que o livro tem. É o cenário 'tudo bate' — e mesmo ele precisa
+    passar pela reconciliação para gerar evidência."""
+    from decimal import Decimal as _D
+    posicoes = {i: _D(str(d["quantidade"]))
+                for i, d in coord.ledger.open_positions_detail().items()}
+    return coord.reconciliar(lambda coid: None, consultar_posicoes=lambda: posicoes, consultar_ordens_abertas=lambda: [])
+
+
 class TestDinheiroRealNoServico:
     """O caminho de dinheiro real existe e é honesto sobre o que falta."""
 
@@ -459,9 +469,52 @@ class TestDinheiroRealNoServico:
         assert c.get("/v1/desk/status", headers=h).status_code == 423
         assert c.post("/v1/live/liberar", headers=h,
                       json={"frase": "qualquer"}).status_code == 422
+        # Liberar exige DUAS condições: a frase E a reconciliação. Só a frase
+        # não basta — pode haver ordem ou posição que o sistema desconhece.
+        # Mesa LIMPA ainda assim exige reconciliação: sem relatório do
+        # servidor não há evidência, e sem evidência não se libera.
+        sem_relatorio = c.post(
+            "/v1/live/liberar", headers=h,
+            json={"frase": "EU AUTORIZO OPERAR COM DINHEIRO REAL"})
+        assert sem_relatorio.status_code == 409
+        mesa = m._DESKS.get("legacy") or m._desk_boot("legacy")
+        m._DESKS["legacy"] = mesa
+        _reconciliar_com_corretora_que_confirma(mesa["coordinator"])
+        limpa = c.post("/v1/live/liberar", headers=h,
+                       json={"frase": "EU AUTORIZO OPERAR COM DINHEIRO REAL"})
+        assert limpa.status_code == 200, limpa.text
+
+        # Com ordem INCERTA, a liberação é recusada — e nenhuma afirmação do
+        # cliente ("reconciliado": true) pode destravar isso.
+        c.get("/v1/desk/status", headers=h)          # carrega a mesa
+        coord = m._DESKS["legacy"]["coordinator"]
+        coord.exigir_reconciliacao("ordem incerta de teste")
+        c.post("/v1/live/parada-emergencia", headers=h)
+        recusado = c.post(
+            "/v1/live/liberar", headers=h,
+            json={"frase": "EU AUTORIZO OPERAR COM DINHEIRO REAL",
+                  "reconciliado": True})
+        assert recusado.status_code == 409
+        sem_reconciliar = recusado
+        detalhe = sem_reconciliar.json()["detail"]
+        assert "reconcilie" in detalhe["acao"]
+        assert detalhe["pendencias"], "a recusa precisa DIZER o que está pendente"
+        # Repetir o pedido com a mesma afirmação do cliente continua sendo
+        # recusado: só o SERVIDOR pode atestar a reconciliação.
+        de_novo = c.post("/v1/live/liberar", headers=h,
+                         json={"frase": "EU AUTORIZO OPERAR COM DINHEIRO REAL",
+                               "reconciliado": True})
+        assert de_novo.status_code == 409
+
+        # Só após a reconciliação concluída no servidor a liberação passa.
+        atual = m._DESKS.get("legacy") or m._desk_boot("legacy")
+        m._DESKS["legacy"] = atual
+        # Reconciliação REAL do servidor: corretora sem ordens e sem posições.
+        rel = _reconciliar_com_corretora_que_confirma(atual["coordinator"])
+        assert rel["seguro"] is True, rel["divergencias"]
         ok = c.post("/v1/live/liberar", headers=h,
                     json={"frase": "EU AUTORIZO OPERAR COM DINHEIRO REAL"})
-        assert ok.status_code == 200
+        assert ok.status_code == 200, ok.text
         assert c.get("/v1/desk/status", headers=h).status_code == 200
 
     def test_panel_has_the_panic_button(self):
@@ -505,3 +558,41 @@ class TestRestauracaoDeAmbienteNoJob:
             _t.sleep(0.1)
         assert os.environ.get("GROQ_API_KEY") is None, (
             "a chave do inquilino ficou no ambiente do processo")
+
+
+class TestMarcaDoProduto:
+    """Os ícones precisam ser servidos — sem rota, o favicon e o ícone de
+    atalho simplesmente não aparecem."""
+
+    @staticmethod
+    def _cliente():
+        # sem `with`: o ciclo de vida reinicia o agendador, que só pode
+        # subir uma vez por processo
+        from fastapi.testclient import TestClient
+
+        import service.app as m
+        return TestClient(m.app)
+
+    def test_the_favicon_is_served(self):
+        r = self._cliente().get("/favicon.ico")
+        assert r.status_code == 200 and len(r.content) > 0
+
+    def test_the_logo_is_served(self):
+        c = self._cliente()
+        for arquivo in ("dz23-logo-192.png", "dz23-logo-512.png",
+                        "favicon-32.png"):
+            r = c.get(f"/static/marca/{arquivo}")
+            assert r.status_code == 200, arquivo
+            assert r.content[:4] == b"\x89PNG", f"{arquivo} não é PNG"
+
+    def test_arbitrary_paths_are_refused(self):
+        """Nome arbitrário leria qualquer arquivo do disco."""
+        c = self._cliente()
+        for tentativa in ("..%2F..%2Fapp.py", "segredo.env", "app.py"):
+            r = c.get(f"/static/marca/{tentativa}")
+            assert r.status_code in (404, 400), tentativa
+
+    def test_the_pages_reference_the_brand(self):
+        html = self._cliente().get("/").text
+        assert "/static/marca/favicon" in html
+        assert "/static/marca/dz23-logo-192.png" in html

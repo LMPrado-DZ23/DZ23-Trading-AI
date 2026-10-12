@@ -12,9 +12,11 @@ Limites codificados:
 from __future__ import annotations
 
 from dataclasses import dataclass, dataclass as _dataclass, field
+from datetime import datetime
 from decimal import Decimal
 
 from .models import Action, DeskMandate, MandateError, OrderIntent, utcnow
+from .provenance import build_state, validar
 from .risk import PortfolioAllocator, RiskEngine, RiskVeto
 
 
@@ -26,6 +28,9 @@ class Position:
     entry_price: Decimal
     agent_id: str
     cost_basis: Decimal
+    # Momento da entrada: sem ele a regra de tempo da política de saída
+    # nunca dispara em produção, e o backtest passa a medir outra coisa.
+    opened_at: datetime | None = None
 
 
 @dataclass
@@ -129,6 +134,8 @@ class DeskOrchestrator:
         report.admitted = len(decision.admitted)
         report.vetoed = [(p.agent_id, why) for p, why in decision.vetoed]
 
+        snaps_por_instrumento = {s.instrument: s for s in (snapshots or [])}
+
         for proposal in decision.admitted:
             if self.analista is not None:
                 from .context import aplicar_parecer
@@ -150,10 +157,28 @@ class DeskOrchestrator:
             if price is None:
                 report.vetoed.append((proposal.agent_id, "sem preço de execução"))
                 continue
+            # PROCEDÊNCIA: a ordem precisa provar de qual dado nasceu. Sem
+            # isto o gate de capital recusa — e recusava, silenciosamente,
+            # todo o caminho de produção.
+            snap = snaps_por_instrumento.get(proposal.instrument)
+            try:
+                provenance = validar(build_state(
+                    instrument=proposal.instrument,
+                    cutoff=snap.cutoff if snap else None,
+                    source=(snap.source if snap and getattr(snap, "source", None)
+                            else "fixture"),
+                    strategy=proposal.strategy, agent_id=proposal.agent_id,
+                    worker_id=self.worker_id))
+            except Exception as exc:
+                report.vetoed.append(
+                    (proposal.agent_id,
+                     f"sem procedência verificável: {type(exc).__name__}: {exc}"[:200]))
+                continue
             try:
                 reservation = self.risk.reserve(proposal, price)
                 intent = self.risk.intent(reservation, proposal.action,
-                                          self.mandate.mode, self.worker_id)
+                                          self.mandate.mode, self.worker_id,
+                                          provenance=provenance)
                 intent.assert_sendable(worker_id=self.worker_id, mandate=self.mandate)
             except (RiskVeto, MandateError) as exc:
                 report.vetoed.append((proposal.agent_id, str(exc)))
@@ -166,7 +191,7 @@ class DeskOrchestrator:
                       cost_basis) -> None:
         """Chamado quando uma compra executa: a posição entra no livro."""
         self.book[instrument] = Position(instrument, quantity, price, agent_id,
-                                         cost_basis)
+                                         cost_basis, opened_at=utcnow())
 
     def close_position(self, instrument: str, preco_saida=None) -> Position | None:
         """Posição encerrada sai do livro, o instrumento fica livre — e o

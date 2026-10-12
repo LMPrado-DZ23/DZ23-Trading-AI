@@ -142,17 +142,15 @@ def validar(trader, closes, instrumento: str, *, exchange: str = "binance",
         else:
             entrada_idx, entrada = posicao
             variacao = (preco - entrada) / entrada
-            alvo = trader.movimento_alvo
-            stop = -alvo / 2
-            venceu = i - entrada_idx >= velas_maximas_na_posicao
-            if variacao >= alvo or variacao <= stop or venceu:
+            # A MESMA política que a produção usa — não uma aproximação.
+            politica = trader.exit_policy
+            sair, motivo_saida = politica.avaliar(variacao, i - entrada_idx)
+            if sair:
                 custo = custo_de_operar(instrumento, exchange,
                                         capital * Decimal("0.15"))
                 resultado.operacoes.append(Operacao(
                     entrada_idx, i, entrada, preco, variacao,
-                    variacao - custo.ida_e_volta,
-                    "alvo" if variacao >= alvo else
-                    ("stop" if variacao <= stop else "tempo")))
+                    variacao - custo.ida_e_volta, motivo_saida))
                 posicao = None
         i += 1
     return resultado

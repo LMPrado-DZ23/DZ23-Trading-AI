@@ -55,10 +55,29 @@ class TestGestaoDeSaida:
         assert t.manage(snap(uptrend()), p).action is Action.REDUCE
 
     def test_thesis_alive_holds(self):
+        """Posição ainda dentro do alvo da estratégia: mantém.
+
+        O alvo agora vem da política ÚNICA da estratégia (a mesma do
+        backtest), não de um 8% fixo que só existia na produção.
+        """
         t = enable([TrendTrader("t", UNIV)])[0]
-        p = Position("BTC/USDT", Decimal("1"), Decimal("152"), "t", Decimal("152"))
+        atual = uptrend()[-1]
+        # entrada a ~2% abaixo do preço atual: lucro menor que o alvo (4%)
+        entrada = (Decimal(str(atual)) / Decimal("1.02")).quantize(Decimal("0.01"))
+        p = Position("BTC/USDT", Decimal("1"), entrada, "t", entrada)
         call = t.manage(snap(uptrend()), p)
         assert call.action is Action.HOLD and "tese de pé" in call.reason
+
+    def test_target_from_the_strategy_policy_triggers_the_exit(self):
+        """E ao alcançar o alvo da política, sai — mesmo número que o
+        backtest usa para dizer se a estratégia presta."""
+        t = enable([TrendTrader("t", UNIV)])[0]
+        atual = Decimal(str(uptrend()[-1]))
+        entrada = (atual / (Decimal("1") + t.exit_policy.alvo + Decimal("0.01"))
+                   ).quantize(Decimal("0.01"))
+        p = Position("BTC/USDT", Decimal("1"), entrada, "t", entrada)
+        call = t.manage(snap(uptrend()), p)
+        assert "alvo atingido" in call.reason
 
     def test_thesis_invalidated_by_strategy_rule(self):
         t = enable([MeanReversionTrader("t", UNIV)])[0]
@@ -90,7 +109,7 @@ class TestCicloCompleto:
                                    price=Decimal("130"),
                                    cost_basis=rec.filled_qty * rec.avg_price,
                                    agent_id=agent)
-        assert out["estado"] == "encerrada"
+        assert out["estado"] in ("filled", "acknowledged")
         assert Decimal(out["resultado"]) > 0              # lucro atribuído
         assert led.attribution()[agent] > 0
         assert led.is_balanced()

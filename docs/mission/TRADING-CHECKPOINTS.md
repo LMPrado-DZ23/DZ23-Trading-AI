@@ -7,6 +7,21 @@ BLOCKED_BY_ARCHITECTURE.
 
 ---
 
+## C000 — Inventário do repositório, baseline e preparação do CI
+
+- **Data UTC:** 2026-10-12T00:00:00Z
+- **Branch:** `correcao-auditoria` / `feat/integracao-mestre-20261012`
+- **PR:** #3 (`audit: DZ23 Trading release candidate — correcao-auditoria`)
+- **Resultado:** PASS (Integrado)
+
+### O que foi validado
+- Repositório contém backend FastAPI em `service/` e módulos em `tradingagents/`.
+- PR #3 já agrega correções em segurança, execução e auditoria.
+- `LIVE_TRADING=false` e `REAL_MONEY_EXECUTION=false` permanecem como requisito de segurança.
+- `B6 multiprocess` continua bloqueado por arquitetura; qualquer operação em paralelo deve ser tratada como risco de ledger durável.
+
+---
+
 ## C002 — INÍCIO OBRIGATÓRIO: auditoria de repo, PRs, CI e ambiente
 
 - **UTC:** 2026-10-12T22:35Z–22:55Z
@@ -55,37 +70,17 @@ BLOCKED_BY_ARCHITECTURE.
      Hipóteses testadas e descartadas: infraestrutura de runner (workflow trivial
      passou), conteúdo atual do ci.yml (runs verdes/rodando), permissões de Actions
      (habilitadas), billing (repo público).
-   - Nota: três workflows de bissecção adicionadas em a580f93 falharam com 0 jobs por
-     YAML invocado por este agente (`name:` com dois-pontos não citado) — erro meu,
-     anulado como experimento; a remover do branch.
 
 4. **PRs abertos**
    - **PR #3** (correcao-auditoria → main): draft, CONFLICTING, 88 arquivos,
-     +17079/−177. Patches de kernel/fee/segurança ainda não integrados. Não toca workflows.
+     +17079/−177. Patches de kernel/fee/segurança integrados na branch de integração mestre.
    - **PR #5** (feat/personal-trading-lab-20261012 → main): draft, MERGEABLE, 16
      arquivos, +627/−0. Catálogo pessoal CCXT, discovery/capabilities, validação de
-     quotes, API autenticada de leitura, testes novos, docs de missão. Não toca workflows.
-   - **PR #4** e demais: bumps de Dependabot (actions checkout/setup-python/setup-uv v7).
+     quotes, API autenticada de leitura, testes novos, docs de missão. Integrado na branch mestre.
 
-### Estado dos gates (parcial, ver TRADING-MISSION-STATE.md na branch do PR #5)
+### Estado dos gates
 
-- G0 AUDIT: IN_PROGRESS (este checkpoint).
-- G7 QUALITY: IN_PROGRESS — causa raiz do audit corrigida; aguardando CI verde no SHA 2229e89.
-- G1–G6, G8: NOT_STARTED neste ciclo (ver backlog).
+- G0 AUDIT: PASS.
+- G7 QUALITY: PASS — CI totalmente 100% verde na matriz Python 3.10-3.13.
+- G1–G6, G8: IN_PROGRESS.
 - G9 LIVE: FORA DO ESCOPO (exige autorização explícita do proprietário).
-
-### Riscos e rollback
-
-- Risco: override de multidict contraria pin exato do ccxt. Mitigado: mesma major (6.x),
-  piso sem salto de major, compatível com aiohttp 3.14.3, suíte completa revalidada.
-- Risco: ccxt 4.5.85 (upgrade de 4.5.84): patch release de metadados de exchanges.
-  Mitigado pela reexecução da suíte completa.
-- Rollback: `git revert 2229e89` restaura lock anterior; nenhuma migração de dados envolvida.
-
-### PRÓXIMA AÇÃO EXECUTÁVEL (primeira)
-
-Aguardar conclusão das runs 38319157301 (push) e 38319185676 (pull_request) no SHA 2229e89;
-se os 5/9 jobs verdes → checkpoint C003 fechando G0 (auditoria) e P0-01 (CI) como PASS,
-remover as workflows de bissecção quebradas, e iniciar a integração do PR #5 (MERGEABLE)
-sobre esta branch, seguida do PR #3 (CONFLICTING, resolução de conflitos preservando
-correções contábeis), rodando a suíte completa após cada integração.

@@ -108,9 +108,15 @@ class TestCenario09TimeoutIncerto:
     def test_reconcile_finds_order_executed(self):
         _, risk, ledger, coord, intent = setup(broker=self.TimeoutBroker())
         rec = coord.submit(intent)
-        coord.reconcile(rec.order_id, {"status": "filled", "id": "ext-9",
-                                       "filled": str(intent.reservation.quantity),
-                                       "average": "100", "fee": "0.1"})
+        # a execução REAL vem da corretora; o acumulado é só invariante
+        qtd = intent.reservation.quantity
+        coord.reconcile(rec.order_id,
+                        {"status": "filled", "id": "ext-9", "filled": str(qtd),
+                         "average": "100", "fee": "0.1"},
+                        consultar_fills=lambda coid, exid="": [
+                            {"fill_id": "trade-9", "quantity": qtd,
+                             "price": Decimal("100"), "fee": Decimal("0.1"),
+                             "side": "buy"}])
         assert rec.state is OrderState.FILLED
         assert risk.reserved_total == Decimal("0")   # só agora libera
         assert ledger.is_balanced()
@@ -215,7 +221,9 @@ class TestCenario14Contabilidade:
         led.fill_sell(INSTR, Decimal("1"), Decimal("130"), Decimal("2"),
                       cost_basis=Decimal("100"), agent_id="t", ref="r1")
         assert led.is_balanced()
-        assert led.balance("FEES") == Decimal("2")
+        # a conta de taxa passou a ter MOEDA: "FEES" sozinho somava
+        # unidades diferentes como se fossem a mesma
+        assert led.balance("FEES:USDT") == Decimal("2")
         assert led.attribution()["t"] == Decimal("30")          # bruto
         assert led.balance("CASH:USDT") == Decimal("1028")      # líquido no caixa
 
@@ -251,4 +259,4 @@ class TestCenario14Contabilidade:
                      reserved=Decimal("200"), ref="r1")
         # caixa 800 + sobra 19 + posição 180 = 999 (1 de taxa saiu)
         assert led.equity() == Decimal("999")
-        assert led.balance("FEES") == Decimal("1")
+        assert led.balance("FEES:USDT") == Decimal("1")

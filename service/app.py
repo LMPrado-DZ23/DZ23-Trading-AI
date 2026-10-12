@@ -164,7 +164,24 @@ ALLOWED_KEYS = [
     "ALERTA_TELEGRAM_TOKEN", "ALERTA_TELEGRAM_CHAT", "ALERTA_WEBHOOK_URL",
     "TRANSPARENCIA_PUBLICA", "TRANSPARENCIA_NOME",
 ]
-SECRETish = tuple(k for k in ALLOWED_KEYS if k.endswith(("_KEY", "_SECRET")))
+# Segredo é declarado, NÃO inferido pelo sufixo do nome. A heurística
+# anterior (_KEY/_SECRET) deixava o token do Telegram e a URL de webhook —
+# que costuma embutir credencial — voltarem em TEXTO CLARO pela API para
+# qualquer usuário com permissão de leitura.
+SEGREDOS_DECLARADOS = {
+    "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "GOOGLE_API_KEY",
+    "GROQ_API_KEY", "MISTRAL_API_KEY", "OPENROUTER_API_KEY",
+    "OPENAI_COMPATIBLE_API_KEY", "FRED_API_KEY", "ALPHA_VANTAGE_API_KEY",
+    "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET",
+    "ALERTA_TELEGRAM_TOKEN", "ALERTA_TELEGRAM_CHAT", "ALERTA_WEBHOOK_URL",
+    "LIVE_TRADING_CONFIRM",
+}
+# Rede de segurança: qualquer chave futura com cara de credencial também
+# entra, mesmo que alguém esqueça de declará-la.
+SECRETish = tuple(sorted(
+    {k for k in ALLOWED_KEYS
+     if k in SEGREDOS_DECLARADOS
+     or k.endswith(("_KEY", "_SECRET", "_TOKEN", "_PASSWORD", "_WEBHOOK_URL"))}))
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 bearer = HTTPBearer(auto_error=False)
@@ -609,7 +626,39 @@ def metrics(_=Depends(auth)):
     return METRICS.snapshot()
 
 @app.get("/")
-def index(): return FileResponse(STATIC / "index.html")
+def index():
+    """Raiz é a página PÚBLICA: quem chega pelo domínio precisa entender o
+    produto antes de ver um formulário de login."""
+    return FileResponse(STATIC / "site.html")
+
+
+@app.get("/app", include_in_schema=False)
+@app.get("/app/", include_in_schema=False)
+def aplicacao():
+    """A plataforma em si — login e painel."""
+    return FileResponse(STATIC / "index.html")
+
+
+@app.get("/static/marca/{arquivo}", include_in_schema=False)
+def marca(arquivo: str):
+    """Serve os arquivos da marca (favicon, ícone de atalho, logo).
+
+    Caminho fixo e nome simples: a pasta é pública por natureza, mas aceitar
+    nome arbitrário abriria leitura de qualquer arquivo do disco.
+    """
+    permitidos = {"favicon.ico", "favicon-32.png", "favicon-64.png",
+                  "dz23-logo.png", "dz23-logo-512.png", "dz23-logo-192.png"}
+    if arquivo not in permitidos:
+        raise HTTPException(status_code=404, detail="arquivo não encontrado")
+    caminho = STATIC / "marca" / arquivo
+    if not caminho.exists():
+        raise HTTPException(status_code=404, detail="arquivo não encontrado")
+    return FileResponse(caminho, headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return FileResponse(STATIC / "marca" / "favicon.ico")
 
 @app.get("/v1/config")
 def get_cfg(request: Request, _=Depends(auth)):
@@ -1356,6 +1405,90 @@ _OAUTH_STATES = StateStore()
 _OAUTH_TRANSPORT = None          # injetável em teste; None = rede real
 
 
+# Valores aceitos como "ligado". Qualquer outra coisa — inclusive "talvez",
+# "enable" ou um erro de digitação — é NÃO. Num campo que decide se ordens
+# chegam a uma corretora, o erro precisa cair do lado seguro.
+_SIM = frozenset({"1", "true", "yes", "sim", "on"})
+_NAO = frozenset({"", "0", "false", "no", "nao", "não", "off"})
+
+
+def flag_ligada(nome: str, env=None) -> bool:
+    """Parser estrito de flag booleana de ambiente.
+
+    `bool(os.environ.get(...))` liga a flag com QUALQUER texto — "false" e
+    "0" incluídos, porque string não vazia é verdadeira em Python. Aqui só
+    um conjunto declarado liga; desconhecido fica desligado.
+    """
+    bruto = (env or os.environ).get(nome)
+    if bruto is None:
+        return False
+    # Só o conjunto declarado liga. `_NAO` existe para documentar os
+    # negativos esperados; qualquer valor fora dos dois cai aqui como NÃO.
+    return str(bruto).strip().lower() in _SIM
+
+
+@app.get("/v1/status/operacao")
+def status_operacao():
+    """Status PÚBLICO de capacidade e rollout da plataforma.
+
+    Texto fixo na tela mente com o tempo: alguém libera um gate e a interface
+    continua dizendo o contrário, ou o gate fecha e a tela segue convidando a
+    operar. O painel pergunta; quem responde é o servidor.
+
+    LIVE não é removido do produto — é uma capacidade PREVISTA e hoje
+    indisponível. Some da tela seria esconder o roteiro; dizer que está
+    pronta seria mentir.
+
+    O QUE ISTO NÃO É: prova de prontidão operacional. Aqui se responde o que
+    a PLATAFORMA oferece — sem nada de inquilino, conta, posição ou saldo,
+    porque a rota é pública. O estado real de um inquilino depende de kill
+    switch, reconciliação, incidentes de risco, consistência de capital,
+    capacidade da corretora, mandato, autorização e frescor do SAFE; isso
+    vive em /v1/operational-readiness, autenticado e por inquilino, ainda
+    não implementado. Responder aqui o que é de lá vazaria estado de cliente
+    para quem nem fez login.
+    """
+    ambiente = {
+        "PAPER": {"habilitado": True,
+                  "descricao": "simulação completa, sem ordem na corretora"},
+        "SHADOW": {"habilitado": True,
+                   "descricao": "decisões com dados reais, sem envio"},
+        "DEMO": {"habilitado": flag_ligada("DEMO_TRADING"),
+                 "descricao": "conta de demonstração da corretora"},
+        "LIVE": {"habilitado": False,
+                 "descricao": "execução com dinheiro real"},
+    }
+    # Um gate só é "aprovado" quando há evidência; enquanto não há, o estado
+    # é EM ANDAMENTO — não "pendente de configuração".
+    gates = [
+        {"nome": "kernel financeiro", "status": "EM_AUDITORIA",
+         "detalhe": "capital, reservas e reconciliação sob auditoria adversarial"},
+        {"nome": "segurança de dados", "status": "EM_AUDITORIA",
+         "detalhe": "isolamento por inquilino e exposição de dados em revisão"},
+    ]
+    bloqueado = not ambiente["LIVE"]["habilitado"]
+    return {
+        "escopo": "PLATAFORMA",
+        "nao_e": ("prova de prontidão operacional (operational readiness); "
+                  "o estado por inquilino virá autenticado em "
+                  "/v1/operational-readiness"),
+        # PAPER é POLÍTICA ATUAL, não detecção: enquanto só ele estiver
+        # autorizado, o valor é fixo de propósito. Quando o modo passar a
+        # vir do mandato do inquilino, esta origem muda junto — e quem lê
+        # precisa saber distinguir as duas coisas.
+        "modo_atual": "PAPER",
+        "modo_atual_origem": "POLITICA_ATUAL",
+        "modos": ambiente,
+        "operacao_real": {
+            "disponivel": not bloqueado,
+            "estado": "BLOQUEADA" if bloqueado else "LIBERADA",
+            "motivo": ("auditoria de segurança em andamento" if bloqueado
+                       else "gates aprovados"),
+        },
+        "gates": gates,
+    }
+
+
 @app.get("/v1/auth/oauth/providers")
 def oauth_providers():
     """Público: o painel só mostra o botão do provedor configurado."""
@@ -1463,8 +1596,20 @@ def _desk_boot(tenant_id: str) -> dict:
     broker, broker_mode = build_desk_broker(
         cfg, final_state={}, journal_path=str(data_dir / "broker.jsonl"),
         paper_price=Decimal("100"))
-    coord = ExecutionCoordinator(mandate, ledger, risk, worker_id=f"worker-{tenant_id}",
-                                 broker=broker)
+    coord = ExecutionCoordinator(mandate, ledger, risk,
+                                 worker_id=f"worker-{tenant_id}", broker=broker)
+    # Identidade e destino do relatório de reconciliação.
+    coord.tenant_id = tenant_id
+    coord.armazem = armazem
+    # A mesa passa a saber o que a corretora PODE provar; sem corretora real,
+    # a matriz fica DESCONHECIDA — e desconhecida não vira confiança.
+    if broker is not None and hasattr(broker, "capacidades"):
+        try:
+            coord.capacidades = broker.capacidades()
+        except Exception as exc:
+            # Falha na detecção NÃO vira confiança: a matriz continua
+            # DESCONHECIDA e o motivo fica registrado, em vez de sumir.
+            coord.capacidades_erro = f"{type(exc).__name__}: {exc}"[:200]
     # IA de contexto: usa o MESMO provedor que o cliente já configurou.
     # Sem provedor, a mesa opera sem verificação — e o ciclo registra isso.
     analista = None
@@ -1472,22 +1617,45 @@ def _desk_boot(tenant_id: str) -> dict:
         from tradingagents.desk.context import AnalistaDeContexto
 
         def _consultar(prompt: str) -> str:
+            """Consulta o provedor do INQUILINO.
+
+            A versão anterior escrevia a credencial em os.environ sem trava:
+            duas mesas de inquilinos diferentes rodam em threads próprias, e
+            a janela entre escrever e restaurar permitia o inquilino A usar a
+            chave do B — ou a chave de um sobrar no processo.
+
+            O ambiente do processo deixou de ser o transporte da credencial:
+            ela vai explicitamente para o cliente. O lock só permanece para o
+            caso em que a biblioteca ainda exija variável de ambiente, e
+            nesse caminho a janela fica fechada de ponta a ponta.
+            """
             from tradingagents.default_config import DEFAULT_CONFIG
             from tradingagents.llm_clients.factory import create_llm_client
             llm_conf, llm_env = resolve_llm(cfg)
             conf = {**DEFAULT_CONFIG, **llm_conf}
-            anterior = {k: os.environ.get(k) for k in llm_env}
-            os.environ.update(llm_env)
-            try:
-                cliente = create_llm_client(conf.get("llm_provider"), conf)
-                return cliente.complete(prompt) if hasattr(cliente, "complete") \
-                    else str(cliente.invoke(prompt))
-            finally:
-                for k, antes in anterior.items():
-                    if antes is None:
-                        os.environ.pop(k, None)
-                    else:
-                        os.environ[k] = antes
+            import inspect
+            aceita_credencial = "api_key" in inspect.signature(
+                create_llm_client).parameters
+            if aceita_credencial:
+                chave = next((v for v in llm_env.values() if v), "")
+                cliente = create_llm_client(conf.get("llm_provider"), conf,
+                                            api_key=chave)
+                return (cliente.complete(prompt) if hasattr(cliente, "complete")
+                        else str(cliente.invoke(prompt)))
+            with _lock:                      # janela fechada: um por vez
+                anterior = {k: os.environ.get(k) for k in llm_env}
+                os.environ.update(llm_env)
+                try:
+                    cliente = create_llm_client(conf.get("llm_provider"), conf)
+                    return (cliente.complete(prompt)
+                            if hasattr(cliente, "complete")
+                            else str(cliente.invoke(prompt)))
+                finally:
+                    for k, antes in anterior.items():
+                        if antes is None:
+                            os.environ.pop(k, None)
+                        else:
+                            os.environ[k] = antes
 
         analista = AnalistaDeContexto(_consultar)
 
@@ -1523,12 +1691,24 @@ def _desk_boot(tenant_id: str) -> dict:
     if hasattr(broker, "price_provider"):
         broker.price_provider = prices_fn
 
+    # Estado financeiro anterior: restaurar e EXIGIR reconciliação antes de
+    # qualquer exposição nova (UNKNOWN => BLOCK).
+    recuperacao = coord.restaurar_estado(armazem.carregar(tenant_id, "oms"))
+
     desk = {"orchestrator": orch, "ledger": ledger, "coordinator": coord,
-            "memoria": memoria, "armazem": armazem,
+            "memoria": memoria, "armazem": armazem, "recuperacao": recuperacao,
             "guardian": PositionGuardian(coord), "cycles": [],
             "feed_kind": feed_kind, "broker_mode": broker_mode, "scheduler": None}
 
+    def _persistir_oms():
+        try:
+            armazem.salvar(tenant_id, "oms", coord.snapshot_estado())
+        except Exception:
+            HEALTH["avisos"].append(
+                "não foi possível persistir o estado financeiro da mesa")
+
     def _record(out):
+        _persistir_oms()
         # A cada ciclo, avalia e envia alertas — é o que acorda o dono sem
         # ele precisar abrir o painel.
         try:
@@ -1570,9 +1750,11 @@ def _desk_boot(tenant_id: str) -> dict:
 
 def _desk_of(request: Request) -> dict:
     tid = request_tenant(request)
-    if _live_halted(tid):
+    parada = _parada(tid)
+    if parada.bloqueia:
         raise HTTPException(
-            423, "parada de emergência acionada: libere em Plano e risco "
+            423, f"parada de emergência {parada.estado.estado}: "
+                 f"{parada.estado.motivo or 'acionada'} — reconcilie e libere "
                  "antes de operar novamente")
     desk = _DESKS.get(tid)
     if desk is None:
@@ -1607,7 +1789,7 @@ def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
         "risk": {"reservado": str(orch.risk.reserved_total),
                  "disponivel": str(orch.risk.available),
                  "instrumentos_abertos": sorted(orch.risk.open_instruments())},
-        "orders": [{"id": r.order_id, "instrumento": r.intent.reservation.instrument,
+        "orders": [{"id": r.order_id, "instrumento": r.instrumento,
                     "estado": r.state.value, "qtd": str(r.filled_qty),
                     "preco": str(r.avg_price), "nota": r.note}
                    for r in coord.orders.values()],
@@ -1804,29 +1986,69 @@ def database_health(_=Depends(auth)):
 # por ordem e o teto de perda diária — mais a parada de emergência.
 from tradingagents.brokers.ccxt_bridge import LIVE_CONFIRM_PHRASE  # noqa: E402  # isort: skip
 
-# Inquilinos com parada de emergência acionada — trava independente da mesa.
-def _load_live_halts() -> set[str]:
-    try:
-        body = json.loads(LIVE_HALT_PATH.read_text(encoding="utf-8"))
-        return {str(item) for item in body if isinstance(item, str)}
-    except (OSError, TypeError, ValueError):
-        return set()
+# Parada de emergência DURÁVEL. O conjunto em memória anterior desarmava
+# sozinho a cada reinício — o dono acreditava ter parado tudo e não tinha.
+# ALIAS obrigatório: este KillSwitch (do desk, por armazém/tenant) é OUTRA
+# classe que o `execution.KillSwitch` importado no topo. Importá-lo com o
+# mesmo nome REBINDAVA o global `KillSwitch`, e o `TenantRuntime` (que resolve
+# o nome em tempo de chamada) passava a construir a classe errada — sem
+# `.state` —, quebrando `/v1/office/snapshot` e `/v1/office/events` com 500.
+from tradingagents.desk.killswitch import (  # noqa: E402
+    KillSwitch as DeskKillSwitch,
+    KillSwitchError,
+)
 
 
-_LIVE_HALTED: set[str] = _load_live_halts()
+def _relatorio_de_reconciliacao(tenant_id: str) -> dict:
+    """Relatório do SERVIDOR sobre o estado financeiro do inquilino.
+
+    É esta função — e não o corpo da requisição — que decide se é seguro
+    liberar a parada. Sem mesa carregada, o resultado é 'não seguro':
+    desconhecido nunca vira permissão.
+    """
+    d = _DESKS.get(tenant_id)
+    if d is None:
+        # Carrega o estado SEM passar pelo portão da parada: examinar é
+        # justamente o que precisa ser possible enquanto está parado. Se nem
+        # isso funcionar, o resultado é 'não seguro' — nunca otimista.
+        try:
+            d = _desk_boot(tenant_id)
+            _DESKS[tenant_id] = d
+        except Exception as exc:
+            return {"seguro": False,
+                    "pendencias": [f"estado financeiro não pôde ser lido "
+                                   f"({type(exc).__name__}): liberar seria "
+                                   "apostar que não há nada em aberto"]}
+    coord = d["coordinator"]
+    pendencias = []
+    incertas = [r.order_id for r in coord.pending_reconciliation()]
+    if incertas:
+        pendencias.append(f"{len(incertas)} ordem(ns) em estado incerto: "
+                          + ", ".join(incertas[:5]))
+    restauradas = getattr(coord, "posicoes_restauradas", {}) or {}
+    if restauradas:
+        pendencias.append(f"{len(restauradas)} posição(ões) restauradas ainda "
+                          "não conferidas com a corretora")
+    if getattr(coord, "reconciliacao_pendente", False):
+        pendencias.append("portão de reconciliação ligado pelo restore")
+    # FRESHNESS: um relatório SAFE antigo não autoriza para sempre. Se o
+    # estado financeiro mudou depois dele, ele deixa de valer.
+    # A validade do relatório é decidida no coordenador, que conhece a
+    # versão do estado e a identidade da mesa — o serviço não reimplementa.
+    valido, motivo = coord.relatorio_valido()
+    if not valido:
+        pendencias.append(motivo)
+    if not coord.ledger.is_balanced():
+        pendencias.append("livro-razão desbalanceado")
+    return {"seguro": not pendencias, "pendencias": pendencias}
 
 
-def _persist_live_halts() -> None:
-    escrever_json_atomico(LIVE_HALT_PATH, sorted(_LIVE_HALTED))
-    os.chmod(LIVE_HALT_PATH, 0o600)
-
-
-def _live_halted(tenant_id: str) -> bool:
-    # Recarrega para que outra instância veja a parada sem depender da memória
-    # do worker que recebeu o clique.
-    _LIVE_HALTED.clear()
-    _LIVE_HALTED.update(_load_live_halts())
-    return tenant_id in _LIVE_HALTED
+def _parada(tenant_id: str) -> DeskKillSwitch:
+    from tradingagents.desk.storage import ArmazemDeEstado
+    d = _DESKS.get(tenant_id)
+    armazem = d.get("armazem") if d else ArmazemDeEstado(
+        os.environ.get("DATABASE_URL"), diretorio=DATA / "desks")
+    return DeskKillSwitch(armazem, tenant_id)
 
 
 @app.get("/v1/live/status")
@@ -1871,8 +2093,8 @@ def live_emergency(request: Request, _=Depends(auth)):
     corretora está mal configurada), parar é trivialmente verdade — e ainda
     assim marcamos a parada, porque o dono clicou para parar."""
     tid = request_tenant(request)
-    _LIVE_HALTED.add(tid)
-    _persist_live_halts()
+    parada = _parada(tid)
+    parada.acionar("acionada pelo painel", por=tid)
     d = _DESKS.get(tid)
     if d is None:
         return {"ok": True, "parado": True, "a_encerrar": [],
@@ -1898,8 +2120,25 @@ async def live_resume(req: Request, _=Depends(auth)):
     if str(body.get("frase", "")).strip() != LIVE_CONFIRM_PHRASE:
         raise HTTPException(422, f"repita exatamente: {LIVE_CONFIRM_PHRASE}")
     tid = request_tenant(req)
-    _LIVE_HALTED.discard(tid)
-    _persist_live_halts()
+    parada = _parada(tid)
+    # A EVIDÊNCIA DE RECONCILIAÇÃO É DO SERVIDOR, NUNCA DO PEDIDO.
+    # Antes, um "reconciliado": true no corpo bastava para destravar dinheiro
+    # real — o próprio cliente afirmando que conferiu. Agora o servidor
+    # verifica o estado do coordenador: ordem incerta, ordem aberta ou
+    # posição restaurada mantêm a parada.
+    relatorio = _relatorio_de_reconciliacao(tid)
+    if not relatorio["seguro"]:
+        raise HTTPException(409, {
+            "erro": "reconciliação pendente — liberar agora arriscaria operar "
+                    "sobre posição ou ordem desconhecida",
+            "pendencias": relatorio["pendencias"],
+            "acao": "Confira as ordens e posições na corretora e reconcilie "
+                    "em Mesa de Agentes antes de liberar",
+        })
+    try:
+        parada.liberar(frase_correta=True, reconciliado=True, por=tid)
+    except KillSwitchError as exc:
+        raise HTTPException(409, str(exc)) from None
     _DESKS.pop(tid, None)          # reconstrói limpo no próximo uso
     return {"ok": True, "liberado": True,
             "aviso": "envios liberados; confira os tetos antes de retomar"}
@@ -2131,3 +2370,48 @@ async def importar_tudo(req: Request, _=Depends(auth)):
     _desk_reset(tid)          # recarrega já com o que foi restaurado
     return {"ok": True, "restaurado": restaurado,
             "proxima_acao": "Abra a Mesa de Agentes e confira o aprendizado"}
+
+
+@app.post("/v1/desk/reconciliar")
+def desk_reconciliar(request: Request, _=Depends(auth)):
+    """Confere ordens incertas COM A CORRETORA e libera o portão se estiver
+    tudo certo. Sem acesso à corretora, o portão permanece fechado."""
+    d = _DESKS.get(request_tenant(request))
+    if d is None:
+        raise HTTPException(409, "mesa não carregada")
+    coord = d["coordinator"]
+    corretora = coord.broker
+
+    def consultar(client_order_id: str):
+        if not hasattr(corretora, "fetch_order_by_client_id"):
+            raise RuntimeError("corretora não expõe consulta por ordem")
+        return corretora.fetch_order_by_client_id(client_order_id)
+
+    def consultar_posicoes():
+        if not hasattr(corretora, "fetch_positions"):
+            raise RuntimeError("corretora não expõe consulta de posições")
+        return corretora.fetch_positions()
+
+    def consultar_fills(client_order_id: str, exchange_order_id: str = ""):
+        if not hasattr(corretora, "fetch_order_fills"):
+            raise RuntimeError("corretora não expõe consulta de execuções")
+        return corretora.fetch_order_fills(client_order_id, exchange_order_id)
+
+    def consultar_ordens_abertas():
+        if not hasattr(corretora, "fetch_open_orders"):
+            raise RuntimeError("corretora não expõe consulta de ordens abertas")
+        return corretora.fetch_open_orders()
+
+    tem_abertas = hasattr(corretora, "fetch_open_orders")
+    tem_consulta = hasattr(corretora, "fetch_order_by_client_id")
+    tem_posicoes = hasattr(corretora, "fetch_positions")
+    tem_fills = hasattr(corretora, "fetch_order_fills")
+    resultado = coord.reconciliar(
+        consultar if tem_consulta else None,
+        consultar_posicoes=consultar_posicoes if tem_posicoes else None,
+        consultar_fills=consultar_fills if tem_fills else None,
+        consultar_ordens_abertas=(consultar_ordens_abertas if tem_abertas
+                                  else None))
+    return {**resultado,
+            "acao": ("portão liberado: pode operar" if resultado["seguro"] else
+                     "confira as divergências na corretora antes de operar")}

@@ -172,8 +172,18 @@ class CCXTBridge:
                        "symbol": symbol, "side": side, "valor_estimado": str(valor),
                        "teto_ordem": str(self.max_order_value)})
 
+    def set_daily_loss(self, perda: Decimal) -> Decimal:
+        """Define a perda acumulada do dia, vinda do LIVRO-RAZÃO.
+
+        É esta a fonte da verdade: o contador manual anterior dependia de
+        alguém lembrar de chamá-lo, e ninguém chamava no fluxo real.
+        """
+        self.realized_loss_today = max(Decimal("0"), Decimal(str(perda)))
+        return self.realized_loss_today
+
     def register_loss(self, valor: Decimal) -> Decimal:
-        """Registra prejuízo realizado do dia — alimenta o freio diário."""
+        """Compatibilidade: soma um prejuízo pontual. Prefira set_daily_loss,
+        que vem do livro e não de chamada manual."""
         if valor > 0:
             self.realized_loss_today += valor
         return self.realized_loss_today

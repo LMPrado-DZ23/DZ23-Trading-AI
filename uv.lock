@@ -3753,7 +3753,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15" },
     { name = "setuptools", specifier = ">=80.9.0" },
     { name = "stockstats", specifier = ">=0.6.5" },
-    { name = "tomli", marker = "python_full_version < '3.11' and extra == 'dev'", specifier = ">=2.0.0" },
+    { name = "tomli", marker = "python_full_version < '3.11' and extra == 'dev'", specifier = ">=2.0.1" },
     { name = "tqdm", specifier = ">=4.67.1" },
     { name = "typer", specifier = ">=0.21.0" },
     { name = "typing-extensions", specifier = ">=4.14.0" },

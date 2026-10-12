@@ -9,8 +9,9 @@ from __future__ import annotations
 from pathlib import Path
 
 try:
-    import tomllib
-except ImportError:  # Python 3.10
+    import tomllib  # Python 3.11+
+except (ImportError, ModuleNotFoundError):  # Python 3.10
+    import tomli as tomllib
     import tomli as tomllib
 
 ROOT = Path(__file__).resolve().parents[1]

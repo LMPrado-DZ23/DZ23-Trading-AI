@@ -77,6 +77,13 @@ class DeskMandate:
     max_position_pct: Decimal = Decimal("0.25")
     max_open_positions: int = 4
     version: int = 1
+    # Folga DECLARADA para custo de execução acima do reservado: o
+    # dimensionamento reserva quantidade × preço esperado, mas a execução
+    # ainda paga taxa e pode sofrer slippage. Sem uma folga explícita,
+    # qualquer taxa viraria "déficit" e travaria a mesa a cada compra; com
+    # folga implícita, um slippage grave passaria despercebido. 1% cobre
+    # taxa típica de corretora (0,1%–0,6%) com margem.
+    slippage_buffer_pct: Decimal = Decimal("0.01")
     valid_until: datetime | None = None
     revoked_at: datetime | None = None
     live_authorized: bool = False      # só verdadeiro com a frase do dono
@@ -177,7 +184,14 @@ class PortfolioDecision:
 
 @dataclass(frozen=True)
 class RiskReservation:
-    """Capital efetivamente travado. Emitido só pelo RiskEngine."""
+    """Capital efetivamente travado. Emitido só pelo RiskEngine.
+
+    `amount` e `quantity` são os valores ORIGINAIS e nunca mudam. Antes o
+    `amount` era sobrescrito a cada consumo: deixava de ser o valor
+    reservado e passava a ser o saldo, então o consumo proporcional seguinte
+    era calculado sobre uma base que já havia encolhido — 50% + 25% dava
+    37,5 em vez de 25 restantes.
+    """
     reservation_id: str
     account: str
     instrument: str
@@ -186,6 +200,44 @@ class RiskReservation:
     mandate_version: int
     expires_at: datetime
     agent_id: str = ""
+    # Acumulados de consumo. Só estes mudam.
+    consumed_amount: Decimal = Decimal("0")
+    filled_quantity: Decimal = Decimal("0")
+    # Ordem que esta reserva financia. Uma reserva cobre UMA ordem: sem este
+    # vínculo, uma segunda ordem apresentando o mesmo id e o valor original
+    # passava na autorização, e o mesmo capital cobria duas ordens.
+    bound_client_order_id: str = ""
+    # Folga de execução efetivamente separada no caixa. `amount` é o ALVO
+    # (notional) que dimensiona a quantidade; a cobertura dura é alvo+folga.
+    # Sem separar os dois, a folga autorizava gasto que ninguém reservou.
+    buffer_amount: Decimal = Decimal("0")
+
+    @property
+    def target_amount(self) -> Decimal:
+        """Notional alvo — base do dimensionamento da quantidade."""
+        return self.amount
+
+    @property
+    def hard_reserved_amount(self) -> Decimal:
+        """Dinheiro realmente travado: alvo + folga."""
+        return self.amount + self.buffer_amount
+
+    @property
+    def original_amount(self) -> Decimal:
+        return self.amount
+
+    @property
+    def original_quantity(self) -> Decimal:
+        return self.quantity
+
+    @property
+    def remaining_amount(self) -> Decimal:
+        """Cobertura DURA ainda disponível (inclui a folga não usada)."""
+        return self.hard_reserved_amount - self.consumed_amount
+
+    @property
+    def remaining_quantity(self) -> Decimal:
+        return self.quantity - self.filled_quantity
 
 
 @dataclass(frozen=True)
@@ -198,6 +250,9 @@ class OrderIntent:
     owner_worker: str
     expires_at: datetime
     idempotency_key: str = ""
+    # Prova de origem da decisão, exigida pelo gate de capital. Ausente =>
+    # a corretora recusa (fail-closed), e é assim que deve ser.
+    provenance: dict | None = None
 
     def assert_sendable(self, *, worker_id: str, mandate: DeskMandate,
                         now: datetime | None = None) -> None:
