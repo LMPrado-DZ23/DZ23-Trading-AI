@@ -43,8 +43,14 @@ from tradingagents.telemetry import AuditLog, EventBus, MetricsRegistry
 from tradingagents.tenancy import AuthError, PostgresTenantStore, Principal, TenantStore
 from tradingagents.workers import WorkerSupervisor
 
-DATA = Path(os.environ.get("DATA_DIR", "/data"))
-DATA.mkdir(parents=True, exist_ok=True)
+_data_dir = os.environ.get("DATA_DIR", "/data")
+try:
+    DATA = Path(_data_dir)
+    DATA.mkdir(parents=True, exist_ok=True)
+except PermissionError:
+    DATA = Path("./data")
+    DATA.mkdir(parents=True, exist_ok=True)
+
 CFG_PATH = DATA / "config.json"
 DB = DATA / "jobs.db"
 LIVE_HALT_PATH = DATA / "live-halts.json"
