@@ -1,0 +1,21 @@
+# TRADING MISSION STATE
+
+- phase: G0 / INVENTORY
+- branch: audit/mission-20261012
+- head_sha: 80e99fb772ddecee48deeb654397d4f3e19cc63c
+- utc: 2026-10-12T00:00:00Z
+- baseline: repo root validated from GitHub metadata; service/app.py and pyproject.toml inspected
+- blockers:
+  - CI reproduction still pending in a local or runner environment
+  - PR #3 and PR #5 must be reviewed before any merge
+  - external exchange testnet credentials are not available; marked BLOCKED_BY_EXTERNAL_DEPENDENCY
+- next_command_executable:
+  - uv sync --locked --extra desk --extra dev
+  - uv run pytest -q
+  - uv run python -m compileall -q tradingagents service scripts
+- risks:
+  - LIVE remains disabled by policy and by code guardrails; do not enable live execution in this branch
+  - do not merge into main until gate G0/G1 passes
+- rollback:
+  - work remains isolated in branch audit/mission-20261012
+  - no destructive migrations or main branch changes in this iteration
