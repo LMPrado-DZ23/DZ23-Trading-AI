@@ -5,7 +5,7 @@
 - **Release Version (alvo):** `v0.4.0-windows-local`
 - **Target OS:** Windows 10/11 x64 (nativo, loopback, Dono Único)
 - **Modo:** Executável empacotado (PyInstaller) + Instalador Inno Setup; sem SaaS/Cloud; sem Python no PC do usuário
-- **Status:** `IN_PROGRESS` — **instalação limpa e mecânica do instalador COMPROVADAS em Windows 11 real** (artefato do run `38439685378`); **dois defeitos de runtime encontrados nessa homologação** (launcher polla `/app/healthz`; trava de força-bruta tranca o dono) — **corrigidos no C008**, com re-homologação pendente no novo artefato.
+- **Status:** `IN_PROGRESS` — **ciclo completo de homologação executado no artefato CORRIGIDO do CI**: instalar → abrir → login do dono (com espera longa no portão) → instância duplicada → fechar → reinstalar → desinstalar preservando dados — todos **PASS** (item 10). Três defeitos de runtime achados na 1ª homologação (C008) e **re-provados corrigidos no bundle**; saída do usuário (C009) homologada em dev-runner, re-prova no bundle pendente do próximo build.
   - Correção V7: a versão anterior deste documento declarava `PASS` citando testes unitários e CI Linux.
     Isso é **insuficiente** (CI Linux não prova instalador Windows) — status corrigido.
 
@@ -51,24 +51,44 @@
 
    **Pendente com o NOVO artefato (C008):** refazer o ciclo instalando, **abrindo como usuário real (duplo clique no atalho)**, login do dono no navegador sem pressa, instância duplicada abre o painel existente, e registrar aqui.
 
+10. **HOMOLOGAÇÃO DO ARTEFATO CORRIGIDO C008 — run `38444558353`** (push de `142e030`). Setup `DZ23-Trading-AI-Setup-v0.4.0.exe` 69.754.365 B `sha256:59403222…`; zip 88.480.081 B `sha256:931f886b…`; **`sha256sum -c SHA256SUMS.txt` → ambos OK direto, sem tocar no arquivo** (formato LF do C007 validado em artefato de produção). Ciclo completo executado na estação Windows 11:
+
+   | # | Passo | Resultado | Evidência |
+   |---|-------|-----------|-----------|
+   | 1 | Instalação silenciosa sem elevação | **PASS** (exit 0) | exe + `_internal` + `unins000` em `{localappdata}\DZ23-Trading-AI`; atalhos Desktop/Menu Iniciar; registro HKCU `DisplayVersion 0.4.0` |
+   | 2 | 1ª abertura como usuário | **PASS** | log do launcher: `GET /healthz 200` na 1ª tentativa → `Local backend is ready. Opening UI...` em ~1,5 s, abrindo `/app` — **sem o timeout falso de 15 s** (defeito C008-1 morto no bundle) |
+   | 3 | Headers de runtime | **PASS** | `/app` e `/floor`: `Cache-Control: no-store` ao vivo (defeito C008-3 fechado) + `X-Frame-Options` corretos; `HEAD` não é usado pelo navegador |
+   | 4 | Playwright no bundle INSTALADO: floor sem sessão | **PASS** | `AGUARDANDO LOGIN`, **zero** chamadas a `/v1/agency/snapshot` em 8 s (antes pollava a cada 3 s) |
+   | 5 | Playwright: portão do dono com 16 s de espera | **PASS** | espera 16 s (>5 ciclos do polling antigo) → login com a senha do dono → painel abre (defeito C008-2, trava 429, morto no bundle) |
+   | 6 | Playwright: visão geral + floor embutido | **PASS** | `READY`/`ADMIN`, "Live bloqueado"/`BLOCKED`; iframe do floor `CONNECTED` com a sessão do dono. Capturas: `docs/mission/evidence/windows-release/painel-instalado-c008.png` e `floor-instalado-c008.png` |
+   | 7 | Instância duplicada (2ª abertura) | **PASS** | exit 0 em **367 ms**; log `Já existe uma instância servindo http://127.0.0.1:8000 — abrindo o painel.`; pid do listener inalterado (38320) — sem segundo backend |
+   | 8 | Reinstalação sobre a existente | **PASS** (exit 0) | mtimes de `agency.db`/`jobs.db`/`subscriptions.db`/`owner_password.txt` byte a byte idênticos; senha reutilizada sem novo diálogo; binário reinstalado sobe (`healthz` 200, `/app` 200, `/floor` 200) |
+   | 9 | Desinstalação preservando dados | **PASS** (exit 0) | pasta do programa e atalhos removidos; `%APPDATA%\DZ23-Trading-AI` intacto (mtimes idênticos) |
+   | 10 | Sem janela de console | **PASS** | PE Subsystem do exe dentro do zip = **2 (WINDOWS/GUI)**; nenhum console apareceu nos lançamentos |
+
+   **Notas de execução:** o instalador rodado do Git Bash exige `MSYS_NO_PATHCONV=1` (sem isso o MSYS converte `/VERYSILENT` em caminho e abre o wizard interativo — comportamento do shell, não do instalador). Fechamento entre passos via `taskkill` (não havia caminho de saída pelo app — ver C009 abaixo).
+
+11. **C009 — saída do usuário (achado desta homologação):** executável windowed sem console e sem bandeja; fechar o navegador não para o servidor — o dono ficaria preso ao Gerenciador de Tarefas. Implementado: botão **"Fechar aplicativo"** no painel (visível só no modo Dono Único) → `POST /v1/app/quit` (auth do dono; 404 em multi-tenant ANTES da autenticação; 409 se o servidor não foi iniciado pelo launcher) → `uvicorn.Server.should_exit` → encerramento gracioso. Prova em dev-runner (mesma topologia): clique no navegador real → `POST /v1/app/quit 200` → `Application shutdown complete` → **launcher exit 0 sozinho**, porta 8000 livre; captura `docs/mission/evidence/windows-release/encerrado-c009.png`. 4 testes unitários + 1 de contrato + 2 de launcher (red→green). **Re-prova no bundle pendente do próximo build (C009).**
+
 ## Ainda NÃO comprovado (pendências de homologação)
 
-- [x] Instalação limpa em Windows 10/11 x64 real com o artefato gerado pelo CI (run `38439685378`, exit 0 — item 9).
-- [x] Criação de shortcuts (Desktop/Start) pelo instalador — item 9.
-- [x] Início sem janela de console; healthz respondendo após abrir — item 9 (com re-prova no C008: abertura do painel sem os 15 s falsos de timeout).
-- [x] Migração de versão (reinstalação sobre a anterior) e uninstaller que preserva dados em `%APPDATA%` — item 9.
+- [x] Instalação limpa em Windows 10/11 x64 real com o artefato gerado pelo CI — ciclo completo no artefato C008 (item 10).
+- [x] Criação de shortcuts (Desktop/Start) pelo instalador — item 9 (C006) e item 10 (C008, recriados).
+- [x] Início sem janela de console (PE Subsystem=GUI), healthz respondendo e painel abrindo sem timeout falso — item 10.
+- [x] Migração de versão (reinstalação sobre a anterior) e uninstaller que preserva dados em `%APPDATA%` — item 10.
 - [x] Separar binários (`%LOCALAPPDATA%`) de dados (`%APPDATA%`) verificado em runtime — item 9.
-- [x] Hash SHA256 dos artefatos verificados (via `sha256sum -c` no artefato do C006 após normalizar CRLF; formato do workflow corrigido no C007).
-- [ ] Bloqueio de instância duplicada; comportamento com porta ocupada — **corrigido no C008** (fast-path abre o painel existente; teste unitário verde); re-prova no bundle novo pendente.
-- [ ] Abertura como usuário real (duplo clique no atalho) + login do dono no navegador no bundle CORRIGIDO (C008) — pendente com o novo artefato.
-- [ ] Encerramento limpo, sleep/wake, offline/reconexão, recuperação de crash.
+- [x] Hash SHA256 dos artefatos verificados — `sha256sum -c` OK direto no artefato C008 (formato LF validado em produção).
+- [x] Bloqueio de instância duplicada — item 10, passo 7 (exit 0 em 367 ms, listener único).
+- [x] Abertura como usuário + login do dono no navegador sem pressa (16 s no portão) no bundle CORRIGIDO — item 10, passos 2–6.
+- [x] Encerramento limpo com **saída pelo próprio app** — C009 (item 11): botão "Fechar aplicativo" + shutdown gracioso; re-prova no bundle C009 pendente do próximo build.
+- [ ] Porta ocupada por OUTRO processo (não-DZ23) — parcialmente coberto pelo fast-path (se healthz responde, abre; senão tenta subir). Cenário hostil fica registrado como risco aceito no log de erro do uvicorn.
+- [ ] Sleep/wake, offline/reconexão e recuperação de crash — não exercitados (fora do alcance desta estação sem suspender a máquina do dono).
 - [ ] Assinatura de código: somente com certificado autorizado (não há certificado disponível).
 
 ## Próximo passo (executado nesta estação Windows 11)
 
-1. Push do batch C008 → novo run de build com launcher/floor/trava corrigidos.
-2. Baixar o novo artefato `dz23-windows-x64`.
-3. Ciclo completo no bundle corrigido: instalar → abrir pelo atalho (usuário real) → login do dono sem pressa no navegador → duplo clique de novo (instância única) → reinstalar → desinstalar preservando dados.
-4. Registrar cada item acima como PASS/FAIL com data, run id e caminhos — sem declarar homologação antes disso.
+1. Push do batch C009 → build de CI → baixar artefato novo.
+2. Re-provar no bundle C009: instalar → abrir → **encerrar pelo botão "Fechar aplicativo"** → confirmar processo encerrado e porta livre → desinstalar preservando dados.
+3. Se o ciclo fechar verde, restam apenas sleep/wake/offline/crash e assinatura de código — declarar o status honesto de cada um.
 
-*Última atualização: 2026-10-13 — batch C008 sobre `0e6fdeb`, branch `feat/integracao-mestre-20261012`.*
+*Última atualização: 2026-10-13 — batch C009 sobre `142e030`, branch `feat/integracao-mestre-20261012`.*

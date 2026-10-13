@@ -68,3 +68,16 @@ def test_trading_floor_nao_polla_sem_sessao():
     assert "prompt('Senha do painel')" not in html
     assert "WORKER RUNNING" in html
     assert "/v1/agency/missions" in html
+
+
+def test_painel_tem_saida_do_aplicativo():
+    # C009: sem console, o usuário só fecharia o app pelo Gerenciador de
+    # Tarefas. O painel do dono precisa de um botão que encerra o servidor,
+    # visível apenas no modo Dono Único (multi-tenant não pode derrubar o
+    # servidor compartilhado de um inquilino).
+    html = (ROOT / "service/static/index.html").read_text(encoding="utf-8")
+    assert 'id="quitAppBtn"' in html
+    assert "Fechar aplicativo" in html
+    assert "function quitApp" in html
+    assert "/v1/app/quit" in html
+    assert "quitAppBtn').classList.remove('hide')" in html

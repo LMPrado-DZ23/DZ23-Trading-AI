@@ -299,6 +299,30 @@ def auth(request: Request, c: HTTPAuthorizationCredentials = Depends(bearer)):
     return True
 
 
+_shutdown_hook = None
+
+
+def set_shutdown_hook(fn):
+    """Registra como desligar o servidor (o launcher liga no uvicorn.Server)."""
+    global _shutdown_hook
+    _shutdown_hook = fn
+
+
+def _only_owner_mode():
+    # Avaliado ANTES da autenticação: em multi-tenant nenhum inquilino pode
+    # derrubar o servidor compartilhado — nem com sessão válida.
+    if MULTI_TENANT_ENABLED:
+        raise HTTPException(404, "encerramento disponível apenas no modo Dono Único")
+
+
+@app.post("/v1/app/quit")
+async def app_quit(_mode=Depends(_only_owner_mode), _=Depends(auth)):
+    if _shutdown_hook is None:
+        raise HTTPException(409, "servidor iniciado fora do launcher; encerre pelo terminal")
+    threading.Timer(0.3, _shutdown_hook).start()
+    return {"ok": True, "message": "servidor encerrando"}
+
+
 @app.post("/v1/auth/bootstrap")
 async def tenant_bootstrap(req: Request):
     if not MULTI_TENANT_ENABLED or not TENANT_STORE or not TENANT_BOOTSTRAP_TOKEN:

@@ -1,5 +1,6 @@
 """Auditoria de usabilidade: o serviço protege o leigo por construção."""
 import importlib
+import threading
 from pathlib import Path
 
 import pytest
@@ -635,3 +636,47 @@ class TestMarcaDoProduto:
         html = self._cliente().get("/").text
         assert "/static/marca/favicon" in html
         assert "/static/marca/dz23-logo-192.png" in html
+
+
+class TestEncerrarAplicativo:
+    """C009: o leigo precisa de um caminho de saída.
+
+    O executável é windowed (sem console); fechar o navegador não para o
+    servidor. Sem este contrato, o dono só consegue encerrar o app pelo
+    Gerenciador de Tarefas.
+    """
+
+    def _client(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = _load_app(tmp_path, monkeypatch)
+        m._FAILS.clear()
+        return TestClient(m.app), m
+
+    def test_quit_exige_senha_do_dono(self, tmp_path, monkeypatch):
+        c, _ = self._client(tmp_path, monkeypatch)
+        assert c.post("/v1/app/quit").status_code == 401
+        assert c.post(
+            "/v1/app/quit", headers={"Authorization": "Bearer errada"}
+        ).status_code == 401
+
+    def test_quit_sem_gancho_nao_mente(self, tmp_path, monkeypatch):
+        # Servidor iniciado fora do launcher (testes, uvicorn solto) não pode
+        # fingir que encerrou: sem gancho registrado, responde 409 e segue vivo.
+        c, _ = self._client(tmp_path, monkeypatch)
+        r = c.post("/v1/app/quit", headers={"Authorization": "Bearer s3nh4"})
+        assert r.status_code == 409
+
+    def test_quit_dispara_o_desligamento_com_senha_certa(self, tmp_path, monkeypatch):
+        c, m = self._client(tmp_path, monkeypatch)
+        parado = threading.Event()
+        m.set_shutdown_hook(parado.set)
+        r = c.post("/v1/app/quit", headers={"Authorization": "Bearer s3nh4"})
+        assert r.status_code == 200 and r.json()["ok"] is True
+        assert parado.wait(5), "gancho de desligamento não foi chamado"
+
+    def test_quit_indisponivel_fora_do_modo_dono(self, tmp_path, monkeypatch):
+        # Em modo multi-tenant o encerramento por HTTP é vetado ANTES da
+        # autenticação: nenhum inquilino pode derrubar o servidor compartilhado.
+        c, m = self._client(tmp_path, monkeypatch)
+        monkeypatch.setattr(m, "MULTI_TENANT_ENABLED", True)
+        assert c.post("/v1/app/quit").status_code == 404

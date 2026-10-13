@@ -1,18 +1,18 @@
 # DZ23 Trading AI — TRADING MISSION STATE
 
 - **Fase atual (V7):** integração mestre concluída; camada quant/IA e 10 traders em produção local;
-  build Windows verde no CI com artefato verificado; painel homologado em navegador real (dono entra,
-  Trading Floor embutido) após corrigir 2 defeitos de produto; suíte E2E Playwright versionada em `tests/e2e/`
-  (**6 testes verdes** em navegador real); **homologação REAL do instalador executada na estação Windows 11**
-  (instalação silenciosa, atalhos, reinstalação e desinstalação preservando dados — tudo PASS) e **2 defeitos
-  de runtime encontrados nessa homologação corrigidos no C008** (launcher polla `/app/healthz`; trava de
-  força-bruta trancava o dono); re-prova no artefato C008 pendente (G3/G8)
+  build Windows verde no CI com artefato verificado; **CICLO COMPLETO DE HOMOLOGAÇÃO DO INSTALADOR executado no
+  artefato CORRIGIDO do C008** (run `38444558353`, estação Windows 11): instalar sem UAC → abrir → Playwright no
+  bundle (floor sem polling pré-login; login do dono após 16 s no portão) → instância duplicada (exit 0, 367 ms,
+  listener único) → reinstalar (dados intactos) → desinstalar (programa/atalhos removidos, `%APPDATA%` preservado):
+  **todos PASS** (item 10 de `WINDOWS-RELEASE-EVIDENCE.md`); **C009** (saída do usuário: botão "Fechar aplicativo"
+  + `POST /v1/app/quit` + shutdown gracioso) implementado e provado em dev-runner — re-prova no bundle pendente
 - **Branch:** `feat/integracao-mestre-20261012`
 - **Base:** `main` (`80e99fb`)
 - **PR:** #7
-- **HEAD:** batch C008 (sobre `0e6fdeb`) — correções de runtime do bundle real + regressão E2E do portão de login
-- **UTC:** `2026-10-13T18:05:00Z`
-- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md`; checkpoints em `TRADING-CHECKPOINTS.md` (C000–C008)
+- **HEAD:** batch C009 (sobre `142e030`) — saída do usuário + homologação completa do artefato C008
+- **UTC:** `2026-10-13T18:29:00Z`
+- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md`; checkpoints em `TRADING-CHECKPOINTS.md` (C000–C009)
 - **LIVE:** `BLOCKED_BY_POLICY` (inalterado; nenhuma operação com dinheiro real)
 
 ## Baseline Verificada e Conquistas

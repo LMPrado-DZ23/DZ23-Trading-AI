@@ -10,16 +10,57 @@ from desktop.launcher import (
 )
 
 
+class _FakeServer:
+    def __init__(self, config):
+        self.config = config
+        self.should_exit = False
+        self.rodou = False
+
+    def run(self):
+        self.rodou = True
+
+
 def test_desktop_launcher_loopback_configuration(tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path))
+    criados: list[_FakeServer] = []
 
-    with patch("uvicorn.run") as mock_uvicorn:
+    def fakeserver(config):
+        criados.append(_FakeServer(config))
+        return criados[-1]
+
+    with patch("uvicorn.Config") as mock_cfg, \
+            patch("uvicorn.Server", side_effect=fakeserver), \
+            patch("service.app.set_shutdown_hook") as mock_hook:
         run_backend(host="127.0.0.1", port=8000)
 
         assert os.environ["HOST"] == "127.0.0.1"
         assert os.environ["PORT"] == "8000"
         assert os.environ["MULTI_TENANT_ENABLED"] == "false"
-        mock_uvicorn.assert_called_once()
+        kwargs = mock_cfg.call_args.kwargs
+        assert kwargs["host"] == "127.0.0.1" and kwargs["port"] == 8000
+        assert criados and criados[0].rodou  # servidor real, não uvicorn.run solto
+        mock_hook.assert_called_once()  # C009: gancho de encerramento ligado
+
+
+def test_quit_endpoint_stops_the_launcher_server(tmp_path, monkeypatch):
+    # C009: o gancho registrado pelo launcher precisa ser capaz de parar o
+    # servidor de verdade — é o que o botão "Fechar aplicativo" dispara.
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    capturado: dict = {}
+    criados: list[_FakeServer] = []
+
+    def fakeserver(config):
+        criados.append(_FakeServer(config))
+        return criados[-1]
+
+    with patch("uvicorn.Config"), \
+            patch("uvicorn.Server", side_effect=fakeserver), \
+            patch("service.app.set_shutdown_hook", side_effect=lambda fn: capturado.setdefault("fn", fn)):
+        run_backend(host="127.0.0.1", port=8000)
+
+    assert capturado["fn"] is not None
+    capturado["fn"]()
+    assert criados[0].should_exit is True
 
 
 def test_wait_and_open_ui_success():

@@ -68,8 +68,15 @@ def run_backend(host: str = "127.0.0.1", port: int = 8000):
     user_data.mkdir(parents=True, exist_ok=True)
     os.environ["DATA_DIR"] = str(user_data)
 
-    from service.app import app
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    from service.app import app, set_shutdown_hook
+
+    # uvicorn.Server (não uvicorn.run) para dar ao painel um gatilho de
+    # encerramento: o endpoint /v1/app/quit liga should_exit e o servidor
+    # desliga graciosamente — o leigo não fica preso ao Gerenciador de Tarefas.
+    config = uvicorn.Config(app, host=host, port=port, log_level="info")
+    server = uvicorn.Server(config)
+    set_shutdown_hook(lambda: setattr(server, "should_exit", True))
+    server.run()
 
 
 def _healthz_ok(base_url: str, timeout: int = 1) -> bool:
