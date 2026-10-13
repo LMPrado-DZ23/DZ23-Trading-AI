@@ -75,6 +75,19 @@ def test_trading_floor_nao_polla_sem_sessao():
     assert "/v1/agency/missions" in html
 
 
+def test_config_page_exposes_the_desk_feed_toggle():
+    # A rota /v1/desk/feed manda o dono "em Configuração, Fonte de dados =
+    # Mercado real" — o controle precisa existir de verdade, com as duas
+    # opções, e a chave precisa entrar no CFG_KEYS para o Salvar levar o
+    # valor ao servidor.
+    html = (ROOT / "service/static/index.html").read_text(encoding="utf-8")
+    assert 'id="TRADINGAGENTS_DESK_FEED"' in html
+    assert "'TRADINGAGENTS_DESK_FEED'" in html, "fora do CFG_KEYS: Salvar não enviaria"
+    assert "<option value=\"fixture\">" in html
+    assert "<option value=\"real\">" in html
+    assert "Fonte de dados" in html
+
+
 def test_painel_tem_saida_do_aplicativo():
     # C009: sem console, o usuário só fecharia o app pelo Gerenciador de
     # Tarefas. O painel do dono precisa de um botão que encerra o servidor,

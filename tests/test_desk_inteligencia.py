@@ -238,6 +238,36 @@ class TestMesaRecarregaAoConfigurar:
         novo = c.get("/v1/desk/status", headers=h).json()
         assert novo["mandate"]["capital"] == "5000"
 
+    def test_resaving_the_same_value_keeps_the_desk_running(self, tmp_path, monkeypatch):
+        # O painel reenvia o formulário inteiro a cada Salvar — inclusive o
+        # seletor de fonte de dados. Reenvio idêntico não pode derrubar a
+        # mesa: a autônoma pararia sem o dono ter pedido.
+        from fastapi.testclient import TestClient
+        m = self._app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+        h = {"Authorization": "Bearer s3nh4"}
+        c.get("/v1/desk/status", headers=h)
+        c.post("/v1/config", headers=h,
+               json={"vars": {"TRADINGAGENTS_DESK_FEED": "real"}})
+        assert "legacy" not in m._DESKS           # mudou: reconstrói
+        c.get("/v1/desk/status", headers=h)       # reconstrói com o feed novo
+        assert "legacy" in m._DESKS
+        c.post("/v1/config", headers=h,
+               json={"vars": {"TRADINGAGENTS_DESK_FEED": "real"}})
+        assert "legacy" in m._DESKS               # idêntico: mesa de pé
+
+    def test_saving_the_feed_toggle_rebuilds_with_the_new_source(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = self._app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+        h = {"Authorization": "Bearer s3nh4"}
+        c.get("/v1/desk/status", headers=h)
+        assert c.get("/v1/desk/status", headers=h).json()["fonte"]["dados"] == "fixture"
+        r = c.post("/v1/config", headers=h,
+                   json={"vars": {"TRADINGAGENTS_DESK_FEED": "real"}})
+        assert "TRADINGAGENTS_DESK_FEED" in r.json()["saved"]
+        assert c.get("/v1/desk/status", headers=h).json()["fonte"]["dados"] == "real"
+
     def test_learning_route_reads_what_was_persisted(self, tmp_path, monkeypatch):
         from fastapi.testclient import TestClient
         m = self._app(tmp_path, monkeypatch)

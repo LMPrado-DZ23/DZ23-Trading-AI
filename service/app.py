@@ -801,19 +801,25 @@ async def set_cfg(req: Request, _=Depends(auth)):
     body = await _json_body(req)
     tenant_id = request_tenant(req)
     cfg = load_cfg(tenant_id)
-    saved = []
+    saved, changed = [], []
     for k, v in (body.get("vars") or {}).items():
         if k in ALLOWED_KEYS and isinstance(v, str) and v.strip():
-            cfg[k] = v.strip()
+            novo = v.strip()
             saved.append(k)
+            if cfg.get(k) != novo:
+                cfg[k] = novo
+                changed.append(k)
     if not saved:
         raise HTTPException(400, "nada para salvar")
     save_cfg(cfg, tenant_id)
     # Configuração que muda a mesa (corretora, feed, capital, limites) exige
     # reconstrução — senão o cliente salva e nada acontece até reiniciar.
+    # Só quando o valor REALMENTE mudou: o painel reenvia o formulário
+    # inteiro a cada Salvar, e um reenvio idêntico não pode derrubar a mesa
+    # (a autônoma pararia sem o dono ter pedido).
     if any(k.startswith(("TRADINGAGENTS_DESK", "LIVE_", "EXCHANGE_")) or
            k in ("TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE")
-           for k in saved):
+           for k in changed):
         _desk_reset(tenant_id)
     return {"saved": saved}
 
