@@ -42,12 +42,23 @@
   SUCCESS em `38473108095`) e job ARM64 (QEMU — **"NÃO é homologação Oracle"**); runbook PC→Oracle no `RUNBOOK.md`; suíte completa
   `2251 passed / 5 skipped / 71 subtests` (exit 0); incidente gitleaks (fixture sintética, entropia 3,5069>3,5) corrigido em `8e369f1`
   **sem allowlist**. Detalhe no C019 de `TRADING-CHECKPOINTS.md`.
-- **Branch:** `feat/integracao-mestre-20261012` (PR #7; M01 mergeado por fast-forward; C016 e C019 direto; PR #10 (login C017) e PR #11 (kernel fix) **mergeados**) + `feat/qoder-maestro-traders` (entrega M01) + `feat/login-dono-unico-premium` (C017) + `fix/primeiro-salvar-efetivo` (PR #11)
+- **C020 — Identidade visual definitiva + novo login premium (missão do dono; tasks #32–#35)** na branch `feat/integracao-mestre-20261012` (de `732f9f5`):
+  original do LOGO preservado em `assets/brand/dz23-logo-original.png` (sha256 `ab3c6a64…` = byte a byte o `LOGO.png` entregue) com gerador
+  reproduzível `scripts/gerar_assets_marca.py` (logomarca completa + **símbolo separado** para favicon/ícone — texto nunca reduzido a 16 px;
+  `dz23-icone.ico` multi-tamanho); portão do dono reescrito com símbolo + wordmark **"Trading AI"** (sem repetir "DZ23"), subtítulo
+  "Inteligência coordenada. Risco governado.", 4 estados de autenticação intactos e senha mascarada com toggle acessível; **selos operacionais
+  dinâmicos** de `/v1/status/operacao` (PAPER MODE / EXECUÇÃO GOVERNADA / DINHEIRO REAL BLOQUEADO — backend fora → selo neutro; nunca estático);
+  paleta da missão nos 3 HTMLs (painel/site/floor, zero hex antigo); manifesto PWA `/manifest.webmanifest`; ícone Windows no exe
+  (`build_exe.py --icon`) e no instalador (`setup.iss SetupIconFile`). **Prova:** suíte completa `2267 passed / 6 skipped / 71 subtests` (exit 0),
+  lote focado `117 passed`, **e2e Playwright `10 passed`** (identidade + responsivo 1920/1366/768/390/360 sem corte nem rolagem horizontal), ruff limpo.
+  **Ressalvas declaradas:** a imagem de referência do login **não foi anexada** à missão (composição feita pelo texto); **homologação do novo bundle
+  Windows pendente do artefato deste push** — não declarada.
+- **Branch:** `feat/integracao-mestre-20261012` (PR #7; M01 mergeado por fast-forward; C016, C019 e C020 direto; PR #10 (login C017) e PR #11 (kernel fix) **mergeados**) + `feat/qoder-maestro-traders` (entrega M01) + `feat/login-dono-unico-premium` (C017) + `fix/primeiro-salvar-efetivo` (PR #11)
 - **Base:** `main` (`80e99fb`)
 - **PR:** #7 (integração mestre) + branch M01 publicada + **#10 (C017 login) e #11 (primeiro Salvar) mergeados na integração**
-- **HEAD:** `8e369f1` (integração: C016 + C017 + kernel fix do primeiro Salvar + C019 + fix do gitleaks)
-- **UTC:** `2026-10-13T21:58:00Z`
-- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md` (G3 fechado; re-provado nos bundles M01, C015 e da integração — itens 13–17); checkpoints em `TRADING-CHECKPOINTS.md` (C000–C017 + M01 + C018 + C019)
+- **HEAD:** `732f9f5` + commits C020 deste batch (identidade visual + login premium; docs em seguida)
+- **UTC:** `2026-10-13T22:17:00Z`
+- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md` (G3 fechado; re-provado nos bundles M01, C015 e da integração — itens 13–17); checkpoints em `TRADING-CHECKPOINTS.md` (C000–C017 + M01 + C018 + C019 + C020)
 - **LIVE:** `BLOCKED_BY_POLICY` (inalterado; nenhuma operação com dinheiro real)
 
 ## Baseline Verificada e Conquistas
