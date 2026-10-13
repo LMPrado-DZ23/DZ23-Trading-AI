@@ -85,12 +85,10 @@ class TestEntrarComGoogle:
         Adivinhar o formato deixaria o botão nunca aparecer."""
         assert "dados.provedores" in APP and "p.nome" in APP
 
-    def test_the_start_endpoint_returns_a_url_not_a_redirect(self):
-        r = cliente().get("/v1/auth/oauth/google/start")
-        assert r.status_code in (200, 503)
-        if r.status_code == 200:
-            assert "url" in r.json()
-        assert "d.url" in APP, "o cliente precisa navegar para a url devolvida"
+    def test_the_start_endpoint_is_disabled_in_the_personal_app(self):
+        # Login social é superfície de cadastro: desligada no app de dono único.
+        assert cliente().get("/v1/auth/oauth/google/start").status_code == 404
+        assert "d.url" in APP, "o cliente ainda referencia a url (DOM legado)"
 
     def test_the_buttons_come_from_the_server(self):
         assert "/v1/auth/oauth/providers" in APP, (
@@ -105,9 +103,8 @@ class TestEntrarComGoogle:
     def test_the_button_goes_to_the_existing_backend_flow(self):
         assert "'/v1/auth/oauth/'+id+'/start'" in APP
 
-    def test_the_providers_endpoint_answers(self):
-        r = cliente().get("/v1/auth/oauth/providers")
-        assert r.status_code == 200
+    def test_the_providers_endpoint_is_disabled_in_the_personal_app(self):
+        assert cliente().get("/v1/auth/oauth/providers").status_code == 404
 
     def test_google_is_a_known_provider_in_the_backend(self):
         from tradingagents.identity.oauth import PROVIDERS
