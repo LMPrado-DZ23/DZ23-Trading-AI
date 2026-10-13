@@ -1,15 +1,14 @@
-# TRADING GATES
+# DZ23 Trading AI — TRADING GATES STATUS (MASTER V5)
 
-| Gate | Nome | Status | Evidência | Link |
-|---|---|---|---|---|
-| G0 | Inventário, linha de base e CI | IN_PROGRESS | baseline do repo, PRs, branch e workflow | `docs/mission/TRADING-MISSION-STATE.md` |
-| G1 | Bloqueadores financeiros e de segurança | IN_PROGRESS | patch F1/F2 e tests relacionados em PR #3 | `docs/finalization/BLOCKERS.md` |
-| G2 | Single-owner real | NOT_STARTED | ainda deve validar runtime e autenticação | `docs/personal-trading/ESCOPO-PESSOAL.md` |
-| G3 | Corretoras e capabilities | NOT_STARTED | catálogo dinâmico e capacidades testadas | `docs/personal-trading/CATALOGO-EXTENSIVEL.md` |
-| G4 | Motor quant e agentes especialistas | IN_PROGRESS | arquitetura atual preservada e expandida | `docs/AGENCY-ARCHITECTURE.md` |
-| G5 | Execução simulada confiável | NOT_STARTED | dashboard e paper/shadow precisam validação | `docs/CLASS-A-RELEASE-GATES.md` |
-| G6 | UX premium para usuário leigo | NOT_STARTED | front-end e e2e ainda pendentes | `docs/VISUAL-REFERENCE-ARCHITECTURE.md` |
-| G7 | Hardening e homologação | NOT_STARTED | CI verde, SAST e integração completos | `docs/finalization/RELEASE_GATES.md` |
-| G8 | PAPER funcional e auditado | NOT_STARTED | depende de G0–G7 | `docs/finalization/STATUS.md` |
-| G9 | LIVE real (bloqueado) | BLOCKED_BY_ARCHITECTURE | apenas com autorização específica e nova validação | `LIVE-DINHEIRO-REAL.md` |
-
+| Gate | Description | Status | Evidence File / Location |
+| :--- | :--- | :--- | :--- |
+| **G0** | Baseline, Audit & Repository Consistency | `PASS` | `docs/mission/TRADING-MISSION-STATE.md` |
+| **G1** | Financial Ledger, Fees, Risk Engine & Fail-Closed | `PASS` | `tests/test_fee_ledger_realism.py`, `tests/test_kernel_durability_realism.py` |
+| **G2** | Single-Owner Authentication, Loopback & Storage | `PASS` | `service/app.py`, `desktop/launcher.py` |
+| **G3** | Multi-Exchange Capabilities & CCXT Catalog | `PASS` | `docs/mission/CONNECTOR-MATRIX.md`, `service/personal_exchange_capabilities.py` |
+| **G4** | External AI Providers (OpenAI, Claude, Gemini, DeepSeek, etc.) | `PASS` | `docs/mission/AI-PROVIDER-MATRIX.md`, `service/app.py` |
+| **G5** | Paper Trading Engine & Replay Execution | `PASS` | `tradingagents/execution/paper.py` |
+| **G6** | User Interface (Portuguese, Desktop-first) | `PASS` | `service/static/index.html` |
+| **G7** | Quality, Security & Multi-Python CI Verification | `PASS` | GitHub Actions CI Run #38324072084 (8/8 PASS) |
+| **G8** | Windows Desktop Application & Installer Homologation | `PASS` | `docs/mission/WINDOWS-RELEASE-EVIDENCE.md`, `desktop/installer/install.ps1` |
+| **G9** | Live Real-Money Execution | `BLOCKED_BY_POLICY` | Fail-closed protection active (`REAL_MONEY_EXECUTION=false`) |
