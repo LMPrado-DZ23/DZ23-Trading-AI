@@ -1,5 +1,7 @@
 import numpy as np
+
 from tradingagents.research.monte_carlo import run_monte_carlo_simulation
+
 
 def test_monte_carlo_metrics():
     returns = np.array([0.01, -0.005, 0.02, -0.01, 0.015, -0.008])

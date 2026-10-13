@@ -1,4 +1,5 @@
 import sys
+
 from fastapi import APIRouter
 
 router = APIRouter(prefix="/v1/diagnostics", tags=["diagnostics"])

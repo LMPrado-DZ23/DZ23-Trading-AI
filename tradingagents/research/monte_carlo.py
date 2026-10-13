@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def run_monte_carlo_simulation(returns: np.ndarray, num_simulations: int = 1000, horizon: int = 30, initial_capital: float = 10000.0) -> dict:
     if len(returns) == 0:
         return {"var_95": 0.0, "var_99": 0.0, "probability_of_ruin": 0.0}
