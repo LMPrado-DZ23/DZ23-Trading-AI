@@ -5,9 +5,9 @@
 - **Release Version (alvo):** `v0.4.0-windows-local`
 - **Target OS:** Windows 10/11 x64 (nativo, loopback, Dono Único)
 - **Modo:** Executável empacotado (PyInstaller) + Instalador Inno Setup; sem SaaS/Cloud; sem Python no PC do usuário
-- **Status:** `IN_PROGRESS` — **ciclo completo de homologação executado no artefato CORRIGIDO do CI**: instalar → abrir → login do dono (com espera longa no portão) → instância duplicada → fechar → reinstalar → desinstalar preservando dados — todos **PASS** (item 10). Três defeitos de runtime achados na 1ª homologação (C008) e **re-provados corrigidos no bundle**; saída do usuário (C009) e porta-ocupada (C010) homologadas em dev-runner, re-prova no bundle pendente do próximo build.
+- **Status:** `PASS` — **ciclo final de homologação executado no ARTEFATO FINAL** (run `38450504893`, bundle do merge `0c3fc26` com C008+C009+C010): instalar → abrir sem timeout falso → login do dono após 16 s no portão → **encerrar pelo botão "Fechar aplicativo"** (shutdown gracioso, launcher exit 0 sozinho, porta livre) → **intruso real na 8000 → diálogo nativo de porta ocupada → WM_CLOSE → exit limpo** → reinstalar (dados byte a byte idênticos) → desinstalar (dados preservados). Ressalvas honestas: sleep/wake, offline/reconexão e crash não exercitados nesta estação; assinatura de código `BLOCKED_BY_EXTERNAL_DEPENDENCY` (sem certificado).
   - Correção V7: a versão anterior deste documento declarava `PASS` citando testes unitários e CI Linux.
-    Isso é **insuficiente** (CI Linux não prova instalador Windows) — status corrigido.
+    Isso é **insuficiente** (CI Linux não prova instalador Windows) — status corrigido; o PASS atual só cita o ciclo real no laptop do dono.
 
 ## Comprovado até agora (com evidência)
 
@@ -68,7 +68,24 @@
 
    **Notas de execução:** o instalador rodado do Git Bash exige `MSYS_NO_PATHCONV=1` (sem isso o MSYS converte `/VERYSILENT` em caminho e abre o wizard interativo — comportamento do shell, não do instalador). Fechamento entre passos via `taskkill` (não havia caminho de saída pelo app — ver C009 abaixo).
 
-11. **C009 — saída do usuário (achado desta homologação):** executável windowed sem console e sem bandeja; fechar o navegador não para o servidor — o dono ficaria preso ao Gerenciador de Tarefas. Implementado: botão **"Fechar aplicativo"** no painel (visível só no modo Dono Único) → `POST /v1/app/quit` (auth do dono; 404 em multi-tenant ANTES da autenticação; 409 se o servidor não foi iniciado pelo launcher) → `uvicorn.Server.should_exit` → encerramento gracioso. Prova em dev-runner (mesma topologia): clique no navegador real → `POST /v1/app/quit 200` → `Application shutdown complete` → **launcher exit 0 sozinho**, porta 8000 livre; captura `docs/mission/evidence/windows-release/encerrado-c009.png`. 4 testes unitários + 1 de contrato + 2 de launcher (red→green). **Re-prova no bundle pendente do próximo build (C009).**
+11. **C009 — saída do usuário (achado desta homologação):** executável windowed sem console e sem bandeja; fechar o navegador não para o servidor — o dono ficaria preso ao Gerenciador de Tarefas. Implementado: botão **"Fechar aplicativo"** no painel (visível só no modo Dono Único) → `POST /v1/app/quit` (auth do dono; 404 em multi-tenant ANTES da autenticação; 409 se o servidor não foi iniciado pelo launcher) → `uvicorn.Server.should_exit` → encerramento gracioso. Prova em dev-runner (mesma topologia): clique no navegador real → `POST /v1/app/quit 200` → `Application shutdown complete` → **launcher exit 0 sozinho**, porta 8000 livre; captura `docs/mission/evidence/windows-release/encerrado-c009.png`. 4 testes unitários + 1 de contrato + 2 de launcher (red→green). **Re-provado no BUNDLE FINAL — item 12, passos 4–5.**
+
+12. **HOMOLOGAÇÃO FINAL DO BUNDLE — run `38450504893` (artefato do merge `0c3fc26`, com C008+C009+C010).** Setup `DZ23-Trading-AI-Setup-v0.4.0.exe` **69.759.848 B** `sha256:bd160830a51a46222270317e932772bb82b9313054504410071d4e4848ae74de`; zip 88.482.294 B `sha256:2cd7ebc2f7d244707b8f51adc54a8d80f0e4fb8b331188f7777780ef3ab822a5`; **`sha256sum -c SHA256SUMS.txt` → ambos OK direto, sem tocar no arquivo.** Ciclo único executado na estação Windows 11:
+
+   | # | Passo | Resultado | Evidência |
+   |---|-------|-----------|-----------|
+   | 1 | Verificação de integridade do artefato | **PASS** | `sha256sum -c` OK nos 2 arquivos (formato LF do C007 validado de novo em produção) |
+   | 2 | Instalação silenciosa sem elevação | **PASS** (exit 0) | exe + `_internal` + `unins000` em `{localappdata}\DZ23-Trading-AI`; atalhos Desktop/Menu Iniciar |
+   | 3 | 1ª abertura como usuário | **PASS** | log do launcher: `GET /healthz 200` na 1ª tentativa → `Local backend is ready. Opening UI...` em ~1,5 s; `/app` 200; **sem timeout falso** |
+   | 4 | Playwright (Chrome real) no bundle: portão do dono + login | **PASS** | espera de **16 s** no portão (anti-trava 429) → login com a senha do dono → painel `ADMIN`, "Live bloqueado", botão "Fechar aplicativo" visível. Captura: `docs/mission/evidence/windows-release/painel-final-item12.png` |
+   | 5 | Encerramento PELO BOTÃO "Fechar aplicativo" (C009 no bundle) | **PASS** | diálogo nativo de confirmação aceito → `POST /v1/app/quit 200` → `Application shutdown complete` → `Finished server process [65312]` → **launcher encerrou sozinho, exit 0** → porta 8000 livre, processo morto. Captura: `encerrado-item12.png` |
+   | 6 | Porta 8000 ocupada por OUTRO processo + duplo clique (C010 no bundle) | **PASS** | intruso real (socket Python, pid 57876) escutando 127.0.0.1:8000 → launcher detecta, espera a 1ª instância (15 s), **não abre navegador** e mostra diálogo nativo **"DZ23 Trading AI — porta ocupada"** (título encontrado por EnumWindows, classe `#32770`); captura `porta-ocupada-item12.png`; descarte por **WM_CLOSE** → **exit 0 limpo** |
+   | 7 | Reinstalação sobre a existente | **PASS** (exit 0) | `agency.db`/`jobs.db`/`subscriptions.db`/`owner_password.txt` **byte a byte idênticos** (`sha256sum -c` OK pós-reinstalação) |
+   | 8 | Binário reinstalado sobe e desliga graciosamente | **PASS** | `healthz` 200 em 1 s → `POST /v1/app/quit` com Bearer do dono → 200 → processo encerra (exit 0) |
+   | 9 | Desinstalação preservando dados | **PASS** (exit 0) | pasta do programa e atalhos Desktop/Menu removidos; `%APPDATA%\DZ23-Trading-AI` **byte a byte idêntico** (`sha256sum -c` OK pós-uninstall) |
+   | 10 | Sem janela de console | **PASS** | nenhum console apareceu em todos os lançamentos (PE Subsystem=GUI do C008 mantido) |
+
+   **Nota de execução (harness, não defeito do app):** o Playwright por padrão auto-dispensa `confirm()` — o clique no botão só completou após aceitar o diálogo de confirmação do navegador; o app pergunta ao dono antes de encerrar (comportamento desejado).
 
 ## Ainda NÃO comprovado (pendências de homologação)
 
@@ -80,15 +97,15 @@
 - [x] Hash SHA256 dos artefatos verificados — `sha256sum -c` OK direto no artefato C008 (formato LF validado em produção).
 - [x] Bloqueio de instância duplicada — item 10, passo 7 (exit 0 em 367 ms, listener único).
 - [x] Abertura como usuário + login do dono no navegador sem pressa (16 s no portão) no bundle CORRIGIDO — item 10, passos 2–6.
-- [x] Encerramento limpo com **saída pelo próprio app** — C009 (item 11): botão "Fechar aplicativo" + shutdown gracioso; re-prova no bundle C009 pendente do próximo build.
-- [x] Porta ocupada por OUTRO processo (não-DZ23) — **C010**: sonda TCP real + espera da 1ª instância em boot + diálogo nativo de "porta ocupada"/"falha ao iniciar" (antes: falha silenciosa com navegador aberto numa página inexistente). Provado em dev com listener real (`PORTBUSY_LIVE_C010=PASS`); prova no bundle C010 pendente do mesmo ciclo final.
+- [x] Encerramento limpo com **saída pelo próprio app** — C009 (item 11): botão "Fechar aplicativo" + shutdown gracioso; **re-provado no BUNDLE FINAL — item 12, passo 5** (`/v1/app/quit 200`, `Application shutdown complete`, launcher exit 0 sozinho, porta livre).
+- [x] Porta ocupada por OUTRO processo (não-DZ23) — **C010**: sonda TCP real + espera da 1ª instância em boot + diálogo nativo de "porta ocupada"/"falha ao iniciar" (antes: falha silenciosa com navegador aberto numa página inexistente). Provado em dev com listener real (`PORTBUSY_LIVE_C010=PASS`) e **re-provado no BUNDLE FINAL — item 12, passo 6** (diálogo nativo encontrado, WM_CLOSE, exit 0 limpo, navegador não abriu).
 - [ ] Sleep/wake, offline/reconexão e recuperação de crash — não exercitados (fora do alcance desta estação sem suspender a máquina do dono).
-- [ ] Assinatura de código: somente com certificado autorizado (não há certificado disponível).
+- [ ] Assinatura de código: somente com certificado autorizado (não há certificado disponível) — `BLOCKED_BY_EXTERNAL_DEPENDENCY`.
 
-## Próximo passo (executado nesta estação Windows 11)
+## Ciclo final — ENCERRADO (esta estação Windows 11)
 
-1. Push dos batches C009+C010 → build de CI → baixar o artefato final.
-2. Ciclo final no bundle: instalar → abrir → login → **encerrar pelo botão "Fechar aplicativo"** → processo morto/porta livre → **intruso real na 8000 → duplo clique → diálogo "porta ocupada"** (descartar por WM_CLOSE, exit limpo) → reinstalar → desinstalar preservando dados.
-3. Se o ciclo fechar verde, restam apenas sleep/wake/offline/crash e assinatura de código — declarar o status honesto de cada um.
+1. Push dos batches C009+C010 → builds de CI → merge do PR #8 (`0c3fc26`) → build do merge (`38450504893`) → artefato final baixado. **Feito.**
+2. Ciclo final no bundle: instalar → abrir → login → **encerrar pelo botão** → processo morto/porta livre → **intruso real na 8000 → diálogo "porta ocupada"** → reinstalar → desinstalar preservando dados. **Todos PASS — item 12.**
+3. Restam apenas sleep/wake/offline/crash (não exercitados nesta estação) e assinatura de código (`BLOCKED_BY_EXTERNAL_DEPENDENCY`) — declarados honestamente acima. G3 fechado com este artefato em `TRADING-GATES.md`.
 
-*Última atualização: 2026-10-13 — batch C010 sobre `f8254ab`, branch `feat/integracao-mestre-20261012`.*
+*Última atualização: 2026-10-13 — homologação final do bundle `38450504893` (artefato de `0c3fc26`), item 12; branch `feat/integracao-mestre-20261012` (merge no PR #7) e artefato idêntico na branch de entrega `feat/qoder-maestro-traders`.*

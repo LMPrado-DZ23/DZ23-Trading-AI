@@ -28,6 +28,12 @@ def _sma(values, n: int) -> Decimal:
 class BaseTrader:
     strategy = "base"
     needs = 20
+    # Contrato do trader (mandato MAESTRO): timeframe em que decide.
+    timeframe = "1h"
+    # Selo de homologação: os três traders preservados operavam antes desta
+    # missão e são os aprovados. Os novos nascem experimentais e só sobem a
+    # habilitado com evidência estatística — nunca por existirem no código.
+    homologado = False
 
     regimes_favoraveis: tuple[Regime, ...] = ()
     # Movimento que a estratégia espera capturar (alvo). Sem isto não há como
@@ -222,6 +228,7 @@ class BaseTrader:
 class TrendTrader(BaseTrader):
     """Segue tendência: compra quando a média curta cruza acima da longa."""
     strategy = "trend_following"
+    homologado = True
     needs = 30
     regimes_favoraveis = (Regime.ALTA,)
     movimento_alvo = Decimal("0.04")     # tendência: alvo maior, menos trades
@@ -242,6 +249,7 @@ class TrendTrader(BaseTrader):
 class MeanReversionTrader(BaseTrader):
     """Reversão à média: compra exagero de queda contra a média."""
     strategy = "mean_reversion"
+    homologado = True
     needs = 20
     regimes_favoraveis = (Regime.LATERAL, Regime.BAIXA, Regime.VOLATIL)
     movimento_alvo = Decimal("0.025")    # volta à média: alvo curto
@@ -268,6 +276,7 @@ class MeanReversionTrader(BaseTrader):
 class BreakoutTrader(BaseTrader):
     """Rompimento: compra quando supera a máxima recente com folga."""
     strategy = "breakout"
+    homologado = True
     needs = 25
     regimes_favoraveis = (Regime.ALTA, Regime.VOLATIL)
     movimento_alvo = Decimal("0.035")

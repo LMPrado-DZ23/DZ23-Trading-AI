@@ -28,6 +28,7 @@ from service.api import diagnostics, security_center
 from tradingagents.agency import AgencyTask, build_llm_handler
 from tradingagents.agency.store import AgencyTaskStore
 from tradingagents.agency_runtime import AgencyRuntime
+from tradingagents.desk.models import AgentStage
 from tradingagents.desk.storage import escrever_json_atomico
 from tradingagents.domain import (
     MarketSnapshot,
@@ -1716,9 +1717,30 @@ def _desk_boot(tenant_id: str) -> dict:
     exchange_cfg = (cfg.get("TRADINGAGENTS_EXCHANGE") or "binance").lower()
     traders = default_desk(universe, memoria=memoria, exchange=exchange_cfg,
                            capital=capital)
+    # ESTÁGIO INICIAL (mandato MAESTRO): os três traders preservados são
+    # HOMOLOGADOS e operam; os sete novos nascem EXPERIMENTAIS (shadow) e NÃO
+    # são habilitados sem evidência estatística. Promoções e pausas decididas
+    # pelo dono ficam persistidas e sobrevivem ao reinício.
+    estagios_salvos = armazem.carregar(tenant_id, "agentes") or {}
+    estagios_antes: dict[str, str] = {}
     for t in traders:
-        for stage in (AgentStage.VALIDATED, AgentStage.SHADOW, AgentStage.PAPER_ENABLED):
-            t.spec.move_to(stage)
+        t.spec.move_to(AgentStage.VALIDATED)
+        t.spec.move_to(AgentStage.SHADOW)
+        registro = estagios_salvos.get(t.spec.agent_id) or {}
+        salvo = registro.get("stage")
+        if salvo in ("shadow", "paper_enabled", "paused"):
+            if salvo != t.spec.stage.value:
+                t.spec.move_to(AgentStage(salvo))
+            estagios_antes[t.spec.agent_id] = registro.get("antes") or ""
+        elif t.homologado:
+            t.spec.move_to(AgentStage.PAPER_ENABLED)
+
+    def _persistir_estagios():
+        documento = {t.spec.agent_id: {"stage": t.spec.stage.value,
+                                       "antes": estagios_antes.get(t.spec.agent_id, "")}
+                     for t in traders}
+        with contextlib.suppress(Exception):
+            armazem.salvar(tenant_id, "agentes", documento)
 
     risk = RiskEngine(mandate)
     ledger = Ledger(opening_cash=mandate.capital)
@@ -1843,7 +1865,10 @@ def _desk_boot(tenant_id: str) -> dict:
     desk = {"orchestrator": orch, "ledger": ledger, "coordinator": coord,
             "memoria": memoria, "armazem": armazem, "recuperacao": recuperacao,
             "guardian": PositionGuardian(coord), "cycles": [],
-            "feed_kind": feed_kind, "broker_mode": broker_mode, "scheduler": None}
+            "feed_kind": feed_kind, "broker_mode": broker_mode,
+            "scheduler": None, "estagios_antes": estagios_antes,
+            "persistir_estagios": _persistir_estagios,
+            "ia_modelo": cfg.get("TRADINGAGENTS_LLM_PROVIDER") or ""}
 
     def _persistir_oms():
         try:
@@ -1915,6 +1940,52 @@ def _desk_reset(tenant_id: str) -> None:
         desk["scheduler"].stop()
 
 
+_ROTULO_ESTAGIO = {"registered": "pesquisa", "validated": "validado",
+                   "shadow": "experimental (paper)",
+                   "paper_enabled": "aprovado (paper)",
+                   "paused": "pausado", "retired": "bloqueado"}
+
+
+def _agente_para_painel(t, d: dict) -> dict:
+    """Linha do painel Mesa de Agentes: estado em PT-BR, evidência estatística
+    e o motivo do último NO_TRADE — para o leigo, tão importante quanto a
+    ordem enviada."""
+    memoria = d.get("memoria")
+    ok, motivo = (memoria.pode_promover(t.strategy) if memoria
+                  else (False, "memória indisponível"))
+    st = memoria.estatistica(t.strategy) if memoria else None
+    ultimo = ""
+    if d.get("cycles"):
+        ciclo = d["cycles"][-1]
+        for linha in ciclo.get("abstencoes", []):
+            if linha.startswith(t.spec.agent_id + " · "):
+                ultimo = linha.split(": ", 1)[-1]
+                break
+        if not ultimo:
+            for linha in ciclo.get("vetos", []):
+                if linha.startswith(t.spec.agent_id + ": "):
+                    ultimo = linha.split(": ", 1)[-1]
+                    break
+    provedor = d.get("ia_modelo") or ""
+    return {
+        "id": t.spec.agent_id, "strategy": t.spec.strategy,
+        "version": t.spec.version, "stage": t.spec.stage.value,
+        "stage_label": _ROTULO_ESTAGIO.get(t.spec.stage.value, t.spec.stage.value),
+        "tier": "homologado" if t.homologado else "experimental",
+        "universe": list(t.universe), "timeframe": t.timeframe, "needs": t.needs,
+        "regimes": [r.value for r in t.regimes_favoraveis],
+        "modelo_ia": (f"{provedor} · contexto (veta ou reduz; nunca autoriza)"
+                      if provedor else "desligado (núcleo determinístico)"),
+        "evidencia": {
+            "operacoes": st.amostras if st else 0,
+            "maduro": bool(st and st.maduro),
+            "taxa_acerto": round(st.taxa_acerto, 3) if st else 0.0,
+            "retorno_medio": round(st.retorno_medio, 5) if st else 0.0,
+            "elegivel": ok, "motivo": motivo},
+        "ultimo_no_trade": ultimo,
+    }
+
+
 @app.get("/v1/desk/status")
 def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
     try:
@@ -1928,9 +1999,7 @@ def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
         "mandate": {"account": orch.mandate.account, "mode": orch.mandate.mode.value,
                     "capital": str(orch.mandate.capital),
                     "instruments": list(orch.mandate.instruments)},
-        "agents": [{"id": t.spec.agent_id, "strategy": t.spec.strategy,
-                    "version": t.spec.version, "stage": t.spec.stage.value,
-                    "universe": list(t.universe)} for t in orch.traders],
+        "agents": [_agente_para_painel(t, d) for t in orch.traders],
         "risk": {"reservado": str(orch.risk.reserved_total),
                  "disponivel": str(orch.risk.available),
                  "instrumentos_abertos": sorted(orch.risk.open_instruments())},
@@ -1962,7 +2031,9 @@ def desk_cycle(request: Request, _=Depends(auth), __=Depends(require_plan)):
     for o in out.get("ordens", []):
         enviados.append(o)
     return {"ok": True, "resumo": out.get("resumo", ""), "ordens": enviados,
-            "encerradas": encerrados, "descartados": out.get("descartados", [])}
+            "encerradas": encerrados, "descartados": out.get("descartados", []),
+            "vetos": out.get("vetos", []), "abstencoes": out.get("abstencoes", []),
+            "erros": out.get("erros", [])}
 
 
 @app.post("/v1/desk/scheduler/{action}")
@@ -1980,6 +2051,75 @@ def desk_scheduler(action: str, request: Request, _=Depends(auth), __=Depends(re
         return {"ok": True, "parada": "controlada — posições seguem sob o guardião",
                 "a_encerrar": d["orchestrator"].drain(), "status": sched.status()}
     raise HTTPException(422, "ação deve ser start ou stop")
+
+
+def _trader_da_mesa(d: dict, agent_id: str):
+    return next((t for t in d["orchestrator"].traders
+                 if t.spec.agent_id == agent_id), None)
+
+
+@app.post("/v1/desk/traders/{agent_id}/promover")
+def desk_trader_promover(agent_id: str, request: Request,
+                         _=Depends(auth), __=Depends(require_plan)):
+    """Habilita um trader experimental — SOMENTE com evidência estatística.
+
+    O mandato é explícito: trader sem resultado comprovado não é habilitado.
+    O veredito sai das operações FECHADAS (memória), nunca de confiança."""
+    d = _desk_of(request)
+    t = _trader_da_mesa(d, agent_id)
+    if t is None:
+        raise HTTPException(404, f"trader {agent_id} não existe nesta mesa")
+    if t.spec.stage is AgentStage.PAPER_ENABLED:
+        return {"ok": True, "agent_id": agent_id, "stage": t.spec.stage.value,
+                "motivo": "já habilitado"}
+    ok, motivo = d["memoria"].pode_promover(t.strategy)
+    if not ok:
+        raise HTTPException(409, f"{agent_id} ainda não elegível: {motivo}")
+    t.spec.move_to(AgentStage.PAPER_ENABLED)
+    d["estagios_antes"][agent_id] = ""
+    d["persistir_estagios"]()
+    return {"ok": True, "agent_id": agent_id, "stage": t.spec.stage.value,
+            "motivo": motivo}
+
+
+@app.post("/v1/desk/traders/{agent_id}/pausar")
+def desk_trader_pausar(agent_id: str, request: Request,
+                       _=Depends(auth), __=Depends(require_plan)):
+    """Pausa um trader: ele para de propor; posições abertas seguem sob o
+    guardião e o estágio anterior é lembrado para a retomada."""
+    d = _desk_of(request)
+    t = _trader_da_mesa(d, agent_id)
+    if t is None:
+        raise HTTPException(404, f"trader {agent_id} não existe nesta mesa")
+    if t.spec.stage is AgentStage.PAUSED:
+        return {"ok": True, "agent_id": agent_id, "stage": t.spec.stage.value,
+                "motivo": "já pausado"}
+    antes = t.spec.stage.value
+    d["estagios_antes"][agent_id] = antes
+    t.spec.move_to(AgentStage.PAUSED)
+    d["persistir_estagios"]()
+    return {"ok": True, "agent_id": agent_id, "stage": t.spec.stage.value,
+            "motivo": f"pausado (estava em {antes}) — posições seguem sob o guardião"}
+
+
+@app.post("/v1/desk/traders/{agent_id}/retomar")
+def desk_trader_retomar(agent_id: str, request: Request,
+                        _=Depends(auth), __=Depends(require_plan)):
+    """Retoma um trader pausado no estágio que ele tinha — sem pular etapas."""
+    d = _desk_of(request)
+    t = _trader_da_mesa(d, agent_id)
+    if t is None:
+        raise HTTPException(404, f"trader {agent_id} não existe nesta mesa")
+    if t.spec.stage is not AgentStage.PAUSED:
+        raise HTTPException(409, f"{agent_id} não está pausado "
+                                 f"(estágio {t.spec.stage.value})")
+    antes = d["estagios_antes"].get(agent_id) or "shadow"
+    alvo = antes if antes in ("shadow", "paper_enabled") else "shadow"
+    t.spec.move_to(AgentStage(alvo))
+    d["estagios_antes"][agent_id] = ""
+    d["persistir_estagios"]()
+    return {"ok": True, "agent_id": agent_id, "stage": t.spec.stage.value,
+            "motivo": f"retomado em {alvo}"}
 
 
 @app.get("/v1/desk/feed")

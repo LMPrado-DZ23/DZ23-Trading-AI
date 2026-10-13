@@ -1,20 +1,22 @@
 # DZ23 Trading AI — TRADING MISSION STATE
 
-- **Fase atual (V7):** integração mestre concluída; camada quant/IA e 10 traders em produção local;
-  build Windows verde no CI com artefato verificado; **CICLO COMPLETO DE HOMOLOGAÇÃO DO INSTALADOR executado no
-  artefato CORRIGIDO do C008** (run `38444558353`, estação Windows 11): instalar sem UAC → abrir → Playwright no
-  bundle (floor sem polling pré-login; login do dono após 16 s no portão) → instância duplicada (exit 0, 367 ms,
-  listener único) → reinstalar (dados intactos) → desinstalar (programa/atalhos removidos, `%APPDATA%` preservado):
-  **todos PASS** (item 10 de `WINDOWS-RELEASE-EVIDENCE.md`); **C009** (saída do usuário: botão "Fechar aplicativo"
-  + `POST /v1/app/quit` + shutdown gracioso) e **C010** (porta ocupada por outro programa vira diálogo claro em vez
-  de fracasso silencioso) implementados e provados em dev-runner — re-prova dos dois no bundle pendente
-  (ciclo final no artefato do build C009+C010)
-- **Branch:** `feat/integracao-mestre-20261012`
+- **Fase atual (V7):** **G3 FECHADO (PASS)** — ciclo final de homologação executado no ARTEFATO FINAL
+  (run `38450504893`, bundle do merge `0c3fc26`, estação Windows 11, item 12 de `WINDOWS-RELEASE-EVIDENCE.md`):
+  instalar → abrir sem timeout falso → login do dono após 16 s no portão → **encerrar pelo botão "Fechar aplicativo"**
+  (launcher exit 0 sozinho, porta livre) → **intruso real na 8000 → diálogo nativo "porta ocupada" → WM_CLOSE → exit limpo**
+  → reinstalar (dados byte a byte idênticos) → desinstalar (dados preservados): **todos PASS** (ressalvas declaradas:
+  sleep/wake/offline/crash não exercitados; assinatura de código BLOCKED_BY_EXTERNAL_DEPENDENCY).
+  **MISSÃO QODER 01 concluída na branch de entrega `feat/qoder-maestro-traders`:** Maestro Central + 10 traders com
+  tiers aprovados×experimentais (3 homologados operam; 7 nascem SHADOW), gate de evidência `pode_promover()`
+  (≥12 operações fechadas, retorno>0, acerto≥45%), rotas promover/pausar/retomar persistidas, Mesa de Agentes no
+  painel e PAPER E2E com reinício — evidência em `QODER-MAESTRO-TRADERS-EVIDENCE.md` (16 testes novos; suíte completa
+  `2196 passed / 5 skipped / 71 subtests`, exit 0).
+- **Branch:** `feat/qoder-maestro-traders` (entrega M01; base `feat/integracao-mestre-20261012`, PR #7)
 - **Base:** `main` (`80e99fb`)
-- **PR:** #7
-- **HEAD:** batch C011 — integração controlada do PR #8 (política fail-closed incondicional de dono único: nenhuma variável de ambiente reabre SaaS) sobre C010
-- **UTC:** `2026-10-13T18:45:00Z`
-- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md`; checkpoints em `TRADING-CHECKPOINTS.md` (C000–C011)
+- **PR:** #7 (integração mestre) + branch M01 publicada
+- **HEAD:** `0c3fc26` + batch M01/C012 (10 traders por evidência + homologação final do bundle)
+- **UTC:** `2026-10-13T19:12:00Z`
+- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md` (G3 fechado); checkpoints em `TRADING-CHECKPOINTS.md` (C000–C012 + M01)
 - **LIVE:** `BLOCKED_BY_POLICY` (inalterado; nenhuma operação com dinheiro real)
 
 ## Baseline Verificada e Conquistas

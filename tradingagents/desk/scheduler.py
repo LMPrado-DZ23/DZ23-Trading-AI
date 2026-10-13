@@ -127,8 +127,10 @@ class DeskScheduler:
                     self.state.errors += 1
                     out.setdefault("erros", []).append(f"{type(exc).__name__}: {exc}"[:160])
             out["resumo"] = report.summary
-            out["vetos"] = [f"{a}: {w}" for a, w in report.vetoed][:6]
-            out["abstencoes"] = [f"{a} · {i}: {r}" for a, i, r in report.abstentions][:6]
+            # Teto generoso: o painel mostra o motivo de NO_TRADE POR trader —
+            # truncar em 6 escondia justamente os experimentais do fim da fila.
+            out["vetos"] = [f"{a}: {w}" for a, w in report.vetoed][:12]
+            out["abstencoes"] = [f"{a} · {i}: {r}" for a, i, r in report.abstentions][:24]
             out["erros"] = report.errors[:4]
         self.state.cycles_run += 1
         self.state.last_cycle_at = utcnow().isoformat()

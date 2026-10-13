@@ -182,6 +182,31 @@ class MemoriaDeDesempenho:
         return False, (f"desempenho aceitável ({st.retorno_medio:+.2%}, "
                        f"{st.taxa_acerto:.0%} de acerto)")
 
+    def pode_promover(self, estrategia: str,
+                      agora: datetime | None = None) -> tuple[bool, str]:
+        """Gate determinístico para habilitar uma estratégia experimental.
+
+        O mandato é explícito: trader sem resultado estatístico suficiente NÃO
+        é habilitado. O veredito sai SÓ de operações FECHADAS (desfecho
+        realizado, líquido de custos) — promessa de backtest não promove.
+        """
+        st = self.estatistica(estrategia, None, agora)
+        if not st.maduro:
+            return False, (f"amostra insuficiente: {st.amostras}/{AMOSTRA_MINIMA} "
+                           "operações fechadas")
+        if st.retorno_medio <= 0:
+            return False, (f"retorno médio {st.retorno_medio:+.2%} não é "
+                           f"positivo em {st.amostras} operações")
+        if st.taxa_acerto < 0.45:
+            return False, (f"taxa de acerto {st.taxa_acerto:.0%} abaixo de 45% "
+                           f"em {st.amostras} operações")
+        rebaixar, _ = self.deve_rebaixar(estrategia, agora)
+        if rebaixar:
+            return False, "estratégia rebaixada pelo histórico"
+        return True, (f"evidência suficiente: {st.amostras} operações, "
+                      f"{st.taxa_acerto:.0%} de acerto, retorno médio "
+                      f"{st.retorno_medio:+.2%} (líquido de custos)")
+
     def melhor_regime(self, estrategia: str) -> tuple[str, float] | None:
         """Em que cenário esta estratégia funciona melhor (se é que funciona)."""
         melhores = []
