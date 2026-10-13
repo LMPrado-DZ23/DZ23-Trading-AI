@@ -6,13 +6,15 @@
   bundle (floor sem polling pré-login; login do dono após 16 s no portão) → instância duplicada (exit 0, 367 ms,
   listener único) → reinstalar (dados intactos) → desinstalar (programa/atalhos removidos, `%APPDATA%` preservado):
   **todos PASS** (item 10 de `WINDOWS-RELEASE-EVIDENCE.md`); **C009** (saída do usuário: botão "Fechar aplicativo"
-  + `POST /v1/app/quit` + shutdown gracioso) implementado e provado em dev-runner — re-prova no bundle pendente
+  + `POST /v1/app/quit` + shutdown gracioso) e **C010** (porta ocupada por outro programa vira diálogo claro em vez
+  de fracasso silencioso) implementados e provados em dev-runner — re-prova dos dois no bundle pendente
+  (ciclo final no artefato do build C009+C010)
 - **Branch:** `feat/integracao-mestre-20261012`
 - **Base:** `main` (`80e99fb`)
 - **PR:** #7
-- **HEAD:** batch C009 (sobre `142e030`) — saída do usuário + homologação completa do artefato C008
-- **UTC:** `2026-10-13T18:29:00Z`
-- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md`; checkpoints em `TRADING-CHECKPOINTS.md` (C000–C009)
+- **HEAD:** batch C010 (sobre `f8254ab`) — porta ocupada por outro programa deixa de ser fracasso silencioso
+- **UTC:** `2026-10-13T18:36:00Z`
+- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md`; checkpoints em `TRADING-CHECKPOINTS.md` (C000–C010)
 - **LIVE:** `BLOCKED_BY_POLICY` (inalterado; nenhuma operação com dinheiro real)
 
 ## Baseline Verificada e Conquistas

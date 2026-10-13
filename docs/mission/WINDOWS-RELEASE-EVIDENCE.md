@@ -5,7 +5,7 @@
 - **Release Version (alvo):** `v0.4.0-windows-local`
 - **Target OS:** Windows 10/11 x64 (nativo, loopback, Dono Único)
 - **Modo:** Executável empacotado (PyInstaller) + Instalador Inno Setup; sem SaaS/Cloud; sem Python no PC do usuário
-- **Status:** `IN_PROGRESS` — **ciclo completo de homologação executado no artefato CORRIGIDO do CI**: instalar → abrir → login do dono (com espera longa no portão) → instância duplicada → fechar → reinstalar → desinstalar preservando dados — todos **PASS** (item 10). Três defeitos de runtime achados na 1ª homologação (C008) e **re-provados corrigidos no bundle**; saída do usuário (C009) homologada em dev-runner, re-prova no bundle pendente do próximo build.
+- **Status:** `IN_PROGRESS` — **ciclo completo de homologação executado no artefato CORRIGIDO do CI**: instalar → abrir → login do dono (com espera longa no portão) → instância duplicada → fechar → reinstalar → desinstalar preservando dados — todos **PASS** (item 10). Três defeitos de runtime achados na 1ª homologação (C008) e **re-provados corrigidos no bundle**; saída do usuário (C009) e porta-ocupada (C010) homologadas em dev-runner, re-prova no bundle pendente do próximo build.
   - Correção V7: a versão anterior deste documento declarava `PASS` citando testes unitários e CI Linux.
     Isso é **insuficiente** (CI Linux não prova instalador Windows) — status corrigido.
 
@@ -81,14 +81,14 @@
 - [x] Bloqueio de instância duplicada — item 10, passo 7 (exit 0 em 367 ms, listener único).
 - [x] Abertura como usuário + login do dono no navegador sem pressa (16 s no portão) no bundle CORRIGIDO — item 10, passos 2–6.
 - [x] Encerramento limpo com **saída pelo próprio app** — C009 (item 11): botão "Fechar aplicativo" + shutdown gracioso; re-prova no bundle C009 pendente do próximo build.
-- [ ] Porta ocupada por OUTRO processo (não-DZ23) — parcialmente coberto pelo fast-path (se healthz responde, abre; senão tenta subir). Cenário hostil fica registrado como risco aceito no log de erro do uvicorn.
+- [x] Porta ocupada por OUTRO processo (não-DZ23) — **C010**: sonda TCP real + espera da 1ª instância em boot + diálogo nativo de "porta ocupada"/"falha ao iniciar" (antes: falha silenciosa com navegador aberto numa página inexistente). Provado em dev com listener real (`PORTBUSY_LIVE_C010=PASS`); prova no bundle C010 pendente do mesmo ciclo final.
 - [ ] Sleep/wake, offline/reconexão e recuperação de crash — não exercitados (fora do alcance desta estação sem suspender a máquina do dono).
 - [ ] Assinatura de código: somente com certificado autorizado (não há certificado disponível).
 
 ## Próximo passo (executado nesta estação Windows 11)
 
-1. Push do batch C009 → build de CI → baixar artefato novo.
-2. Re-provar no bundle C009: instalar → abrir → **encerrar pelo botão "Fechar aplicativo"** → confirmar processo encerrado e porta livre → desinstalar preservando dados.
+1. Push dos batches C009+C010 → build de CI → baixar o artefato final.
+2. Ciclo final no bundle: instalar → abrir → login → **encerrar pelo botão "Fechar aplicativo"** → processo morto/porta livre → **intruso real na 8000 → duplo clique → diálogo "porta ocupada"** (descartar por WM_CLOSE, exit limpo) → reinstalar → desinstalar preservando dados.
 3. Se o ciclo fechar verde, restam apenas sleep/wake/offline/crash e assinatura de código — declarar o status honesto de cada um.
 
-*Última atualização: 2026-10-13 — batch C009 sobre `142e030`, branch `feat/integracao-mestre-20261012`.*
+*Última atualização: 2026-10-13 — batch C010 sobre `f8254ab`, branch `feat/integracao-mestre-20261012`.*

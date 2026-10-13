@@ -6,6 +6,7 @@ import ctypes
 import logging
 import os
 import secrets
+import socket
 import threading
 import time
 import urllib.request
@@ -88,18 +89,71 @@ def _healthz_ok(base_url: str, timeout: int = 1) -> bool:
         return False
 
 
-def wait_and_open_ui(base_url: str, ui_path: str = "/app", timeout: int = 15):
-    """Poll o /healthz da raiz até o backend responder, então abre o painel."""
+def _port_in_use(host: str, port: int, timeout: float = 0.5) -> bool:
+    """True se qualquer programa já aceita conexões na porta."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _wait_for_existing_instance(url: str, timeout: float = 15) -> bool:
+    """A porta aceita conexão mas ninguém responde /healthz ainda: pode ser
+    uma instância DZ23 iniciando. Espera ficar saudável; False se não ficar."""
+    start = time.time()
+    while time.time() - start < timeout:
+        if _healthz_ok(url):
+            return True
+        time.sleep(1)
+    return False
+
+
+def show_port_busy_dialog(port: int) -> None:
+    try:
+        ctypes.windll.user32.MessageBoxW(
+            None,
+            f"O aplicativo não conseguiu iniciar porque a porta {port} já está "
+            f"sendo usada por outro programa.\n\nFeche o outro programa (ou "
+            f"reinicie o computador) e abra o DZ23 Trading AI novamente.",
+            "DZ23 Trading AI — porta ocupada",
+            0x30,
+        )
+    except Exception:
+        logger.error(
+            "Porta %s ocupada por outro programa; encerrando. Feche o programa que usa a porta.",
+            port,
+        )
+
+
+def show_startup_failed_dialog() -> None:
+    try:
+        ctypes.windll.user32.MessageBoxW(
+            None,
+            "O aplicativo não conseguiu iniciar o servidor local.\n\n"
+            "Feche programas que possam usar a porta 8000, reinicie o "
+            "computador e abra o DZ23 Trading AI novamente.",
+            "DZ23 Trading AI — falha ao iniciar",
+            0x30,
+        )
+    except Exception:
+        logger.error("Servidor local não iniciou; encerrando.")
+
+
+def wait_and_open_ui(base_url: str, ui_path: str = "/app", timeout: int = 15) -> bool:
+    """Poll o /healthz da raiz até o backend responder, então abre o painel.
+    True se o backend ficou saudável dentro do tempo."""
     ui_url = f"{base_url}{ui_path}"
     start_time = time.time()
     while time.time() - start_time < timeout:
         if _healthz_ok(base_url):
             logger.info("Local backend is ready. Opening UI...")
             webbrowser.open(ui_url)
-            return
+            return True
         time.sleep(0.5)
     logger.warning("Backend start timed out. Opening UI anyway...")
     webbrowser.open(ui_url)
+    return False
 
 
 def main():
@@ -116,6 +170,18 @@ def main():
         webbrowser.open(f"{url}/app")
         return
 
+    # Porta ocupada por OUTRO programa (ou 1ª instância ainda iniciando):
+    # espera a instância existente ficar pronta; se nada saudável aparecer,
+    # avisa o dono — antes o launcher falhava em silêncio e abria o
+    # navegador numa página alheia.
+    if _port_in_use(host, port):
+        if _wait_for_existing_instance(url):
+            logger.info("Instância existente pronta — abrindo o painel.")
+            webbrowser.open(f"{url}/app")
+            return
+        show_port_busy_dialog(port)
+        return
+
     # Dono Único: senha criada na 1ª execução (mostrada no diálogo) — o painel
     # não abre sessão sem ela; sem isso o app empacotado nega todo acesso.
     ensure_owner_password(notify=show_first_run_dialog)
@@ -127,7 +193,12 @@ def main():
     backend_thread.start()
 
     # Wait for backend and launch webview/browser UI
-    wait_and_open_ui(url)
+    ready = wait_and_open_ui(url)
+    if not ready and not backend_thread.is_alive():
+        # Backend morreu no start (ex.: porta tomada entre a checagem e o
+        # bind) — avisa em vez de fingir que abriu.
+        show_startup_failed_dialog()
+        return
 
     try:
         while backend_thread.is_alive():
