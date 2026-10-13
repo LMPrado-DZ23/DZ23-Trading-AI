@@ -24,6 +24,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from service.api import diagnostics, security_center
 from tradingagents.agency import AgencyTask, build_llm_handler
 from tradingagents.agency.store import AgencyTaskStore
 from tradingagents.agency_runtime import AgencyRuntime
@@ -189,10 +190,9 @@ SECRETish = tuple(sorted(
      if k in SEGREDOS_DECLARADOS
      or k.endswith(("_KEY", "_SECRET", "_TOKEN", "_PASSWORD", "_WEBHOOK_URL"))}))
 
-from service.api import diagnostics
-
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(diagnostics.router)
+app.include_router(security_center.router)
 bearer = HTTPBearer(auto_error=False)
 
 
