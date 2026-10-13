@@ -196,6 +196,7 @@ ALLOWED_KEYS = [
     "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET",
     "TRADINGAGENTS_DESK_FEED", "TRADINGAGENTS_DESK_BROKER",
     "TRADINGAGENTS_DESK_INSTRUMENTS", "TRADINGAGENTS_DESK_CAPITAL",
+    "TRADINGAGENTS_DESK_CONTROLE", "TRADINGAGENTS_DESK_TETO_EXPOSICAO",
     "LIVE_MAX_ORDER_VALUE", "LIVE_MAX_DAILY_LOSS",
     "LIVE_TRADING_CONFIRM",
     "ALERTA_TELEGRAM_TOKEN", "ALERTA_TELEGRAM_CHAT", "ALERTA_WEBHOOK_URL",
@@ -1819,8 +1820,13 @@ def _desk_boot(tenant_id: str) -> dict:
     memoria = MemoriaDeDesempenho(DATA / "desks" / tenant_id / "aprendizado.json",
                                   armazem=armazem, tenant_id=tenant_id)
     exchange_cfg = (cfg.get("TRADINGAGENTS_EXCHANGE") or "binance").lower()
+    # Trader de controle entra SÓ por opção explícita do dono
+    # (TRADINGAGENTS_DESK_CONTROLE=1): é o piso estatístico de comparação,
+    # não um trader a mais por padrão.
+    incluir_controle = str(cfg.get("TRADINGAGENTS_DESK_CONTROLE") or "") \
+        .strip().lower() in ("1", "true", "sim", "on", "yes")
     traders = default_desk(universe, memoria=memoria, exchange=exchange_cfg,
-                           capital=capital)
+                           capital=capital, incluir_controle=incluir_controle)
     # ESTÁGIO INICIAL (mandato MAESTRO): os três traders preservados são
     # HOMOLOGADOS e operam; os sete novos nascem EXPERIMENTAIS (shadow) e NÃO
     # são habilitados sem evidência estatística. Promoções e pausas decididas
@@ -2369,6 +2375,328 @@ def desk_evaluation(request: Request, _=Depends(auth)):
         ressalvas.append("nenhuma posição FECHADA: resultado ainda não realizado")
     return {"por_agente": linhas, "conclusivo": not ressalvas, "ressalvas": ressalvas,
             "aviso": "retrospectivo e simulado; não é promessa de lucro"}
+
+
+# ------------------------------------------------- escola central + salas
+def _escola_of(request: Request) -> dict:
+    """UMA escola central e o catálogo de SALAS do tenant. Construída a cada
+    requisição: o estado vive no armazém, não em cache de processo — assim
+    duas superfícies (painel e CLI) nunca divergem."""
+    from decimal import Decimal as D
+
+    from tradingagents.desk.maestro import MaestroCentral
+    from tradingagents.desk.salas import EscolaCentral, RegistroDeSalas
+    from tradingagents.desk.storage import ArmazemDeEstado
+    tid = request_tenant(request)
+    d = _DESKS.get(tid)
+    armazem = d.get("armazem") if d else None
+    if armazem is None:
+        armazem = ArmazemDeEstado(os.environ.get("DATABASE_URL"),
+                                  diretorio=DATA / "desks")
+    cfg = load_cfg(tid)
+    teto = cfg.get("TRADINGAGENTS_DESK_TETO_EXPOSICAO")
+    registro = RegistroDeSalas(armazem=armazem, tenant_id=tid)
+    central = EscolaCentral(armazem=armazem, tenant_id=tid)
+    maestro = MaestroCentral(
+        registro, teto_exposicao_global=(D(str(teto)) if teto else None))
+    return {"armazem": armazem, "registro": registro, "central": central,
+            "maestro": maestro, "tenant_id": tid}
+
+
+def _contexto_da_sala(body: dict):
+    from tradingagents.desk.salas import ContextoDaSala
+    return ContextoDaSala(
+        corretora=str(body.get("corretora") or ""),
+        conta=str(body.get("conta") or ""),
+        mercado=str(body.get("mercado") or "spot"),
+        modo=str(body.get("modo") or "paper"),
+        payout=(body.get("payout") if body.get("payout") not in (None, "")
+                else None))
+
+
+def _sala_por_chave(esc: dict, chave: str):
+    """Sala pelo catálogo — abrir é idempotente, chave desconhecida é 404."""
+    from tradingagents.desk.salas import SalaError
+    if not chave:
+        raise HTTPException(422, "informe a sala (chave corretora|conta|mercado|modo)")
+    try:
+        if chave in esc["registro"].salas:
+            return esc["registro"].salas[chave]
+    except SalaError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    raise HTTPException(404, f"sala '{chave}' não existe — abra a sala primeiro")
+
+
+@app.get("/v1/escola/central")
+def escola_central(request: Request, _=Depends(auth)):
+    """Relatório da escola central: certificados, estados e justificativas."""
+    return _escola_of(request)["central"].relatorio()
+
+
+@app.get("/v1/escola/salas")
+def escola_salas(request: Request, _=Depends(auth)):
+    """Salas independentes por corretora/conta/mercado/modo + maestro."""
+    from tradingagents.desk.salas import corretoras_homologadas
+    esc = _escola_of(request)
+    return {"salas": esc["registro"].relatorio(),
+            "corretoras": corretoras_homologadas(),
+            "maestro": esc["maestro"].relatorio()}
+
+
+@app.post("/v1/escola/salas")
+async def escola_abrir_sala(req: Request, _=Depends(auth),
+                            __=Depends(require_plan)):
+    """Abre uma sala. Identidades são validadas contra o adaptador
+    homologado: mercado errado, laboratório fora de paper ou modo LIVE
+    são recusados com motivo — nunca silenciosamente ajustados."""
+    from tradingagents.desk.salas import SalaError
+    body = await _json_body(req)
+    esc = _escola_of(req)
+    try:
+        sala = esc["registro"].abrir_sala(_contexto_da_sala(body))
+    except SalaError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"ok": True, "sala": sala.resumo()}
+
+
+@app.get("/v1/escola/salas/detalhe")
+def escola_sala_detalhe(chave: str, request: Request, _=Depends(auth)):
+    """Retrato da sala + priors recebidos (de onde veio, o que afirma)."""
+    from tradingagents.desk.conhecimento import resumo_dos_priors
+    esc = _escola_of(request)
+    sala = _sala_por_chave(esc, chave)
+    return {"sala": sala.resumo(), "priors": resumo_dos_priors(sala)}
+
+
+@app.get("/v1/escola/salas/pacote")
+def escola_pacote(chave: str, request: Request, estrategias: str = "",
+                  _=Depends(auth)):
+    """Exporta o pacote de conhecimento da sala — SÓ estatísticas."""
+    from tradingagents.desk.conhecimento import montar_pacote
+    esc = _escola_of(request)
+    sala = _sala_por_chave(esc, chave)
+    filtro = tuple(e.strip() for e in estrategias.split(",") if e.strip())
+    return montar_pacote(sala, estrategias=filtro or None).como_dict()
+
+
+@app.post("/v1/escola/salas/conhecimento")
+async def escola_adotar_conhecimento(req: Request, _=Depends(auth),
+                                     __=Depends(require_plan)):
+    """Adota um pacote como PRIOR da sala de destino. Recusa eco da própria
+    sala e qualquer documento com campos de certificação."""
+    from datetime import datetime as _dt
+
+    from tradingagents.desk.conhecimento import (
+        AVISO_CONHECIMENTO,
+        SCHEMA_CONHECIMENTO,
+        PacoteDeConhecimento,
+        adotar_conhecimento,
+        campos_de_certificacao,
+    )
+    from tradingagents.desk.models import utcnow
+    from tradingagents.desk.salas import SalaError
+    body = await _json_body(req)
+    esc = _escola_of(req)
+    sala = _sala_por_chave(esc, str(body.get("chave") or ""))
+    doc = body.get("pacote")
+    if not isinstance(doc, dict):
+        raise HTTPException(422, "informe o pacote de conhecimento")
+    proibidos = campos_de_certificacao(doc)
+    if proibidos:
+        raise HTTPException(
+            409, "pacote traz campos de certificação "
+                 f"({', '.join(sorted(set(proibidos)))}): certificação não "
+                 "atravessa salas — a formação exige evidência própria no "
+                 "contexto de destino")
+    try:
+        gerado_em = _dt.fromisoformat(str(doc.get("gerado_em")))
+    except (TypeError, ValueError):
+        gerado_em = utcnow()
+    pacote = PacoteDeConhecimento(
+        origem=str(doc.get("origem") or ""),
+        corretora=str(doc.get("corretora") or ""),
+        mercado=str(doc.get("mercado") or ""),
+        gerado_em=gerado_em,
+        estatisticas=tuple(doc.get("estatisticas") or ()),
+        aviso=str(doc.get("aviso") or AVISO_CONHECIMENTO),
+        schema=str(doc.get("schema") or SCHEMA_CONHECIMENTO))
+    try:
+        registro = adotar_conhecimento(sala, pacote)
+    except SalaError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {"ok": True, "prior": registro}
+
+
+@app.get("/v1/escola/certificacao")
+def escola_certificacao(request: Request, estrategia: str, corretora: str,
+                        mercado: str = "spot", ativo: str = "",
+                        horizonte: str = "1h", versao: str = "1",
+                        _=Depends(auth)):
+    """Elegibilidade NO CONTEXTO informado. Um trader formado na Binance
+    não é considerado formado na OKX — a resposta diz isso com todas as
+    letras, em vez de fingir equivalência."""
+    from tradingagents.desk.salas import ContextoDeCertificacao
+    esc = _escola_of(request)
+    contexto = ContextoDeCertificacao(corretora=corretora, mercado=mercado,
+                                      ativo=ativo, horizonte=horizonte)
+    ok, motivo = esc["central"].elegivel_para_live(
+        estrategia, versao, contexto=contexto)
+    return {"contexto": contexto.chave,
+            "estado": esc["central"].estado_de(estrategia, versao,
+                                               contexto=contexto),
+            "elegivel": ok, "motivo": motivo,
+            "aviso": ("elegibilidade habilita apenas o PROCESSO de "
+                      "autorização; quem autoriza operação real é o "
+                      "proprietário, com limites explícitos")}
+
+
+@app.get("/v1/escola/maestro")
+def escola_maestro(request: Request, _=Depends(auth)):
+    """Maestro Central: pausa global, exposição, conflitos entre salas."""
+    return _escola_of(request)["maestro"].relatorio()
+
+
+@app.post("/v1/escola/maestro/{acao}")
+async def escola_maestro_acao(acao: str, req: Request, _=Depends(auth),
+                              __=Depends(require_plan)):
+    """Pausa/retoma GLOBAL das salas. Motivo é obrigatório — auditoria."""
+    from tradingagents.desk.maestro import MaestroError
+    if acao not in ("pausar", "retomar"):
+        raise HTTPException(422, "ação deve ser pausar ou retomar")
+    body = await _json_body(req)
+    maestro = _escola_of(req)["maestro"]
+    try:
+        if acao == "pausar":
+            maestro.pausar_global(str(body.get("motivo") or ""))
+        else:
+            maestro.retomar_global(str(body.get("motivo") or ""))
+    except MaestroError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"ok": True, **maestro.relatorio()}
+
+
+# ------------------------------------------------------------ pilotos
+def _supervisor_of(request: Request, escola=None):
+    """Supervisor de pilotos do tenant. A elegibilidade, quando consultada,
+    é SEMPRE de um contexto de certificação explícito."""
+    from tradingagents.desk.piloto import SupervisorDePiloto
+    esc = _escola_of(request)
+    sup = SupervisorDePiloto(esc["armazem"], tenant_id=esc["tenant_id"],
+                             escola=escola)
+    return sup
+
+
+@app.get("/v1/escola/pilotos")
+def escola_pilotos(request: Request, _=Depends(auth)):
+    """Cadeia do piloto por agente + modo do piloto + gates esperados."""
+    from tradingagents.desk.piloto import GATES_ESPERADOS, MODO_DO_PILOTO
+    sup = _supervisor_of(request)
+    return {"modo": MODO_DO_PILOTO, "gates_esperados": list(GATES_ESPERADOS),
+            "autorizacoes": sup.relatorio(),
+            "vigia": sup.vigiar(),
+            "aviso": ("a formação não habilita negociação real; autorizar "
+                      "piloto é ato exclusivo do proprietário")}
+
+
+@app.post("/v1/escola/pilotos/solicitar")
+async def escola_piloto_solicitar(req: Request, _=Depends(auth),
+                                  __=Depends(require_plan)):
+    """Registra o PEDIDO do proprietário. Só aceita aluno FORMADO no
+    contexto de certificação informado — e isso não autoriza nada ainda."""
+    from decimal import Decimal as D
+
+    from tradingagents.desk.piloto import SupervisorDePiloto
+    from tradingagents.desk.salas import (
+        ContextoDeCertificacao,
+        EscolaDoPiloto,
+        SalaError,
+    )
+    body = await _json_body(req)
+
+    def _decimal(campo: str) -> D:
+        valor = body.get(campo)
+        if valor in (None, ""):
+            raise HTTPException(422, f"{campo} é obrigatório para o pedido")
+        try:
+            return D(str(valor))
+        except Exception as exc:
+            raise HTTPException(422, f"{campo} precisa ser numérico") from exc
+
+    try:
+        prazo = int(body.get("prazo_dias") or 0)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(422, "prazo_dias precisa ser um número inteiro") from exc
+    esc = _escola_of(req)
+    contexto = ContextoDeCertificacao(
+        corretora=str(body.get("corretora") or ""),
+        mercado=str(body.get("mercado") or "spot"),
+        ativo=str(body.get("ativo") or ""),
+        horizonte=str(body.get("horizonte") or "1h"))
+    sup = SupervisorDePiloto(
+        esc["armazem"], tenant_id=esc["tenant_id"],
+        escola=EscolaDoPiloto(esc["central"], contexto))
+    try:
+        aut = sup.solicitar(
+            str(body.get("agent_id") or ""),
+            estrategia=str(body.get("estrategia") or ""),
+            versao=str(body.get("versao") or "1"),
+            corretora=str(body.get("corretora") or ""),
+            conta=str(body.get("conta") or ""),
+            capital_maximo=_decimal("capital_maximo"),
+            perda_diaria_maxima=_decimal("perda_diaria_maxima"),
+            perda_total_maxima=_decimal("perda_total_maxima"),
+            prazo_dias=prazo,
+            condicoes_de_suspensao=tuple(body.get("condicoes_de_suspensao")
+                                         or ()))
+    except (ValueError, SalaError) as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {"ok": True, "autorizacao": aut.como_dict()}
+
+
+def _gates_do_ambiente(tenant_id: str, d: dict) -> list[dict]:
+    """Gates lidos do ESTADO REAL da mesa — não de checkboxes do usuário.
+    `envio_real_desativado` é a verdade desta versão: nenhuma rota envia
+    ordem real; LIVE continua bloqueado por construção."""
+    from tradingagents.desk.piloto import SupervisorDePiloto
+    posse = d["posse"].resumo()
+    return SupervisorDePiloto.gates_de_ativacao(
+        single_owner=bool(posse.get("valida") and posse.get("sou_eu")),
+        kill_switch=not _parada(tenant_id).bloqueia,
+        risco=bool(getattr(d["orchestrator"], "risk", None)),
+        reconciliacao=not d["coordinator"].pending_reconciliation(),
+        corretora=bool(d["broker_mode"]),
+        envio_real_desativado=(d["broker_mode"] != "live"))
+
+
+@app.post("/v1/escola/pilotos/{agent_id}/autorizar")
+def escola_piloto_autorizar(agent_id: str, request: Request,
+                            _=Depends(auth), __=Depends(require_plan)):
+    """Ato EXPLÍCITO do proprietário. Os gates são medidos no estado real
+    da mesa; qualquer reprovação devolve o motivo exato."""
+    d = _desk_of(request)
+    sup = _supervisor_of(request)
+    try:
+        aut = sup.autorizar(agent_id,
+                            gates=_gates_do_ambiente(request_tenant(request),
+                                                     d))
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {"ok": True, "autorizacao": aut.como_dict(),
+            "lembrete": ("piloto em modo paper (simulado) — envio real "
+                         "continua desativado")}
+
+
+@app.post("/v1/escola/pilotos/{agent_id}/revogar")
+async def escola_piloto_revogar(agent_id: str, req: Request,
+                                _=Depends(auth), __=Depends(require_plan)):
+    """Encerra o piloto com motivo auditável. Sem motivo, não revoga."""
+    body = await _json_body(req)
+    sup = _supervisor_of(req)
+    try:
+        aut = sup.revogar(agent_id, motivo=str(body.get("motivo") or ""))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"ok": True, "autorizacao": aut.como_dict()}
 
 
 @app.post("/v1/backup")

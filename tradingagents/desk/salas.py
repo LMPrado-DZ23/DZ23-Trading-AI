@@ -536,6 +536,16 @@ class EscolaCentral:
         escola = self._escola(contexto)
         return escola.elegivel_para_live(estrategia, versao)
 
+    def estado_de(self, estrategia: str, versao: str = "1", *,
+                  contexto: ContextoDeCertificacao) -> str:
+        """Estado da matrícula NO contexto — 'coletando' quando nunca houve
+        evidência ali (não finge formação que não existe)."""
+        chave = contexto.chave
+        if chave not in self._escolas and chave not in self._catalogo:
+            return "coletando"
+        estado = self._escola(contexto).estado_de(estrategia, versao)
+        return estado.value if estado is not None else "coletando"
+
     # -- retratos -------------------------------------------------------
     def relatorio(self) -> dict:
         certificados = []
@@ -558,9 +568,25 @@ class EscolaCentral:
         }
 
 
+class EscolaDoPiloto:
+    """Amarra a Escola Central a UM contexto de certificação para o fluxo
+    de piloto. O supervisor consulta elegibilidade SEMPRE naquele contexto
+    — nunca na escola "em geral", que não existe."""
+
+    def __init__(self, central: EscolaCentral,
+                 contexto: ContextoDeCertificacao):
+        self._central = central
+        self._contexto = contexto
+
+    def elegivel_para_live(self, estrategia: str,
+                           versao: str = "1") -> tuple[bool, str]:
+        return self._central.elegivel_para_live(
+            estrategia, versao, contexto=self._contexto)
+
+
 __all__ = [
     "AdaptadorDeCorretora", "ContextoDaSala", "ContextoDeCertificacao",
-    "EscolaCentral", "RegistroDeSalas", "Sala", "SalaError",
-    "adaptador_de", "corretoras_homologadas", "registrar_adaptador",
-    "MERCADOS", "MODO_PAPER", "MODOS_OPERACIONAIS",
+    "EscolaCentral", "EscolaDoPiloto", "RegistroDeSalas", "Sala",
+    "SalaError", "adaptador_de", "corretoras_homologadas",
+    "registrar_adaptador", "MERCADOS", "MODO_PAPER", "MODOS_OPERACIONAIS",
 ]

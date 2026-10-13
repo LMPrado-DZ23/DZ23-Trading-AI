@@ -1,0 +1,232 @@
+"""Rotas da Escola Central, salas, conhecimento e pilotos no serviço.
+
+Contrato de segurança da superfície: tudo exige auth; sala LIVE é recusada
+com o motivo do fluxo de piloto; certificação não atravessa contexto; o
+controle aleatório entra só por opção explícita do dono.
+"""
+import importlib
+
+
+def _load_app(tmp_path, monkeypatch, **env):
+    monkeypatch.setenv("ACCESS_PASSWORD", "s3nh4")
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+    import service.app as m
+    importlib.reload(m)
+    return m
+
+
+def _client(tmp_path, monkeypatch, **env):
+    from fastapi.testclient import TestClient
+    m = _load_app(tmp_path, monkeypatch, **env)
+    m._FAILS.clear()
+    m._DESKS.clear()
+    return TestClient(m.app), m
+
+
+H = {"Authorization": "Bearer s3nh4"}
+
+
+def _abrir(c, corretora="binance", conta="paper-1", mercado="spot",
+           modo="paper", payout=None):
+    body = {"corretora": corretora, "conta": conta, "mercado": mercado,
+            "modo": modo}
+    if payout is not None:
+        body["payout"] = payout
+    return c.post("/v1/escola/salas", headers=H, json=body)
+
+
+class TestRotasRegistradas:
+    def test_paths_exists(self, tmp_path, monkeypatch):
+        m = _load_app(tmp_path, monkeypatch)
+        paths = {r.path for r in m.app.routes if getattr(r, "path", None)}
+        assert {"/v1/escola/central", "/v1/escola/salas", "/v1/escola/salas/detalhe",
+                "/v1/escola/salas/pacote", "/v1/escola/salas/conhecimento",
+                "/v1/escola/certificacao", "/v1/escola/maestro",
+                "/v1/escola/maestro/{acao}", "/v1/escola/pilotos",
+                "/v1/escola/pilotos/solicitar",
+                "/v1/escola/pilotos/{agent_id}/autorizar",
+                "/v1/escola/pilotos/{agent_id}/revogar"} <= paths
+
+    def test_tudo_exige_auth(self, tmp_path, monkeypatch):
+        c, _ = _client(tmp_path, monkeypatch)
+        assert c.get("/v1/escola/central").status_code == 401
+        assert c.get("/v1/escola/salas").status_code == 401
+        assert c.get("/v1/escola/maestro").status_code == 401
+        assert c.get("/v1/escola/pilotos").status_code == 401
+        assert c.post("/v1/escola/salas", json={}).status_code == 401
+
+
+class TestEscolaCentralEBandeja:
+    def test_central_vazia_e_honesta(self, tmp_path, monkeypatch):
+        c, _ = _client(tmp_path, monkeypatch)
+        d = c.get("/v1/escola/central", headers=H).json()
+        assert d["total_contextos"] == 0 and d["certificados"] == []
+        assert "proprietário" in d["aviso"]
+
+    def test_abrir_sala_idempotente_e_isolada(self, tmp_path, monkeypatch):
+        c, _ = _client(tmp_path, monkeypatch)
+        r = _abrir(c)
+        assert r.status_code == 200 and r.json()["ok"] is True
+        sala = r.json()["sala"]
+        assert sala["chave"] == "binance|paper-1|spot|paper"
+        assert sala["saldo_realizado"] == "0"
+        assert sala["laboratorio"] is False
+        assert _abrir(c).status_code == 200          # idempotente
+        salas = c.get("/v1/escola/salas", headers=H).json()
+        assert [s["chave"] for s in salas["salas"]] == ["binance|paper-1|spot|paper"]
+        assert {c_["nome"] for c_ in salas["corretoras"]} >= {"binance", "okx",
+                                                             "iq_option"}
+
+    def test_duas_corretoras_duas_salas_zeradas(self, tmp_path, monkeypatch):
+        c, _ = _client(tmp_path, monkeypatch)
+        _abrir(c, corretora="binance", conta="paper-1")
+        _abrir(c, corretora="okx", conta="paper-2")
+        salas = c.get("/v1/escola/salas", headers=H).json()["salas"]
+        assert len(salas) == 2
+        assert all(s["saldo_realizado"] == "0" for s in salas)
+
+    def test_recusas_com_motivo(self, tmp_path, monkeypatch):
+        c, _ = _client(tmp_path, monkeypatch)
+        assert "desconhecido" in _abrir(c, mercado="cripto").json()["detail"]
+        assert "laboratório" in _abrir(
+            c, corretora="iq_option", mercado="opcoes_binarias",
+            modo="shadow", payout="0.85").json()["detail"]
+        assert "piloto" in _abrir(c, modo="live").json()["detail"]
+        assert "payout" in _abrir(
+            c, corretora="iq_option", mercado="opcoes_binarias").json()["detail"]
+        assert "conta" in _abrir(c, conta="").json()["detail"]
+
+    def test_sala_inexistente_404(self, tmp_path, monkeypatch):
+        c, _ = _client(tmp_path, monkeypatch)
+        r = c.get("/v1/escola/salas/detalhe",
+                  headers=H, params={"chave": "binance|x|spot|paper"})
+        assert r.status_code == 404
+
+
+class TestConhecimento:
+    def test_pacote_sem_certificacao_e_adocao(self, tmp_path, monkeypatch):
+        c, _ = _client(tmp_path, monkeypatch)
+        _abrir(c, corretora="binance", conta="paper-1")
+        _abrir(c, corretora="okx", conta="paper-2")
+        pacote = c.get("/v1/escola/salas/pacote", headers=H,
+                       params={"chave": "binance|paper-1|spot|paper"}).json()
+        assert pacote["schema"] == "dz23.conhecimento/1"
+        assert "estado" not in pacote and "formado_em" not in pacote
+        r = c.post("/v1/escola/salas/conhecimento", headers=H,
+                   json={"chave": "okx|paper-2|spot|paper", "pacote": pacote})
+        assert r.status_code == 200 and r.json()["ok"] is True
+        det = c.get("/v1/escola/salas/detalhe", headers=H,
+                    params={"chave": "okx|paper-2|spot|paper"}).json()
+        assert len(det["priors"]) == 1
+        assert det["sala"]["priors_conhecimento"] == 1
+
+    def test_eco_da_propria_sala_recusado(self, tmp_path, monkeypatch):
+        c, _ = _client(tmp_path, monkeypatch)
+        _abrir(c)
+        pacote = c.get("/v1/escola/salas/pacote", headers=H,
+                       params={"chave": "binance|paper-1|spot|paper"}).json()
+        r = c.post("/v1/escola/salas/conhecimento", headers=H,
+                   json={"chave": "binance|paper-1|spot|paper", "pacote": pacote})
+        assert r.status_code == 409 and "eco" in r.json()["detail"]
+
+    def test_certificacao_escondida_no_pacote_recusada(self, tmp_path, monkeypatch):
+        c, _ = _client(tmp_path, monkeypatch)
+        _abrir(c, corretora="okx", conta="paper-2")
+        for contaminado in (
+            {"origem": "binance|paper-1|spot|paper", "corretora": "binance",
+             "mercado": "spot", "gerado_em": "2026-10-13T00:00:00+00:00",
+             "estatisticas": [], "estado": "formada"},
+            {"origem": "binance|paper-1|spot|paper", "corretora": "binance",
+             "mercado": "spot", "gerado_em": "2026-10-13T00:00:00+00:00",
+             "estatisticas": [{"estrategia": "x", "eventos": ["contrabando"]}]},
+        ):
+            r = c.post("/v1/escola/salas/conhecimento", headers=H,
+                       json={"chave": "okx|paper-2|spot|paper",
+                             "pacote": contaminado})
+            assert r.status_code == 409
+            assert "certificação" in r.json()["detail"]
+
+
+class TestMaestroRotas:
+    def test_pausa_exige_motivo_e_persiste(self, tmp_path, monkeypatch):
+        c, _ = _client(tmp_path, monkeypatch)
+        assert c.post("/v1/escola/maestro/pausar", headers=H,
+                      json={}).status_code == 422
+        r = c.post("/v1/escola/maestro/pausar", headers=H,
+                   json={"motivo": "manutenção no conector"})
+        assert r.status_code == 200 and r.json()["pausa_global"]["ativo"] is True
+        g = c.get("/v1/escola/maestro", headers=H).json()
+        assert "manutenção" in g["pausa_global"]["motivo"]
+        assert c.post("/v1/escola/maestro/retomar", headers=H,
+                      json={"motivo": "conector estável"}).status_code == 200
+        assert c.get("/v1/escola/maestro", headers=H).json(
+        )["pausa_global"]["ativo"] is False
+
+    def test_acao_invalida_422(self, tmp_path, monkeypatch):
+        c, _ = _client(tmp_path, monkeypatch)
+        assert c.post("/v1/escola/maestro/reiniciar", headers=H,
+                      json={"motivo": "x"}).status_code == 422
+
+
+class TestCertificacaoEPilotos:
+    def test_sem_evidencia_nao_finge_formacao(self, tmp_path, monkeypatch):
+        c, _ = _client(tmp_path, monkeypatch)
+        _abrir(c)
+        d = c.get("/v1/escola/certificacao", headers=H,
+                  params={"estrategia": "trend_following", "corretora": "binance",
+                          "mercado": "spot", "ativo": "BTC/USDT"}).json()
+        assert d["elegivel"] is False and d["estado"] == "coletando"
+        assert "nenhuma evidência" in d["motivo"]
+
+    def test_laboratorio_jamais_elegivel(self, tmp_path, monkeypatch):
+        c, _ = _client(tmp_path, monkeypatch)
+        d = c.get("/v1/escola/certificacao", headers=H,
+                  params={"estrategia": "trend_following",
+                          "corretora": "iq_option",
+                          "mercado": "opcoes_binarias",
+                          "ativo": "EUR/USD"}).json()
+        assert d["elegivel"] is False and "laboratório" in d["motivo"]
+
+    def test_pilotos_vazio_e_cadeia_guardada(self, tmp_path, monkeypatch):
+        c, _ = _client(tmp_path, monkeypatch)
+        d = c.get("/v1/escola/pilotos", headers=H).json()
+        assert d["modo"] == "paper (simulado)"
+        assert d["autorizacoes"] == []
+        assert set(d["gates_esperados"]) == {"segurança", "integração",
+                                             "risco", "execução"}
+        # pedido sem formado no contexto => recusado com o motivo da escola
+        r = c.post("/v1/escola/pilotos/solicitar", headers=H, json={
+            "agent_id": "trader-trend", "estrategia": "trend_following",
+            "corretora": "binance", "conta": "paper-1", "ativo": "BTC/USDT",
+            "capital_maximo": "100", "perda_diaria_maxima": "10",
+            "perda_total_maxima": "30", "prazo_dias": 30})
+        assert r.status_code == 409 and "não elegível" in r.json()["detail"]
+        # autorizar sem pedido registrado => 409
+        assert c.post("/v1/escola/pilotos/trader-trend/autorizar",
+                      headers=H).status_code == 409
+        # revogar sem motivo => 422
+        assert c.post("/v1/escola/pilotos/trader-trend/revogar", headers=H,
+                      json={}).status_code == 422
+
+    def test_solicitar_exige_numeros(self, tmp_path, monkeypatch):
+        c, _ = _client(tmp_path, monkeypatch)
+        r = c.post("/v1/escola/pilotos/solicitar", headers=H, json={
+            "agent_id": "trader-trend", "estrategia": "trend_following",
+            "corretora": "binance", "conta": "paper-1"})
+        assert r.status_code == 422 and "capital_maximo" in r.json()["detail"]
+
+
+class TestControleOptIn:
+    def test_controle_desligado_por_padrao(self, tmp_path, monkeypatch):
+        c, _ = _client(tmp_path, monkeypatch)
+        st = c.get("/v1/desk/status", headers=H).json()
+        ids = [a["id"] for a in st["agents"]]
+        assert len(ids) == 10 and "trader-controle" not in ids
+
+    def test_controle_liga_por_configuracao(self, tmp_path, monkeypatch):
+        c, _ = _client(tmp_path, monkeypatch, TRADINGAGENTS_DESK_CONTROLE="1")
+        st = c.get("/v1/desk/status", headers=H).json()
+        ids = [a["id"] for a in st["agents"]]
+        assert len(ids) == 11 and "trader-controle" in ids

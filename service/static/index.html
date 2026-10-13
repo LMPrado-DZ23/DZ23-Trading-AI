@@ -97,6 +97,7 @@
 <button class="btn secondary" onclick="avaliar()">Avaliar equipe</button>
 <button class="btn secondary" onclick="aprendizado()">O que aprenderam</button>
 <button class="btn secondary" onclick="viabilidade()">Isso dá lucro?</button>
+<button class="btn secondary" onclick="escolaCentral()">Escola Central</button>
 <button class="btn secondary" onclick="quantStatus()">Camada quant/IA</button>
 <button class="btn secondary" onclick="verAlertas()">Alertas</button>
 <button class="btn secondary" onclick="exportarTudo()">Exportar tudo (mudar de servidor)</button>
@@ -239,6 +240,17 @@ async function viabilidade(){const r=await api('/v1/desk/viabilidade');if(!r.ok)
 $('deskMsg').innerHTML=`<div class="muted">Corretora: <b>${escapeHtml(d.exchange)}</b></div><table class="table"><thead><tr><th>Estratégia</th><th>Custo/op</th><th>Sobra por op</th><th>Acerto mínimo</th><th>Veredito</th></tr></thead><tbody>`+
 d.estrategias.map(e=>`<tr><td>${escapeHtml(e.estrategia)}</td><td>${escapeHtml(e.custo_por_operacao)}</td><td class="${e.viavel?'ok':'bad'}">${escapeHtml(e.esperanca_liquida)}</td><td>${escapeHtml(e.acerto_minimo)}</td><td>${e.viavel?'<b class="ok">viável</b>':'<b class="bad">inviável</b>'}<br><small class="muted">${escapeHtml(e.origem)}</small></td></tr>`).join('')+
 `</tbody></table><div class="muted">${escapeHtml(d.como_ler)}</div><div class="warn">${escapeHtml(d.aviso)}</div>`}
+async function escolaCentral(){const [ce,sa,pi]=await Promise.all([api('/v1/escola/central'),api('/v1/escola/salas'),api('/v1/escola/pilotos')]);if(!ce.ok||!sa.ok||!pi.ok)return toast((ce.data||{}).detail||'falhou','bad');const c=ce.data,s=sa.data,p=pi.data;
+const cert=c.certificados.length?`<table class="table"><thead><tr><th>Contexto</th><th>Estratégia</th><th>Estado</th><th>Amostras</th><th>Justificativa</th></tr></thead><tbody>`+c.certificados.map(x=>`<tr><td>${escapeHtml(x.contexto)}</td><td>${escapeHtml(x.estrategia)}@${escapeHtml(x.versao||'1')}</td><td><span class="pill">${escapeHtml(x.estado)}</span></td><td>${escapeHtml(String(x.amostras??0))}</td><td><small>${escapeHtml(x.motivo||'—')}</small></td></tr>`).join('')+'</tbody></table>':'<div class="muted">Nenhuma certificação ainda — a escola só certifica com evidência própria de cada contexto.</div>';
+const salas=s.salas.length?`<table class="table"><thead><tr><th>Sala</th><th>Saldo realizado</th><th>Taxas</th><th>Posições</th><th>Desfechos</th><th>Priors</th></tr></thead><tbody>`+s.salas.map(x=>`<tr><td>${escapeHtml(x.chave)}${x.laboratorio?' <span class="pill">laboratório</span>':''}</td><td class="${Number(x.saldo_realizado)>=0?'ok':'bad'}">${escapeHtml(x.saldo_realizado)}</td><td>${escapeHtml(x.taxas_acumuladas)}</td><td>${Object.keys(x.posicoes_abertas||{}).length}</td><td>${x.desfechos}</td><td>${x.priors_conhecimento}</td></tr>`).join('')+'</tbody></table>':'<div class="muted">Nenhuma sala aberta — cada corretora/conta/mercado ganha sala própria e isolada.</div>';
+const ma=s.maestro||{},pa=ma.pausa_global||{},ex=ma.exposicao||{};
+const pil=p.autorizacoes.length?p.autorizacoes.map(a=>`<div class="event"><b>${escapeHtml(a.agent_id)} · ${escapeHtml(a.estado)}</b><small>${escapeHtml(a.corretora)} · conta ${escapeHtml(a.conta)} · modo ${escapeHtml(a.modo||'')}</small>${a.motivo_revogacao?`<small>${escapeHtml(a.motivo_revogacao)}</small>`:''}</div>`).join(''):'<div class="muted">Nenhum piloto — a cadeia é FORMADO → ELEGÍVEL → AGUARDANDO AUTORIZAÇÃO → PILOTO AUTORIZADO, e a autorização é ato exclusivo do proprietário.</div>';
+$('deskMsg').innerHTML=`<h3>Escola Central</h3><div class="metric-line"><span>Contextos de certificação</span><b>${c.total_contextos}</b></div>${cert}
+<h3 style="margin-top:12px">Salas por corretora (isolamento financeiro)</h3>${salas}
+<div class="metric-line"><span>Maestro: pausa global</span><b class="${pa.ativo?'bad':'ok'}">${pa.ativo?'PAUSADA — '+escapeHtml(pa.motivo||''):'livre'}</b></div>
+<div class="metric-line"><span>Maestro: exposição global</span><b>${escapeHtml(String(ex.total??'0'))}${ex.excedido?' — TETO ALCANÇADO':''}</b></div>
+<h3 style="margin-top:12px">Pilotos (modo ${escapeHtml(p.modo)})</h3>${pil}
+<div class="warn">${escapeHtml(c.aviso||'')}</div><div class="muted">${escapeHtml(p.aviso||'')}</div>`}
 async function quantStatus(){const r=await api('/v1/quant/status');if(!r.ok)return toast('falhou','bad');const d=r.data;
 const linhas=Object.entries(d.modelos||{}).map(([nome,i])=>`<tr><td>${escapeHtml(nome)}</td><td>${i.instalado?'<b class="ok">instalado</b>':'<span class="muted">ausente</span>'}</td><td>${escapeHtml(i.versao||'—')}</td><td>${escapeHtml(i.papel||'')}</td></tr>`).join('');
 const ia=d.ia_contexto?`<div class="metric-line"><span>IA de contexto: <b>${escapeHtml(d.ia_contexto.provedor||'—')}</b> — última consulta ${d.ia_contexto.latencia_ms} ms (${d.ia_contexto.ok?'sucesso':'falha'}) em ${escapeHtml(d.ia_contexto.quando)}</span></div>`

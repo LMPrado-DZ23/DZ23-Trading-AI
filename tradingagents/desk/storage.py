@@ -26,6 +26,45 @@ from pathlib import Path
 
 _WRITE_LOCK = threading.Lock()
 
+# Caracteres legítimos numa CHAVE lógica que o NTFS proíbe num NOME de
+# arquivo (`|` dava EINVAL no mkstemp; `:` e `/` também não passam). O `%`
+# entra no conjunto porque é o próprio marcador de escape — sem ele a
+# codificação não seria reversível.
+_PROIBIDOS_NO_NOME = frozenset('<>:"/\\|?*%')
+
+
+def _nome_seguro(chave: str) -> str:
+    """Chave lógica → nome de arquivo válido em QUALQUER sistema.
+
+    `sala::binance|paper-1|spot|paper` é chave legítima, e vira
+    `sala::binance%7Cpaper-1%7Cspot%7Cpaper` no arquivo. Determinístico e
+    reversível; chaves já seguras ("agentes", "maestro") não mudam de nome.
+    """
+    return "".join(f"%{ord(c):02X}" if c in _PROIBIDOS_NO_NOME else c
+                   for c in chave)
+
+
+def _chave_do_nome(nome: str) -> str:
+    """Nome de arquivo → chave lógica (inverso de `_nome_seguro`)."""
+    if "%" not in nome:
+        return nome
+    saida: list[str] = []
+    i = 0
+    while i < len(nome):
+        if nome[i] == "%" and i + 2 < len(nome):
+            escape = nome[i + 1:i + 3]
+            try:
+                c = chr(int(escape, 16))
+            except ValueError:
+                c = ""
+            if c in _PROIBIDOS_NO_NOME:
+                saida.append(c)
+                i += 3
+                continue
+        saida.append(nome[i])
+        i += 1
+    return "".join(saida)
+
 
 def escrever_json_atomico(caminho: Path, documento: dict) -> None:
     """Grava JSON sem janela de corrupção e sem corrida entre escritas.
@@ -101,7 +140,7 @@ class ArmazemDeEstado:
     # -- interface -----------------------------------------------------
     def _caminho(self, tenant_id: str, chave: str) -> Path:
         base = self.diretorio or Path(".")
-        return base / tenant_id / f"{chave}.json"
+        return base / tenant_id / f"{_nome_seguro(chave)}.json"
 
     def carregar(self, tenant_id: str, chave: str) -> dict | None:
         if self.backend == "postgres":
@@ -118,7 +157,7 @@ class ArmazemDeEstado:
         if not caminho.exists():
             return None
         try:
-            return json.loads(caminho.read_text())
+            return json.loads(caminho.read_text(encoding="utf-8"))
         except ValueError:
             return None
 
@@ -176,7 +215,7 @@ class ArmazemDeEstado:
         atual = None
         if caminho.exists():
             try:
-                atual = json.loads(caminho.read_text())
+                atual = json.loads(caminho.read_text(encoding="utf-8"))
             except ValueError:
                 atual = None
         if isinstance(atual, dict) and atual.get("dono") != dono:
@@ -188,7 +227,7 @@ class ArmazemDeEstado:
                 return False, "arquivo"
         escrever_json_atomico(caminho, documento)
         try:
-            lido = json.loads(caminho.read_text())
+            lido = json.loads(caminho.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             lido = documento
         return lido.get("dono") == dono, "arquivo"
@@ -205,7 +244,7 @@ class ArmazemDeEstado:
         base = (self.diretorio or Path(".")) / tenant_id
         if not base.exists():
             return []
-        return sorted(p.stem for p in base.glob("*.json"))
+        return sorted(_chave_do_nome(p.stem) for p in base.glob("*.json"))
 
     def estado(self) -> dict:
         return {"destino": self.backend,
