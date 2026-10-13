@@ -1,0 +1,35 @@
+name: Windows Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv and build dependencies
+        run: |
+          pip install uv pyinstaller
+          uv sync --extra dev
+      - name: Build Executable Bundle
+        run: |
+          uv run python -m desktop.packaging.build_exe
+      - name: Zip Release Bundle
+        run: |
+          Compress-Archive -Path dist/DZ23-Trading-AI/* -DestinationPath dist/DZ23-Trading-AI-windows-x64.zip
+          Get-FileHash dist/DZ23-Trading-AI-windows-x64.zip -Algorithm SHA256 | Out-File dist/SHA256SUMS.txt
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/DZ23-Trading-AI-windows-x64.zip
+            dist/SHA256SUMS.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
