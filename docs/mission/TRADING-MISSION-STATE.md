@@ -27,12 +27,19 @@
   `2193 passed / 4 skipped / 71 subtests` + e2e 6/6; no bundle instalado: `sha256sum -c` OK, 16 s no portão → `ADMIN`,
   6 páginas com título correto e **zero 5xx**, Mesa 3+7 por tier, PAPER ciclo e reinício durável re-provados. **App deixado
   instalado (estado de entrega).**
-- **Branch:** `feat/integracao-mestre-20261012` (PR #7; M01 mergeado por fast-forward) + `feat/qoder-maestro-traders` (entrega M01)
+- **C017 — portão do dono único premium + auditoria Open Source (#28/#30 parcial)** na branch `feat/login-dono-unico-premium`
+  (de `5fea049`): credencial do dono em **Argon2id** com migração silenciosa do `owner_password.txt`; assistente de primeira execução
+  (código de recuperação exibido uma única vez); portão premium de 4 estados com "DZ23 Trading AI" no lugar de "DZ23 AGENCY" e badge
+  MULTI-TENANT removida (`SINGLE_OWNER_ENFORCED` é trava de código); auditoria open source: Apache-2.0 preservada, `backtrader` (GPLv3+,
+  sem uso) removido, CI com gitleaks + gate de licenças + SBOM, README/SECURITY/CONTRIBUTING/DEPLOY e site sem SaaS. **Prova:** suíte
+  completa `2226 passed / 5 skipped / 71 subtests` (exit 0), e2e Playwright `9 passed` (primeira execução + recuperação com a senha
+  antiga morrendo, mobile 390×844), ruff limpo. Homologação no bundle desta PR pendente (itens 16/17).
+- **Branch:** `feat/integracao-mestre-20261012` (PR #7; M01 mergeado por fast-forward) + `feat/qoder-maestro-traders` (entrega M01) + `feat/login-dono-unico-premium` (C017)
 - **Base:** `main` (`80e99fb`)
-- **PR:** #7 (integração mestre) + branch M01 publicada
-- **HEAD:** `ba3307d` + batch C015 (docs: painel sem SaaS morto, item 15)
-- **UTC:** `2026-10-13T19:51:00Z`
-- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md` (G3 fechado; re-provado nos bundles M01 e C015 — itens 13–15); checkpoints em `TRADING-CHECKPOINTS.md` (C000–C015 + M01)
+- **PR:** #7 (integração mestre) + branch M01 publicada + PR do C017 para a integração
+- **HEAD:** `5fea049` (integração, C016) + C017 na branch de login (`55d36ff` + `cda7f9c` + docs)
+- **UTC:** `2026-10-13T20:30:00Z`
+- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md` (G3 fechado; re-provado nos bundles M01 e C015 — itens 13–15); checkpoints em `TRADING-CHECKPOINTS.md` (C000–C017 + M01)
 - **LIVE:** `BLOCKED_BY_POLICY` (inalterado; nenhuma operação com dinheiro real)
 
 ## Baseline Verificada e Conquistas

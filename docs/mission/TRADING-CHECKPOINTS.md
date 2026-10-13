@@ -501,3 +501,29 @@ LIVE `BLOCKED_BY_POLICY` o tempo todo; **nada foi publicado** (sem tag/release �
 ### Estado
 
 LIVE `BLOCKED_BY_POLICY` o tempo todo; **nada foi publicado** (sem tag/release — aguarda autorização explícita do dono).
+
+---
+
+## C017 — Portão do dono único premium + auditoria Open Source (#28/#30 parcial)
+
+- **UTC:** 2026-10-13T20:00Z–20:30Z
+- **Branch:** `feat/login-dono-unico-premium` (de `5fea049`; PR para `feat/integracao-mestre-20261012`)
+- **Commits:** `55d36ff` (login) + `cda7f9c` (open source) + este batch documental
+- **Motivação dupla:** diretiva do dono para o portão de entrada (auditoria da tela de login, MULTI-TENANT, marca, senha em texto, assistente de primeira execução, UX premium) e diretiva Open Source (licença, docs públicas, CI de segredos/licenças/SBOM, exemplos sem segredos).
+
+### Portão do dono único (#28)
+
+1. **Credencial em Argon2id** (`service/api/owner_credentials.py`): `owner_credentials.json` no DATA dir (senha + código de recuperação com hash Argon2id; escrita atômica); o arquivo vence a env `PASSWORD`; nada configurado → 409 "primeira configuração pendente". `desktop/launcher.py` migra `owner_password.txt` em silêncio (hash da mesma senha + remoção do txt) — o acesso do dono nunca se perde.
+2. **Rotas novas** em `service/app.py`: `/v1/auth/status` (com `setup_required`), `POST /v1/auth/setup` (422 senha fraca, 409 se já existe, código de recuperação devolvido UMA vez, lock de concorrência), `POST /v1/auth/recover` (mesma trava de tentativas do login), `POST /v1/auth/recovery-code` (autenticado, para donos migrados).
+3. **Portão premium** (`service/static/index.html`): 4 estados (entrar / primeira configuração / código de recuperação / esqueci a senha); marca "DZ23 Trading AI" (fim do "DZ23 AGENCY"); badge MULTI-TENANT removida — `SINGLE_OWNER_ENFORCED = True` é trava de código (middleware 404 no SaaS), não flag; orientação a `owner_password.txt` eliminada; carregando, erros de senha, bloqueio de tentativas (429) e `aria-live="polite"`.
+4. **Prova fresca desta rodada:** suíte completa **`2226 passed, 5 skipped, 71 subtests passed in 188.89s`** (exit 0); ruff limpo; lote focado site/semântica/frontend/empacotamento **`119 passed`**; **e2e Playwright `9 passed in 23.87s`** — identidade premium desktop, **assistente de primeira execução + recuperação com prova de que a senha antiga morre** (401 no Bearer antigo, 200 no novo) e mobile 390×844. Capturas `00-login-premium-desktop.png`, `04-login-mobile.png`, `05-painel-mobile.png`, `06-codigo-recuperacao.png` (regeneradas na verificação final).
+
+### Auditoria Open Source (#30, parcial)
+
+5. **Licença preservada e auditada** (Apache-2.0): inventário `pip-licenses` de 146 pacotes em `docs/mission/evidence/supply-chain/licenses.csv`; **`backtrader` 1.9.78.123 é GPLv3+** e constava no pyproject sem nenhum uso no código → **removido** de `pyproject.toml`/`uv.lock` (o mesmo delta inclui `argon2-cffi` do login). Permanecem licenças permissivas + `psycopg` LGPL-3.0-only (permitida).
+6. **CI supply-chain** (`.github/workflows/ci.yml`): job novo — `gitleaks` na história completa, gate de licenças (falha se sobrar linha GPL/SSPL/EUPL; LGPL isenta) e SBOM SPDX (`dz23-sbom.spdx.json`, artefato 90 dias).
+7. **Docs públicas**: `README.md` reescrito (estados PAPER/SHADOW/DEMO/LIVE com homologação declarada, quickstart `uv`, seção open source); `SECURITY.md`; `CONTRIBUTING.md`; `DEPLOY.md` (single-owner; Oracle ARM64 "preparado, não homologado"); site público sem SaaS/cobrança (sem "Planos"/"PIX"/"R$", FAQ "É gratuito?"); `.env.example`/`.env.enterprise.example`/`.env.agency.example` sem segredos; `.gitignore` endurecido (`.env.*` com exceções para os exemplos, `*.pem`/`*.key`/`*.p12`, `owner_credentials.json`, `owner_password.txt`). Pin de teste atualizado para pinar a ausência da cobrança no site.
+
+### Estado
+
+LIVE `BLOCKED_BY_POLICY` o tempo todo; **nada foi publicado** (sem tag/release — aguarda autorização explícita do dono). A homologação no bundle Windows do novo portão de login e a re-homologação C016 (fonte de dados) ficam pendentes do artefato desta PR — sem declaração antecipada.
