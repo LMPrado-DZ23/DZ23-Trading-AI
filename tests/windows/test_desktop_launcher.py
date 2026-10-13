@@ -22,6 +22,7 @@ def test_wait_and_open_ui_success():
         def __enter__(self): return self
         def __exit__(self, *args): pass
 
-    with patch("urllib.request.urlopen", return_value=DummyResponse()), patch("webbrowser.open") as mock_browser:
+    with patch("urllib.request.urlopen", return_value=DummyResponse()) as mock_urlopen, patch("webbrowser.open") as mock_browser:
         wait_and_open_ui("http://127.0.0.1:8000", timeout=1)
+        mock_urlopen.assert_called_once_with("http://127.0.0.1:8000/healthz", timeout=1)
         mock_browser.assert_called_once_with("http://127.0.0.1:8000")

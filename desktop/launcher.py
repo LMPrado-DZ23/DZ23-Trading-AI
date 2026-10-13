@@ -39,7 +39,7 @@ def wait_and_open_ui(url: str, timeout: int = 15):
     start_time = time.time()
     while time.time() - start_time < timeout:
         try:
-            with urllib.request.urlopen(f"{url}/v1/health", timeout=1) as resp:
+            with urllib.request.urlopen(f"{url}/healthz", timeout=1) as resp:
                 if resp.status == 200:
                     logger.info("Local backend is ready. Opening UI...")
                     webbrowser.open(url)
