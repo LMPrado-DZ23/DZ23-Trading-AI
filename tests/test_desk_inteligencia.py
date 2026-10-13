@@ -256,6 +256,31 @@ class TestMesaRecarregaAoConfigurar:
                json={"vars": {"TRADINGAGENTS_DESK_FEED": "real"}})
         assert "legacy" in m._DESKS               # idêntico: mesa de pé
 
+    def test_first_save_of_panel_defaults_is_not_a_change(self, tmp_path, monkeypatch):
+        # Defeito real no bundle instalado: instalação nova não tem nada
+        # salvo, e o painel reenvia TODOS os campos no primeiro Salvar —
+        # inclusive os defaults dos seletores (fixture/binance/testnet).
+        # Sem padrão efetivo, o primeiro clique derrubava a mesa recém-nascida
+        # (log de ciclos zerava) sem o dono ter pedido nada diferente.
+        from fastapi.testclient import TestClient
+        m = self._app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+        h = {"Authorization": "Bearer s3nh4"}
+        c.get("/v1/desk/status", headers=h)
+        assert "legacy" in m._DESKS
+        c.post("/v1/config", headers=h, json={"vars": {
+            "TRADINGAGENTS_LLM_PROVIDER": "openrouter",
+            "TRADINGAGENTS_OUTPUT_LANGUAGE": "Portuguese",
+            "TRADINGAGENTS_EXCHANGE": "binance",
+            "TRADINGAGENTS_BROKER_MODE": "testnet",
+            "TRADINGAGENTS_DESK_FEED": "fixture",
+        }})
+        assert "legacy" in m._DESKS               # padrões: nada mudou
+        # Materializado o padrão, trocar de verdade ainda reconstrói.
+        c.post("/v1/config", headers=h,
+               json={"vars": {"TRADINGAGENTS_DESK_FEED": "real"}})
+        assert "legacy" not in m._DESKS
+
     def test_saving_the_feed_toggle_rebuilds_with_the_new_source(self, tmp_path, monkeypatch):
         from fastapi.testclient import TestClient
         m = self._app(tmp_path, monkeypatch)

@@ -219,6 +219,17 @@ SECRETish = tuple(sorted(
      if k in SEGREDOS_DECLARADOS
      or k.endswith(("_KEY", "_SECRET", "_TOKEN", "_PASSWORD", "_WEBHOOK_URL"))}))
 
+# Padrão EFETIVO do papel de cada chave que reconstrói a mesa. Instalação
+# nova não tem nada salvo; o painel reenvia todos os campos no primeiro
+# Salvar, incluindo os defaults dos seletores (fixture/binance/testnet).
+# Salvar o padrão não é mudança — senão o primeiro clique derruba a mesa.
+_DESK_EFFECTIVE_DEFAULTS = {
+    "TRADINGAGENTS_DESK_BROKER": "paper",
+    "TRADINGAGENTS_DESK_FEED": "fixture",
+    "TRADINGAGENTS_EXCHANGE": "binance",
+    "TRADINGAGENTS_BROKER_MODE": "testnet",
+}
+
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(diagnostics.router)
 app.include_router(security_center.router)
@@ -876,9 +887,15 @@ async def set_cfg(req: Request, _=Depends(auth)):
         if k in ALLOWED_KEYS and isinstance(v, str) and v.strip():
             novo = v.strip()
             saved.append(k)
-            if cfg.get(k) != novo:
-                cfg[k] = novo
+            atual = str(cfg.get(k) or "").strip()
+            if not atual:
+                # Nada salvo (nem no ambiente): o que vale é o padrão
+                # efetivo do papel da chave. Salvar esse padrão não é
+                # mudança e não pode reconstruir a mesa.
+                atual = _DESK_EFFECTIVE_DEFAULTS.get(k, "")
+            if atual != novo:
                 changed.append(k)
+            cfg[k] = novo
     if not saved:
         raise HTTPException(400, "nada para salvar")
     save_cfg(cfg, tenant_id)
