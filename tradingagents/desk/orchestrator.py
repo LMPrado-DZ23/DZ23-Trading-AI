@@ -253,7 +253,10 @@ class DeskOrchestrator:
                 regime=(leitura.regime.value if leitura else "indefinido"),
                 instrumento=instrument, retorno=retorno,
                 fechado_em=utcnow().astimezone(timezone.utc),
-                forca_do_sinal=(leitura.forca if leitura else 0.0)))
+                forca_do_sinal=(leitura.forca if leitura else 0.0),
+                exchange=getattr(self, "exchange", "binance"),
+                versao=str(getattr(trader, "versao", "1")),
+                agente=pos.agent_id))
         return pos
 
     # -- kill switch com semânticas distintas (cenário 13) -------------

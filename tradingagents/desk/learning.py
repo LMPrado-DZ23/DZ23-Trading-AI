@@ -39,10 +39,19 @@ class Desfecho:
     retorno: Decimal            # fração: 0.02 = +2%
     fechado_em: datetime
     forca_do_sinal: float = 0.0
+    # Procedência da evidência (Escola de Traders): a mesma estratégia pode
+    # ter VERSÕES — evidência de uma não promove a outra; a corretora muda o
+    # custo real; e o agente identifica de qual aluno veio a operação.
+    exchange: str = ""
+    versao: str = "1"
+    agente: str = ""
 
     def peso(self, agora: datetime | None = None) -> float:
         agora = agora or datetime.now(timezone.utc)
-        dias = max(0.0, (agora - self.fechado_em).total_seconds() / 86400)
+        fechado = self.fechado_em
+        if fechado.tzinfo is None:
+            fechado = fechado.replace(tzinfo=timezone.utc)
+        dias = max(0.0, (agora - fechado).total_seconds() / 86400)
         return 0.5 ** (dias / MEIA_VIDA_DIAS)
 
 
@@ -99,7 +108,10 @@ class MemoriaDeDesempenho:
                     d["estrategia"], d["regime"], d["instrumento"],
                     Decimal(str(d["retorno"])),
                     datetime.fromisoformat(d["fechado_em"]),
-                    float(d.get("forca_do_sinal", 0.0))))
+                    float(d.get("forca_do_sinal", 0.0)),
+                    str(d.get("exchange", "")),
+                    str(d.get("versao", "1")),
+                    str(d.get("agente", ""))))
             except (KeyError, ValueError):
                 continue
 
@@ -108,7 +120,9 @@ class MemoriaDeDesempenho:
             {"estrategia": d.estrategia, "regime": d.regime,
              "instrumento": d.instrumento, "retorno": str(d.retorno),
              "fechado_em": d.fechado_em.isoformat(),
-             "forca_do_sinal": d.forca_do_sinal}
+             "forca_do_sinal": d.forca_do_sinal,
+             "exchange": d.exchange, "versao": d.versao,
+             "agente": d.agente}
             for d in self._desfechos[-2000:]]}
         if self.armazem is not None:
             self.armazem.salvar(self.tenant_id, "aprendizado", payload)
@@ -122,6 +136,38 @@ class MemoriaDeDesempenho:
     def registrar(self, desfecho: Desfecho) -> None:
         self._desfechos.append(desfecho)
         self.salvar()
+
+    # -- consulta para a ESCOLA (prova independente por versão) ---------
+    def desfechos_de(self, estrategia: str, *, versao: str | None = None,
+                     desde: datetime | None = None) -> list[Desfecho]:
+        """Desfechos de uma estratégia — opcionalmente de UMA versão e
+        estritamente POSTERIORES a `desde`.
+
+        O corte é estrito (>) de propósito: a prova final da escola usa o
+        instante da candidatura como fronteira; reaproveitar um desfecho do
+        treino como prova seria fraude estatística.
+        """
+        saida = []
+        for d in self._desfechos:
+            if d.estrategia != estrategia:
+                continue
+            if versao is not None and (d.versao or "1") != str(versao):
+                continue
+            if desde is not None:
+                fechado = d.fechado_em
+                if fechado.tzinfo is None:
+                    fechado = fechado.replace(tzinfo=timezone.utc)
+                if not (fechado > desde):
+                    continue
+            saida.append(d)
+        return saida
+
+    def versoes_de(self, estrategia: str) -> list[str]:
+        return sorted({(d.versao or "1") for d in self._desfechos
+                       if d.estrategia == estrategia})
+
+    def estrategias(self) -> list[str]:
+        return sorted({d.estrategia for d in self._desfechos})
 
     def estatistica(self, estrategia: str, regime: str | Regime | None = None,
                     agora: datetime | None = None) -> Estatistica:
