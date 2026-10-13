@@ -138,21 +138,22 @@ class TestCobranca:
         assert view["brcode"] and view["qrcode_imagem"]
 
 
-class TestPortaoDeAcesso:
-    """Assinatura vencida bloqueia o que custa dinheiro — mas nunca a página
-    de pagamento (senão o cliente não consegue nem voltar a pagar).
+class TestCobrancaDesativadaNoAppPessoal:
+    """Num app de dono único não há cobrança: as rotas de billing e o webhook
+    de pagamento não existem (404), e o desk NUNCA é bloqueado por assinatura
+    vencida — não há plano a pagar. A lógica de assinatura/cripto acima segue
+    testada como biblioteca preservada.
 
-    Cobrança é superfície SaaS (modo multi-tenant). No padrão Dono Único do
-    aplicativo Windows esse funil fica desligado — a garantia equivalente do
-    dono local (nunca trancado fora da própria mesa) é coberta em
-    tests/test_single_owner_modo_windows.py."""
-
-    TENANT = "tenfixo"   # sem hífens: o webhook parseia o id pelo correlationID
+    (Resolução de merge: a base refatorou esta classe para um fluxo SaaS
+    multi-tenant com login de inquilino; por DECISÃO ARQUITETURAL o modo dono
+    único é permanente e nenhuma flag reabre esse fluxo, então as asserções
+    corretas aqui são de bloqueio.)"""
 
     def _app(self, tmp_path, monkeypatch):
         import importlib
         monkeypatch.setenv("ACCESS_PASSWORD", "s3nh4")
         monkeypatch.setenv("DATA_DIR", str(tmp_path))
+        # Flags SaaS ligadas de propósito: o modo dono único as ignora.
         monkeypatch.setenv("MULTI_TENANT_ENABLED", "true")
         monkeypatch.setenv("TENANT_TOKEN_SIGNING_KEY",
                            "chave-de-assinatura-bem-longa-0123456789")
@@ -161,65 +162,47 @@ class TestPortaoDeAcesso:
         m._FAILS.clear()
         return m
 
-    def _cliente_autenticado(self, m):
-        """Agência fixa com login determinístico (id sem hífen)."""
-        from fastapi.testclient import TestClient
-        c = TestClient(m.app)
-        m.TENANT_STORE.create_tenant("Loja fixa", tenant_id=self.TENANT)
-        uid = m.TENANT_STORE.create_user("dono@fixo.dev", "uma-senha-bem-longa-2026")
-        m.TENANT_STORE.add_member(self.TENANT, uid, "admin")
-        r = c.post("/v1/auth/login", json={"email": "dono@fixo.dev",
-                                           "password": "uma-senha-bem-longa-2026",
-                                           "tenant_id": self.TENANT})
-        assert r.status_code == 200, r.text
-        return c, {"Authorization": f"Bearer {r.json()['access_token']}"}
-
-    def test_trial_allows_the_desk(self, tmp_path, monkeypatch):
-        m = self._app(tmp_path, monkeypatch)
-        c, h = self._cliente_autenticado(m)
-        assert c.get("/v1/desk/status", headers=h).status_code == 200
-
-    def test_expired_subscription_blocks_the_desk_with_402(self, tmp_path, monkeypatch):
+    def test_desk_is_not_plan_gated_even_when_subscription_expired(self, tmp_path, monkeypatch):
         from datetime import datetime, timedelta, timezone
+
+        from fastapi.testclient import TestClient
         m = self._app(tmp_path, monkeypatch)
-        c, h = self._cliente_autenticado(m)
-        sub = m.SUBS.ensure(self.TENANT)
+        c = TestClient(m.app)
+        h = {"Authorization": "Bearer s3nh4"}
+        sub = m.SUBS.ensure("legacy")
         sub.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
         sub.status = "expired"
         m.SUBS.save(sub)
-        assert c.get("/v1/desk/status", headers=h).status_code == 402
-        # ... mas o caminho para pagar continua aberto:
-        assert c.get("/v1/billing/status", headers=h).status_code == 200
-        assert c.get("/v1/billing/planos", headers=h).status_code == 200
+        # O dono tem direito pleno: sem 402.
+        assert c.get("/v1/desk/status", headers=h).status_code == 200
 
-    def test_webhook_route_is_public_but_requires_signature(self, tmp_path, monkeypatch):
+    def test_billing_routes_are_404(self, tmp_path, monkeypatch):
         from fastapi.testclient import TestClient
         m = self._app(tmp_path, monkeypatch)
         c = TestClient(m.app)
-        r = c.post("/v1/webhooks/woovi", content=evento())      # sem assinatura
-        assert r.status_code == 401
+        h = {"Authorization": "Bearer s3nh4"}
+        assert c.get("/v1/billing/status", headers=h).status_code == 404
+        assert c.get("/v1/billing/planos", headers=h).status_code == 404
+        assert c.post("/v1/billing/checkout", headers=h,
+                      json={"plano": "starter"}).status_code == 404
 
-    def test_signed_webhook_activates_the_plan(self, tmp_path, monkeypatch):
+    def test_woovi_webhook_route_is_404(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = self._app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+        r = c.post("/v1/webhooks/woovi", content=evento())
+        assert r.status_code == 404
+
+    def test_even_a_validly_signed_webhook_activates_nothing(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
         monkeypatch.setenv("WOOVI_WEBHOOK_PUBLIC_KEY", PUB_PEM)
         m = self._app(tmp_path, monkeypatch)
-        c, h = self._cliente_autenticado(m)
-        corpo = evento(tenant=self.TENANT, plano="starter", charge="chg-x")
+        c = TestClient(m.app)
+        corpo = evento(tenant="legacy", plano="starter", charge="chg-x")
         r = c.post("/v1/webhooks/woovi", content=corpo,
                    headers={"x-webhook-signature": assinar(corpo)})
-        assert r.status_code == 200 and r.json()["plano"] == "starter"
-        assert m.SUBS.get(self.TENANT).status == "active"
-        # e o acesso volta:
-        assert c.get("/v1/desk/status", headers=h).status_code == 200
-
-    def test_forged_webhook_does_not_activate_anything(self, tmp_path, monkeypatch):
-        monkeypatch.setenv("WOOVI_WEBHOOK_PUBLIC_KEY", PUB_PEM)
-        m = self._app(tmp_path, monkeypatch)
-        c, h = self._cliente_autenticado(m)
-        corpo = evento(tenant=self.TENANT, plano="pro", charge="gratis")
-        r = c.post("/v1/webhooks/woovi", content=corpo,
-                   headers={"x-webhook-signature": base64.b64encode(b"lixo").decode()})
-        assert r.status_code == 401
-        assert m.SUBS.ensure(self.TENANT).plan_code == "trial"   # nada mudou
+        assert r.status_code == 404                              # rota não existe
+        assert m.SUBS.ensure("legacy").plan_code == "trial"      # nada ativado
 
 
 class TestPainelDePagamento:

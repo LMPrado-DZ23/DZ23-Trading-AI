@@ -1,8 +1,9 @@
-"""Dono Único é o padrão do aplicativo Windows (exigência do produto).
+"""Dono Único é o padrão E a única política do aplicativo Windows.
 
-Sem pedido explícito de multi-tenant, a superfície SaaS (contas, planos,
-webhooks, oauth) responde 404 e o funil de planos não se aplica ao dono
-local. Quem pedir multi-tenant via ambiente reabre a superfície íntegra.
+A superfície SaaS (contas, planos, webhooks, oauth) responde 404 e o funil de
+planos não se aplica ao dono local. Nem o pedido explícito de multi-tenant via
+ambiente reabre a superfície: a política fail-closed é constante de código
+(autoridade: PR #8 / tests/test_single_owner_g2.py).
 """
 import importlib
 
@@ -34,13 +35,18 @@ def test_default_mode_blocks_the_saas_surface(tmp_path, monkeypatch):
     assert c.get("/v1/auth/oauth/google/start").status_code == 404
 
 
-def test_multitenant_requested_reopens_the_surface(tmp_path, monkeypatch):
+def test_multitenant_flag_does_not_reopen_the_surface(tmp_path, monkeypatch):
+    """DECISÃO ARQUITETURAL (dono único permanente): diferentemente de uma
+    versão anterior deste teste, pedir multi-tenant por ambiente NÃO reabre o
+    SaaS. A trava é fixa no código (fail-closed) e nenhuma flag a desarma."""
     m = _load(tmp_path, monkeypatch, MULTI_TENANT_ENABLED="true",
               TENANT_TOKEN_SIGNING_KEY="k" * 40)
     c = TestClient(m.app)
-    assert m.MULTI_TENANT_ENABLED is True
-    assert m.SINGLE_OWNER_ENFORCED is False
-    assert c.get("/v1/auth/signup-status").status_code == 200
+    assert m.SINGLE_OWNER_ENFORCED is True
+    assert m.MULTI_TENANT_ENABLED is False      # o pedido foi ignorado
+    assert c.get("/v1/auth/signup-status").status_code == 404
+    assert c.post("/v1/auth/login", json={}).status_code == 404
+    assert c.get("/v1/auth/oauth/providers").status_code == 404
 
 
 def test_dono_local_nunca_e_trancado_fora_por_plano(tmp_path, monkeypatch):

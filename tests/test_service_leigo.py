@@ -297,14 +297,24 @@ class TestArranqueResiliente:
         m = _load_app(tmp_path, monkeypatch)
         assert TestClient(m.app).get("/").status_code == 200
 
-    def test_requested_multitenant_never_falls_back_to_legacy_auth(self, tmp_path, monkeypatch):
+    def test_stray_multitenant_request_is_ignored_but_auth_stays_strong(self, tmp_path, monkeypatch):
+        # App de dono único: um pedido de multi-tenant (com chave inválida) é
+        # IGNORADO — forçado a desligado —, mas o acesso NUNCA fica aberto: a
+        # senha do dono continua obrigatória. (Antes, multi-tenant era um modo
+        # real e o fallback silencioso para senha única era um risco; hoje não
+        # há inquilinos, então a senha é o modelo pretendido.)
         from fastapi.testclient import TestClient
         monkeypatch.setenv("MULTI_TENANT_ENABLED", "true")
         monkeypatch.setenv("TENANT_TOKEN_SIGNING_KEY", "curta")
         m = _load_app(tmp_path, monkeypatch)
-        response = TestClient(m.app).get(
-            "/v1/config", headers={"Authorization": "Bearer s3nh4"})
-        assert response.status_code == 503
+        assert m.SINGLE_OWNER_ENFORCED is True
+        assert m.MULTI_TENANT_ENABLED is False
+        c = TestClient(m.app)
+        assert c.get("/v1/config").status_code == 401
+        assert c.get("/v1/config",
+                     headers={"Authorization": "Bearer errada"}).status_code == 401
+        assert c.get("/v1/config",
+                     headers={"Authorization": "Bearer s3nh4"}).status_code == 200
 
 
 class TestEmergencyStopPersistence:
@@ -674,9 +684,16 @@ class TestEncerrarAplicativo:
         assert r.status_code == 200 and r.json()["ok"] is True
         assert parado.wait(5), "gancho de desligamento não foi chamado"
 
-    def test_quit_indisponivel_fora_do_modo_dono(self, tmp_path, monkeypatch):
-        # Em modo multi-tenant o encerramento por HTTP é vetado ANTES da
-        # autenticação: nenhum inquilino pode derrubar o servidor compartilhado.
+    def test_quit_continua_do_dono_com_env_multitenant(self, tmp_path, monkeypatch):
+        # Política fail-closed do dono único: MULTI_TENANT_ENABLED=true no
+        # ambiente não reabre o modo multi-tenant — o encerramento segue
+        # protegido apenas pela senha do dono e funciona normalmente.
+        monkeypatch.setenv("MULTI_TENANT_ENABLED", "true")
         c, m = self._client(tmp_path, monkeypatch)
-        monkeypatch.setattr(m, "MULTI_TENANT_ENABLED", True)
-        assert c.post("/v1/app/quit").status_code == 404
+        assert m.MULTI_TENANT_ENABLED is False
+        assert c.post("/v1/app/quit").status_code == 401
+        parado = threading.Event()
+        m.set_shutdown_hook(parado.set)
+        r = c.post("/v1/app/quit", headers={"Authorization": "Bearer s3nh4"})
+        assert r.status_code == 200 and r.json()["ok"] is True
+        assert parado.wait(5), "gancho de desligamento não foi chamado"

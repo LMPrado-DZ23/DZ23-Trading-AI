@@ -12,9 +12,9 @@
 - **Branch:** `feat/integracao-mestre-20261012`
 - **Base:** `main` (`80e99fb`)
 - **PR:** #7
-- **HEAD:** batch C010 (sobre `f8254ab`) — porta ocupada por outro programa deixa de ser fracasso silencioso
-- **UTC:** `2026-10-13T18:36:00Z`
-- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md`; checkpoints em `TRADING-CHECKPOINTS.md` (C000–C010)
+- **HEAD:** batch C011 — integração controlada do PR #8 (política fail-closed incondicional de dono único: nenhuma variável de ambiente reabre SaaS) sobre C010
+- **UTC:** `2026-10-13T18:45:00Z`
+- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md`; checkpoints em `TRADING-CHECKPOINTS.md` (C000–C011)
 - **LIVE:** `BLOCKED_BY_POLICY` (inalterado; nenhuma operação com dinheiro real)
 
 ## Baseline Verificada e Conquistas

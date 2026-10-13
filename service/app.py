@@ -21,7 +21,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from service.api import diagnostics, security_center
@@ -86,6 +86,25 @@ JOB_STORE = _build_job_store()
 PASSWORD = os.environ.get("ACCESS_PASSWORD", "")
 MULTI_TENANT_REQUESTED = os.environ.get("MULTI_TENANT_ENABLED", "false").lower() == "true"
 MULTI_TENANT_ENABLED = MULTI_TENANT_REQUESTED
+
+# ── GATE G2 — APLICATIVO PESSOAL DE DONO ÚNICO (SINGLE-OWNER) ────────────────
+# Este é um aplicativo PESSOAL de um único dono. Toda a superfície de SaaS
+# (cadastro self-service, cobrança/Woovi, login social, multi-tenant e
+# administração de inquilinos) continua existindo apenas como CÓDIGO LEGADO
+# PRESERVADO — nenhum dado é apagado — porém é desligada de forma
+# INCONDICIONAL aqui. A trava é FAIL-CLOSED por construção: é uma constante
+# do código, NÃO uma flag de ambiente. Nenhuma variável (MULTI_TENANT_ENABLED,
+# SIGNUP_ENABLED, WOOVI_*, TENANT_*) pode reabri-la. Ao forçar o multi-tenant
+# a desligado AQUI, antes da construção de qualquer store, garantimos que a
+# autenticação do processo inteiro use sempre a senha do dono (ACCESS_PASSWORD)
+# e nunca o fluxo de inquilinos. A inalcançabilidade das rotas é reforçada,
+# em profundidade, pelo middleware `bloqueio_single_owner` mais abaixo e
+# provada por tests/test_single_owner_g2.py.
+SINGLE_OWNER_ENFORCED = True
+if SINGLE_OWNER_ENFORCED:
+    MULTI_TENANT_REQUESTED = False
+    MULTI_TENANT_ENABLED = False
+
 _TENANT_SIGNING_KEY = os.environ.get("TENANT_TOKEN_SIGNING_KEY")
 TENANT_STORE = None
 if MULTI_TENANT_ENABLED:
@@ -106,10 +125,10 @@ if MULTI_TENANT_ENABLED:
         HEALTH["avisos"].append(
             f"multi-tenant desligado: {_exc}. Defina TENANT_TOKEN_SIGNING_KEY "
             "com 32+ caracteres aleatórios e reinicie para habilitar contas.")
-# Dono Único é o modo padrão do aplicativo Windows: sem pedido explícito de
-# multi-tenant, a superfície SaaS (contas, planos, webhooks) responde 404 e o
-# funil de planos não se aplica ao dono local.
-SINGLE_OWNER_ENFORCED = not MULTI_TENANT_ENABLED
+# NOTA DE MERGE: a base (Qoder) definia aqui `SINGLE_OWNER_ENFORCED =
+# not MULTI_TENANT_ENABLED` — política flag-reabrível. Por DECISÃO ARQUITETURAL
+# (dono único permanente), essa redefinição foi removida: a trava fixa definida
+# acima é a única autoridade, e nenhuma flag reabre a superfície SaaS.
 TENANT_BOOTSTRAP_TOKEN = os.environ.get("TENANT_BOOTSTRAP_TOKEN", "")
 STATIC = Path(__file__).parent / "static"
 AGENCY_AUDIT = AuditLog(DATA / "agency-events.jsonl")
@@ -198,6 +217,44 @@ app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(diagnostics.router)
 app.include_router(security_center.router)
 bearer = HTTPBearer(auto_error=False)
+
+# ── GATE G2 — BLOQUEIO INCONDICIONAL DA SUPERFÍCIE SaaS ─────────────────────
+# Prefixos de rota que NÃO existem num aplicativo pessoal de dono único. O
+# casamento é por SEGMENTO (prefixo exato ou seguido de '/'), para jamais
+# atingir vizinhos legítimos — ex.: `/v1/admin/database` (inspeção do próprio
+# banco pelo dono) NÃO é afetado por `/v1/admin/tenants`.
+SAAS_BLOCKED_PREFIXES = (
+    "/v1/auth/signup",         # cadastro self-service
+    "/v1/auth/signup-status",  # vitrine do cadastro (sufixo '-status', não '/')
+    "/v1/auth/login",       # login multi-tenant (o dono usa ACCESS_PASSWORD)
+    "/v1/auth/bootstrap",   # bootstrap inicial de inquilino
+    "/v1/auth/oauth",       # login social (Google/Microsoft)
+    "/v1/admin/tenants",    # criação/gestão de inquilinos
+    "/v1/admin/users",      # criação/gestão de usuários de inquilino
+    "/v1/billing",          # planos, status de assinatura, checkout PIX
+    "/v1/webhooks/woovi",   # webhook de pagamento que ativaria plano
+)
+
+
+def rota_saas_bloqueada(path: str) -> bool:
+    """True se `path` pertence à superfície SaaS desligada no modo dono único."""
+    return any(path == pref or path.startswith(pref + "/")
+               for pref in SAAS_BLOCKED_PREFIXES)
+
+
+@app.middleware("http")
+async def bloqueio_single_owner(request: Request, call_next):
+    """Fecha a superfície SaaS ANTES da autenticação e ANTES do roteamento,
+    para QUALQUER método HTTP e autenticado ou não. Responde 404: no produto
+    pessoal esses recursos simplesmente não existem. Incondicional: não lê
+    nenhuma flag de ambiente, então configuração incorreta não o reabre."""
+    if SINGLE_OWNER_ENFORCED and rota_saas_bloqueada(request.url.path):
+        return JSONResponse(
+            {"detail": "recurso indisponível neste aplicativo pessoal "
+                       "(dono único); superfície SaaS desativada"},
+            status_code=404,
+        )
+    return await call_next(request)
 
 
 @app.on_event("startup")
@@ -308,15 +365,8 @@ def set_shutdown_hook(fn):
     _shutdown_hook = fn
 
 
-def _only_owner_mode():
-    # Avaliado ANTES da autenticação: em multi-tenant nenhum inquilino pode
-    # derrubar o servidor compartilhado — nem com sessão válida.
-    if MULTI_TENANT_ENABLED:
-        raise HTTPException(404, "encerramento disponível apenas no modo Dono Único")
-
-
 @app.post("/v1/app/quit")
-async def app_quit(_mode=Depends(_only_owner_mode), _=Depends(auth)):
+async def app_quit(_=Depends(auth)):
     if _shutdown_hook is None:
         raise HTTPException(409, "servidor iniciado fora do launcher; encerre pelo terminal")
     threading.Timer(0.3, _shutdown_hook).start()
@@ -413,37 +463,11 @@ def list_tenant_users(request: Request, _=Depends(auth)):
     return {"users": TENANT_STORE.list_members(request_tenant(request))}
 
 
-def rota_saas_bloqueada(caminho: str) -> bool:
-    """Verifica se a rota pertence à superfície SaaS bloqueada no modo Dono Único."""
-    path = caminho.rstrip("/")
-    blocked_exact = {
-        "/v1/auth/signup-status",
-        "/v1/auth/signup",
-        "/v1/auth/login",
-        "/v1/auth/bootstrap",
-        "/v1/admin/tenants",
-        "/v1/admin/users",
-        "/v1/billing/planos",
-        "/v1/billing/status",
-        "/v1/billing/checkout",
-        "/v1/webhooks/woovi",
-    }
-    # O login social inteiro pertence à superfície SaaS: prefixo cobre
-    # google, microsoft e qualquer provedor futuro — enumerar caminhos
-    # deixaria buracos silenciosos.
-    blocked_prefixes = ("/v1/auth/oauth",)
-    if path in blocked_exact:
-        return True
-    return any(path.startswith(b + "/")
-               for b in blocked_prefixes + tuple(blocked_exact))
-
-
-@app.middleware("http")
-async def block_saas_routes(request: Request, call_next):
-    if not MULTI_TENANT_ENABLED and rota_saas_bloqueada(request.url.path):
-        from fastapi.responses import Response
-        return Response("Not Found", status_code=404)
-    return await call_next(request)
+# NOTA DE MERGE: a base (Qoder) trazia aqui uma segunda `rota_saas_bloqueada`
+# e um middleware `block_saas_routes` acoplados a `not MULTI_TENANT_ENABLED`
+# (política flag-reabrível). Removidos por decisão arquitetural: o bloqueio é
+# feito pela `rota_saas_bloqueada`/`bloqueio_single_owner` únicos lá de cima,
+# de forma incondicional (nenhuma flag reabre).
 
 
 @app.middleware("http")
@@ -1338,6 +1362,12 @@ def require_plan(request: Request, feature: str = "mesa"):
     """Portão de acesso. Assinatura vencida bloqueia o que custa dinheiro
     (mesa, análises), mas NUNCA a página de pagamento nem o login — senão o
     cliente não consegue nem pagar para voltar."""
+    # GATE G2: num aplicativo pessoal de dono único não há plano a cobrar; o
+    # dono tem direito pleno. O portão de assinatura (402) é conceito de SaaS
+    # e fica desligado junto com o resto da superfície. A assinatura segue
+    # registrada apenas para preservar os dados antigos.
+    if SINGLE_OWNER_ENFORCED:
+        return SUBS.ensure("legacy")
     tenant = request_tenant(request)
     sub = SUBS.ensure(tenant)
     if SINGLE_OWNER_ENFORCED or tenant == "legacy":

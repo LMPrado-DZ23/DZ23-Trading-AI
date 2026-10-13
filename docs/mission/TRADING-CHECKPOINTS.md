@@ -303,3 +303,64 @@ Com a porta 8000 ocupada por OUTRO programa, o launcher tentava subir o backend 
 
 ### Próxima tarefa
 Commit + push deste batch e, com o artefato do build do C010: ciclo final no bundle instalado — instalar → abrir → login do dono → **encerrar pelo botão** → conferir processo morto/porta livre → **intruso real na 8000 → duplo clique → diálogo "porta ocupada"** (descartar o diálogo por WM_CLOSE e conferir o exit limpo) → reinstalar → desinstalar preservando dados; registrar como item 12 de `WINDOWS-RELEASE-EVIDENCE.md` e fechar o G3 com o artefato final.
+
+---
+
+## C011 — Integração controlada do PR #8: fail-closed de dono único passa a ser política de CÓDIGO (nenhuma variável de ambiente reabre SaaS)
+
+- **UTC:** 2026-10-13T18:42Z–18:54Z
+- **Branch:** `feat/integracao-mestre-20261012` (PR #7)
+- **SHAs:** merge de `origin/fix/g2-single-owner-20261013` (tip `477433f`) sobre `690fd04`
+- **Resultado:** PASS (local; push neste commit)
+
+### O comportamento conflitante (decisão do dono)
+
+A base tinha single-owner **flag-reabrível**: `MULTI_TENANT_ENABLED=true` reapresentava a
+superfície SaaS inteira (cadastro, billing, Woovi, tenants, OAuth) e trocava o modelo de
+autenticação do processo. Por decisão arquitetural do dono, a política do PR #8 é a
+autoridade: dono único é **permanente e invariável** — nenhuma configuração reabre SaaS.
+
+### Integração (sem sobrescrever o trabalho do Claude)
+
+- O PR #8 avançou durante esta sessão: além de `09409ae`/`8ce9f23` (trava + suíte adversarial),
+  pushou `477433f` — merge que já conciliava a trava com a base dos 10 traders (`2562bd6`).
+  Merge base real: `2562bd6`. O merge foi refeito contra o tip fresco → **zero conflitos**
+  (as reconciliações do lado deles aplicam exatamente no mesmo base).
+- `service/app.py`: trava fixa `SINGLE_OWNER_ENFORCED = True` na origem (força
+  `MULTI_TENANT_REQUESTED/ENABLED = False` antes de qualquer store), middleware
+  incondicional `bloqueio_single_owner` (404 antes de auth/rotas, sem ler ambiente),
+  `require_plan` neutralizado. Removidas as duplicatas da base (segunda
+  `rota_saas_bloqueada` + `block_saas_routes` acoplado a flag) — a decisão deles preservada
+  com as notas de merge originais.
+- Reconciliações desta integração: guard `_only_owner_mode` removido por ficar morto sob
+  travagem (quit segue exigindo apenas a senha do dono); docstring de
+  `test_single_owner_modo_windows.py` corrigida (dizia que o ambiente "reabre a superfície" —
+  falso desde a trava); `test_quit_indisponivel_fora_do_modo_dono` →
+  `test_quit_continua_do_dono_com_env_multitenant`.
+- Preservados intactos: C008 (anônimo não arma a trava 429), C009 (botão "Fechar aplicativo"
+  + `POST /v1/app/quit` + shutdown gracioso), C010 (porta ocupada), iframe `SAMEORIGIN`,
+  `no-store`, launcher e testes Windows.
+
+### Provas (adversariais)
+
+- `tests/test_single_owner_g2.py` (lado deles): 13 rotas × 5 métodos, com e sem Bearer,
+  TODOS os toggles ligados → 404 em tudo; webhook Woovi **assinado e válido** → 404 e
+  nenhuma assinatura alterada; vizinhos legítimos vivos (`/healthz`, `/v1/auth/status`,
+  `/v1/admin/database`, mesa sem 402 com plano vencido).
+- `tests/test_single_owner_modo_windows.py` + `tests/test_service_leigo.py` (reconciliados):
+  `MULTI_TENANT_ENABLED=true` no ambiente → `MULTI_TENANT_ENABLED is False` forçado, 404,
+  e o quit continua funcionando só com a senha do dono.
+- Foco: `173 passed in 40.72s`. Suíte completa: **`2180 passed, 5 skipped, 19 warnings,
+  71 subtests passed in 160.48s`**, exit 0. ruff `All checks passed!`.
+
+### Aberto (honestidade de estado, §7 de `G2-SINGLE-OWNER-AUDIT.md`)
+
+UI SaaS ainda no DOM (morta: todo clique recebe 404 — remoção é PR de frontend próprio),
+guia de onboarding menciona Woobi/OAuth, DPAPI/Windows Credential Manager e threat model
+pendentes. LIVE segue `BLOCKED_BY_POLICY`.
+
+### Próxima tarefa
+Push deste merge → CI + Windows Release Build do merge → baixar o artefato FINAL → ciclo único
+de homologação no bundle (instalar → abrir → login → **encerrar pelo botão** → intruso na 8000 →
+diálogo de porta ocupada → reinstalar → desinstalar preservando dados) → item 12 de
+`WINDOWS-RELEASE-EVIDENCE.md` → fechar o G3.
