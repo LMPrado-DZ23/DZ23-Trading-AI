@@ -18,7 +18,7 @@ O CCXT já é o candidato efetivamente utilizado no projeto e deve continuar enc
 | TauricResearch/TradingAgents | Não integrado como motor | Pesquisa multiagente e debates | Referência ou worker read-only; o DZ23 já possui função semelhante. |
 | FinRL | Não integrado | Laboratório de reinforcement learning | Worker offline de pesquisa, sem credenciais e sem execução direta. |
 | VectorBT | Não integrado | Sweeps e backtest vetorizado | Spike offline condicionado à licença Commons Clause e comparação com baseline. |
-| Backtrader | Não integrado | Benchmark clássico de backtest | Referência ou runner offline; não incorporar ao core por sobreposição e GPLv3+. |
+| Backtrader | Removido das dependências | Benchmark clássico de backtest | Auditoria open source (2026-10-13): constava no pyproject sem uso no código e é GPLv3+, incompatível com a Apache-2.0 do projeto — dependência removida do pyproject/uv.lock. |
 | Freqtrade | Não integrado | Lifecycle de bot crypto e stoploss | Principalmente referência; serviço separado somente para gap mensurável. |
 | LumiBot | Não integrado | Adapters para brokers/ativos adicionais | Bloqueado até resolver divergência GPLv3 versus MIT. |
 | MT5-Python-Trading | Não integrado | Exemplos de API MT5 | Referência apenas; não há licença declarada. |

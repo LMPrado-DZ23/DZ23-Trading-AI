@@ -1,90 +1,117 @@
 <p align="center">
-  <img src="service/static/marca/dz23-logo-512.png" alt="DZ23 Trading Platform" width="180">
+  <img src="service/static/marca/dz23-logo-512.png" alt="DZ23 Trading AI" width="180">
 </p>
 
-# DZ23 Trading Agency
+# DZ23 Trading AI
 
-Agência autônoma de agentes de trading, operável pelo navegador e vendável
-como serviço: vários traders com estratégias distintas trabalham em ciclos,
-disputam capital sob um risco determinístico, executam, reconciliam e
-prestam contas — enquanto o dono acompanha tudo numa mesa visual.
+Plataforma open source, **single-owner**, para pesquisa e operação de trading
+com múltiplos agentes de IA: dez traders com estratégias distintas, um Maestro
+central, gestão determinística de risco, execução governada, reconciliação,
+auditoria e um painel visual em português. Um dono por instalação — sem SaaS,
+sem multi-tenant, sem cobrança.
+
+Roda **no Windows** (instalador próprio, sem exigir Python instalado) e, para
+acesso remoto pelo navegador e pelo celular, numa VM Linux ARM64 (Oracle
+Cloud) — preparado neste repositório, com homologação pendente de ambiente
+real.
 
 > **Aviso:** software experimental de pesquisa e engenharia. Não é
 > recomendação de investimento, não garante lucro e pode causar perdas.
-> O padrão é **paper/testnet**. Operar com **dinheiro real** é possível e
-> exige quatro fechaduras explícitas do dono — leia
-> [LIVE-DINHEIRO-REAL.md](LIVE-DINHEIRO-REAL.md) antes de ligar.
+> O padrão é **PAPER/SHADOW**. **LIVE (dinheiro real) está bloqueado** por
+> construção (fail-closed, quatro fechaduras explícitas) e permanece
+> bloqueado até revisão técnica, operacional e regulatória independente.
+
+## Estados de operação
+
+| Estado | Envia ordens? | Situação |
+| --- | ---: | --- |
+| **PAPER** | Não (simula com ledger persistente) | Homologado no bundle Windows — evidências em [docs/mission/WINDOWS-RELEASE-EVIDENCE.md](docs/mission/WINDOWS-RELEASE-EVIDENCE.md) |
+| **SHADOW** | Não (registra intenções e compara com o mercado) | Disponível nesta suíte; sem homologação real declarada |
+| **DEMO** (MT5 conta demo) | Sim, somente em conta demo | Requer terminal e conta externos; **não validado neste repositório** |
+| **LIVE** (dinheiro real) | — | **Bloqueado** — ver [LIVE-DINHEIRO-REAL.md](LIVE-DINHEIRO-REAL.md) |
+
+O estado operacional é perguntado ao servidor (`/v1/status/operacao`) — o
+painel não guarda texto fixo que envelhece na direção perigosa.
 
 ## O que o sistema faz
 
-**Mesa autônoma (multiagente)**
-- Três traders com estratégias realmente distintas — tendência, reversão à
-  média e rompimento —, cada um com regime de elegibilidade, invalidação da
-  tese e razão explícita quando decide **não** operar.
-- Árbitro de carteira: veta direção oposta no mesmo ativo e resolve disputa
-  por instrumento; um dono operacional por conta/instrumento.
-- Risco determinístico com poder de veto e **reserva atômica** — o mesmo
-  capital nunca é prometido duas vezes.
-- Executor único até a corretora, com máquina de 11 estados, chave
-  idempotente presa ao conteúdo do comando e **reconciliação** pós-timeout
-  (sem reenvio cego, sem liberar reserva enquanto houver efeito possível).
-- Contabilidade em partidas dobradas, com resultado atribuído por trader e
+**Mesa multiagente (dez traders + Maestro)**
+- Dez traders com estratégias realmente distintas — tendência, reversão à
+  média, rompimento e variações —, cada um com regime de elegibilidade,
+  invalidação da tese e razão explícita quando decide **não** operar.
+- Um Maestro central coordena ciclos, prioridades e disputas; cada trader
+  presta contas por resultado atribuído.
+- Gate de evidência por trader: promoção de tier exige histórico compatível;
+  pausar/retomar é ação explícita do dono.
+
+**Risco e execução**
+- Risco determinístico com poder de veto sobre a IA e **reserva atômica** —
+  o mesmo capital nunca é prometido duas vezes.
+- Executor único até a corretora, com máquina de estados, chave idempotente
+  presa ao conteúdo do comando e **reconciliação** pós-timeout (sem reenvio
+  cego, sem liberar reserva enquanto houver efeito possível).
+- Contabilidade em partidas dobradas, resultado atribuído por trader e
   correção só por compensação.
-- Agendador persistente: roda sozinho, sobrevive a reinício e **reconcilia
-  antes de retomar**; sinal vencido nunca vira ordem atrasada.
+
+**Inteligência quantitativa e IA externa**
+- Laboratório quant: walk-forward, controle de vazamento, Monte Carlo,
+  relatórios por estratégia.
+- APIs externas de IA para notícias, sentimento, macro e explicações —
+  informam decisões, mas **nunca enviam ordens**.
 
 **Plataforma**
-- Multi-tenant com papéis (viewer, analyst, operator, risk manager, admin,
-  auditor) e isolamento testado entre inquilinos.
-- Cadastro self-service com período de teste; login por e-mail/senha ou
-  social (Google e Microsoft, OAuth com PKCE).
-- Cobrança por **PIX (Woovi)**: webhook verificado por assinatura RSA sobre
-  o corpo bruto — corpo adulterado ou sem assinatura não ativa nada.
-- Painel em português: Command Center, Configuração, Análises, **Mesa de
-  Agentes**, **Trading Floor** isométrica, Risco, Plano e pagamento, Admin.
-- Backup e restauração com verificação SHA-256 por arquivo.
+- Painel em português: Visão geral, Configuração, Análises, Mesa de Agentes,
+  Trading Floor isométrica e Risco.
+- Acesso do dono com senha em hash **Argon2id** e código de recuperação de
+  uso único; assistente de primeira execução no próprio painel — nada de
+  editar arquivos ou decorar comandos.
+- Trading Floor e painel funcionam no celular (acesso remoto via HTTPS).
 
-**Segurança herdada de auditoria adversarial**
-- Núcleo aprovado em 12 rodadas de auditoria independente (redação de
-  segredos fail-closed, política de transporte, gate de capital).
-- Segredos nunca voltam pela API, não entram em log, journal ou backup
-  comum; arranque resiliente (banco fora do ar **degrada**, não derruba).
-
-## Começar em 2 minutos (local)
+## Começar (desenvolvimento)
 
 ```bash
 uv sync --locked --extra desk --extra dev
-source .venv/bin/activate
-ACCESS_PASSWORD=uma-senha-de-teste DATA_DIR=./data \
-  uvicorn service.app:app --port 8080
+uv run uvicorn service.app:app --port 8080
 ```
 
-Abra `http://localhost:8080`, use a senha definida e siga o quadro
-**Seu progresso**. Com Docker:
+Abra `http://localhost:8080/app`. Na primeira execução o painel mostra o
+assistente: crie a senha do dono ali mesmo e guarde o código de recuperação
+exibido uma única vez.
 
-```bash
-ACCESS_PASSWORD=uma-senha-de-teste docker compose up --build
-```
+No Windows instalado, use o instalador dos releases — ele não exige Python
+no computador e preserva os dados em atualizações. Passo a passo em
+[COMECE-AQUI.md](COMECE-AQUI.md).
 
-## Colocar no ar e vender
-- **[INSTALAR.md](INSTALAR.md)** — Supabase, deploy, webhook, primeira venda.
-- **[DOMINIO-E-CADASTROS.md](DOMINIO-E-CADASTROS.md)** — DNS, OAuth, Woovi.
-- **[RUNBOOK.md](RUNBOOK.md)** — operação, incidentes, backup/restauração.
-- **[COMECE-AQUI.md](COMECE-AQUI.md)** — guia do usuário final.
+## Open source
+
+- Licença: **Apache-2.0** ([LICENSE](LICENSE)); atribuições de terceiros em
+  [NOTICE](NOTICE).
+- [CONTRIBUTING.md](CONTRIBUTING.md) — como contribuir.
+- [SECURITY.md](SECURITY.md) — política e reporte de vulnerabilidades.
+- [DEPLOY.md](DEPLOY.md) — deployment em servidor (Docker Compose).
+- Arquitetura: [docs/AGENCY-ARCHITECTURE.md](docs/AGENCY-ARCHITECTURE.md).
+- Missão, checkpoints e evidências: [docs/mission/](docs/mission/).
+
+**Nunca versione segredos.** Chaves de IA, credenciais de corretora, senhas,
+tokens e bancos pessoais ficam no host (painel Configuração ou variáveis de
+ambiente). Modelos sem valores reais: [`.env.example`](.env.example),
+`.env.personal.example`, `.env.enterprise.example`.
 
 ## Qualidade
 
 ```bash
-pytest -q          # suíte completa
-ruff check .
+uv run ruff check .
+uv run pytest -q                                # suíte completa
+uv run --with playwright pytest tests/e2e -q    # E2E com navegador real
 ```
 
-A suíte cobre os cenários de aceite da mesa (concorrência, disputa de
-capital, mandato revogado, timeout incerto, fills fora de ordem, kill
-switch, contabilidade que confere na mão) e o produto (isolamento entre
-inquilinos, cobrança, cadastro, painel sem botão morto).
+O CI verifica: suíte de testes em quatro versões de Python, lint estrito,
+instalação limpa (sem extras), auditoria de dependências (pip-audit),
+varredura de segredos (gitleaks), inventário de licenças (recusa copyleft
+forte), SBOM (SPDX) e smoke tests de API/single-owner.
 
 ## Créditos e licença
+
 Fork endurecido de
 [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents)
 (Apache-2.0). A Trading Floor é código original DZ23, inspirada visualmente

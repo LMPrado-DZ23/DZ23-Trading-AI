@@ -101,8 +101,15 @@ class TestLoginSocialRemovido:
 
 class TestConteudoQueVende:
     def test_it_says_what_the_product_does(self):
-        for termo in ("Como funciona", "Planos", "Paper", "risco"):
+        for termo in ("Como funciona", "Open source", "Paper", "risco"):
             assert termo in SITE, f"falta {termo}"
+
+    def test_the_billing_page_is_gone_not_hidden(self):
+        """O projeto é open source, sem SaaS nem cobrança: a página de planos
+        saiu do ar de propósito e não pode voltar."""
+        baixo = SITE.lower()
+        for proibido in ("planos", "assinar", "pix", "r$"):
+            assert proibido not in baixo, f"conteúdo de cobrança voltou ao site: {proibido}"
 
     def test_it_states_the_limits_instead_of_hiding_them(self):
         """Prometer rentabilidade seria o caminho fácil — e desonesto."""
