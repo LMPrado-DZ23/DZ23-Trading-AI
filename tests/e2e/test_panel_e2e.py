@@ -141,21 +141,26 @@ def test_rotas_saas_bloqueadas_e_login_dono_por_bearer(page, live_server, owner_
 
 
 def test_login_premium_desktop_identidade_e_estado(page, live_server, evidence_dir):
-    # O portão precisa parecer aplicativo pessoal, não página de SaaS: marca
-    # DZ23 Trading AI, só badges verdadeiras e nenhuma menção a arquivo de
-    # senha. O aviso de erro precisa ser anunciado (aria-live).
+    # O portão precisa parecer aplicativo pessoal, não página de SaaS: o
+    # símbolo DZ23 com "Trading AI" ao lado, badges que espelham o estado
+    # real do backend e nenhuma menção a arquivo de senha. O aviso de erro
+    # precisa ser anunciado (aria-live).
     page.goto(f"{live_server}/app")
     expect(page.locator("#loginForm")).to_be_visible(timeout=15000)
-    expect(page.locator(".auth-wordmark")).to_have_text("DZ23 Trading AI")
+    expect(page.locator(".auth-wordmark")).to_have_text("Trading AI")
     expect(page.locator("#authMsg")).to_have_attribute("role", "status")
     expect(page.locator("#authMsg")).to_have_attribute("aria-live", "polite")
 
+    badges = page.locator("#gateBadges")
+    expect(badges).to_contain_text("PAPER MODE", timeout=10000)
+    expect(badges).to_contain_text("EXECUÇÃO GOVERNADA")
+    expect(badges).to_contain_text("DINHEIRO REAL BLOQUEADO")
+
     texto = page.locator("#authGate").inner_text()
-    assert "PAPER MODE" in texto
-    assert "EXECUÇÃO GOVERNADA" in texto
     assert "MULTI-TENANT" not in texto
     assert "AGENCY" not in texto
     assert "owner_password" not in texto
+    assert "DZ23 Trading AI" not in texto, "o símbolo já contém DZ23; não repetir a marca abaixo"
 
     page.screenshot(path=str(evidence_dir / "00-login-premium-desktop.png"))
 
@@ -224,3 +229,37 @@ def test_login_mobile_390x844(mobile_page, live_server, owner_password, evidence
     expect(page.locator("#app")).to_be_visible(timeout=15000)
     expect(page.locator("#appStatus")).to_have_text("READY", timeout=15000)
     page.screenshot(path=str(evidence_dir / "05-painel-mobile.png"))
+
+
+def test_login_responsivo_sem_corte_nem_rolagem_horizontal(page, live_server, evidence_dir):
+    # O portão precisa caber inteiro nas larguras reais de uso (desktop,
+    # notebook, tablet e celular estreito): nada de campo/botão/erro cortado
+    # e nada de rolagem horizontal acidental.
+    tamanhos = [(1920, 1080), (1366, 768), (768, 1024), (390, 844), (360, 640)]
+    for largura, altura in tamanhos:
+        page.set_viewport_size({"width": largura, "height": altura})
+        page.goto(f"{live_server}/app")
+        expect(page.locator("#loginForm")).to_be_visible(timeout=15000)
+
+        estouro = page.evaluate("document.documentElement.scrollWidth - window.innerWidth")
+        assert estouro <= 1, f"rolagem horizontal em {largura}x{altura}: +{estouro}px"
+
+        campo = page.locator("#loginPassword").bounding_box()
+        assert campo, f"campo de senha invisível em {largura}x{altura}"
+        assert campo["x"] >= 0 and campo["x"] + campo["width"] <= largura + 1, (
+            f"campo de senha cortado em {largura}x{altura}"
+        )
+
+        botao = page.get_by_role("button", name="Entrar", exact=True).bounding_box()
+        assert botao and botao["x"] + botao["width"] <= largura + 1, (
+            f"botão Entrar cortado em {largura}x{altura}"
+        )
+
+        page.get_by_role("button", name="Entrar", exact=True).click()
+        expect(page.locator("#authMsg")).to_contain_text("Informe a senha do dono", timeout=5000)
+        aviso = page.locator("#authMsg").bounding_box()
+        assert aviso and aviso["x"] + aviso["width"] <= largura + 1, (
+            f"mensagem de erro cortada em {largura}x{altura}"
+        )
+
+        page.screenshot(path=str(evidence_dir / f"07-login-{largura}x{altura}.png"))

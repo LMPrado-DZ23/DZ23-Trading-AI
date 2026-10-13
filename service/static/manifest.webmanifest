@@ -1,0 +1,15 @@
+{
+  "name": "DZ23 Trading AI",
+  "short_name": "Trading AI",
+  "description": "Mesa de agentes com execução governada. PAPER MODE.",
+  "lang": "pt-BR",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#061526",
+  "theme_color": "#061526",
+  "icons": [
+    { "src": "/static/marca/dz23-simbolo-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/static/marca/dz23-simbolo-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

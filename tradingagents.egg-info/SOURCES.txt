@@ -20,7 +20,18 @@ service/api/owner_credentials.py
 service/api/security_center.py
 service/static/floor.html
 service/static/index.html
+service/static/manifest.webmanifest
 service/static/site.html
+service/static/marca/dz23-icone.ico
+service/static/marca/dz23-logo-192.png
+service/static/marca/dz23-logo-512.png
+service/static/marca/dz23-logo.png
+service/static/marca/dz23-simbolo-192.png
+service/static/marca/dz23-simbolo-512.png
+service/static/marca/dz23-simbolo-64.png
+service/static/marca/favicon-32.png
+service/static/marca/favicon-64.png
+service/static/marca/favicon.ico
 tests/test_adapter_snapshots.py
 tests/test_agency_core.py
 tests/test_agency_executor.py
@@ -94,6 +105,7 @@ tests/test_google_thinking_level.py
 tests/test_guard_de_execucao.py
 tests/test_guard_por_intencao.py
 tests/test_i18n_coverage.py
+tests/test_identidade_visual.py
 tests/test_incidentes_risco.py
 tests/test_instrument_identity.py
 tests/test_job_store.py
@@ -289,6 +301,7 @@ tradingagents/desk/learning.py
 tradingagents/desk/ledger.py
 tradingagents/desk/market.py
 tradingagents/desk/models.py
+tradingagents/desk/modo.py
 tradingagents/desk/notifications.py
 tradingagents/desk/orchestrator.py
 tradingagents/desk/policy.py

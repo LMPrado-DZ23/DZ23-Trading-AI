@@ -90,7 +90,7 @@ include = ["tradingagents*", "cli*", "service*"]
 
 [tool.setuptools.package-data]
 cli = ["static/*"]
-service = ["static/*.html", "static/*.css", "static/*.js"]
+service = ["static/*.html", "static/*.css", "static/*.js", "static/*.webmanifest", "static/marca/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

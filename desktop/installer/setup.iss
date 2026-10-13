@@ -3,6 +3,7 @@ AppName=DZ23 Trading AI
 AppVersion=0.4.0
 DefaultDirName={localappdata}\DZ23-Trading-AI
 DefaultGroupName=DZ23 Trading AI
+SetupIconFile=..\..\service\static\marca\dz23-icone.ico
 ; Aplicativo por usuário: instala sem UAC (o dono leigo não deve lidar com elevação).
 PrivilegesRequired=lowest
 UninstallDisplayIcon={app}\DZ23-Trading-AI.exe

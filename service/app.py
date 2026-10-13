@@ -851,7 +851,9 @@ def marca(arquivo: str):
     nome arbitrário abriria leitura de qualquer arquivo do disco.
     """
     permitidos = {"favicon.ico", "favicon-32.png", "favicon-64.png",
-                  "dz23-logo.png", "dz23-logo-512.png", "dz23-logo-192.png"}
+                  "dz23-logo.png", "dz23-logo-512.png", "dz23-logo-192.png",
+                  "dz23-simbolo-512.png", "dz23-simbolo-192.png",
+                  "dz23-simbolo-64.png", "dz23-icone.ico"}
     if arquivo not in permitidos:
         raise HTTPException(status_code=404, detail="arquivo não encontrado")
     caminho = STATIC / "marca" / arquivo
@@ -863,6 +865,13 @@ def marca(arquivo: str):
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon():
     return FileResponse(STATIC / "marca" / "favicon.ico")
+
+
+@app.get("/manifest.webmanifest", include_in_schema=False)
+def manifest():
+    """Manifesto PWA: o painel instalável herda a identidade DZ23."""
+    return FileResponse(STATIC / "manifest.webmanifest",
+                        media_type="application/manifest+json")
 
 @app.get("/v1/config")
 def get_cfg(request: Request, _=Depends(auth)):
