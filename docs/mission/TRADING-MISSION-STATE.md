@@ -16,12 +16,17 @@
   → **Mesa de Agentes com os 10 traders por tier** (3 `aprovado (paper)` / 7 `experimental (paper)`) → encerramento pelo
   botão (launcher exit 0, porta livre) → reinstalar dados idênticos → desinstalar preservando `%APPDATA%`. CI da branch
   verde (`38453302349`/`38453307482`). Sem tag/release — publicação aguarda autorização explícita do dono.
+- **C014 — operação PAPER ponta a ponta no bundle INSTALADO** (item 14 de `WINDOWS-RELEASE-EVIDENCE.md`, mesmo artefato
+  do item 13): ciclo disparado pelos botões do painel (`20 propostas, 2 admitidas, 2 entradas, 0 saídas, 0 vetos` com veto
+  do Supervisor visível), ledger balanceado e `pendências=[]`; **reinício do processo restaura o estado durável do disco**
+  (2 ordens do OMS, posições BTC/USDT+ETH/USDT, contador do agendador com `ultimo_ciclo` preservado, disponível
+  699.70000105/1000); encerramento pelo botão nas 2 sessões. **App deixado instalado na estação (estado de entrega).**
 - **Branch:** `feat/integracao-mestre-20261012` (PR #7; M01 mergeado por fast-forward) + `feat/qoder-maestro-traders` (entrega M01)
 - **Base:** `main` (`80e99fb`)
 - **PR:** #7 (integração mestre) + branch M01 publicada
-- **HEAD:** `d6491ab` + batch C013 (docs: homologação do bundle M01)
-- **UTC:** `2026-10-13T19:21:00Z`
-- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md` (G3 fechado; re-provado no bundle M01); checkpoints em `TRADING-CHECKPOINTS.md` (C000–C013 + M01)
+- **HEAD:** `6c3940e` + batch C014 (docs: PAPER E2E no bundle instalado)
+- **UTC:** `2026-10-13T19:27:00Z`
+- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md` (G3 fechado; re-provado no bundle M01; PAPER E2E no bundle no item 14); checkpoints em `TRADING-CHECKPOINTS.md` (C000–C014 + M01)
 - **LIVE:** `BLOCKED_BY_POLICY` (inalterado; nenhuma operação com dinheiro real)
 
 ## Baseline Verificada e Conquistas

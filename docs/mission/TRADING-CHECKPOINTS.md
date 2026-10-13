@@ -445,3 +445,30 @@ Trader → Supervisor → risco → executor (nenhum atalho); frequência de ope
 ### Nota
 
 Suíte completa re-executada na branch de integração pós-merge: **`2196 passed, 5 skipped, 71 subtests passed in 190.62s`, exit 0**. O gate de evidência do M01 foi provado no bundle: nenhum trader experimental operou; o dono vê o motivo e as ações por trader. LIVE `BLOCKED_BY_POLICY` o tempo todo; **nada foi publicado** (sem tag/release — aguarda autorização explícita).
+
+---
+
+## C014 — Operação PAPER ponta a ponta no BUNDLE INSTALADO (item 14)
+
+- **UTC:** 2026-10-13T19:22Z–19:26Z
+- **Branch:** `feat/integracao-mestre-20261012` (HEAD `6c3940e` = C013; este batch documental)
+- **Artefato:** mesmo bundle homologado do item 13 (run `38453302293`, `dz23-windows-x64`; Setup `sha256:bed915cf…`) — **instalado na estação**
+- **Resultado:** operação PAPER provada no app REAL instalado (não só em teste) — detalhamento no item 14 de `WINDOWS-RELEASE-EVIDENCE.md`
+
+### Passos
+
+1. App instalado (item 13) reaberto pelo launcher: `healthz` 200 na 1ª tentativa; Playwright no bundle → **16 s no portão do dono** → badge `ADMIN`.
+2. **Sessão 1** — ciclo disparado PELOS BOTÕES do painel ("Testar dados de mercado" + "Rodar um ciclo"): resumo `20 propostas, 2 admitidas, 2 entradas, 0 saídas, 0 vetos`; abstenções visíveis ao dono (ex.: `trader-adaptive · BTC/USDT: Veto do Supervisor para evitar exposição duplicada.`).
+3. Ledger **balanceado**; pendências de reconciliação `[]`; disponível 699.70/1000; captura `paper-ciclo-item14.png`.
+4. Encerramento pelo botão "Fechar aplicativo" (confirm nativo) → `POST /v1/app/quit 200` → **launcher exit 0 sozinho** → porta livre.
+5. **Sessão 2** — processo reiniciado do zero: FASES preservadas (3 `aprovado (paper)` / 7 `experimental (paper)`); `AGENDADOR` `ciclos=1` com `ultimo_ciclo=2026-10-13T19:22:55Z` **preservado**, `posicoes=[BTC/USDT, ETH/USDT]`, `pendencias=[]`, `erros=0`.
+6. **Estado durável restaurado do disco:** `ORDENS_DURAVEIS=2` (OMS via `coord.restaurar_estado` ← `oms.json`); `RISCO={'reservado':'0','disponivel':'699.70000105','instrumentos_abertos':['BTC/USDT','ETH/USDT']}`; ledger `True`; `PAPER_RESTART_BUNDLE=PASS`; captura `paper-pos-restart-item14.png`.
+7. Encerramento pelo botão na 2ª sessão → launcher exit 0. **App deixado instalado** na estação (estado de entrega).
+
+### Nota de harness (não é defeito)
+
+O log "Ciclos" do painel (`d["cycles"]`) é **por sessão, em memória, por design** (aparado em 30). O contrato durável é: OMS (`oms.json` ← `coord.restaurar_estado`), contador do agendador (`mesa.json`) e estágios dos traders (doc `agentes`). O script de prova inicialmente assumiu que o log também era durável e falhou; foi corrigido para o contrato real — o mesmo que o teste do M01 fixa (`agendador.ciclos`, não o log).
+
+### Estado
+
+LIVE `BLOCKED_BY_POLICY` o tempo todo; **nada foi publicado** (sem tag/release — aguarda autorização explícita do dono).

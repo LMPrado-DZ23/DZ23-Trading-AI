@@ -5,7 +5,7 @@
 - **Release Version (alvo):** `v0.4.0-windows-local`
 - **Target OS:** Windows 10/11 x64 (nativo, loopback, Dono Único)
 - **Modo:** Executável empacotado (PyInstaller) + Instalador Inno Setup; sem SaaS/Cloud; sem Python no PC do usuário
-- **Status:** `PASS` — **ciclo final de homologação executado no ARTEFATO FINAL** (run `38450504893`, bundle do merge `0c3fc26` com C008+C009+C010): instalar → abrir sem timeout falso → login do dono após 16 s no portão → **encerrar pelo botão "Fechar aplicativo"** (shutdown gracioso, launcher exit 0 sozinho, porta livre) → **intruso real na 8000 → diálogo nativo de porta ocupada → WM_CLOSE → exit limpo** → reinstalar (dados byte a byte idênticos) → desinstalar (dados preservados). **Re-provado no BUNDLE DA ENTREGA M01** (run `38453302293`, push de `d6491ab`): mesmo ciclo verde + o painel **"Mesa de Agentes" com os 10 traders por tier de evidência** renderizado ao dono no bundle instalado (3 homologados → "aprovado (paper)"; 7 experimentais → "experimental (paper)") — item 13. Ressalvas honestas: sleep/wake, offline/reconexão e crash não exercitados nesta estação; assinatura de código `BLOCKED_BY_EXTERNAL_DEPENDENCY` (sem certificado).
+- **Status:** `PASS` — **ciclo final de homologação executado no ARTEFATO FINAL** (run `38450504893`, bundle do merge `0c3fc26` com C008+C009+C010): instalar → abrir sem timeout falso → login do dono após 16 s no portão → **encerrar pelo botão "Fechar aplicativo"** (shutdown gracioso, launcher exit 0 sozinho, porta livre) → **intruso real na 8000 → diálogo nativo de porta ocupada → WM_CLOSE → exit limpo** → reinstalar (dados byte a byte idênticos) → desinstalar (dados preservados). **Re-provado no BUNDLE DA ENTREGA M01** (run `38453302293`, push de `d6491ab`): mesmo ciclo verde + o painel **"Mesa de Agentes" com os 10 traders por tier de evidência** renderizado ao dono no bundle instalado (3 homologados → "aprovado (paper)"; 7 experimentais → "experimental (paper)") — item 13. **Operação PAPER ponta a ponta NO BUNDLE** (item 14): ciclo real de mercado-fixture pelo painel (20 propostas, 2 entradas, abstenções e veto do Supervisor visíveis), ledger balanceado e sem pendências de reconciliação → fechar pelo botão → relançar → **estado durável restaurado do disco** (2 ordens/posições, contador de ciclos, estágios) — o log dos últimos ciclos é por sessão, por desenho. Ressalvas honestas: sleep/wake, offline/reconexão e crash de SO não exercitados nesta estação; assinatura de código `BLOCKED_BY_EXTERNAL_DEPENDENCY` (sem certificado).
   - Correção V7: a versão anterior deste documento declarava `PASS` citando testes unitários e CI Linux.
     Isso é **insuficiente** (CI Linux não prova instalador Windows) — status corrigido; o PASS atual só cita o ciclo real no laptop do dono.
 
@@ -102,6 +102,20 @@
 
    **Nota de execução:** o mesmo harness Playwright do item 12 (aceita o `confirm()` do botão antes de seguir) — comportamento desejado do app, não defeito.
 
+14. **OPERAÇÃO PAPER PONTA A PONTA NO BUNDLE INSTALADO — item 14** (mesmo artefato do item 13, run `38453302293`). Ciclo real executado no app instalado nesta estação Windows 11, pelo painel e pelas rotas do dono:
+
+   | # | Passo | Resultado | Evidência |
+   |---|-------|-----------|-----------|
+   | 1 | Cycle no bundle: "Testar dados de mercado" + "Rodar um ciclo" | **PASS** | resumo real `"20 propostas, 2 admitidas, 2 entradas, 0 saídas, 0 vetos"` com abstenções por trader visíveis (sem rompimento; RSI sem sobrevenda; sem arbitragem; sem apoio multi-prazo; **`Veto do Supervisor para evitar exposição duplicada`**) — a cadeia trader → Supervisor → risco → executor trabalhando diante do dono |
+   | 2 | Estado financeiro pós-ciclo | **PASS** | ledger **balanceado**; `pendencias_reconciliacao=[]`; disponível `699.70` de `1000.00` (custo das 2 entradas paper debitado) |
+   | 3 | Encerramento pelo botão + relançamento | **PASS** | quit 200 → launcher exit 0 sozinho → porta livre → relançar (novo processo) → `healthz` na 1ª tentativa |
+   | 4 | **Reinício: estado durável restaurado do disco** | **PASS** | OMS: **2 ordens + 2 posições abertas** (BTC/USDT, ETH/USDT) restauradas; agendador: **ciclos=1**, `ultimo_ciclo` preservado, `pendencias=[]`; ledger balanceado; estágios 3 `aprovado (paper)` + 7 `experimental (paper)` inalterados — nada ficou incerto após o fechamento abrupto |
+   | 5 | Encerramento pelo botão (2ª sessão) | **PASS** | quit 200 → launcher exit 0 sozinho; capturas `paper-ciclo-item14.png`, `paper-pos-restart-item14.png` |
+
+   **Contrato durável (precisão honesta):** sobrevivem ao reinício o estado financeiro/operacional (ordens e posições no OMS, ledger, contador/último ciclo do agendador, estágios dos traders, reconciliação). O **log dos últimos ciclos** (`d["cycles"]`, seção "Ciclos" do painel) é **por sessão, por desenho** — re-popula no próximo ciclo. Nota de harness (não defeito): o script de prova inicialmente assumia o log como durável; ajustado ao contrato real.
+
+   **Estado final da estação:** app **instalado e funcionando** (estado de entrega), dados do dono preservados em `%APPDATA%`; **nada foi publicado** (sem tag/Release) e LIVE permanece `BLOCKED_BY_POLICY`.
+
 ## Ainda NÃO comprovado (pendências de homologação)
 
 - [x] Instalação limpa em Windows 10/11 x64 real com o artefato gerado pelo CI — ciclo completo no artefato C008 (item 10).
@@ -122,6 +136,7 @@
 1. Push dos batches C009+C010 → builds de CI → merge do PR #8 (`0c3fc26`) → build do merge (`38450504893`) → artefato final baixado. **Feito.**
 2. Ciclo final no bundle: instalar → abrir → login → **encerrar pelo botão** → processo morto/porta livre → **intruso real na 8000 → diálogo "porta ocupada"** → reinstalar → desinstalar preservando dados. **Todos PASS — item 12.**
 3. Ciclo da entrega M01 no bundle (`38453302293`, `d6491ab`): mesmo roteiro + painel "Mesa de Agentes" com os 10 traders por tier de evidência. **Todos PASS — item 13.**
-4. Restam apenas sleep/wake/offline/crash (não exercitados nesta estação) e assinatura de código (`BLOCKED_BY_EXTERNAL_DEPENDENCY`) — declarados honestamente acima. G3 fechado com o artefato do item 12 e re-provado com o artefato da entrega M01 (item 13) em `TRADING-GATES.md`. Publicação (tag/Release) segue aguardando autorização explícita do dono.
+4. Operação PAPER ponta a ponta no bundle: ciclo real, ledger balanceado, sem pendências de reconciliação, **reinício com estado durável restaurado do disco** (ordens/posições/contador/estágios), encerramento pelo botão nas 2 sessões. **Todos PASS — item 14.** O app ficou **instalado** na estação (estado de entrega).
+5. Restam apenas sleep/wake, offline/reconexão e crash de SO (não exercitados nesta estação) e assinatura de código (`BLOCKED_BY_EXTERNAL_DEPENDENCY`) — declarados honestamente acima. G3 fechado com o artefato do item 12 e re-provado com o artefato da entrega M01 (itens 13–14) em `TRADING-GATES.md`. Publicação (tag/Release) segue aguardando autorização explícita do dono.
 
-*Última atualização: 2026-10-13 — homologação do bundle da entrega M01 `38453302293` (artefato de `d6491ab`), item 13; branches `feat/integracao-mestre-20261012` (merge no PR #7) e `feat/qoder-maestro-traders`.*
+*Última atualização: 2026-10-13 — homologação do bundle da entrega M01 `38453302293` (artefato de `d6491ab`), itens 13–14 (painel + PAPER E2E com reinício durável); branches `feat/integracao-mestre-20261012` (merge no PR #7) e `feat/qoder-maestro-traders`.*
