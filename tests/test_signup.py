@@ -78,13 +78,16 @@ class TestIsolamentoDeAmbienteNoJob:
         assert "os.environ.pop(_k, None)" in fonte
 
 
-class TestTelaDeCadastro:
-    def test_signup_form_exists_in_panel(self):
+class TestTelaDeCadastroRemovida:
+    def test_signup_ui_is_gone_from_the_personal_panel(self):
+        # Cadastro self-service é superfície SaaS: rota morta (C011) e DOM
+        # removido — não sobra "Criar conta" que leve a lugar nenhum.
         from pathlib import Path
         html = Path("service/static/index.html").read_text(encoding="utf-8")
-        for needle in ['id="signupForm"', "criarConta()", "/v1/auth/signup",
-                       "/v1/auth/signup-status", "mostrarLogin()"]:
-            assert needle in html, f"faltou: {needle}"
+        for vestigio in ['id="signupForm"', "criarConta", "/v1/auth/signup",
+                         "signup-status", "mostrarLogin", 'id="btnCriarConta"',
+                         "Criar conta"]:
+            assert vestigio not in html, f"cadastro ainda no painel: {vestigio}"
 
 
 class TestConfiguracaoRuimNaoDerruba:

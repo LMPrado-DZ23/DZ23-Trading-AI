@@ -14,15 +14,12 @@ def _element(html: str, div_id: str) -> str:
     raise AssertionError(f"<div id={div_id}> sem fechamento")
 
 
-def test_dashboard_contains_multitenant_and_operational_surfaces():
+def test_dashboard_contains_only_the_personal_app_surfaces():
     html = (ROOT / "service/static/index.html").read_text(encoding="utf-8")
     for contract in (
         "/v1/auth/status",
-        "/v1/auth/bootstrap",
-        "/v1/auth/login",
         "/v1/auth/me",
         "/v1/auth/logout",
-        "/v1/admin/users",
         "/v1/config",
         "/v1/jobs",
         "/v1/jobs/health",
@@ -37,12 +34,20 @@ def test_dashboard_contains_multitenant_and_operational_surfaces():
         assert contract in html
 
 
-def test_bootstrap_form_contains_token_and_button():
+def test_the_saas_dom_is_gone_not_just_hidden():
+    # A fronteira HTTP já responde 404 para todo o SaaS (C011). Estes
+    # vestígios de DOM foram removidos de vez: o dono não vê tela de
+    # cadastro, planos/cobrança PIX, login social nem administração de
+    # inquilinos — nada que clique e não funcione.
     html = (ROOT / "service/static/index.html").read_text(encoding="utf-8")
-    form = _element(html, "bootstrapForm")
-    assert 'class="hide"' in form.split(">", 1)[0]
-    assert 'id="bootToken"' in form
-    assert 'onclick="bootstrap()"' in form
+    for remnant in (
+        'id="bootstrapForm"', 'id="signupForm"', 'id="socialBox"',
+        'id="page-plano"', 'id="page-admin"', 'id="pixBox"',
+        "loadPlano", "pagar(", "loadUsers", "criarConta", "carregarProvedores",
+        "/v1/auth/bootstrap", "/v1/auth/signup", "/v1/auth/oauth",
+        "/v1/admin/users", "/v1/billing",
+    ):
+        assert remnant not in html, f"vestígio SaaS no painel: {remnant}"
 
 
 def test_owner_mode_login_contract():

@@ -205,13 +205,16 @@ class TestCobrancaDesativadaNoAppPessoal:
         assert m.SUBS.ensure("legacy").plan_code == "trial"      # nada ativado
 
 
-class TestPainelDePagamento:
-    def test_payment_page_exists_with_handlers(self):
+class TestPainelDePagamentoRemovido:
+    def test_payment_ui_is_gone_from_the_personal_panel(self):
+        # A rota de cobrança segue morta na fronteira HTTP (C011); a tela
+        # não existe mais — o dono único não tem plano nem PIX para ver.
         from pathlib import Path
         html = Path("service/static/index.html").read_text(encoding="utf-8")
-        for needle in ['id="page-plano"', "loadPlano()", "pagar('", 'id="pixBox"',
-                       "/v1/billing/checkout", "/v1/billing/planos"]:
-            assert needle in html, f"faltou no painel: {needle}"
+        for vestigio in ['id="page-plano"', "loadPlano", "pagar(",
+                         'id="pixBox"', "/v1/billing/checkout",
+                         "/v1/billing/planos", "Planos", "PIX"]:
+            assert vestigio not in html, f"tela de pagamento ainda no painel: {vestigio}"
 
     def test_panel_never_embeds_the_woovi_token(self):
         from pathlib import Path

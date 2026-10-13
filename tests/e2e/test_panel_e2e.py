@@ -22,8 +22,6 @@ PAGINAS = [
     ("mesa", "Mesa de Agentes"),
     ("floor", "Trading Floor"),
     ("risk", "Risco"),
-    ("plano", "Plano e pagamento"),
-    ("admin", "Administração"),
     ("overview", "Visão geral"),
 ]
 
@@ -31,7 +29,7 @@ PAGINAS = [
 def entrar_como_dono(page, base_url: str, senha: str) -> None:
     page.goto(f"{base_url}/app")
     expect(page.locator("#authTitle")).to_have_text("Entrar na sua mesa")
-    expect(page.locator("#loginTenant")).to_be_hidden()
+    expect(page.locator("#loginTenant")).to_have_count(0)
     page.fill("#loginPassword", senha)
     page.get_by_role("button", name="Entrar", exact=True).click()
     expect(page.locator("#app")).to_be_visible(timeout=15000)

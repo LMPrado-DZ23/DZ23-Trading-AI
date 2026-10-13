@@ -1,8 +1,8 @@
-"""Site público, ver senha e entrar com Google.
+"""Site público e ver senha.
 
 A raiz era o formulário de login: quem chegava pelo domínio via um campo de
-senha sem saber o que o produto faz. E o backend tinha OAuth pronto sem
-nenhum botão que chegasse até ele.
+senha sem saber o que o produto faz. O painel pessoal tem um único campo de
+senha — a do dono — e nenhuma superfície de cadastro ou login social.
 """
 from __future__ import annotations
 
@@ -43,8 +43,7 @@ class TestVerSenha:
         import re
         campos = re.findall(r'<input[^>]*type="password"[^>]*id="(\w+)"', APP)
         campos += re.findall(r'<input[^>]*id="(\w+)"[^>]*type="password"', APP)
-        do_acesso = [c for c in campos
-                     if c in ("loginPassword", "bootPassword", "bootToken")]
+        do_acesso = [c for c in campos if c in ("loginPassword",)]
         assert do_acesso, "o cenário precisa encontrar os campos"
         for campo in do_acesso:
             assert f'data-alvo="{campo}"' in APP, f"{campo} sem botão de ver"
@@ -66,42 +65,30 @@ class TestVerSenha:
         assert '</div><button type="button" class="pwd-eye"' not in APP, (
             "há botão de olho fora do bloco do campo: ele aparece solto")
 
-    def test_every_password_field_in_the_auth_area_is_covered(self):
-        """Eu havia chutado nomes de campo que não existiam (signupPassword),
-        e o cadastro ficou sem o botão."""
-        for campo in ("loginPassword", "bootPassword", "bootToken", "suSenha",
-                      "newUserPassword"):
-            assert f'id="{campo}"' in APP, f"{campo} sumiu da tela"
-            assert f'data-alvo="{campo}"' in APP, f"{campo} sem botão de ver"
+    def test_the_only_auth_field_left_is_the_owner_password(self):
+        """No app do dono único sobrou um campo: a senha do dono. Campos de
+        bootstrap/cadastro/usuário eram do SaaS e não existem mais."""
+        assert 'id="loginPassword"' in APP, "o campo da senha do dono sumiu"
+        assert 'data-alvo="loginPassword"' in APP, "loginPassword sem botão de ver"
+        for campo in ("bootPassword", "bootToken", "suSenha", "newUserPassword"):
+            assert f'id="{campo}"' not in APP, f"{campo} reapareceu na tela"
 
     def test_the_toggle_is_a_button_not_a_submit(self):
         assert 'type="button" class="pwd-eye"' in APP, (
             "sem type=button o clique enviaria o formulário")
 
 
-class TestEntrarComGoogle:
-    def test_the_client_reads_the_real_contract(self):
-        """O servidor responde em português: {provedores:[{nome,disponivel}]}.
-        Adivinhar o formato deixaria o botão nunca aparecer."""
-        assert "dados.provedores" in APP and "p.nome" in APP
+class TestLoginSocialRemovido:
+    """O login social era superfície de cadastro do SaaS. No app do dono
+    único ele saiu do DOM por completo — não basta esconder o botão."""
+
+    def test_the_social_login_dom_is_gone(self):
+        for needle in ("carregarProvedores", "socialButtons", 'id="socialBox"',
+                       "MARCAS", "/v1/auth/oauth"):
+            assert needle not in APP, f"{needle} continua no painel"
 
     def test_the_start_endpoint_is_disabled_in_the_personal_app(self):
-        # Login social é superfície de cadastro: desligada no app de dono único.
         assert cliente().get("/v1/auth/oauth/google/start").status_code == 404
-        assert "d.url" in APP, "o cliente ainda referencia a url (DOM legado)"
-
-    def test_the_buttons_come_from_the_server(self):
-        assert "/v1/auth/oauth/providers" in APP, (
-            "a tela precisa perguntar ao servidor quais provedores existem")
-
-    def test_an_unconfigured_provider_shows_no_button(self):
-        """Mostrar um botão que leva a erro é pior que não mostrar botão."""
-        assert "filter(p=>p.disponivel)" in APP, (
-            "o filtro precisa usar o campo que o servidor realmente envia")
-        assert 'if(!lista.length) return' in APP
-
-    def test_the_button_goes_to_the_existing_backend_flow(self):
-        assert "'/v1/auth/oauth/'+id+'/start'" in APP
 
     def test_the_providers_endpoint_is_disabled_in_the_personal_app(self):
         assert cliente().get("/v1/auth/oauth/providers").status_code == 404
