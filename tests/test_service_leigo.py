@@ -13,6 +13,18 @@ def _load_app(tmp_path, monkeypatch):
     return m
 
 
+def _get_all_paths(app):
+    paths = set()
+    for r in app.routes:
+        if hasattr(r, "path") and r.path is not None:
+            paths.add(r.path)
+        elif "IncludedRouter" in type(r).__name__ and hasattr(r, "original_router") and hasattr(r.original_router, "routes"):
+            for sub_r in r.original_router.routes:
+                if hasattr(sub_r, "path") and sub_r.path is not None:
+                    paths.add(sub_r.path)
+    return paths
+
+
 class TestAssetType:
     @pytest.mark.parametrize("t,expected", [
         ("BTC/USDT", "crypto"), ("ETH-USD", "crypto"), ("SOL-USDT", "crypto"),
@@ -27,7 +39,7 @@ class TestAssetType:
 class TestServerSideHistory:
     def test_list_jobs_route_exists(self, tmp_path, monkeypatch):
         m = _load_app(tmp_path, monkeypatch)
-        paths = [r.path for r in m.app.routes if hasattr(r, "path")]
+        paths = _get_all_paths(m.app)
         assert "/v1/jobs" in paths and "/v1/jobs/{jid}" in paths
 
 
@@ -144,7 +156,7 @@ class TestPainelMesaDeAgentes:
 
     def test_desk_routes_are_registered(self, tmp_path, monkeypatch):
         m = _load_app(tmp_path, monkeypatch)
-        paths = {r.path for r in m.app.routes if hasattr(r, "path")}
+        paths = _get_all_paths(m.app)
         assert {"/v1/desk/status", "/v1/desk/cycle", "/v1/desk/feed",
                 "/v1/desk/avaliacao", "/v1/desk/scheduler/{action}",
                 "/v1/backup", "/v1/primeiros-passos"} <= paths
@@ -359,7 +371,7 @@ class TestPainelSemBotaoQuebrado:
         import re
         html = Path("service/static/index.html").read_text(encoding="utf-8")
         m = _load_app(tmp_path, monkeypatch)
-        registradas = {r.path for r in m.app.routes if hasattr(r, "path")}
+        registradas = _get_all_paths(m.app)
         for rota in set(re.findall(r"fetch\('(/[\w/-]+)", html)):
             base = rota.rstrip("/")
             assert any(base == p or p.startswith(base.rsplit("/", 1)[0])
