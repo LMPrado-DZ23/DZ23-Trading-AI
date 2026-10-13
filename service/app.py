@@ -189,7 +189,10 @@ SECRETish = tuple(sorted(
      if k in SEGREDOS_DECLARADOS
      or k.endswith(("_KEY", "_SECRET", "_TOKEN", "_PASSWORD", "_WEBHOOK_URL"))}))
 
+from service.api import diagnostics
+
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+app.include_router(diagnostics.router)
 bearer = HTTPBearer(auto_error=False)
 
 
