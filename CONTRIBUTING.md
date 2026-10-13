@@ -23,7 +23,7 @@ ruff check .
 python3 -m compileall -q tradingagents service scripts
 python3 -m pytest -q
 python3 scripts/smoke_agency_api.py
-python3 scripts/smoke_multitenant.py
+python3 scripts/smoke_single_owner.py
 ```
 
 Se Docker estiver disponível:

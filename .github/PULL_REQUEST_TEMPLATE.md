@@ -17,7 +17,7 @@ Descreva o problema e a solução.
 - [ ] `python3 -m compileall -q tradingagents service scripts`
 - [ ] `python3 -m pytest -q`
 - [ ] `python3 scripts/smoke_agency_api.py`
-- [ ] `python3 scripts/smoke_multitenant.py` (quando aplicável)
+- [ ] `python3 scripts/smoke_single_owner.py` (quando aplicável)
 - [ ] `docker compose config` (quando aplicável)
 
 ## Segurança
