@@ -64,10 +64,15 @@ class DeskOrchestrator:
 
     def __init__(self, mandate: DeskMandate, traders, *, worker_id: str,
                  risk: RiskEngine | None = None, positions_provider=None,
-                 memoria=None, exchange: str = "binance", analista=None):
+                 memoria=None, exchange: str = "binance", analista=None,
+                 supervisor=None, conselheiro=None):
         self.mandate = mandate
         self.traders = list(traders)
         self.worker_id = worker_id
+        # Kill switch "pausar entradas": um flag, não esvaziar a lista — o
+        # supervisor guarda a MESMA lista e continuaria propondo com a
+        # referência antiga (bug de referência obsoleta).
+        self._entries_paused = False
         self.risk = risk or RiskEngine(mandate)
         self.allocator = PortfolioAllocator()
         self.owner_by_instrument: dict[str, str] = {}
@@ -79,9 +84,18 @@ class DeskOrchestrator:
         self.exchange = exchange
         # IA de contexto: só veta ou reduz, nunca aumenta nem autoriza.
         self.analista = analista
+        # Leitura quant consultiva (item 6): quando disponível e em desacordo
+        # com a entrada, só REDUZ exposição — jamais aumenta ou autoriza.
+        self.conselheiro = conselheiro
         # Livro da mesa: quem abriu o quê, a que preço. É daqui que sai a
         # gestão de saída — sem isso a mesa só compra e nunca realiza.
         self.book: dict[str, Position] = {}
+
+        if supervisor is not None:
+            self.supervisor = supervisor
+        else:
+            from .traders import MarketRegimeSupervisor
+            self.supervisor = MarketRegimeSupervisor(self.traders, self.mandate.capital)
 
     def open_exposure(self) -> set[str]:
         return set(self.risk.open_instruments()) | set(self.positions_provider())
@@ -109,14 +123,21 @@ class DeskOrchestrator:
             if call.action is Action.REDUCE:
                 report.exits.append((pos.agent_id, snap.instrument, call.reason))
 
-        # 2) Só então procurar entradas novas
+        # 2) Só então procurar entradas novas (a não ser que estejam pausadas)
         proposals = []
-        for snap in snapshots:
-            for trader in self.traders:
-                try:
-                    proposals.append(trader.propose(snap))
-                except Exception as exc:  # um trader defeituoso não derruba a mesa
-                    report.errors.append(f"{trader.spec.agent_id}: {type(exc).__name__}")
+        if not self._entries_paused:
+            try:
+                proposals = self.supervisor.supervise(snapshots, self.book)
+            except Exception as exc:
+                report.errors.append(f"supervisor: {type(exc).__name__}: {exc}")
+                # fallback to legacy loop if supervisor fails
+                proposals = []
+                for snap in snapshots:
+                    for trader in self.traders:
+                        try:
+                            proposals.append(trader.propose(snap))
+                        except Exception as e:
+                            report.errors.append(f"{trader.spec.agent_id}: {type(e).__name__}")
         report.proposals = len(proposals)
 
         actionable = []
@@ -137,6 +158,7 @@ class DeskOrchestrator:
         snaps_por_instrumento = {s.instrument: s for s in (snapshots or [])}
 
         for proposal in decision.admitted:
+            snap = snaps_por_instrumento.get(proposal.instrument)
             if self.analista is not None:
                 from .context import aplicar_parecer
                 parecer = self.analista.avaliar(
@@ -153,6 +175,20 @@ class DeskOrchestrator:
                                        reason=proposal.reason + f" | {nota}")
                 elif not parecer.disponivel:
                     report.errors.append(nota)
+            if self.conselheiro is not None and snap is not None:
+                # Leitura quant consultiva: discordância só REDUZ (item 6);
+                # disponível e de acordo não muda nada — conselho não comanda.
+                parecer_quant = self.conselheiro.avaliar(proposal.instrument,
+                                                         snap.closes)
+                if parecer_quant.disponivel and parecer_quant.direcao == "vender":
+                    from dataclasses import replace
+                    proposta_original = proposal
+                    proposal = replace(
+                        proposta_original,
+                        desired_exposure_pct=proposta_original.desired_exposure_pct
+                        * Decimal("0.5"),
+                        reason=proposta_original.reason
+                        + f" | quant discorda: {parecer_quant.motivo}")
             price = prices.get(proposal.instrument)
             if price is None:
                 report.vetoed.append((proposal.agent_id, "sem preço de execução"))
@@ -160,7 +196,6 @@ class DeskOrchestrator:
             # PROCEDÊNCIA: a ordem precisa provar de qual dado nasceu. Sem
             # isto o gate de capital recusa — e recusava, silenciosamente,
             # todo o caminho de produção.
-            snap = snaps_por_instrumento.get(proposal.instrument)
             try:
                 provenance = validar(build_state(
                     instrument=proposal.instrument,
@@ -224,7 +259,7 @@ class DeskOrchestrator:
     # -- kill switch com semânticas distintas (cenário 13) -------------
     def pause_entries(self) -> None:
         """Para de abrir; posições e reservas seguem sob o guardião."""
-        self.traders = []
+        self._entries_paused = True
 
     def drain(self) -> list[str]:
         """Pede saída controlada: devolve os instrumentos a encerrar.

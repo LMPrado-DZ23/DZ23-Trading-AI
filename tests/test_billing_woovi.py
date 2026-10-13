@@ -142,12 +142,21 @@ class TestCobrancaDesativadaNoAppPessoal:
     """Num app de dono único não há cobrança: as rotas de billing e o webhook
     de pagamento não existem (404), e o desk NUNCA é bloqueado por assinatura
     vencida — não há plano a pagar. A lógica de assinatura/cripto acima segue
-    testada como biblioteca preservada."""
+    testada como biblioteca preservada.
+
+    (Resolução de merge: a base refatorou esta classe para um fluxo SaaS
+    multi-tenant com login de inquilino; por DECISÃO ARQUITETURAL o modo dono
+    único é permanente e nenhuma flag reabre esse fluxo, então as asserções
+    corretas aqui são de bloqueio.)"""
 
     def _app(self, tmp_path, monkeypatch):
         import importlib
         monkeypatch.setenv("ACCESS_PASSWORD", "s3nh4")
         monkeypatch.setenv("DATA_DIR", str(tmp_path))
+        # Flags SaaS ligadas de propósito: o modo dono único as ignora.
+        monkeypatch.setenv("MULTI_TENANT_ENABLED", "true")
+        monkeypatch.setenv("TENANT_TOKEN_SIGNING_KEY",
+                           "chave-de-assinatura-bem-longa-0123456789")
         import service.app as m
         importlib.reload(m)
         m._FAILS.clear()

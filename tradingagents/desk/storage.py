@@ -86,7 +86,8 @@ class ArmazemDeEstado:
     # -- postgres ------------------------------------------------------
     def _conectar(self):
         import psycopg
-        return psycopg.connect(self.dsn)
+        # Teto de conexão: endpoint morto degrada para arquivo, não pendura.
+        return psycopg.connect(self.dsn, connect_timeout=5)
 
     def _criar_tabela(self) -> None:
         with self._conectar() as c, c.cursor() as cur:

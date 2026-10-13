@@ -63,6 +63,7 @@
 <button class="btn secondary" onclick="avaliar()">Avaliar equipe</button>
 <button class="btn secondary" onclick="aprendizado()">O que aprenderam</button>
 <button class="btn secondary" onclick="viabilidade()">Isso dá lucro?</button>
+<button class="btn secondary" onclick="quantStatus()">Camada quant/IA</button>
 <button class="btn secondary" onclick="verAlertas()">Alertas</button>
 <button class="btn secondary" onclick="exportarTudo()">Exportar tudo (mudar de servidor)</button>
 <button class="btn secondary" onclick="doBackup()">Gerar backup</button>
@@ -231,6 +232,12 @@ async function viabilidade(){const r=await api('/v1/desk/viabilidade');if(!r.ok)
 $('deskMsg').innerHTML=`<div class="muted">Corretora: <b>${escapeHtml(d.exchange)}</b></div><table class="table"><thead><tr><th>Estratégia</th><th>Custo/op</th><th>Sobra por op</th><th>Acerto mínimo</th><th>Veredito</th></tr></thead><tbody>`+
 d.estrategias.map(e=>`<tr><td>${escapeHtml(e.estrategia)}</td><td>${escapeHtml(e.custo_por_operacao)}</td><td class="${e.viavel?'ok':'bad'}">${escapeHtml(e.esperanca_liquida)}</td><td>${escapeHtml(e.acerto_minimo)}</td><td>${e.viavel?'<b class="ok">viável</b>':'<b class="bad">inviável</b>'}<br><small class="muted">${escapeHtml(e.origem)}</small></td></tr>`).join('')+
 `</tbody></table><div class="muted">${escapeHtml(d.como_ler)}</div><div class="warn">${escapeHtml(d.aviso)}</div>`}
+async function quantStatus(){const r=await api('/v1/quant/status');if(!r.ok)return toast('falhou','bad');const d=r.data;
+const linhas=Object.entries(d.modelos||{}).map(([nome,i])=>`<tr><td>${escapeHtml(nome)}</td><td>${i.instalado?'<b class="ok">instalado</b>':'<span class="muted">ausente</span>'}</td><td>${escapeHtml(i.versao||'—')}</td><td>${escapeHtml(i.papel||'')}</td></tr>`).join('');
+const ia=d.ia_contexto?`<div class="metric-line"><span>IA de contexto: <b>${escapeHtml(d.ia_contexto.provedor||'—')}</b> — última consulta ${d.ia_contexto.latencia_ms} ms (${d.ia_contexto.ok?'sucesso':'falha'}) em ${escapeHtml(d.ia_contexto.quando)}</span></div>`
+:'<div class="muted">Nenhuma consulta de IA de contexto registrada nesta sessão.</div>';
+$('deskMsg').innerHTML=`<table class="table"><thead><tr><th>Modelo</th><th>Estado</th><th>Versão</th><th>Papel</th></tr></thead><tbody>${linhas}</tbody></table>`+ia+
+`<div class="muted">${escapeHtml(d.quantitativo)}</div><div class="warn">${escapeHtml(d.governanca)}</div><div class="muted">${escapeHtml(d.aviso)}</div>`}
 async function verAlertas(){const r=await api('/v1/alertas');if(!r.ok)return toast('falhou','bad');const d=r.data;
 $('deskMsg').innerHTML=(d.ativos.length?d.ativos.map(a=>`<div class="${a.severidade==='urgente'?'bad':'warn'}"><b>${escapeHtml(a.titulo)}</b><br>${escapeHtml(a.detalhe)}<br><small>➡️ ${escapeHtml(a.acao)}</small></div>`).join('')
 :'<div class="ok">Nada exige sua atenção agora.</div>')
