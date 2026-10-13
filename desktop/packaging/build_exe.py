@@ -14,7 +14,6 @@ def build_windows_exe():
     """Build standalone DZ23-Trading-AI.exe bundle using PyInstaller."""
     print("Building DZ23 Trading AI Standalone Windows Executable...")
 
-    # Ensure pyinstaller is installed or run via uv
     dist_dir = ROOT / "dist"
     static_dir = ROOT / "service" / "static"
 
@@ -27,6 +26,12 @@ def build_windows_exe():
         "--windowed",
         "--name=DZ23-Trading-AI",
         f"--add-data={static_dir}{os.pathsep}service/static",
+        "--collect-all=service",
+        "--collect-all=tradingagents",
+        "--hidden-import=uvicorn.logging",
+        "--hidden-import=uvicorn.loops.auto",
+        "--hidden-import=uvicorn.protocols.http.h11_impl",
+        "--hidden-import=uvicorn.lifespan.on",
         str(ROOT / "desktop" / "launcher.py"),
     ]
 

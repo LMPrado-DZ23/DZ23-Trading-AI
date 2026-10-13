@@ -18,17 +18,25 @@ jobs:
         run: |
           pip install uv pyinstaller
           uv sync --extra dev
+      - name: Install Inno Setup
+        uses: BoringPlanets/inno-setup-action@v1.4
+        with:
+          path-to-iss: desktop/installer/setup.iss
       - name: Build Executable Bundle
         run: |
           uv run python -m desktop.packaging.build_exe
-      - name: Zip Release Bundle
+      - name: Compile Inno Setup Installer
+        run: |
+          iscc desktop/installer/setup.iss
+      - name: Zip Release Bundle and Calculate Hashes
         run: |
           Compress-Archive -Path dist/DZ23-Trading-AI/* -DestinationPath dist/DZ23-Trading-AI-windows-x64.zip
-          Get-FileHash dist/DZ23-Trading-AI-windows-x64.zip -Algorithm SHA256 | Out-File dist/SHA256SUMS.txt
+          Get-FileHash dist/DZ23-Trading-AI-windows-x64.zip, dist/DZ23-Trading-AI-Setup-v0.4.0.exe -Algorithm SHA256 | Out-File dist/SHA256SUMS.txt
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
+            dist/DZ23-Trading-AI-Setup-v0.4.0.exe
             dist/DZ23-Trading-AI-windows-x64.zip
             dist/SHA256SUMS.txt
         env:
