@@ -201,6 +201,9 @@ class Sala:
         self.taxas_acumuladas = Decimal("0")
         self.posicoes: dict[str, dict] = {}
         self._desfechos: list[Desfecho] = []
+        # Priors de conhecimento recebidos de OUTRAS salas: informação
+        # rotulada, jamais certificação (ver `conhecimento.py`).
+        self.priors_conhecimento: list[dict] = []
         self._carregar()
 
     @property
@@ -224,6 +227,9 @@ class Sala:
                 self._desfechos.append(desfecho_de_dict(d))
             except (KeyError, ValueError, TypeError):
                 continue
+        priors = dados.get("priors_conhecimento")
+        if isinstance(priors, list):
+            self.priors_conhecimento = priors
         livro = dados.get("ledger")
         if isinstance(livro, dict) and self.ledger is None:
             from .ledger import Ledger
@@ -242,6 +248,7 @@ class Sala:
             "posicoes": self.posicoes,
             "desfechos": [desfecho_para_dict(d)
                           for d in self._desfechos[-self.MAX_DESFECHOS:]],
+            "priors_conhecimento": self.priors_conhecimento[-200:],
         }
         if self.ledger is not None:
             payload["ledger"] = {"currency": self.ledger.currency,
@@ -344,6 +351,7 @@ class Sala:
                     "agente": p.get("agente", "")}
                 for i, p in self.posicoes.items()},
             "desfechos": len(self._desfechos),
+            "priors_conhecimento": len(self.priors_conhecimento),
             "tem_ledger": self.ledger is not None,
             "laboratorio": bool(ad.laboratorio) if ad else None,
         }
