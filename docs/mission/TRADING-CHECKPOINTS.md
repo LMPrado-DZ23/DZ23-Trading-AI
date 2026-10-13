@@ -615,3 +615,37 @@ LIVE `BLOCKED_BY_POLICY` o tempo todo; **nada foi publicado** (sem tag/release).
 ### Estado
 
 LIVE `BLOCKED_BY_POLICY` o tempo todo; **nada foi publicado** (sem tag/release). Identidade **provada em servidor real** (unit + E2E) mas **ainda NÃO homologada no bundle Windows** — não declarar concluído até o artefato deste push passar pelo ciclo de instalação com evidência registrada.
+
+---
+
+## C021 — Causa-raiz da falha de inicialização no Windows (missão do dono; tasks #37–#41)
+
+- **UTC:** 2026-10-13 (batch noturno)
+- **Branch:** `feat/integracao-mestre-20261012` (de `a4065ea`; este batch)
+- **Motivação:** o dono reportou que abrir o DZ23 Trading AI pelo atalho no Windows (duplo clique) mostrava “falha ao iniciar” e o painel não subia — sem nenhum processo na porta 8000.
+
+### Causa-raiz (provada, não presumida)
+
+1. O backend sobe em thread própria com `uvicorn.Config(...)`. O `LOGGING_CONFIG` padrão do uvicorn constrói um formatter colorido cujo `__init__` chama `sys.stdout.isatty()`.
+2. No exe PyInstaller `--windowed` aberto do jeito do dono (SEM console), `sys.stdout`/`sys.stderr`/`sys.stdin` são `None` → `AttributeError: 'NoneType' object has no attribute 'isatty'` → `ValueError: Unable to configure formatter 'default'` — exceção levantada DENTRO do `uvicorn.Config.__init__`, na thread do backend, ANTES de qualquer bind de porta.
+3. A exceção morria muda: `threading.excepthook` escreve em `sys.stderr`, que também era `None`. Daí o “sem logs” e o “falha ao iniciar” após o timeout — sem nada na porta.
+4. Lançamentos com console (scripts, terminais, homologações anteriores) herdam handles válidos e não reproduzem o bug — o que explica por que C018/C019 pareciam bem e a abertura do dono sempre falhava.
+5. Reprodução determinística do defeito no binário `--windowed` via `Start-Process` (equivalente ao duplo clique): `docs/mission/evidence/e2e/c021-causa-raiz-old-windowed.log` — linhas `stdout=None stderr=None stdin=None`, traceback de `uvicorn\logging.py:42` e diálogo nativo #32770 “DZ23 Trading AI — falha ao iniciar” lido por `scripts/diagnostico_janelas_win.py`.
+
+### Correção (causa-raiz; nada de segurança afrouxado)
+
+1. **`desktop/launcher.py` reescrito:** `uvicorn.Config(..., log_config=None)` — o formatter defeituoso nem é construído; logging próprio configurado ANTES de tudo em `%APPDATA%\DZ23-Trading-AI\logs\launcher.log` (RotatingFileHandler 2 MB × 3), com `threading.excepthook`/`sys.excepthook` próprios gravando qualquer traceback no arquivo (fim do “morre mudo”).
+2. **Pré-checagem de portas 8000–8010 com identificação read-only** (netstat + tasklist) e **marcador de saúde** (`/healthz` com campo `app` = `tradingagents-agency`): instância DZ23 saudável é reutilizada; senão primeira porta livre; senão diálogo claro “DZ23 Trading AI — portas ocupadas” listando o processo ocupante — **nunca encerra nem altera outros programas**.
+3. **Porta efetiva propagada** (env `PORT` + `DZ23_PORTA_EFETIVA`) para backend, URL do navegador e healthcheck; o app só é dado como iniciado quando `/healthz` responde (com fast-fail se a thread do backend morrer); em falha, o diálogo aponta o caminho do log.
+4. Quit de produção preservado (rota `/v1/app/quit` segue integrada).
+
+### Prova (Windows real, binário `--windowed`, SEM console)
+
+- Launcher NOVO via `Start-Process`: varredura de portas → “iniciando na porta efetiva 8000” → healthz 200 → painel aberto → encerrado; zero diálogos nativos — `docs/mission/evidence/e2e/c021-fix-verificado-windowed-sem-console.log`.
+- `tests/windows/test_desktop_launcher.py`: **29/29**; ruff limpo.
+- Ferramentas de prova novas/endurecidas: `scripts/build_diag_console.py` (constrói exe de diagnóstico `--windowed`/`--console` com os mesmos collects do build oficial), `scripts/matriz_inicializacao_win.py` (6 cenários: subida limpa; porta 8000 ocupada por terceiro → fallback para 8001 sem tocar no processo alheio; instância duplicada sai sozinha; faixa inteira ocupada → diálogo sem iniciar; reinício; encerramento gracioso via `/v1/app/quit` com porta liberada), `scripts/homolog_identidade_bundle.py` endurecido (descobre a porta efetiva pelo marcador; nunca mata processo que não subiu).
+- **Pendente nesta entrada:** matriz completa + re-homologação do item 18 no bundle instalado do CI — executadas na sequência (tasks #39–#40); resultado será anexado como `docs/mission/evidence/e2e/c021-matriz-*.log`.
+
+### Estado
+
+LIVE `BLOCKED_BY_POLICY`. Nada publicado (sem tag/release). A falha real do dono (duplo clique sem console) está com causa-raiz provada e corrigida, com prova em binário `--windowed`; a homologação no bundle gerado por este push fica declarada como pendente até rodar a matriz completa.

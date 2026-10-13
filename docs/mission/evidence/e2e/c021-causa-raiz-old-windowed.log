@@ -1,0 +1,24 @@
+2026-10-13 19:46:39,593 [INFO] diag.old_launcher: diag: frozen=True python=3.12.10 exe=C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\DZ23-Trading-AI\dist-diag\DZ23-Trading-AI-diag-old\DZ23-Trading-AI-diag-old.exe
+2026-10-13 19:46:39,593 [INFO] diag.old_launcher: diag: stdout=None stderr=None stdin=None
+2026-10-13 19:46:39,634 [INFO] dz23.desktop: Starting DZ23 Trading AI Desktop Environment...
+2026-10-13 19:46:41,454 [ERROR] diag.old_launcher: thread 'Thread-1 (run_backend)' morreu com exceção:
+Traceback (most recent call last):
+  File "logging\config.py", line 587, in configure
+  File "logging\config.py", line 699, in configure_formatter
+  File "logging\config.py", line 490, in configure_custom
+  File "uvicorn\logging.py", line 42, in __init__
+AttributeError: 'NoneType' object has no attribute 'isatty'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "threading.py", line 1075, in _bootstrap_inner
+  File "threading.py", line 1012, in run
+  File "old_launcher_diag.py", line 146, in run_backend
+  File "uvicorn\config.py", line 303, in __init__
+  File "uvicorn\config.py", line 398, in configure_logging
+  File "logging\config.py", line 942, in dictConfig
+  File "logging\config.py", line 590, in configure
+ValueError: Unable to configure formatter 'default'
+
+2026-10-13 19:46:56,292 [WARNING] dz23.desktop: Backend start timed out. Opening UI anyway...

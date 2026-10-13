@@ -1,0 +1,29 @@
+2026-10-13 19:48:02,042 [INFO] dz23.desktop: DZ23 Trading AI — launcher iniciando (log: C:\Users\DZ23\AppData\Roaming\DZ23-Trading-AI\logs\launcher.log)
+2026-10-13 19:48:02,042 [INFO] dz23.desktop: execução: frozen=True; python=3.12.10; exe=C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\DZ23-Trading-AI\dist-diag\DZ23-Trading-AI-diag-win\DZ23-Trading-AI-diag-win.exe
+2026-10-13 19:48:07,657 [INFO] dz23.desktop: porta 8000: livre
+2026-10-13 19:48:07,657 [INFO] dz23.desktop: porta 8001: livre
+2026-10-13 19:48:07,657 [INFO] dz23.desktop: porta 8002: livre
+2026-10-13 19:48:07,657 [INFO] dz23.desktop: porta 8003: livre
+2026-10-13 19:48:07,657 [INFO] dz23.desktop: porta 8004: livre
+2026-10-13 19:48:07,657 [INFO] dz23.desktop: porta 8005: livre
+2026-10-13 19:48:07,678 [INFO] dz23.desktop: porta 8006: livre
+2026-10-13 19:48:07,678 [INFO] dz23.desktop: porta 8007: livre
+2026-10-13 19:48:07,678 [INFO] dz23.desktop: porta 8008: livre
+2026-10-13 19:48:07,678 [INFO] dz23.desktop: porta 8009: livre
+2026-10-13 19:48:07,678 [INFO] dz23.desktop: porta 8010: livre
+2026-10-13 19:48:07,678 [INFO] dz23.desktop: iniciando na porta efetiva 8000 (primeira livre da faixa)
+2026-10-13 19:48:08,402 [INFO] dz23.desktop: backend: DATA_DIR=C:\Users\DZ23\AppData\Roaming\DZ23-Trading-AI porta=8000 — importando service.app
+2026-10-13 19:48:09,069 [INFO] dz23.desktop: backend: app importado; preparando uvicorn
+2026-10-13 19:48:09,069 [INFO] dz23.desktop: backend: uvicorn.run em http://127.0.0.1:8000
+2026-10-13 19:48:09,166 [INFO] uvicorn.error: Started server process [12832]
+2026-10-13 19:48:09,166 [INFO] uvicorn.error: Waiting for application startup.
+2026-10-13 19:48:09,166 [INFO] uvicorn.error: Application startup complete.
+2026-10-13 19:48:09,166 [INFO] uvicorn.error: Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+2026-10-13 19:48:10,033 [INFO] uvicorn.access: 127.0.0.1:62875 - "GET /healthz HTTP/1.1" 200
+2026-10-13 19:48:10,034 [INFO] dz23.desktop: backend saudável em http://127.0.0.1:8000/app — abrindo o painel
+2026-10-13 19:48:10,281 [INFO] uvicorn.access: 127.0.0.1:65321 - "GET /app HTTP/1.1" 200
+2026-10-13 19:48:10,377 [INFO] uvicorn.access: 127.0.0.1:65321 - "GET /floor HTTP/1.1" 200
+2026-10-13 19:48:10,377 [INFO] uvicorn.access: 127.0.0.1:54375 - "GET /v1/status/operacao HTTP/1.1" 200
+2026-10-13 19:48:10,378 [INFO] uvicorn.access: 127.0.0.1:55646 - "GET /v1/auth/status HTTP/1.1" 200
+2026-10-13 19:48:10,406 [INFO] uvicorn.access: 127.0.0.1:61489 - "GET /manifest.webmanifest HTTP/1.1" 200
+2026-10-13 19:48:10,408 [INFO] uvicorn.access: 127.0.0.1:55646 - "GET /v1/status/operacao HTTP/1.1" 200
