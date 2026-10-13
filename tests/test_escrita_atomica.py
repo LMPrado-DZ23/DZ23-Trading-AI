@@ -76,7 +76,7 @@ class TestEscritaAtomica:
     def test_content_survives_the_write(self, tmp_path):
         alvo = tmp_path / "estado.json"
         escrever_json_atomico(alvo, {"chave": "acentuação é preservada"})
-        assert json.loads(alvo.read_text())["chave"] == "acentuação é preservada"
+        assert json.loads(alvo.read_text(encoding="utf-8"))["chave"] == "acentuação é preservada"
 
     def test_creates_missing_directories(self, tmp_path):
         alvo = tmp_path / "a" / "b" / "c.json"

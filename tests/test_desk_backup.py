@@ -53,6 +53,9 @@ class TestRestore:
         assert (novo / "jobs.db").read_bytes().startswith(b"SQLite format 3")
 
     def test_config_permissions_are_restored_tight(self, tmp_path):
+        import sys
+        if sys.platform == "win32":
+            pytest.skip("POSIX permissions (600) are not natively supported on Windows NTFS")
         data = populate(tmp_path / "data")
         create_backup(data, tmp_path / "bk.tar.gz")
         novo = tmp_path / "novo"

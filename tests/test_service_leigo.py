@@ -27,7 +27,7 @@ class TestAssetType:
 class TestServerSideHistory:
     def test_list_jobs_route_exists(self, tmp_path, monkeypatch):
         m = _load_app(tmp_path, monkeypatch)
-        paths = [r.path for r in m.app.routes]
+        paths = [r.path for r in m.app.routes if hasattr(r, "path")]
         assert "/v1/jobs" in paths and "/v1/jobs/{jid}" in paths
 
 
@@ -144,7 +144,7 @@ class TestPainelMesaDeAgentes:
 
     def test_desk_routes_are_registered(self, tmp_path, monkeypatch):
         m = _load_app(tmp_path, monkeypatch)
-        paths = {r.path for r in m.app.routes}
+        paths = {r.path for r in m.app.routes if hasattr(r, "path")}
         assert {"/v1/desk/status", "/v1/desk/cycle", "/v1/desk/feed",
                 "/v1/desk/avaliacao", "/v1/desk/scheduler/{action}",
                 "/v1/backup", "/v1/primeiros-passos"} <= paths
@@ -359,7 +359,7 @@ class TestPainelSemBotaoQuebrado:
         import re
         html = Path("service/static/index.html").read_text(encoding="utf-8")
         m = _load_app(tmp_path, monkeypatch)
-        registradas = {r.path for r in m.app.routes}
+        registradas = {r.path for r in m.app.routes if hasattr(r, "path")}
         for rota in set(re.findall(r"fetch\('(/[\w/-]+)", html)):
             base = rota.rstrip("/")
             assert any(base == p or p.startswith(base.rsplit("/", 1)[0])

@@ -20,7 +20,11 @@ import contextlib
 import json
 import os
 import tempfile
+import threading
+import time
 from pathlib import Path
+
+_WRITE_LOCK = threading.Lock()
 
 
 def escrever_json_atomico(caminho: Path, documento: dict) -> None:
@@ -35,19 +39,28 @@ def escrever_json_atomico(caminho: Path, documento: dict) -> None:
     """
     caminho = Path(caminho)
     caminho.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=str(caminho.parent),
-                               prefix=f".{caminho.stem}-", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(documento, fh, ensure_ascii=False)
-            fh.flush()
-            os.fsync(fh.fileno())
-        os.replace(tmp, caminho)
-    except BaseException:
-        # temporário órfão não pode ficar entulhando o volume
-        with contextlib.suppress(OSError):
-            os.unlink(tmp)
-        raise
+    with _WRITE_LOCK:
+        fd, tmp = tempfile.mkstemp(dir=str(caminho.parent),
+                                   prefix=f".{caminho.stem}-", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                json.dump(documento, fh, ensure_ascii=False)
+                fh.flush()
+                os.fsync(fh.fileno())
+
+            for attempt in range(10):
+                try:
+                    os.replace(tmp, caminho)
+                    break
+                except PermissionError:
+                    if attempt == 9:
+                        raise
+                    time.sleep(0.005)
+        except BaseException:
+            # temporário órfão não pode ficar entulhando o volume
+            with contextlib.suppress(OSError):
+                os.unlink(tmp)
+            raise
 
 
 class ArmazemDeEstado:

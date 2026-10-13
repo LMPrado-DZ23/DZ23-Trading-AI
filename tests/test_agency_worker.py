@@ -19,7 +19,7 @@ def test_worker_processes_durable_tasks_and_stops_idempotently(tmp_path: Path):
     assert first["running"] is True and second["running"] is True
 
     deadline = monotonic() + 3
-    while monotonic() < deadline and runtime.executor.tasks["t1"].status is not TaskStatus.SUCCEEDED:
+    while monotonic() < deadline and (runtime.executor.tasks["t1"].status is not TaskStatus.SUCCEEDED or runtime.worker_status("tenant-1")["cycles"] < 1):
         sleep(0.05)
     assert runtime.executor.tasks["t1"].status is TaskStatus.SUCCEEDED
     assert runtime.worker_status("tenant-1")["cycles"] >= 1
