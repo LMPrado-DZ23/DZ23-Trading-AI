@@ -45,6 +45,10 @@ class Desfecho:
     exchange: str = ""
     versao: str = "1"
     agente: str = ""
+    # Horizonte operacional (ex.: "1h", "4h", "1d"). A certificação por sala
+    # exige (corretora, mercado, ativo, horizonte): formado em 1h não é
+    # formado em swing — o mesmo sinal tem estatística diferente em cada um.
+    horizonte: str = "1h"
 
     def peso(self, agora: datetime | None = None) -> float:
         agora = agora or datetime.now(timezone.utc)
@@ -53,6 +57,28 @@ class Desfecho:
             fechado = fechado.replace(tzinfo=timezone.utc)
         dias = max(0.0, (agora - fechado).total_seconds() / 86400)
         return 0.5 ** (dias / MEIA_VIDA_DIAS)
+
+
+def desfecho_para_dict(d: Desfecho) -> dict:
+    """Formato único de persistência — usado pela memória e pelas salas."""
+    return {"estrategia": d.estrategia, "regime": d.regime,
+            "instrumento": d.instrumento, "retorno": str(d.retorno),
+            "fechado_em": d.fechado_em.isoformat(),
+            "forca_do_sinal": d.forca_do_sinal,
+            "exchange": d.exchange, "versao": d.versao,
+            "agente": d.agente, "horizonte": d.horizonte}
+
+
+def desfecho_de_dict(d: dict) -> Desfecho:
+    """Reconstrói um desfecho persistido. Campos essenciais são exigidos —
+    um registro sem estratégia/resultado/data não é evidência utilizável."""
+    return Desfecho(
+        str(d["estrategia"]), str(d["regime"]), str(d["instrumento"]),
+        Decimal(str(d["retorno"])),
+        datetime.fromisoformat(str(d["fechado_em"])),
+        float(d.get("forca_do_sinal", 0.0)),
+        str(d.get("exchange", "")), str(d.get("versao", "1")),
+        str(d.get("agente", "")), str(d.get("horizonte", "1h")))
 
 
 @dataclass
@@ -104,26 +130,13 @@ class MemoriaDeDesempenho:
                 return
         for d in dados.get("desfechos", []):
             try:
-                self._desfechos.append(Desfecho(
-                    d["estrategia"], d["regime"], d["instrumento"],
-                    Decimal(str(d["retorno"])),
-                    datetime.fromisoformat(d["fechado_em"]),
-                    float(d.get("forca_do_sinal", 0.0)),
-                    str(d.get("exchange", "")),
-                    str(d.get("versao", "1")),
-                    str(d.get("agente", ""))))
-            except (KeyError, ValueError):
+                self._desfechos.append(desfecho_de_dict(d))
+            except (KeyError, ValueError, TypeError):
                 continue
 
     def salvar(self) -> None:
-        payload = {"desfechos": [
-            {"estrategia": d.estrategia, "regime": d.regime,
-             "instrumento": d.instrumento, "retorno": str(d.retorno),
-             "fechado_em": d.fechado_em.isoformat(),
-             "forca_do_sinal": d.forca_do_sinal,
-             "exchange": d.exchange, "versao": d.versao,
-             "agente": d.agente}
-            for d in self._desfechos[-2000:]]}
+        payload = {"desfechos": [desfecho_para_dict(d)
+                                 for d in self._desfechos[-2000:]]}
         if self.armazem is not None:
             self.armazem.salvar(self.tenant_id, "aprendizado", payload)
             return
@@ -283,4 +296,5 @@ class MemoriaDeDesempenho:
         return saida
 
 
-__all__ = ["MemoriaDeDesempenho", "Desfecho", "Estatistica", "AMOSTRA_MINIMA"]
+__all__ = ["MemoriaDeDesempenho", "Desfecho", "Estatistica", "AMOSTRA_MINIMA",
+           "desfecho_para_dict", "desfecho_de_dict"]

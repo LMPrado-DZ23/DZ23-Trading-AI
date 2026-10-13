@@ -283,7 +283,8 @@ class DeskOrchestrator:
                 forca_do_sinal=(leitura.forca if leitura else 0.0),
                 exchange=getattr(self, "exchange", "binance"),
                 versao=str(getattr(trader, "versao", "1")),
-                agente=pos.agent_id))
+                agente=pos.agent_id,
+                horizonte=str(getattr(trader, "timeframe", "1h"))))
         return pos
 
     # -- kill switch com semânticas distintas (cenário 13) -------------

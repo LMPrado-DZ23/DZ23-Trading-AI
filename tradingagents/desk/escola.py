@@ -167,7 +167,13 @@ class EscolaDeTraders:
     CHAVE_ARMAZEM = "escola"
     MAX_EVENTOS = 500
 
-    def __init__(self, armazem=None, tenant_id: str = "legacy"):
+    def __init__(self, armazem=None, tenant_id: str = "legacy", *,
+                 chave_armazem: str | None = None):
+        # `chave_armazem` permite UMA escola por contexto de certificação
+        # (Escola Central): cada instância persiste na própria chave e nunca
+        # enxerga evidência de outro contexto.
+        if chave_armazem:
+            self.CHAVE_ARMAZEM = chave_armazem
         self.armazem = armazem
         self.tenant_id = tenant_id
         self._matriculas: dict[str, dict] = {}
