@@ -133,6 +133,12 @@ class TestBruteForceLock:
         assert h["X-Content-Type-Options"] == "nosniff"
         assert h["X-Frame-Options"] == "DENY"
 
+    def test_floor_allows_same_origin_iframe_embedding(self, tmp_path, monkeypatch):
+        # O painel embute /floor em iframe same-origin; DENY quebraria a tela.
+        c, _ = self._client(tmp_path, monkeypatch)
+        assert c.get("/floor").headers["X-Frame-Options"] == "SAMEORIGIN"
+        assert c.get("/app").headers["X-Frame-Options"] == "DENY"
+
     def test_forwarded_for_is_ignored_without_trusted_proxy(self, tmp_path, monkeypatch):
         c, m = self._client(tmp_path, monkeypatch)
         request = type("Request", (), {

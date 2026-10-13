@@ -422,7 +422,10 @@ async def block_saas_routes(request: Request, call_next):
 async def security_headers(request, call_next):
     resp = await call_next(request)
     resp.headers["X-Content-Type-Options"] = "nosniff"
-    resp.headers["X-Frame-Options"] = "DENY"
+    # O painel embute o Trading Floor em iframe same-origin (/floor). DENY
+    # bloquearia a própria tela; SAMEORIGIN mantém a proteção anti-clickjacking
+    # contra sites externos. Todo o resto segue DENY.
+    resp.headers["X-Frame-Options"] = "SAMEORIGIN" if request.url.path == "/floor" else "DENY"
     resp.headers["Referrer-Policy"] = "no-referrer"
     return resp
 

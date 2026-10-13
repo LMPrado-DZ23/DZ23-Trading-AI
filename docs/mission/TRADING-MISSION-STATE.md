@@ -1,11 +1,15 @@
 # DZ23 Trading AI — TRADING MISSION STATE
 
-- **Fase atual:** G0 e G7 Concluídos (PASS) — Integração Mestre e Validação CI
+- **Fase atual (V7):** integração mestre concluída; camada quant/IA e 10 traders em produção local;
+  build Windows verde no CI com artefato verificado; painel homologado em navegador real (dono entra,
+  Trading Floor embutido) após corrigir 2 defeitos de produto; homologação de instalação limpa em andamento (G3/G8)
 - **Branch:** `feat/integracao-mestre-20261012`
 - **Base:** `main` (`80e99fb`)
-- **PR:** #6 (`feat/diagnostico-ci-20261012` & `feat/integracao-mestre-20261012`)
-- **UTC:** `2026-10-12T23:20:00Z`
-- **Status:** `IN_PROGRESS`
+- **PR:** #7
+- **HEAD:** commit C006 (sobre `e3e6239`) — batch E2E/launcher/workflow instalador
+- **UTC:** `2026-10-13T17:45:00Z`
+- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md`; checkpoints em `TRADING-CHECKPOINTS.md` (C000–C006)
+- **LIVE:** `BLOCKED_BY_POLICY` (inalterado; nenhuma operação com dinheiro real)
 
 ## Baseline Verificada e Conquistas
 - Repositório `LMPrado-DZ23/DZ23-Trading-AI`.

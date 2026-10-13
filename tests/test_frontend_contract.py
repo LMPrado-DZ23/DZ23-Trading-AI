@@ -1,6 +1,17 @@
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _element(html: str, div_id: str) -> str:
+    start = html.index(f'<div id="{div_id}"')
+    depth = 0
+    for m in re.finditer(r"<div\b|</div>", html[start:]):
+        depth += 1 if m.group(0).startswith("<div") else -1
+        if depth == 0:
+            return html[start : start + m.end()]
+    raise AssertionError(f"<div id={div_id}> sem fechamento")
 
 
 def test_dashboard_contains_multitenant_and_operational_surfaces():
@@ -24,6 +35,24 @@ def test_dashboard_contains_multitenant_and_operational_surfaces():
         "/v1/status/operacao",
     ):
         assert contract in html
+
+
+def test_bootstrap_form_contains_token_and_button():
+    html = (ROOT / "service/static/index.html").read_text(encoding="utf-8")
+    form = _element(html, "bootstrapForm")
+    assert 'class="hide"' in form.split(">", 1)[0]
+    assert 'id="bootToken"' in form
+    assert 'onclick="bootstrap()"' in form
+
+
+def test_owner_mode_login_contract():
+    # No modo Dono Único (padrão Windows) /v1/auth/login responde 404;
+    # o painel precisa entrar com a senha do dono via Bearer em /v1/auth/me.
+    html = (ROOT / "service/static/index.html").read_text(encoding="utf-8")
+    assert "if(status.multi_tenant===false)" in html
+    assert "ownerMode" in html
+    assert "Senha do dono" in html
+    assert "Entrar na sua mesa" in html
 
 
 def test_trading_floor_reuses_multitenant_session():
