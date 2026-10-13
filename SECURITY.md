@@ -2,7 +2,13 @@
 
 ## Escopo
 
-Esta política cobre o código, a API, o runtime multi-tenant, os adapters de execução, o painel e os artefatos de deployment deste repositório.
+Esta política cobre o código, a API, o runtime **single-owner** (um dono por
+instalação), os adapters de execução, o painel e os artefatos de deployment
+(Windows e servidor Linux) deste repositório.
+
+Recursos de SaaS/multi-tenant **não existem** neste produto e não podem ser
+reativados por configuração — a fronteira responde 404 por construção
+(fail-closed), inclusive com flags de ambiente ligadas de propósito.
 
 ## Reporte responsável
 
@@ -17,7 +23,10 @@ São especialmente importantes: bypass de tenant/RBAC, exposição de secrets, e
 ## Práticas do projeto
 
 - `LIVE_TRADING=false` e `REAL_MONEY_EXECUTION=false` por padrão.
+- Senha do dono guardada como hash **Argon2id**; código de recuperação de
+  uso único (o antigo morre a cada troca). Nunca em texto puro.
 - Segredos ficam em secret manager ou variáveis protegidas, nunca no Git.
+  O CI varre o repositório (gitleaks) e gera SBOM a cada mudança.
 - O frontend não envia ordens diretamente à corretora.
 - Falhas de reconciliação são fail-closed.
 - Mudanças de segurança exigem testes de regressão e auditoria.

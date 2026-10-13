@@ -15,6 +15,9 @@ service/personal_exchange_capabilities.py
 service/personal_exchange_catalog.py
 service/personal_exchange_discovery.py
 service/personal_market_integrity.py
+service/api/diagnostics.py
+service/api/owner_credentials.py
+service/api/security_center.py
 service/static/floor.html
 service/static/index.html
 service/static/site.html
@@ -99,6 +102,7 @@ tests/test_kill_switch_runtime.py
 tests/test_liberacao_canonica.py
 tests/test_llm_max_retries.py
 tests/test_llm_max_tokens.py
+tests/test_login_dono_unico.py
 tests/test_market_data_validator.py
 tests/test_market_toolnode.py
 tests/test_memory_log.py
@@ -121,6 +125,7 @@ tests/test_openai_responses_base_url.py
 tests/test_openrouter_model_select.py
 tests/test_operations.py
 tests/test_ordens_orfas.py
+tests/test_owner_credentials.py
 tests/test_paper_financial_state.py
 tests/test_paper_persistence.py
 tests/test_personal_exchange_capabilities.py
@@ -132,6 +137,9 @@ tests/test_polymarket.py
 tests/test_prova_de_resolucao.py
 tests/test_provider_registry.py
 tests/test_py310_compat.py
+tests/test_qoder_maestro_traders.py
+tests/test_qoder_ten_traders.py
+tests/test_quant_intelligence.py
 tests/test_reconciliacao_adversarial.py
 tests/test_reconciliation_state.py
 tests/test_reconciliation_worker.py
@@ -162,6 +170,8 @@ tests/test_settlement_atomico.py
 tests/test_shadow.py
 tests/test_signal_processing.py
 tests/test_signup.py
+tests/test_single_owner_g2.py
+tests/test_single_owner_modo_windows.py
 tests/test_site_publico.py
 tests/test_social_lookahead.py
 tests/test_status_capacidade.py
@@ -278,6 +288,7 @@ tradingagents/desk/learning.py
 tradingagents/desk/ledger.py
 tradingagents/desk/market.py
 tradingagents/desk/models.py
+tradingagents/desk/notifications.py
 tradingagents/desk/orchestrator.py
 tradingagents/desk/policy.py
 tradingagents/desk/provenance.py
@@ -331,8 +342,18 @@ tradingagents/llm_clients/validators.py
 tradingagents/mt5/__init__.py
 tradingagents/mt5/adapter.py
 tradingagents/mt5/worker.py
+tradingagents/quant/__init__.py
+tradingagents/quant/advisor.py
+tradingagents/quant/calibration.py
+tradingagents/quant/champion.py
+tradingagents/quant/drift.py
+tradingagents/quant/ensemble.py
+tradingagents/quant/features.py
+tradingagents/quant/governance.py
+tradingagents/quant/models.py
 tradingagents/research/__init__.py
 tradingagents/research/backtest.py
+tradingagents/research/monte_carlo.py
 tradingagents/research/walk_forward.py
 tradingagents/risk/__init__.py
 tradingagents/risk/engine.py

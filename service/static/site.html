@@ -2,14 +2,14 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DZ23 Trading Platform — mesa de trading com risco governado</title>
-<meta name="description" content="Agência multiagente de trading com contabilidade auditável, reconciliação com a corretora e travas de risco. Paper e Shadow Trading hoje; dinheiro real só depois de auditoria independente.">
+<title>DZ23 Trading AI — mesa de trading open source com risco governado</title>
+<meta name="description" content="Mesa multiagente de trading open source (Apache-2.0), single-owner por instalação. Contabilidade auditável, reconciliação com a corretora e travas de risco. Paper e Shadow Trading hoje; dinheiro real bloqueado.">
 <link rel="icon" href="/static/marca/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="/static/marca/favicon-32.png">
 <link rel="apple-touch-icon" href="/static/marca/dz23-logo-192.png">
 <meta name="theme-color" content="#1447c8">
-<meta property="og:title" content="DZ23 Trading Platform">
-<meta property="og:description" content="Mesa multiagente com risco governado e contabilidade auditável.">
+<meta property="og:title" content="DZ23 Trading AI">
+<meta property="og:description" content="Mesa multiagente open source com risco governado e contabilidade auditável.">
 <meta property="og:image" content="/static/marca/dz23-logo-512.png">
 <meta property="og:type" content="website">
 <style>
@@ -53,13 +53,6 @@ p.sub{color:var(--muted);max-width:680px;margin:0 0 34px}
 .honesto h3{margin:0 0 10px;color:#ffb5c0;font-size:18px}
 .honesto ul{margin:0;padding-left:20px;color:#e3c7cf}
 .honesto li{margin:7px 0}
-.planos{display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
-.plano{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:26px;display:flex;flex-direction:column}
-.plano.destaque{border-color:var(--green);box-shadow:0 0 0 1px var(--green) inset}
-.plano .preco{font-size:34px;font-weight:850;margin:10px 0 4px}
-.plano .preco small{font-size:14px;color:var(--muted);font-weight:600}
-.plano ul{list-style:none;padding:0;margin:16px 0 22px;flex:1}
-.plano li{padding:7px 0;color:var(--muted);font-size:14.5px;border-bottom:1px solid #ffffff08}
 .faq details{border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:10px;background:#0a1623}
 .faq summary{cursor:pointer;font-weight:700;list-style:none}
 .faq summary::-webkit-details-marker{display:none}
@@ -70,19 +63,19 @@ p.sub{color:var(--muted);max-width:680px;margin:0 0 34px}
 footer{border-top:1px solid var(--line);padding:30px 0;color:var(--muted);font-size:13px}
 .foot{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
 @media(max-width:760px){.nav-links{display:none}.hero{padding:56px 0 44px}}
-@media(prefers-reduced-motion:no-preference){.card,.btn,.plano{transition:.18s ease}.card:hover{border-color:#2d4b68;transform:translateY(-2px)}}
+@media(prefers-reduced-motion:no-preference){.card,.btn{transition:.18s ease}.card:hover{border-color:#2d4b68;transform:translateY(-2px)}}
 </style></head>
 <body>
 
 <header><div class="wrap nav">
-  <div class="logo"><img src="/static/marca/dz23-logo-192.png" alt="DZ23 Trading Platform">DZ23</div>
+  <div class="logo"><img src="/static/marca/dz23-logo-192.png" alt="DZ23 Trading AI">DZ23 Trading AI</div>
   <nav class="nav-links">
     <a href="#como">Como funciona</a>
     <a href="#seguranca">Segurança</a>
-    <a href="#planos">Planos</a>
+    <a href="#open-source">Open source</a>
     <a href="#faq">Dúvidas</a>
   </nav>
-  <a class="btn primary" href="/app">Entrar</a>
+  <a class="btn primary" href="/app">Abrir o painel</a>
 </div></header>
 
 <div class="wrap">
@@ -91,14 +84,15 @@ footer{border-top:1px solid var(--line);padding:30px 0;color:var(--muted);font-s
   <h1>Uma mesa de trading que<br>presta contas de cada centavo.</h1>
   <p class="lead">Vários agentes com estratégias distintas operam em ciclos, sob limites
   de risco que o sistema não consegue contornar. Cada ordem tem contabilidade de
-  partidas dobradas, reconciliação com a corretora e registro auditável.</p>
+  partidas dobradas, reconciliação com a corretora e registro auditável.
+  Open source e seu: um dono por instalação, sem serviço de terceiros no meio.</p>
   <div class="hero-cta">
     <a class="btn primary" href="/app">Começar em Paper Trading</a>
     <a class="btn ghost" href="#como">Ver como funciona</a>
   </div>
   <div class="badges">
     <span class="badge"><i class="dot"></i>PAPER &amp; SHADOW</span>
-    <span class="badge"><i class="dot"></i>MULTI-TENANT</span>
+    <span class="badge"><i class="dot"></i>OPEN SOURCE · APACHE-2.0</span>
     <span class="badge" style="color:var(--red);border-color:#4a2333">DINHEIRO REAL BLOQUEADO</span>
   </div>
 </section>
@@ -147,9 +141,10 @@ footer{border-top:1px solid var(--line);padding:30px 0;color:var(--muted);font-s
     <div class="card"><span class="ico">👤</span><h3>Posição tem dono</h3>
       <p>Cada agente encerra apenas o próprio lote. Resultado vai para quem operou, não
       para quem apertou o botão.</p></div>
-    <div class="card"><span class="ico">🗝️</span><h3>Isolamento por cliente</h3>
-      <p>Cada conta tem mesa, credenciais e histórico próprios. Chaves de corretora ficam
-      no servidor e voltam sempre mascaradas.</p></div>
+    <div class="card"><span class="ico">🗝️</span><h3>Dono único, travas de código</h3>
+      <p>Um dono por instalação. Não existe cadastro de terceiros, plano nem cobrança —
+      esses recursos não existem no código, em vez de estarem apenas escondidos. As
+      chaves de corretora ficam no seu host e voltam sempre mascaradas.</p></div>
   </div>
 </section>
 
@@ -167,62 +162,45 @@ footer{border-top:1px solid var(--line);padding:30px 0;color:var(--muted);font-s
       <li><b>Custos comem resultado.</b> Ida e volta em cripto custa em torno de 0,3%;
       estratégia que mira menos que isso perde dinheiro por construção, e o sistema
       recusa operações que não pagam o próprio custo.</li>
-      <li><b>Estratégia só é promovida com evidência.</b> Validação fora da amostra,
-      com custos descontados. Resultado bonito no histórico não basta.</li>
+      <li><b>Acesso remoto (servidor Linux ARM64) está preparado, não homologado.</b>
+      O caminho principal é o aplicativo no seu Windows; a implantação em servidor só
+      será declarada pronta depois de testes em ambiente real.</li>
     </ul>
   </div>
 </section>
 
-<section id="planos">
-  <h2 class="sec">Planos</h2>
-  <p class="sub">Comece sem cartão. Pagamento por PIX quando quiser mais mesa.</p>
-  <div class="planos">
-    <div class="plano">
-      <h3>Paper</h3>
-      <div class="preco">R$ 0 <small>/ mês</small></div>
-      <ul>
-        <li>1 mesa em Paper Trading</li>
-        <li>Agentes com estratégias distintas</li>
-        <li>Painel completo e histórico</li>
-        <li>Relatório de risco</li>
-      </ul>
-      <a class="btn ghost" href="/app">Criar conta</a>
-    </div>
-    <div class="plano destaque">
-      <h3>Mesa</h3>
-      <div class="preco">R$ 149 <small>/ mês</small></div>
-      <ul>
-        <li>Tudo do Paper</li>
-        <li>Shadow Trading com dados reais</li>
-        <li>Alertas no Telegram e webhook</li>
-        <li>Backup e restauração do estado</li>
-        <li>Suporte por e-mail</li>
-      </ul>
-      <a class="btn primary" href="/app">Assinar</a>
-    </div>
-    <div class="plano">
-      <h3>Agência</h3>
-      <div class="preco">Sob consulta</div>
-      <ul>
-        <li>Várias contas isoladas</li>
-        <li>Mesa dedicada por cliente</li>
-        <li>Página pública de transparência</li>
-        <li>Acompanhamento na configuração</li>
-      </ul>
-      <a class="btn ghost" href="mailto:contato@dz23trading.com.br">Falar com a gente</a>
-    </div>
+<section id="open-source">
+  <h2 class="sec">Open source, de verdade</h2>
+  <p class="sub">Código aberto, instalável por qualquer pessoa, sem taxa e sem serviço no meio.</p>
+  <div class="grid">
+    <div class="card"><span class="ico">📜</span><h3>Licença Apache-2.0</h3>
+      <p>Audite cada linha, contribua com melhorias e rode a sua própria cópia.
+      Atribuições de terceiros ficam registradas no NOTICE do repositório.</p></div>
+    <div class="card"><span class="ico">💻</span><h3>Windows sem dependências</h3>
+      <p>Instalador próprio: não exige Python instalado e preserva seus dados em
+      atualizações. A senha do dono é criada por um assistente no primeiro uso.</p></div>
+    <div class="card"><span class="ico">🔐</span><h3>Sem segredos no repositório</h3>
+      <p>Chaves de IA e corretoras ficam no seu host. O projeto varre vazamentos, gera
+      inventário de licenças e SBOM a cada mudança.</p></div>
+    <div class="card"><span class="ico">🧪</span><h3>Homologação honesta</h3>
+      <p>O que é experimental, o que está homologado e o que está bloqueado fica escrito
+      com evidência no repositório — sem promessa de marketing.</p></div>
   </div>
 </section>
 
 <section id="faq" class="faq">
   <h2 class="sec">Dúvidas frequentes</h2>
+  <details><summary>É gratuito?</summary>
+    <p>Sim. É software open source sob a licença Apache-2.0. Não há assinatura, plano
+    nem cobrança: você instala e usa na sua própria máquina.</p></details>
   <details><summary>Preciso saber programar?</summary>
-    <p>Não. Você cria a conta, conecta a corretora quando quiser e acompanha pelo painel.
-    Toda configuração é por formulário.</p></details>
-  <details><summary>Vocês têm acesso ao meu dinheiro?</summary>
-    <p>Não. As chaves de corretora ficam na sua conta, no servidor, e retornam sempre
-    mascaradas. Enquanto a execução real estiver bloqueada, nenhuma ordem sai com dinheiro
-    de verdade.</p></details>
+    <p>Não. No Windows, o instalador cuida de tudo e toda a configuração é por
+    formulário no painel. Programar só é necessário se você quiser contribuir com o
+    código.</p></details>
+  <details><summary>Vocês têm acesso ao meu dinheiro ou às minhas chaves?</summary>
+    <p>Não. Não existe servidor nosso no meio: tudo roda na sua máquina. As chaves de
+    corretora ficam no seu host e retornam sempre mascaradas. Enquanto a execução real
+    estiver bloqueada, nenhuma ordem sai com dinheiro de verdade.</p></details>
   <details><summary>Quanto rende?</summary>
     <p>Não damos esse número, e desconfie de quem dá. O que mostramos é o histórico
     completo das operações simuladas, com custos descontados, para você julgar.</p></details>
@@ -230,22 +208,19 @@ footer{border-top:1px solid var(--line);padding:30px 0;color:var(--muted);font-s
     <p>Os agentes decidem com dados reais e as ordens são registradas como se fossem
     enviadas, sem ir à corretora. Serve para medir a estratégia em condições de mercado
     antes de qualquer risco.</p></details>
-  <details><summary>Posso cancelar quando quiser?</summary>
-    <p>Pode. A assinatura é mensal por PIX, sem fidelidade. Ao cancelar, o histórico
-    continua acessível para exportação.</p></details>
 </section>
 
 <section class="final" style="border:0">
   <h2 class="sec">Comece sem arriscar nada</h2>
-  <p class="sub" style="margin:0 auto 26px">Crie a conta, rode em Paper Trading e veja o
+  <p class="sub" style="margin:0 auto 26px">Instale, rode em Paper Trading e veja o
   sistema trabalhar antes de decidir qualquer coisa.</p>
-  <a class="btn primary" href="/app">Criar minha mesa</a>
+  <a class="btn primary" href="/app">Abrir o painel</a>
 </section>
 
 </div>
 
 <footer><div class="wrap foot">
-  <div>© 2026 DZ23 Trading Platform · CNPJ 64.339.333/0001-22</div>
+  <div>© 2026 DZ23 Trading AI · projeto open source (Apache-2.0)</div>
   <div>Operações em mercado envolvem risco de perda. Não é recomendação de investimento.</div>
 </div></footer>
 

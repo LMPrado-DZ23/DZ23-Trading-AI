@@ -93,6 +93,47 @@ jobs:
       - name: Audit installed project dependencies
         run: uv run pip-audit --local --progress-spinner off
 
+  supply-chain:
+    name: secrets, licenças e SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # gitleaks varre o histórico do diff/PR
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install locked project
+        run: uv sync --locked --extra desk
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: License inventory — recusar copyleft forte (GPL/AGPL/SSPL/EUPL)
+        run: |
+          uv pip install --python .venv/bin/python pip-licenses
+          uv run pip-licenses --format=csv > /tmp/licenses.csv
+          echo "pacotes inventariados: $(($(wc -l < /tmp/licenses.csv) - 1))"
+          if grep -Ei 'GPL|SSPL|EUPL' /tmp/licenses.csv | grep -vi 'LGPL'; then
+            echo "::error::dependência com licença copyleft forte encontrada"
+            exit 1
+          fi
+      - name: SBOM (SPDX JSON)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: dz23-sbom.spdx.json
+      - name: Publicar SBOM como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-spdx
+          path: dz23-sbom.spdx.json
+          retention-days: 90
+
   smoke:
     name: public smoke checks
     runs-on: ubuntu-latest
