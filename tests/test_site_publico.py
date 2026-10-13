@@ -19,6 +19,21 @@ def cliente():
     return TestClient(m.app)
 
 
+def cliente_saas(tmp_path, monkeypatch):
+    """OAuth faz parte da superfície SaaS; no padrão Dono Único (aplicativo
+    Windows) essas rotas respondem 404 de propósito. O teste liga o modo
+    multi-tenant para exercitar o fluxo real."""
+    import importlib
+    monkeypatch.setenv("ACCESS_PASSWORD", "s3nh4")
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MULTI_TENANT_ENABLED", "true")
+    monkeypatch.setenv("TENANT_TOKEN_SIGNING_KEY",
+                       "chave-de-assinatura-bem-longa-0123456789")
+    import service.app as m
+    importlib.reload(m)
+    return TestClient(m.app)
+
+
 class TestRotas:
     def test_the_root_serves_the_public_page(self):
         html = cliente().get("/").text
@@ -85,8 +100,8 @@ class TestEntrarComGoogle:
         Adivinhar o formato deixaria o botão nunca aparecer."""
         assert "dados.provedores" in APP and "p.nome" in APP
 
-    def test_the_start_endpoint_returns_a_url_not_a_redirect(self):
-        r = cliente().get("/v1/auth/oauth/google/start")
+    def test_the_start_endpoint_returns_a_url_not_a_redirect(self, tmp_path, monkeypatch):
+        r = cliente_saas(tmp_path, monkeypatch).get("/v1/auth/oauth/google/start")
         assert r.status_code in (200, 503)
         if r.status_code == 200:
             assert "url" in r.json()
@@ -105,8 +120,8 @@ class TestEntrarComGoogle:
     def test_the_button_goes_to_the_existing_backend_flow(self):
         assert "'/v1/auth/oauth/'+id+'/start'" in APP
 
-    def test_the_providers_endpoint_answers(self):
-        r = cliente().get("/v1/auth/oauth/providers")
+    def test_the_providers_endpoint_answers(self, tmp_path, monkeypatch):
+        r = cliente_saas(tmp_path, monkeypatch).get("/v1/auth/oauth/providers")
         assert r.status_code == 200
 
     def test_google_is_a_known_provider_in_the_backend(self):

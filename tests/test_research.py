@@ -3,7 +3,7 @@ from decimal import Decimal
 
 import pytest
 
-from tradingagents.research import BacktestConfig, Bar, run_backtest, windows
+from tradingagents.research import BacktestConfig, Bar, run_backtest, run_walk_forward, windows
 
 
 def bars(n=6):
@@ -29,3 +29,36 @@ def test_walk_forward_windows_are_disjoint():
     result = windows(20, 10, 5)
     assert result[0].train_end == result[0].test_start
     assert result[0].test_end == result[1].test_start
+
+
+def test_signal_only_sees_strictly_past_bars():
+    """Sem esta garantia o backtest veria o futuro: a história entregue ao
+    sinal termina ANTES do bar decidido — sem o próprio bar, sem o que vem."""
+    vistos = []
+
+    def espiao(history):
+        vistos.append(history)
+        return 0
+
+    b = bars(6)
+    run_backtest(b, espiao, BacktestConfig())
+    assert [len(h) for h in vistos] == [1, 2, 3, 4, 5]
+    for i, h in enumerate(vistos, start=1):
+        assert h == b[:i], "a história não é o passado estrito do bar decidido"
+        assert all(bar.timestamp < b[i].timestamp for bar in h), (
+            "o sinal recebeu um bar do presente ou do futuro")
+
+
+def test_walk_forward_marks_each_window_with_its_own_revision():
+    """Cada dobra precisa provar de onde veio (item 8): tags distintas por
+    janela e hash próprio — dobra repetida não se confunde com a primeira."""
+    b = bars(40)
+    cfg = BacktestConfig()
+    resultados = run_walk_forward(b, train_size=20, test_size=5,
+                                  signal=lambda history: 0, config=cfg)
+    janelas = windows(40, 20, 5)
+    assert len(resultados) == len(janelas) == 4
+    for r, j in zip(resultados, janelas, strict=True):
+        assert r.manifest["code_revision"] == f"walk-forward:{j.train_start}:{j.train_end}"
+    assert len({r.manifest["code_revision"] for r in resultados}) == 4
+    assert len({r.dataset_hash for r in resultados}) == 4

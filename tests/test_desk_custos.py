@@ -154,6 +154,6 @@ class TestViabilidade:
         m._DESKS.clear()
         d = TestClient(m.app).get("/v1/desk/viabilidade",
                                   headers={"Authorization": "Bearer s3nh4"}).json()
-        assert len(d["estrategias"]) == 3
+        assert len(d["estrategias"]) == 10    # 10 traders da mesa padrão
         assert all("veredito" in e for e in d["estrategias"])
         assert "não é previsão" in d["aviso"]

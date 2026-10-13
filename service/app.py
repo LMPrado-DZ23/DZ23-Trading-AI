@@ -85,7 +85,7 @@ if DATABASE_URL and not os.environ.get("DATABASE_URL"):
 JOB_STORE = _build_job_store()
 PASSWORD = os.environ.get("ACCESS_PASSWORD", "")
 MULTI_TENANT_REQUESTED = os.environ.get("MULTI_TENANT_ENABLED", "false").lower() == "true"
-MULTI_TENANT_ENABLED = os.environ.get("MULTI_TENANT_ENABLED", "false").lower() == "true"
+MULTI_TENANT_ENABLED = MULTI_TENANT_REQUESTED
 _TENANT_SIGNING_KEY = os.environ.get("TENANT_TOKEN_SIGNING_KEY")
 TENANT_STORE = None
 if MULTI_TENANT_ENABLED:
@@ -106,6 +106,10 @@ if MULTI_TENANT_ENABLED:
         HEALTH["avisos"].append(
             f"multi-tenant desligado: {_exc}. Defina TENANT_TOKEN_SIGNING_KEY "
             "com 32+ caracteres aleatórios e reinicie para habilitar contas.")
+# Dono Único é o modo padrão do aplicativo Windows: sem pedido explícito de
+# multi-tenant, a superfície SaaS (contas, planos, webhooks) responde 404 e o
+# funil de planos não se aplica ao dono local.
+SINGLE_OWNER_ENFORCED = not MULTI_TENANT_ENABLED
 TENANT_BOOTSTRAP_TOKEN = os.environ.get("TENANT_BOOTSTRAP_TOKEN", "")
 STATIC = Path(__file__).parent / "static"
 AGENCY_AUDIT = AuditLog(DATA / "agency-events.jsonl")
@@ -381,6 +385,39 @@ def list_tenant_users(request: Request, _=Depends(auth)):
     return {"users": TENANT_STORE.list_members(request_tenant(request))}
 
 
+def rota_saas_bloqueada(caminho: str) -> bool:
+    """Verifica se a rota pertence à superfície SaaS bloqueada no modo Dono Único."""
+    path = caminho.rstrip("/")
+    blocked_exact = {
+        "/v1/auth/signup-status",
+        "/v1/auth/signup",
+        "/v1/auth/login",
+        "/v1/auth/bootstrap",
+        "/v1/admin/tenants",
+        "/v1/admin/users",
+        "/v1/billing/planos",
+        "/v1/billing/status",
+        "/v1/billing/checkout",
+        "/v1/webhooks/woovi",
+    }
+    # O login social inteiro pertence à superfície SaaS: prefixo cobre
+    # google, microsoft e qualquer provedor futuro — enumerar caminhos
+    # deixaria buracos silenciosos.
+    blocked_prefixes = ("/v1/auth/oauth",)
+    if path in blocked_exact:
+        return True
+    return any(path.startswith(b + "/")
+               for b in blocked_prefixes + tuple(blocked_exact))
+
+
+@app.middleware("http")
+async def block_saas_routes(request: Request, call_next):
+    if not MULTI_TENANT_ENABLED and rota_saas_bloqueada(request.url.path):
+        from fastapi.responses import Response
+        return Response("Not Found", status_code=404)
+    return await call_next(request)
+
+
 @app.middleware("http")
 async def security_headers(request, call_next):
     resp = await call_next(request)
@@ -544,6 +581,21 @@ def save_cfg(cfg: dict, tenant_id: str = "legacy"):
 def request_tenant(request: Request) -> str:
     principal = getattr(request.state, "principal", None)
     return principal.tenant_id if isinstance(principal, Principal) else "legacy"
+
+
+# Painel (item 7 do escopo): saúde e latência da última consulta de IA de
+# contexto, por inquilino. Só observabilidade — não guarda prompt nem resposta.
+_IA_CONTEXTO: dict[str, dict] = {}
+
+
+def _registrar_ia_contexto(tenant_id: str, provedor, latencia_ms: float,
+                           ok: bool) -> None:
+    _IA_CONTEXTO[tenant_id] = {
+        "provedor": str(provedor or ""),
+        "latencia_ms": round(latencia_ms, 1),
+        "ok": bool(ok),
+        "quando": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
 
 def upd(jid, **kw):
     JOB_STORE.update(jid, **kw)
@@ -1252,6 +1304,8 @@ def require_plan(request: Request, feature: str = "mesa"):
     cliente não consegue nem pagar para voltar."""
     tenant = request_tenant(request)
     sub = SUBS.ensure(tenant)
+    if SINGLE_OWNER_ENFORCED or tenant == "legacy":
+        return sub
     if not sub.is_active():
         raise HTTPException(402, {
             "erro": "assinatura expirada",
@@ -1646,26 +1700,41 @@ def _desk_boot(tenant_id: str) -> dict:
             import inspect
             aceita_credencial = "api_key" in inspect.signature(
                 create_llm_client).parameters
-            if aceita_credencial:
-                chave = next((v for v in llm_env.values() if v), "")
-                cliente = create_llm_client(conf.get("llm_provider"), conf,
-                                            api_key=chave)
-                return (cliente.complete(prompt) if hasattr(cliente, "complete")
-                        else str(cliente.invoke(prompt)))
-            with _lock:                      # janela fechada: um por vez
-                anterior = {k: os.environ.get(k) for k in llm_env}
-                os.environ.update(llm_env)
-                try:
-                    cliente = create_llm_client(conf.get("llm_provider"), conf)
-                    return (cliente.complete(prompt)
-                            if hasattr(cliente, "complete")
-                            else str(cliente.invoke(prompt)))
-                finally:
-                    for k, antes in anterior.items():
-                        if antes is None:
-                            os.environ.pop(k, None)
-                        else:
-                            os.environ[k] = antes
+            inicio = time.perf_counter()
+            ok = False
+            try:
+                if aceita_credencial:
+                    chave = next((v for v in llm_env.values() if v), "")
+                    cliente = create_llm_client(conf.get("llm_provider"), conf,
+                                                api_key=chave)
+                    resposta = (cliente.complete(prompt)
+                                if hasattr(cliente, "complete")
+                                else str(cliente.invoke(prompt)))
+                else:
+                    with _lock:                  # janela fechada: um por vez
+                        anterior = {k: os.environ.get(k) for k in llm_env}
+                        os.environ.update(llm_env)
+                        try:
+                            cliente = create_llm_client(conf.get("llm_provider"), conf)
+                            resposta = (cliente.complete(prompt)
+                                        if hasattr(cliente, "complete")
+                                        else str(cliente.invoke(prompt)))
+                        finally:
+                            for k, antes in anterior.items():
+                                if antes is None:
+                                    os.environ.pop(k, None)
+                                else:
+                                    os.environ[k] = antes
+                ok = True
+                return resposta
+            finally:
+                # Painel (item 7): latência e saúde do provedor externo.
+                # Registra o nome CONFIGURADO (openrouter, groq, gemini): é o
+                # que o dono escolheu na tela, não o adaptador interno.
+                _registrar_ia_contexto(tenant_id,
+                                       cfg.get("TRADINGAGENTS_LLM_PROVIDER"),
+                                       (time.perf_counter() - inicio) * 1000.0,
+                                       ok)
 
         analista = AnalistaDeContexto(_consultar)
 
@@ -2209,6 +2278,24 @@ def desk_viability(request: Request, _=Depends(auth)):
                          "resultado. Reduza custo (exchange mais barata), "
                          "aumente o alvo, ou não opere."),
             "aviso": "expectativa calculada; não é previsão"}
+
+
+@app.get("/v1/quant/status")
+def quant_status(request: Request, _=Depends(auth)):
+    """Painel da camada quant/IA: o que está instalado, em que papel, e a
+    garantia de governança (itens 7 e 9)."""
+    from tradingagents.quant import disponibilidade
+    return {
+        "modelos": disponibilidade(),
+        "quantitativo": ("features, ensemble, calibração de confiança e "
+                         "monitoramento de drift ativos — tudo determinístico"),
+        "governanca": ("nenhum modelo de IA envia ordens, altera limites de "
+                       "risco ou promove estratégias para LIVE"),
+        "aviso": ("modelos experimentais NÃO são presumidos superiores às "
+                  "estratégias matemáticas; promoção exige comparação "
+                  "champion/challenger com amostra mínima"),
+        "ia_contexto": _IA_CONTEXTO.get(request_tenant(request)),
+    }
 
 
 # =============================================================== ALERTAS ⑥

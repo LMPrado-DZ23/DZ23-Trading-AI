@@ -140,32 +140,50 @@ class TestCobranca:
 
 class TestPortaoDeAcesso:
     """Assinatura vencida bloqueia o que custa dinheiro — mas nunca a página
-    de pagamento (senão o cliente não consegue nem voltar a pagar)."""
+    de pagamento (senão o cliente não consegue nem voltar a pagar).
+
+    Cobrança é superfície SaaS (modo multi-tenant). No padrão Dono Único do
+    aplicativo Windows esse funil fica desligado — a garantia equivalente do
+    dono local (nunca trancado fora da própria mesa) é coberta em
+    tests/test_single_owner_modo_windows.py."""
+
+    TENANT = "tenfixo"   # sem hífens: o webhook parseia o id pelo correlationID
 
     def _app(self, tmp_path, monkeypatch):
         import importlib
         monkeypatch.setenv("ACCESS_PASSWORD", "s3nh4")
         monkeypatch.setenv("DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("MULTI_TENANT_ENABLED", "true")
+        monkeypatch.setenv("TENANT_TOKEN_SIGNING_KEY",
+                           "chave-de-assinatura-bem-longa-0123456789")
         import service.app as m
         importlib.reload(m)
         m._FAILS.clear()
         return m
 
-    def test_trial_allows_the_desk(self, tmp_path, monkeypatch):
+    def _cliente_autenticado(self, m):
+        """Agência fixa com login determinístico (id sem hífen)."""
         from fastapi.testclient import TestClient
-        m = self._app(tmp_path, monkeypatch)
         c = TestClient(m.app)
-        r = c.get("/v1/desk/status", headers={"Authorization": "Bearer s3nh4"})
-        assert r.status_code == 200
+        m.TENANT_STORE.create_tenant("Loja fixa", tenant_id=self.TENANT)
+        uid = m.TENANT_STORE.create_user("dono@fixo.dev", "uma-senha-bem-longa-2026")
+        m.TENANT_STORE.add_member(self.TENANT, uid, "admin")
+        r = c.post("/v1/auth/login", json={"email": "dono@fixo.dev",
+                                           "password": "uma-senha-bem-longa-2026",
+                                           "tenant_id": self.TENANT})
+        assert r.status_code == 200, r.text
+        return c, {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+    def test_trial_allows_the_desk(self, tmp_path, monkeypatch):
+        m = self._app(tmp_path, monkeypatch)
+        c, h = self._cliente_autenticado(m)
+        assert c.get("/v1/desk/status", headers=h).status_code == 200
 
     def test_expired_subscription_blocks_the_desk_with_402(self, tmp_path, monkeypatch):
         from datetime import datetime, timedelta, timezone
-
-        from fastapi.testclient import TestClient
         m = self._app(tmp_path, monkeypatch)
-        c = TestClient(m.app)
-        h = {"Authorization": "Bearer s3nh4"}
-        sub = m.SUBS.ensure("legacy")
+        c, h = self._cliente_autenticado(m)
+        sub = m.SUBS.ensure(self.TENANT)
         sub.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
         sub.status = "expired"
         m.SUBS.save(sub)
@@ -182,29 +200,26 @@ class TestPortaoDeAcesso:
         assert r.status_code == 401
 
     def test_signed_webhook_activates_the_plan(self, tmp_path, monkeypatch):
-        from fastapi.testclient import TestClient
         monkeypatch.setenv("WOOVI_WEBHOOK_PUBLIC_KEY", PUB_PEM)
         m = self._app(tmp_path, monkeypatch)
-        c = TestClient(m.app)
-        corpo = evento(tenant="legacy", plano="starter", charge="chg-x")
+        c, h = self._cliente_autenticado(m)
+        corpo = evento(tenant=self.TENANT, plano="starter", charge="chg-x")
         r = c.post("/v1/webhooks/woovi", content=corpo,
                    headers={"x-webhook-signature": assinar(corpo)})
         assert r.status_code == 200 and r.json()["plano"] == "starter"
-        assert m.SUBS.get("legacy").status == "active"
+        assert m.SUBS.get(self.TENANT).status == "active"
         # e o acesso volta:
-        assert c.get("/v1/desk/status",
-                     headers={"Authorization": "Bearer s3nh4"}).status_code == 200
+        assert c.get("/v1/desk/status", headers=h).status_code == 200
 
     def test_forged_webhook_does_not_activate_anything(self, tmp_path, monkeypatch):
-        from fastapi.testclient import TestClient
         monkeypatch.setenv("WOOVI_WEBHOOK_PUBLIC_KEY", PUB_PEM)
         m = self._app(tmp_path, monkeypatch)
-        c = TestClient(m.app)
-        corpo = evento(tenant="legacy", plano="pro", charge="gratis")
+        c, h = self._cliente_autenticado(m)
+        corpo = evento(tenant=self.TENANT, plano="pro", charge="gratis")
         r = c.post("/v1/webhooks/woovi", content=corpo,
                    headers={"x-webhook-signature": base64.b64encode(b"lixo").decode()})
         assert r.status_code == 401
-        assert m.SUBS.ensure("legacy").plan_code == "trial"   # nada mudou
+        assert m.SUBS.ensure(self.TENANT).plan_code == "trial"   # nada mudou
 
 
 class TestPainelDePagamento:
