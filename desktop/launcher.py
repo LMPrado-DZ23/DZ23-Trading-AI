@@ -72,20 +72,27 @@ def run_backend(host: str = "127.0.0.1", port: int = 8000):
     uvicorn.run(app, host=host, port=port, log_level="info")
 
 
-def wait_and_open_ui(url: str, timeout: int = 15):
-    """Poll localhost server until ready, then open browser window."""
+def _healthz_ok(base_url: str, timeout: int = 1) -> bool:
+    """True se algo responde 200 em /healthz (o painel vive em /app)."""
+    try:
+        with urllib.request.urlopen(f"{base_url}/healthz", timeout=timeout) as resp:
+            return resp.status == 200
+    except Exception:
+        return False
+
+
+def wait_and_open_ui(base_url: str, ui_path: str = "/app", timeout: int = 15):
+    """Poll o /healthz da raiz até o backend responder, então abre o painel."""
+    ui_url = f"{base_url}{ui_path}"
     start_time = time.time()
     while time.time() - start_time < timeout:
-        try:
-            with urllib.request.urlopen(f"{url}/healthz", timeout=1) as resp:
-                if resp.status == 200:
-                    logger.info("Local backend is ready. Opening UI...")
-                    webbrowser.open(url)
-                    return
-        except Exception:
-            time.sleep(0.5)
+        if _healthz_ok(base_url):
+            logger.info("Local backend is ready. Opening UI...")
+            webbrowser.open(ui_url)
+            return
+        time.sleep(0.5)
     logger.warning("Backend start timed out. Opening UI anyway...")
-    webbrowser.open(url)
+    webbrowser.open(ui_url)
 
 
 def main():
@@ -94,6 +101,13 @@ def main():
     url = f"http://{host}:{port}"
 
     logger.info("Starting DZ23 Trading AI Desktop Environment...")
+
+    # Instância já ativa (duplo clique repetido): abre o painel existente em
+    # vez de subir um segundo backend e disputar a porta 8000.
+    if _healthz_ok(url):
+        logger.info("Já existe uma instância servindo %s — abrindo o painel.", url)
+        webbrowser.open(f"{url}/app")
+        return
 
     # Dono Único: senha criada na 1ª execução (mostrada no diálogo) — o painel
     # não abre sessão sem ela; sem isso o app empacotado nega todo acesso.
@@ -106,7 +120,7 @@ def main():
     backend_thread.start()
 
     # Wait for backend and launch webview/browser UI
-    wait_and_open_ui(f"{url}/app")
+    wait_and_open_ui(url)
 
     try:
         while backend_thread.is_alive():

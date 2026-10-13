@@ -2,14 +2,17 @@
 
 - **Fase atual (V7):** integração mestre concluída; camada quant/IA e 10 traders em produção local;
   build Windows verde no CI com artefato verificado; painel homologado em navegador real (dono entra,
-  Trading Floor embutido) após corrigir 2 defeitos de produto; **suíte E2E Playwright versionada em `tests/e2e/`
-  (5 testes verdes em navegador real)**; homologação de instalação limpa em andamento (G3/G8)
+  Trading Floor embutido) após corrigir 2 defeitos de produto; suíte E2E Playwright versionada em `tests/e2e/`
+  (**6 testes verdes** em navegador real); **homologação REAL do instalador executada na estação Windows 11**
+  (instalação silenciosa, atalhos, reinstalação e desinstalação preservando dados — tudo PASS) e **2 defeitos
+  de runtime encontrados nessa homologação corrigidos no C008** (launcher polla `/app/healthz`; trava de
+  força-bruta trancava o dono); re-prova no artefato C008 pendente (G3/G8)
 - **Branch:** `feat/integracao-mestre-20261012`
 - **Base:** `main` (`80e99fb`)
 - **PR:** #7
-- **HEAD:** batch C007 (sobre `0eb40a2`) — suíte E2E Playwright + correção do lint I001
-- **UTC:** `2026-10-13T17:50:00Z`
-- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md`; checkpoints em `TRADING-CHECKPOINTS.md` (C000–C006)
+- **HEAD:** batch C008 (sobre `0e6fdeb`) — correções de runtime do bundle real + regressão E2E do portão de login
+- **UTC:** `2026-10-13T18:05:00Z`
+- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md`; checkpoints em `TRADING-CHECKPOINTS.md` (C000–C008)
 - **LIVE:** `BLOCKED_BY_POLICY` (inalterado; nenhuma operação com dinheiro real)
 
 ## Baseline Verificada e Conquistas

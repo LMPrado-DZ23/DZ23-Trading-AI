@@ -52,6 +52,20 @@ def test_dono_entra_e_visao_geral_paper(page, live_server, owner_password, evide
     page.screenshot(path=str(evidence_dir / "01-visao-geral-dono.png"))
 
 
+def test_dono_entra_mesmo_demorando_no_portao(page, live_server, owner_password):
+    # Regressão do mundo real: o painel embutido (iframe /floor) polla o
+    # servidor enquanto o dono ainda está no portão de login. Antes da
+    # correção, esses 401 anônimos armavam a trava de força-bruta
+    # (5 tentativas => 15 min) e o login do dono respondia 429 só por ele
+    # demorar um pouco para digitar a senha.
+    page.goto(f"{live_server}/app")
+    expect(page.locator("#authTitle")).to_have_text("Entrar na sua mesa")
+    page.wait_for_timeout(16000)  # > 5 ciclos de polling anônimo do painel
+
+    entrar_como_dono(page, live_server, owner_password)
+    expect(page.locator("#appStatus")).to_have_text("READY", timeout=15000)
+
+
 def test_menu_completo_formularios_e_sem_erro_5xx(page, live_server, owner_password):
     erros_5xx: list[str] = []
 

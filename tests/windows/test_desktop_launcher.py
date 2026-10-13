@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from desktop.launcher import (
     ensure_owner_password,
+    main,
     owner_password_path,
     run_backend,
     wait_and_open_ui,
@@ -29,8 +30,47 @@ def test_wait_and_open_ui_success():
 
     with patch("urllib.request.urlopen", return_value=DummyResponse()) as mock_urlopen, patch("webbrowser.open") as mock_browser:
         wait_and_open_ui("http://127.0.0.1:8000", timeout=1)
+        # O healthz vive na RAIZ; o painel vive em /app. Misturar os dois
+        # fazia o launcher pollar /app/healthz (404) e abrir o navegador
+        # 15 s atrasado com um aviso falso de timeout.
         mock_urlopen.assert_called_once_with("http://127.0.0.1:8000/healthz", timeout=1)
-        mock_browser.assert_called_once_with("http://127.0.0.1:8000")
+        mock_browser.assert_called_once_with("http://127.0.0.1:8000/app")
+
+
+def test_wait_and_open_ui_retries_until_healthz_ok():
+    class DummyResponse:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+
+    chamadas = []
+
+    def urlopen_indisponivel_primeiro(url, timeout=1):
+        chamadas.append(url)
+        if len(chamadas) == 1:
+            raise OSError("connection refused")
+        return DummyResponse()
+
+    with patch("urllib.request.urlopen", side_effect=urlopen_indisponivel_primeiro), \
+            patch("webbrowser.open") as mock_browser, \
+            patch("desktop.launcher.time.sleep"):
+        wait_and_open_ui("http://127.0.0.1:8000", timeout=2)
+        assert chamadas == ["http://127.0.0.1:8000/healthz"] * 2
+        mock_browser.assert_called_once_with("http://127.0.0.1:8000/app")
+
+
+def test_main_opens_existing_instance_without_starting_backend():
+    # Instância duplicada: se já há um DZ23 servindo o loopback, apenas abre
+    # o painel — sem segunda travinha de senha e sem disputar a porta 8000.
+    with patch("desktop.launcher._healthz_ok", return_value=True) as mock_health, \
+            patch("desktop.launcher.ensure_owner_password") as mock_pwd, \
+            patch("desktop.launcher.run_backend") as mock_backend, \
+            patch("webbrowser.open") as mock_browser:
+        main()
+        mock_health.assert_called_once()
+        mock_browser.assert_called_once_with("http://127.0.0.1:8000/app")
+        mock_pwd.assert_not_called()
+        mock_backend.assert_not_called()
 
 
 def test_owner_password_created_on_first_run_and_persisted(tmp_path, monkeypatch):

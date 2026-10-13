@@ -58,6 +58,13 @@ def test_owner_mode_login_contract():
 def test_trading_floor_reuses_multitenant_session():
     html = (ROOT / "service/static/floor.html").read_text(encoding="utf-8")
     assert "sessionStorage.getItem('dz23_token')" in html
+
+
+def test_trading_floor_nao_polla_sem_sessao():
+    # Sem token o floor não dispara chamadas protegidas: séries de 401
+    # anônimos armariam a trava de força-bruta antes do login do dono.
+    html = (ROOT / "service/static/floor.html").read_text(encoding="utf-8")
+    assert "AGUARDANDO LOGIN" in html
     assert "prompt('Senha do painel')" not in html
     assert "WORKER RUNNING" in html
     assert "/v1/agency/missions" in html

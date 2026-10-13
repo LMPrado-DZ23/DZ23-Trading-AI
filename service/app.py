@@ -279,6 +279,10 @@ def auth(request: Request, c: HTTPAuthorizationCredentials = Depends(bearer)):
         return principal
     if not PASSWORD:
         raise HTTPException(500, "defina ACCESS_PASSWORD no ambiente")
+    # Requisição anônima (ex.: página abrindo antes do login) NÃO conta como
+    # tentativa de senha; só credencial ERRADA alimenta a trava de força-bruta.
+    if not c or not c.credentials:
+        raise HTTPException(401, "não autenticado")
     ip = _client_ip(request)
     rec = _FAILS.get(ip)
     if rec and rec["n"] >= MAX_FAILS:
@@ -427,6 +431,11 @@ async def security_headers(request, call_next):
     # contra sites externos. Todo o resto segue DENY.
     resp.headers["X-Frame-Options"] = "SAMEORIGIN" if request.url.path == "/floor" else "DENY"
     resp.headers["Referrer-Policy"] = "no-referrer"
+    # HTML do app muda a cada atualização: sem no-store o navegador pode
+    # continuar rodando a tela antiga em cache, inclusive a versão que
+    # pollava sem sessão e armava a trava de força-bruta do dono.
+    if request.url.path in {"/app", "/floor"}:
+        resp.headers["Cache-Control"] = "no-store"
     return resp
 
 # Provedores gratuitos/locais de primeira classe: todos falam o protocolo

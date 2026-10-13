@@ -127,6 +127,20 @@ class TestBruteForceLock:
         assert c.get("/v1/config", headers={"Authorization": "Bearer s3nh4"}).status_code == 200
         assert not m._FAILS  # acerto limpa o histórico
 
+    def test_anonymous_requests_never_lock_the_owner(self, tmp_path, monkeypatch):
+        # O painel embutido (iframe /floor) chama endpoints protegidos antes
+        # do login; esses 401 SEM credencial nenhuma (ou com "Bearer " vazio)
+        # não podem contar como tentativa de senha — senão o dono que só
+        # demora a digitar fica 15 min trancado fora do próprio painel.
+        c, m = self._client(tmp_path, monkeypatch)
+        for _ in range(10):
+            assert c.get("/v1/config").status_code == 401
+            assert c.get("/v1/config",
+                         headers={"Authorization": "Bearer "}).status_code == 401
+        assert m._FAILS == {}
+        assert c.get(
+            "/v1/config", headers={"Authorization": "Bearer s3nh4"}).status_code == 200
+
     def test_security_headers_present(self, tmp_path, monkeypatch):
         c, _ = self._client(tmp_path, monkeypatch)
         h = c.get("/healthz").headers
@@ -138,6 +152,14 @@ class TestBruteForceLock:
         c, _ = self._client(tmp_path, monkeypatch)
         assert c.get("/floor").headers["X-Frame-Options"] == "SAMEORIGIN"
         assert c.get("/app").headers["X-Frame-Options"] == "DENY"
+
+    def test_html_documents_never_cached_stale(self, tmp_path, monkeypatch):
+        # Depois de atualizar o app, o navegador não pode continuar rodando o
+        # HTML ANTIGO em cache: o floor antigo pollava sem sessão e, no
+        # servidor antigo, armava a trava de força-bruta trancando o dono.
+        c, _ = self._client(tmp_path, monkeypatch)
+        for rota in ("/app", "/floor"):
+            assert c.get(rota).headers.get("Cache-Control") == "no-store"
 
     def test_forwarded_for_is_ignored_without_trusted_proxy(self, tmp_path, monkeypatch):
         c, m = self._client(tmp_path, monkeypatch)
