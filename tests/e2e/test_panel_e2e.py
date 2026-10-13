@@ -138,3 +138,89 @@ def test_rotas_saas_bloqueadas_e_login_dono_por_bearer(page, live_server, owner_
     assert "governanca" in quant.json()
 
     assert req.get(f"{live_server}/rota-que-nao-existe-dz23").status == 404
+
+
+def test_login_premium_desktop_identidade_e_estado(page, live_server, evidence_dir):
+    # O portão precisa parecer aplicativo pessoal, não página de SaaS: marca
+    # DZ23 Trading AI, só badges verdadeiras e nenhuma menção a arquivo de
+    # senha. O aviso de erro precisa ser anunciado (aria-live).
+    page.goto(f"{live_server}/app")
+    expect(page.locator("#loginForm")).to_be_visible(timeout=15000)
+    expect(page.locator(".auth-wordmark")).to_have_text("DZ23 Trading AI")
+    expect(page.locator("#authMsg")).to_have_attribute("role", "status")
+    expect(page.locator("#authMsg")).to_have_attribute("aria-live", "polite")
+
+    texto = page.locator("#authGate").inner_text()
+    assert "PAPER MODE" in texto
+    assert "EXECUÇÃO GOVERNADA" in texto
+    assert "MULTI-TENANT" not in texto
+    assert "AGENCY" not in texto
+    assert "owner_password" not in texto
+
+    page.screenshot(path=str(evidence_dir / "00-login-premium-desktop.png"))
+
+
+def test_primeira_execucao_assistente_cria_senha_e_codigo(page, setup_server, evidence_dir):
+    # Instalação nova: nada de arquivo para editar — o assistente visual cria
+    # a senha, mostra o código de recuperação UMA vez e só então abre o painel.
+    nova_senha = "s3nh4-nova-do-dono"
+    page.goto(f"{setup_server}/app")
+    expect(page.locator("#setupForm")).to_be_visible(timeout=15000)
+    expect(page.locator("#setupForm")).to_contain_text("Primeira configuração")
+    expect(page.locator("#loginForm")).to_be_hidden()
+
+    page.fill("#setupPassword", nova_senha)
+    page.fill("#setupPassword2", nova_senha)
+    page.get_by_role("button", name="Criar senha e entrar").click()
+
+    expect(page.locator("#codigoForm")).to_be_visible(timeout=10000)
+    codigo = page.locator("#codigoValor").inner_text().strip()
+    assert re.match(r"^[A-Z2-9]{5}(-[A-Z2-9]{5}){5}$", codigo), codigo
+    page.screenshot(path=str(evidence_dir / "06-codigo-recuperacao.png"))
+
+    page.check("#codigoConfirmado")
+    page.get_by_role("button", name="Abrir o painel").click()
+    expect(page.locator("#app")).to_be_visible(timeout=15000)
+    expect(page.locator("#appStatus")).to_have_text("READY", timeout=15000)
+
+    # Recuperação: sem sessão, "Esqueci minha senha" + código troca a senha.
+    page.evaluate("sessionStorage.removeItem('dz23_token')")
+    page.reload()
+    expect(page.locator("#loginForm")).to_be_visible(timeout=15000)
+    page.get_by_role("button", name="Esqueci minha senha").click()
+    expect(page.locator("#recoverForm")).to_be_visible()
+
+    page.fill("#recoverCodigo", codigo)
+    page.fill("#recoverSenha", "s3nh4-trocada-2026")
+    page.get_by_role("button", name="Trocar senha").click()
+
+    expect(page.locator("#codigoForm")).to_be_visible(timeout=10000)
+    codigo_novo = page.locator("#codigoValor").inner_text().strip()
+    assert codigo_novo != codigo, "o código usado precisa morrer"
+    page.check("#codigoConfirmado")
+    page.get_by_role("button", name="Abrir o painel").click()
+    expect(page.locator("#app")).to_be_visible(timeout=15000)
+
+    velha = page.request.get(
+        f"{setup_server}/v1/auth/me", headers={"Authorization": f"Bearer {nova_senha}"}
+    )
+    assert velha.status == 401, "a senha antiga não pode continuar valendo"
+    nova = page.request.get(
+        f"{setup_server}/v1/auth/me", headers={"Authorization": "Bearer s3nh4-trocada-2026"}
+    )
+    assert nova.status == 200
+
+
+def test_login_mobile_390x844(mobile_page, live_server, owner_password, evidence_dir):
+    # O mesmo painel precisa funcionar no celular (acesso remoto à Oracle).
+    page = mobile_page
+    page.goto(f"{live_server}/app")
+    expect(page.locator("#loginForm")).to_be_visible(timeout=15000)
+    expect(page.locator("#authTitle")).to_have_text("Entrar na sua mesa")
+    page.screenshot(path=str(evidence_dir / "04-login-mobile.png"))
+
+    page.fill("#loginPassword", owner_password)
+    page.get_by_role("button", name="Entrar", exact=True).click()
+    expect(page.locator("#app")).to_be_visible(timeout=15000)
+    expect(page.locator("#appStatus")).to_have_text("READY", timeout=15000)
+    page.screenshot(path=str(evidence_dir / "05-painel-mobile.png"))

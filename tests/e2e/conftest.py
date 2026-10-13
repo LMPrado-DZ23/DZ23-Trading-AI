@@ -37,26 +37,26 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
-@pytest.fixture(scope="session")
-def live_server(tmp_path_factory):
-    """Sobe o app real (uvicorn) num DATA_DIR temporário, modo Dono Único."""
+def _spawn_server(tmp_path_factory, extra_env: dict, nome: str):
+    """Sobe o app real (uvicorn) num DATA_DIR temporário e devolve (proc, url)."""
     try:
         import uvicorn  # noqa: F401
     except ImportError:
         pytest.skip("uvicorn ausente; instale o extra 'desk' para rodar a suíte E2E")
 
-    data_dir = tmp_path_factory.mktemp("dz23-e2e-data")
+    data_dir = tmp_path_factory.mktemp(nome)
     port = _free_port()
     env = os.environ.copy()
+    env.pop("ACCESS_PASSWORD", None)
     env.update(
         {
             "DATA_DIR": str(data_dir),
-            "ACCESS_PASSWORD": E2E_OWNER_PASSWORD,
             "MULTI_TENANT_ENABLED": "false",
             "PYTHONIOENCODING": "utf-8",
             "PYTHONUNBUFFERED": "1",
         }
     )
+    env.update(extra_env)
     proc = subprocess.Popen(
         [
             sys.executable,
@@ -91,13 +91,35 @@ def live_server(tmp_path_factory):
     if not up:
         proc.terminate()
         raise RuntimeError("servidor E2E não respondeu /healthz em 60s")
+    return proc, base_url
 
-    yield base_url
+
+def _stop(proc) -> None:
     proc.terminate()
     try:
         proc.wait(timeout=10)
     except subprocess.TimeoutExpired:
         proc.kill()
+
+
+@pytest.fixture(scope="session")
+def live_server(tmp_path_factory):
+    """App real com a senha vinda do ambiente (caminho legado ainda aceito),
+    como numa estação que já tinha instalação."""
+    proc, base_url = _spawn_server(
+        tmp_path_factory, {"ACCESS_PASSWORD": E2E_OWNER_PASSWORD}, "dz23-e2e-data"
+    )
+    yield base_url
+    _stop(proc)
+
+
+@pytest.fixture()
+def setup_server(tmp_path_factory):
+    """Instalação NOVA de verdade: sem senha no ambiente e sem hash salvo —
+    é o estado em que o assistente de primeira execução aparece."""
+    proc, base_url = _spawn_server(tmp_path_factory, {}, "dz23-e2e-setup")
+    yield base_url
+    _stop(proc)
 
 
 @pytest.fixture(scope="session")
@@ -124,6 +146,15 @@ def browser():
 @pytest.fixture()
 def page(browser):
     context = browser.new_context(viewport={"width": 1440, "height": 900})
+    pagina = context.new_page()
+    yield pagina
+    context.close()
+
+
+@pytest.fixture()
+def mobile_page(browser):
+    # Celular típico (iPhone 12/13): o dono acessa a Oracle Cloud pelo celular.
+    context = browser.new_context(viewport={"width": 390, "height": 844})
     pagina = context.new_page()
     yield pagina
     context.close()
