@@ -65,7 +65,7 @@ class DeskOrchestrator:
     def __init__(self, mandate: DeskMandate, traders, *, worker_id: str,
                  risk: RiskEngine | None = None, positions_provider=None,
                  memoria=None, exchange: str = "binance", analista=None,
-                 supervisor=None, conselheiro=None):
+                 supervisor=None, conselheiro=None, vigia=None):
         self.mandate = mandate
         self.traders = list(traders)
         self.worker_id = worker_id
@@ -87,6 +87,11 @@ class DeskOrchestrator:
         # Leitura quant consultiva (item 6): quando disponível e em desacordo
         # com a entrada, só REDUZ exposição — jamais aumenta ou autoriza.
         self.conselheiro = conselheiro
+        # Vigia do Piloto supervisionado (BT-3): chamável sem argumentos que
+        # devolve {agent_id: motivo} de quem NÃO pode abrir posição agora.
+        # O orquestrador só consulta e corta ENTRADAS — quem decide o estado
+        # é o SupervisorDePiloto, nunca o próprio trader.
+        self.vigia = vigia
         # Livro da mesa: quem abriu o quê, a que preço. É daqui que sai a
         # gestão de saída — sem isso a mesa só compra e nunca realiza.
         self.book: dict[str, Position] = {}
@@ -146,6 +151,28 @@ class DeskOrchestrator:
                 actionable.append(p)
             else:
                 report.abstentions.append((p.agent_id, p.instrument, p.reason))
+
+        # 3) VIGIA do Maestro: corta ENTRADAS de quem o piloto bloqueou
+        # (suspenso, expirado, revogado ou fora dos limites autorizados).
+        # Falha do vigia é fail-closed: nenhuma entrada passa sem supervisão.
+        if actionable and self.vigia is not None:
+            try:
+                bloqueados = dict(self.vigia() or {})
+            except Exception as exc:
+                report.errors.append(f"vigia: {type(exc).__name__}: {exc}")
+                bloqueados = {p.agent_id: "vigia indisponível (fail-closed)"
+                              for p in actionable if p.action is Action.BUY}
+            liberados = []
+            for p in actionable:
+                motivo = (bloqueados.get(p.agent_id)
+                          if p.action is Action.BUY else None)
+                if motivo:
+                    report.abstentions.append(
+                        (p.agent_id, p.instrument, f"Maestro/piloto: {motivo}"))
+                else:
+                    liberados.append(p)
+            actionable = liberados
+
         decision = self.allocator.arbitrate(
             actionable,
             open_positions=self.open_exposure(),

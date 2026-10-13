@@ -6,6 +6,7 @@ como interpretação opcional e NUNCA decide tamanho, risco ou autorização.
 """
 from __future__ import annotations
 
+import random
 from decimal import Decimal
 from statistics import fmean, pstdev
 from typing import TYPE_CHECKING
@@ -34,6 +35,11 @@ class BaseTrader:
     # missão e são os aprovados. Os novos nascem experimentais e só sobem a
     # habilitado com evidência estatística — nunca por existirem no código.
     homologado = False
+    # Aprendizado e rebaixamento valem para quem opera de verdade. O controle
+    # aleatório (benchmark do Batalhão) é imune aos dois: se aprendesse,
+    # deixaria de ser aleatório — e o piso de comparação morreria.
+    imune_a_rebaixamento = False
+    aplica_aprendizado = True
 
     regimes_favoraveis: tuple[Regime, ...] = ()
     # Movimento que a estratégia espera capturar (alvo). Sem isto não há como
@@ -48,6 +54,9 @@ class BaseTrader:
                  exchange: str = "binance", capital: Decimal = Decimal("1000")):
         self.exchange = exchange
         self.capital = capital
+        # Versão da estratégia: identidade do aluno na escola (estratégia ×
+        # versão). Sem guardar aqui, o desfecho registrado perderia a versão.
+        self.versao = str(version or "1")
         # Uma política, consumida por backtest e operação.
         self.exit_policy = policy_for(self.movimento_alvo)
         # A memória é COMPARTILHADA pela mesa: o que um trader aprende sobre
@@ -133,7 +142,7 @@ class BaseTrader:
         if self.regimes_favoraveis and leitura.regime not in self.regimes_favoraveis:
             return self._no(snap, f"regime {leitura.regime.value} não é o meu "
                                   f"terreno ({leitura.resumo()})")
-        if self.memoria:
+        if self.memoria and not self.imune_a_rebaixamento:
             rebaixar, motivo = self.memoria.deve_rebaixar(self.strategy)
             if rebaixar:
                 return self._no(snap, f"estratégia rebaixada pelo histórico: {motivo}")
@@ -155,7 +164,7 @@ class BaseTrader:
             return p
         conf, expo = p.confidence, p.desired_exposure_pct
         notas = [f"leitura: {leitura.resumo()}", f"força {leitura.forca:.2f}"]
-        if self.memoria:
+        if self.memoria and self.aplica_aprendizado:
             conf = self.memoria.ajuste_de_confianca(self.strategy, leitura.regime, conf)
             fator = self.memoria.fator_de_exposicao(self.strategy, leitura.regime)
             if fator < 1:
@@ -606,12 +615,58 @@ class MarketRegimeSupervisor:
         return resolved_proposals
 
 
+# Quantas entradas o sorteio concede, em média. 15% dos ciclos: o suficiente
+# para acumular amostra comparável ao longo do tempo sem inundar a mesa.
+CHANCE_ENTRADA_CONTROLE = 0.15
+
+
+class ControleAleatorio(BaseTrader):
+    """Benchmark permanente (Batalhão): entrada por sorteio determinístico.
+
+    Nunca aprende nem é rebaixado (`imune_a_rebaixamento`,
+    `aplica_aprendizado=False`): se aprendesse, deixaria de ser aleatório e
+    o piso de comparação morreria. Nasce experimental, é OPCIONAL na mesa
+    (`default_desk(incluir_controle=True)`) e só é promovido com evidência,
+    como qualquer outro trader.
+    """
+
+    strategy = "controle_aleatorio"
+    needs = 20
+    homologado = False
+    regimes_favoraveis: tuple[Regime, ...] = ()
+    fator_confirmacao: int | None = None
+    imune_a_rebaixamento = True
+    aplica_aprendizado = False
+    movimento_alvo = Decimal("0.02")
+
+    def _evaluate(self, snap: MarketSnapshot) -> TradeProposal:
+        # Sorteio determinístico por (instrumento, cutoff): o mesmo ciclo
+        # produz o mesmo veredito — reprodutível para auditoria.
+        rng = random.Random(f"{snap.instrument}|{snap.cutoff.isoformat()}")
+        if rng.random() >= CHANCE_ENTRADA_CONTROLE:
+            return self._no(snap, "controle aleatório: sem entrada neste sorteio")
+        return TradeProposal(
+            agent_id=self.spec.agent_id, strategy=self.strategy,
+            instrument=snap.instrument, action=Action.BUY,
+            reason="controle aleatório: entrada sorteada (benchmark permanente)",
+            desired_exposure_pct=Decimal("0.2"), confidence=Decimal("0.5"),
+            valid_until=default_expiry(10), snapshot_cutoff=snap.cutoff)
+
+    def _thesis_dead(self, snap: MarketSnapshot) -> str:
+        return ""
+
+
 def default_desk(universe: tuple[str, ...],
                  memoria: MemoriaDeDesempenho | None = None,
                  exchange: str = "binance",
-                 capital: Decimal = Decimal("1000")) -> list[BaseTrader]:
-    """Mesa padrão com todos os 10 traders especializados compartilhando memória."""
-    return [
+                 capital: Decimal = Decimal("1000"), *,
+                 incluir_controle: bool = False) -> list[BaseTrader]:
+    """Mesa padrão com os 10 traders especializados compartilhando memória.
+
+    O controle aleatório entra só por opção explícita (`incluir_controle`):
+    ele é o piso estatístico de comparação, não um trader a mais por padrão.
+    """
+    mesa: list[BaseTrader] = [
         TrendTrader("trader-trend", universe, memoria=memoria, exchange=exchange, capital=capital),
         MeanReversionTrader("trader-reversion", universe, memoria=memoria, exchange=exchange, capital=capital),
         BreakoutTrader("trader-breakout", universe, memoria=memoria, exchange=exchange, capital=capital),
@@ -623,3 +678,8 @@ def default_desk(universe: tuple[str, ...],
         StatisticalTrader("trader-statistical", universe, memoria=memoria, exchange=exchange, capital=capital),
         AdaptiveRegimeTrader("trader-adaptive", universe, memoria=memoria, exchange=exchange, capital=capital),
     ]
+    if incluir_controle:
+        mesa.append(ControleAleatorio("trader-controle", universe,
+                                      memoria=memoria, exchange=exchange,
+                                      capital=capital))
+    return mesa
