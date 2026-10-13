@@ -111,6 +111,7 @@ tests/test_metrics.py
 tests/test_minimax.py
 tests/test_model_validation.py
 tests/test_modelo_capital.py
+tests/test_modo_da_mesa.py
 tests/test_mt5_workers.py
 tests/test_news_analyst_prompt.py
 tests/test_news_lookahead.py

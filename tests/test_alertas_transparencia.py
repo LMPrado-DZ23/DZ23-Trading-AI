@@ -151,14 +151,23 @@ class TestMudancaDeServidor:
         m._DESKS.clear()
         return m, TestClient(m.app), {"Authorization": "Bearer s3nh4"}
 
-    def test_export_carries_everything_that_matters(self, tmp_path, monkeypatch):
+    def test_export_carries_what_matters_but_never_secrets(self, tmp_path, monkeypatch):
         m, c, h = self._app(tmp_path, monkeypatch)
-        c.post("/v1/config", headers=h, json={"vars": {"GROQ_API_KEY": "gsk-x"}})
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        c.post("/v1/config", headers=h, json={"vars": {
+            "GROQ_API_KEY": "gsk-secreta-123", "EXCHANGE_API_SECRET": "segredo-456",
+            "TRANSPARENCIA_NOME": "Mesa do Prado"}})
         c.get("/v1/desk/status", headers=h)
-        d = c.get("/v1/mudanca/exportar", headers=h).json()
-        assert d["formato"] == "dz23.mudanca/1"
-        assert d["configuracao"]["GROQ_API_KEY"] == "gsk-x"
-        assert "SEGREDOS" in d["aviso"]          # avisa o que está levando
+        r = c.get("/v1/mudanca/exportar", headers=h)
+        assert r.status_code == 200
+        assert "gsk-secreta-123" not in r.text and "segredo-456" not in r.text
+        d = r.json()
+        assert d["formato"] == "dz23.mudanca/2"
+        assert d["configuracao"]["TRANSPARENCIA_NOME"] == "Mesa do Prado"
+        assert "GROQ_API_KEY" not in d["configuracao"]
+        assert "EXCHANGE_API_SECRET" not in d["configuracao"]
+        assert set(d["segredos_omitidos"]) >= {"GROQ_API_KEY", "EXCHANGE_API_SECRET"}
+        assert "NÃO contém segredos" in d["aviso"]
 
     def test_import_restores_on_a_fresh_server(self, tmp_path, monkeypatch):
         from decimal import Decimal as D
@@ -166,6 +175,7 @@ class TestMudancaDeServidor:
         from tradingagents.desk.learning import Desfecho
         from tradingagents.desk.models import utcnow as agora
         m, c, h = self._app(tmp_path, monkeypatch)
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
         c.post("/v1/config", headers=h, json={"vars": {"GROQ_API_KEY": "gsk-antigo"}})
         c.get("/v1/desk/status", headers=h)
         mem = m._DESKS["legacy"]["memoria"]
@@ -185,11 +195,27 @@ class TestMudancaDeServidor:
         assert r.status_code == 200
         assert any("aprendizado" in x for x in r.json()["restaurado"])
         cfg = c2.get("/v1/config", headers=h).json()["config"]
-        assert cfg["GROQ_API_KEY"]["set"] is True
+        # credencial NÃO viaja no pacote: entra de novo pelo painel
+        assert cfg["GROQ_API_KEY"]["set"] is False
+        assert any("segredo" in x for x in r.json()["restaurado"])
         aprend = c2.get("/v1/desk/aprendizado", headers=h).json()
         linha = next(e for e in aprend["estrategias"]
                      if e["estrategia"] == "trend_following")
         assert linha["operacoes"] == 12          # o histórico atravessou
+
+    def test_legacy_package_secrets_are_discarded_not_restored(self, tmp_path, monkeypatch):
+        m, c, h = self._app(tmp_path, monkeypatch)
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        c.get("/v1/desk/status", headers=h)
+        r = c.post("/v1/mudanca/importar", headers=h, json={
+            "formato": "dz23.mudanca/1",
+            "configuracao": {"GROQ_API_KEY": "gsk-legado-999",
+                             "TRANSPARENCIA_NOME": "Mesa Antiga"}})
+        assert r.status_code == 200
+        cfg = c.get("/v1/config", headers=h).json()["config"]
+        assert cfg["GROQ_API_KEY"]["set"] is False          # segredo descartado
+        assert cfg["TRANSPARENCIA_NOME"]["value"] == "Mesa Antiga"
+        assert any("GROQ_API_KEY" in x for x in r.json()["restaurado"])
 
     def test_unknown_package_is_refused(self, tmp_path, monkeypatch):
         m, c, h = self._app(tmp_path, monkeypatch)

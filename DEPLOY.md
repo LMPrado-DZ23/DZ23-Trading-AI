@@ -27,13 +27,15 @@ Nunca coloque chaves em imagens Docker, repositórios ou logs. Credenciais, quan
 
 ## 3. Deployment em servidor (single-owner)
 
-O Compose inclui PostgreSQL, Redis e Qdrant além do serviço DZ23. Não existe modo multi-tenant: um dono por instalação, por construção — qualquer rota de SaaS responde 404 mesmo com flags de ambiente ligadas de propósito.
+O Compose sobe o serviço DZ23 (API + painel + mesa) com volume persistente em `/data`. PostgreSQL entra por `DATABASE_URL` apontando para um banco externo — o Compose não inclui serviços de banco/cache; Redis e Qdrant não são usados pelo produto hoje (as menções no `.env.enterprise.example` são legado). Não existe modo multi-tenant: um dono por instalação, por construção — qualquer rota de SaaS responde 404 mesmo com flags de ambiente ligadas de propósito.
 
-Quando `DATABASE_URL` está configurada, identidade e ledger de jobs usam PostgreSQL; sem ela, o SQLite permanece como fallback local. Redis e Qdrant estão declarados no Compose para filas/cache e memória vetorial. Use `.env.enterprise.example` como referência, substituindo todos os valores de exemplo.
+Quando `DATABASE_URL` está configurada, identidade e ledger de jobs usam PostgreSQL; sem ela, o SQLite permanece como fallback local. Use `.env.enterprise.example` como referência, substituindo todos os valores de exemplo.
 
 O primeiro acesso é o assistente do painel: ele cria a senha do dono e mostra o código de recuperação uma única vez. O endpoint autenticado `/v1/jobs/health` informa o backend ativo (`postgres` ou `sqlite`).
 
-Honestidade de homologação: a implantação Linux ARM64 (Oracle Cloud) está **preparada** neste repositório, mas **não homologada**. Só declare pronta depois de rodar o ciclo completo — subida, persistência, reinício, backup/restauração — em ambiente real, com evidência registrada.
+Honestidade de homologação: a implantação Linux ARM64 (Oracle Cloud) está **preparada** neste repositório, mas **não homologada**. Só declare pronta depois de rodar o ciclo completo — subida, persistência, reinício, backup/restauração — em ambiente real, com evidência registrada. Ter um Dockerfile não é homologação.
+
+**Sem autorização, não há produção.** Nada de deploy em produção nem alteração de DNS sem autorização explícita do dono. LIVE de dinheiro real continua bloqueado — este repositório não ativa operações reais por conta própria.
 
 ## 4. Validar Docker no host
 
@@ -54,7 +56,7 @@ curl http://127.0.0.1:8080/readyz
 python3 scripts/load_test.py --base-url http://127.0.0.1:8080 --requests 100 --workers 10
 ```
 
-Não exponha PostgreSQL, Redis ou Qdrant publicamente. Coloque o serviço atrás de TLS/reverse proxy, configure backup dos volumes e mantenha os secrets fora do Git.
+Não exponha o PostgreSQL (nem o próprio serviço) publicamente. Coloque o serviço atrás de TLS/reverse proxy, configure backup dos volumes e mantenha os secrets fora do Git.
 
 Para um proxy Caddy de referência, consulte [ops/Caddyfile.example](ops/Caddyfile.example). O domínio, DNS, portas 80/443, certificado e política de backup devem ser configurados pelo operador do ambiente.
 

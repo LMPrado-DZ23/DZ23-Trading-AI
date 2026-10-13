@@ -30,6 +30,7 @@ from tradingagents.agency import AgencyTask, build_llm_handler
 from tradingagents.agency.store import AgencyTaskStore
 from tradingagents.agency_runtime import AgencyRuntime
 from tradingagents.desk.models import AgentStage
+from tradingagents.desk.modo import EstadoDaMesa, ModoBloqueado
 from tradingagents.desk.storage import escrever_json_atomico
 from tradingagents.domain import (
     MarketSnapshot,
@@ -1800,6 +1801,7 @@ def _desk_boot(tenant_id: str) -> dict:
                           account=f"paper-{tenant_id}", mode=Mode.PAPER,
                           instruments=universe, capital=capital)
     from tradingagents.desk.learning import MemoriaDeDesempenho
+    from tradingagents.desk.modo import ModoDaMesa, PosseDeExecucao
     from tradingagents.desk.storage import ArmazemDeEstado
     # Servidor é descartável; o aprendizado não pode ser. Com banco externo,
     # o histórico dos agentes sobrevive à troca de máquina.
@@ -1955,10 +1957,16 @@ def _desk_boot(tenant_id: str) -> dict:
     # qualquer exposição nova (UNKNOWN => BLOCK).
     recuperacao = coord.restaurar_estado(armazem.carregar(tenant_id, "oms"))
 
+    # Modo da mesa e posse exclusiva de execução (#29, portabilidade): o
+    # dono decide o que a mesa faz; quem segura a posse é quem submete ordem.
+    modo = ModoDaMesa(armazem, tenant_id)
+    posse = PosseDeExecucao(armazem, tenant_id)
+
     desk = {"orchestrator": orch, "ledger": ledger, "coordinator": coord,
             "memoria": memoria, "armazem": armazem, "recuperacao": recuperacao,
             "guardian": PositionGuardian(coord), "cycles": [],
             "feed_kind": feed_kind, "broker_mode": broker_mode,
+            "modo": modo, "posse": posse,
             "scheduler": None, "estagios_antes": estagios_antes,
             "persistir_estagios": _persistir_estagios,
             "ia_modelo": cfg.get("TRADINGAGENTS_LLM_PROVIDER") or ""}
@@ -2007,8 +2015,50 @@ def _desk_boot(tenant_id: str) -> dict:
         orch, coord, snapshot_provider=snaps_fn, price_provider=prices_fn,
         state_path=data_dir / "state.json", on_cycle=_record,
         armazem=armazem, tenant_id=tenant_id,
-        interval_seconds=int(os.environ.get("DESK_INTERVAL_SECONDS", "300")))
+        interval_seconds=int(os.environ.get("DESK_INTERVAL_SECONDS", "300")),
+        guarda_operacao=lambda: _guarda_do_laco(modo, posse))
     return desk
+
+
+def _guarda_do_laco(modo, posse) -> tuple[str, str]:
+    """Porteiro fail-closed de cada ciclo autônomo (modo + posse).
+
+    observador: analisa sem executar; pausada/bloqueada: nada roda; ativa:
+    só executa com a posse — se outro processo (Oracle) a segura, este fica
+    em silêncio até o vencimento. Guarda quebrado NÃO libera: falha = bloquear.
+    """
+    try:
+        estado = modo.estado
+        if estado is EstadoDaMesa.OBSERVADOR:
+            return "observar", ""
+        ok, motivo = modo.pode_executar()
+        if not ok:
+            return "bloquear", motivo
+        ok, quem = posse.assumir()
+        if not ok:
+            return "bloquear", (f"posse de execução pertence a {quem} — outro "
+                                "processo está executando esta mesa")
+        return "executar", ""
+    except Exception as exc:
+        return "bloquear", f"guarda de modo/posse falhou ({type(exc).__name__})"
+
+
+def _guarda_do_pedido(d: dict) -> None:
+    """Antes de executar sob demanda: modo ativo E posse livre/desta máquina.
+
+    Observador passa daqui sem tocar na posse (quem só olha não trava a
+    execução de quem opera); quem submete ordem, assume a posse exclusiva."""
+    estado = d["modo"].estado
+    if estado is EstadoDaMesa.OBSERVADOR:
+        return                       # a rota decide o ciclo de observação
+    ok, motivo = d["modo"].pode_executar()
+    if not ok:
+        raise HTTPException(409, motivo)
+    ok, quem = d["posse"].assumir()
+    if not ok:
+        raise HTTPException(
+            409, f"posse de execução pertence a {quem} — pare o outro "
+                 "processo ou aguarde o vencimento (15 min sem renovação)")
 
 
 def _desk_of(request: Request) -> dict:
@@ -2107,6 +2157,7 @@ def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
                           "balanceado": led.is_balanced()},
         "guardiao": d["guardian"].watchlist(),
         "agendador": d["scheduler"].status(),
+        "modo": {**d["modo"].resumo(), "posse": d["posse"].resumo()},
         "durabilidade": d["armazem"].estado() if d.get("armazem") else {},
         "fonte": {"dados": d["feed_kind"], "corretora": d["broker_mode"],
                   "aviso": ("mercado real (leitura pública, cutoff na vela fechada)"
@@ -2119,6 +2170,18 @@ def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
 @app.post("/v1/desk/cycle")
 def desk_cycle(request: Request, _=Depends(auth), __=Depends(require_plan)):
     d = _desk_of(request)
+    if d["modo"].estado is EstadoDaMesa.OBSERVADOR:
+        # Observador: ciclo PURO — analisa e propõe, não submete, não grava
+        # o estado financeiro (quem executa é quem grava).
+        out = d["scheduler"].run_once(executar=False, persistir=False)
+        return {"ok": True, "modo": "observador",
+                "resumo": out.get("resumo", ""),
+                "propostas": out.get("propostas", []),
+                "ordens": [],       # explícito: nada foi enviado
+                "descartados": out.get("descartados", []),
+                "vetos": out.get("vetos", []), "abstencoes": out.get("abstencoes", []),
+                "erros": out.get("erros", [])}
+    _guarda_do_pedido(d)
     out = d["scheduler"].run_once()
     enviados, encerrados = [], []
     for o in out.get("ordens", []):
@@ -2132,10 +2195,12 @@ def desk_cycle(request: Request, _=Depends(auth), __=Depends(require_plan)):
 @app.post("/v1/desk/scheduler/{action}")
 def desk_scheduler(action: str, request: Request, _=Depends(auth), __=Depends(require_plan)):
     """Liga/desliga o laço autônomo. Ligado, roda sozinho — fechar o
-    navegador não interrompe nada. Start reconcilia ANTES de retomar."""
+    navegador não interrompe nada. Start reconcilia ANTES de retomar —
+    e respeita o modo e a posse (em observador, o laço só analisa)."""
     d = _desk_of(request)
     sched = d["scheduler"]
     if action == "start":
+        _guarda_do_pedido(d)
         recuperacao = sched.recover()
         return {"ok": True, "iniciado": sched.start(), "recuperacao": recuperacao,
                 "status": sched.status()}
@@ -2144,6 +2209,31 @@ def desk_scheduler(action: str, request: Request, _=Depends(auth), __=Depends(re
         return {"ok": True, "parada": "controlada — posições seguem sob o guardião",
                 "a_encerrar": d["orchestrator"].drain(), "status": sched.status()}
     raise HTTPException(422, "ação deve ser start ou stop")
+
+
+@app.get("/v1/desk/modo")
+def desk_modo_obter(request: Request, _=Depends(auth)):
+    """Modo da mesa + quem segura a posse de execução — visível ao dono."""
+    d = _desk_of(request)
+    return {**d["modo"].resumo(), "posse": d["posse"].resumo()}
+
+
+@app.post("/v1/desk/modo")
+async def desk_modo_definir(req: Request, _=Depends(auth),
+                            __=Depends(require_plan)):
+    """Muda o modo da mesa. Sair de BLOQUEADA exige desbloqueio explícito."""
+    body = await _json_body(req)
+    d = _desk_of(req)
+    try:
+        d["modo"].definir(str(body.get("estado") or ""),
+                          motivo=str(body.get("motivo") or ""),
+                          por="dono",
+                          desbloqueio=bool(body.get("desbloqueio")))
+    except ModoBloqueado as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {**d["modo"].resumo(), "posse": d["posse"].resumo()}
 
 
 def _trader_da_mesa(d: dict, agent_id: str):
@@ -2699,26 +2789,32 @@ def pagina_publica(tenant_id: str):
 # ===================================================== MUDANÇA DE SERVIDOR
 @app.get("/v1/mudanca/exportar")
 def exportar_tudo(request: Request, _=Depends(auth)):
-    """Exporta TUDO o que importa do inquilino, pelo navegador.
+    """Exporta tudo o que importa do inquilino, pelo navegador — SEM segredos.
 
-    Servidor provisório: isto é o que você leva embora. Inclui configuração
-    (com os segredos, porque é uma restauração), aprendizado dos agentes,
-    estado da mesa e assinatura.
+    Servidor provisório: isto é o que você leva embora. A configuração vai
+    sem chaves de IA e sem credenciais de corretora: segredo não viaja em
+    arquivo de texto simples. Ao restaurar, as credenciais são informadas
+    de novo no painel do servidor novo.
     """
     tid = request_tenant(request)
     d = _DESKS.get(tid)
     armazem = d.get("armazem") if d else None
     sub = SUBS.get(tid)
+    cfg = load_cfg(tid)
+    segredos = sorted(k for k in cfg if k in SECRETish)
+    cfg_publica = {k: v for k, v in cfg.items() if k not in SECRETish}
     pacote = {
-        "formato": "dz23.mudanca/1",
+        "formato": "dz23.mudanca/2",
         "tenant_id": tid,
         "exportado_em": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "configuracao": load_cfg(tid),
+        "configuracao": cfg_publica,
+        "segredos_omitidos": segredos,
         "aprendizado": (armazem.carregar(tid, "aprendizado") if armazem else None),
         "mesa": (armazem.carregar(tid, "mesa") if armazem else None),
         "assinatura": (sub.to_row() if sub else None),
-        "aviso": ("Este arquivo contém SEGREDOS (chaves de IA e de corretora). "
-                  "Guarde como guardaria uma senha e nunca o publique."),
+        "aviso": ("Este arquivo NÃO contém segredos: chaves de IA e de "
+                  "corretora ficam de fora, de propósito. No servidor novo, "
+                  "informe cada credencial no painel (Configuração → APIs)."),
     }
     return pacote
 
@@ -2726,9 +2822,13 @@ def exportar_tudo(request: Request, _=Depends(auth)):
 @app.post("/v1/mudanca/importar")
 async def importar_tudo(req: Request, _=Depends(auth)):
     """Restaura num servidor novo. Idempotente: importar duas vezes não
-    duplica nem corrompe."""
+    duplica nem corrompe.
+
+    Segredos NUNCA entram por aqui: pacote antigo (/1) que traga chaves tem
+    os segredos descartados e relatados — credencial se digita no painel do
+    servidor novo, nunca se restaura de arquivo."""
     pacote = await _json_body(req)
-    if pacote.get("formato") != "dz23.mudanca/1":
+    if pacote.get("formato") not in ("dz23.mudanca/1", "dz23.mudanca/2"):
         raise HTTPException(422, "formato de pacote desconhecido")
     tid = request_tenant(req)
     restaurado = []
@@ -2736,10 +2836,21 @@ async def importar_tudo(req: Request, _=Depends(auth)):
     cfg = pacote.get("configuracao") or {}
     if cfg:
         limpo = {k: v for k, v in cfg.items()
-                 if k in ALLOWED_KEYS and isinstance(v, str) and v.strip()}
+                 if k in ALLOWED_KEYS and k not in SECRETish
+                 and isinstance(v, str) and v.strip()}
+        descartados = sorted(k for k in cfg if k in SECRETish)
         if limpo:
             save_cfg({**load_cfg(tid), **limpo}, tid)
             restaurado.append(f"configuração ({len(limpo)} itens)")
+        if descartados:
+            restaurado.append(
+                f"{len(descartados)} segredo(s) descartado(s) por segurança — "
+                "informe no painel: " + ", ".join(descartados))
+    omitidos = pacote.get("segredos_omitidos") or []
+    if omitidos:
+        restaurado.append(
+            f"{len(omitidos)} segredo(s) não viajam no pacote — "
+            "informe no painel")
 
     _desk_reset(tid)
     d = _desk_of(req)

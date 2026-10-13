@@ -77,10 +77,62 @@ ainda não tem essa proteção.
 servidor)** baixa um arquivo com configuração, aprendizado, estado da mesa e
 assinatura.
 
-> ⚠️ Esse arquivo contém **segredos** (chaves de IA e de corretora). Guarde
-> como guardaria uma senha; nunca o coloque no repositório nem o envie por
-> canais públicos.
+> **O arquivo não contém segredos.** Chaves de IA e credenciais de corretora
+> ficam de fora, de propósito — credencial nunca viaja em texto simples. O
+> pacote lista os nomes omitidos em `segredos_omitidos`; guarde-o onde
+> guardaria um documento interno (nunca no repositório).
 
-No servidor novo: entre no painel e envie o arquivo em
+No servidor novo: entre no painel, envie o arquivo em
 `POST /v1/mudanca/importar` (ou use o mesmo botão quando estiver disponível
-na interface). Importar duas vezes não duplica nada.
+na interface) e **informe as credenciais de novo no painel** (Configuração →
+APIs). Importar duas vezes não duplica nada; pacote antigo (formato /1) que
+traga chaves tem os segredos descartados e relatados no import.
+
+## Modo da mesa e posse de execução
+
+O painel mostra, na aba Mesa de Agentes, o **Modo da mesa**:
+
+- **Ativa** — executa (paper/testnet; LIVE continua bloqueado).
+- **Observador** — analisa e propõe, mas não envia ordem nenhuma: você vê o
+  que ela faria sem nada sair.
+- **Pausada** — pelo dono, reversível a qualquer momento no painel.
+- **Bloqueada** — trava de segurança; sair dela exige o botão de desbloqueio
+  com confirmação.
+
+Quem executa é um processo só: a **posse de execução** é tomada pelo processo
+que roda os ciclos e renovada a cada ciclo (vence sozinha após 15 min sem
+renovação). Com a mesma `DATABASE_URL` nos dois lados, PC e servidor se
+enxergam — o segundo processo fica bloqueado com o nome do dono da posse na
+mensagem, em vez de operar em dobro.
+
+## PC → Oracle Cloud (ARM64): roteiro de mudança
+
+O PC continua sendo o ambiente principal; o Oracle é a casa de prontidão.
+Nada aqui se faz "para produção" sem autorização explícita do dono — sem
+deploy em produção e sem mexer em DNS por conta própria.
+
+1. **No PC — pare e leve tudo.** Pare a mesa (botão **Parar**) e baixe o
+   pacote no painel (**Exportar tudo**). Ele leva configuração sem segredos,
+   aprendizado, estado da mesa e assinatura. O PC fica intacto: nada é
+   apagado, e voltar a executar nele é só religar (rollback natural).
+2. **Transfira o arquivo** por um canal que você controla. É um JSON sem
+   chaves; ainda assim, trate-o como documento interno — nunca no
+   repositório. (Se já usa Postgres externo, aponte o Oracle para a MESMA
+   `DATABASE_URL`: o estado vive no banco e não há nada a importar.)
+3. **No Oracle (aarch64).** Instale Docker e suba o serviço com o
+   `docker-compose.yml` (ou só o Dockerfile, em Coolify), definindo
+   `ACCESS_PASSWORD` e o volume `/data`. Não exponha a porta direto: TLS/
+   reverse proxy na frente. Homologação do Oracle = rodar o ciclo completo
+   LÁ com evidência registrada; o Dockerfile existir não homologa nada.
+4. **No painel do servidor novo.** Primeiro acesso (o assistente cria a senha
+   do dono), importe o pacote em `POST /v1/mudanca/importar` e confira o
+   aprendizado restaurado.
+5. **Re-informe cada credencial** no painel (Configuração → APIs) — da sua
+   gestão de senhas, nunca do pacote: segredo não viaja em texto simples.
+6. **Valide antes de deixar rodando.** Confira o cartão **Modo da mesa**
+   (deve estar *Ativa* e a posse no servidor novo), rode um ciclo manual e
+   leia `/v1/desk/status`: contabilidade balanceada e nada em
+   `pendencias_reconciliacao`. Se o PC ainda estiver com a posse, espere o
+   vencimento (até 15 min) ou pare o processo dele.
+7. **Rollback.** Qualquer dúvida no servidor novo: pare-o e religue a mesa no
+   PC. O histórico do PC nunca foi apagado.

@@ -155,3 +155,67 @@ jobs:
           uv run python scripts/smoke_single_owner.py
       - name: Validate compose YAML
         run: uv run python -c "import yaml, pathlib; yaml.safe_load(pathlib.Path('docker-compose.yml').read_text())"
+
+  postgres:
+    name: postgres (posse de execução + armazém)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: dz23
+          POSTGRES_PASSWORD: dz23-ci
+          POSTGRES_DB: dz23_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dz23"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install locked project with dev extras
+        run: uv sync --locked --extra desk --extra dev
+      - name: Testes no caminho Postgres real (posse exclusiva, armazém durável)
+        env:
+          DATABASE_URL: postgresql://dz23:dz23-ci@127.0.0.1:5432/dz23_ci
+        run: uv run pytest tests/test_modo_da_mesa.py -q
+
+  arm64-deps:
+    name: ARM64 build (dependências aarch64 — NÃO é homologação Oracle)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Build linux/arm64 — valida que a árvore de dependências instala em aarch64
+        # Evidência de COMPATIBILIDADE de dependências (Oracle Cloud Ampere é
+        # aarch64). Não é homologação do Oracle: homologação exige execução
+        # real lá (ver DEPLOY.md). O Dockerfile existir não basta — por isso
+        # este job constrói a imagem de verdade.
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: false
+          load: true
+          tags: dz23-trading-ai:arm64-validacao
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Import smoke dentro da imagem ARM64 (extensões nativas)
+        run: |
+          docker run --rm -i --platform linux/arm64 dz23-trading-ai:arm64-validacao \
+            python - <<'PY'
+          import platform
+          import argon2, ccxt, fastapi, lxml, pandas, psycopg, uvicorn
+          print("arm64 import smoke OK em", platform.machine(),
+                "| pandas", pandas.__version__)
+          PY
