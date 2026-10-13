@@ -2,12 +2,13 @@
 
 - **Fase atual (V7):** integração mestre concluída; camada quant/IA e 10 traders em produção local;
   build Windows verde no CI com artefato verificado; painel homologado em navegador real (dono entra,
-  Trading Floor embutido) após corrigir 2 defeitos de produto; homologação de instalação limpa em andamento (G3/G8)
+  Trading Floor embutido) após corrigir 2 defeitos de produto; **suíte E2E Playwright versionada em `tests/e2e/`
+  (5 testes verdes em navegador real)**; homologação de instalação limpa em andamento (G3/G8)
 - **Branch:** `feat/integracao-mestre-20261012`
 - **Base:** `main` (`80e99fb`)
 - **PR:** #7
-- **HEAD:** commit C006 (sobre `e3e6239`) — batch E2E/launcher/workflow instalador
-- **UTC:** `2026-10-13T17:45:00Z`
+- **HEAD:** batch C007 (sobre `0eb40a2`) — suíte E2E Playwright + correção do lint I001
+- **UTC:** `2026-10-13T17:50:00Z`
 - **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md`; checkpoints em `TRADING-CHECKPOINTS.md` (C000–C006)
 - **LIVE:** `BLOCKED_BY_POLICY` (inalterado; nenhuma operação com dinheiro real)
 

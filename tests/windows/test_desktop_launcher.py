@@ -1,7 +1,12 @@
 import os
 from unittest.mock import patch
 
-from desktop.launcher import ensure_owner_password, owner_password_path, run_backend, wait_and_open_ui
+from desktop.launcher import (
+    ensure_owner_password,
+    owner_password_path,
+    run_backend,
+    wait_and_open_ui,
+)
 
 
 def test_desktop_launcher_loopback_configuration(tmp_path, monkeypatch):

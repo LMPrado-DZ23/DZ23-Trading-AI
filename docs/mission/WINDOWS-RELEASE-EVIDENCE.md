@@ -19,7 +19,8 @@
    - Push na branch gera **artefatos de CI** verificáveis (`DZ23-Trading-AI-Setup-v0.4.0.exe`, `.zip`, `SHA256SUMS.txt`); Release só em tag `v*` (aprovação humana).
    - **Build concluído: run `38437252278` success** (3m30s): uv sync ✓ → Inno Setup ✓ → PyInstaller ✓ → ISCC ✓ → zip+hash ✓ → upload ✓; job `publish-release` corretamente pulado.
    - Artefato `dz23-windows-x64` (157.294.923 bytes; digest CI `sha256:f40ab26db60f267e9e2f4d47042e08f1f68c331a5a899d13b4f25bb08c2f659f`); baixado localmente: Setup = 69.752.620 bytes, zip = 88.478.463 bytes.
-   - Integridade verificada manualmente: Setup `9ce9c33a…` ✓ e zip `148fee9a…` ✓ (batem com o SHA256SUMS do run). **Defeito encontrado:** o SHA256SUMS saía em tabela PowerShell com caminhos truncados (`D:\a\…`) — inverificável com `sha256sum`; workflow corrigido para formato padrão `hash  filename` (próximo build já sai correto).
+   - Integridade verificada manualmente: Setup `9ce9c33a…` ✓ e zip `148fee9a…` ✓ (batem com o SHA256SUMS do run). **Defeito encontrado:** o SHA256SUMS saía em tabela PowerShell com caminhos truncados (`D:\a\…`) — inverificável com `sha256sum`; workflow corrigido para formato padrão `hash  filename`.
+   - **Artefato do C006 (com as correções) verificado:** run `38439685378` success (somente o `build`; `publish-release` pulado como esperado). Novo artefato baixado (157.296.918 bytes): SHA256SUMS no formato certo, porém com CRLF (`Out-File`) — removendo o `\r`, `sha256sum -c` confirma Setup `3a048c6e…` OK e zip `ca9a7330…` OK. Workflow agora grava com `WriteAllText` + LF (defeito fechado de vez no C007); o artefato baixado serve para a homologação (mudança é só de empacotamento de hash).
 3. **Testes automatizados no repositório**
    - `tests/windows/test_desktop_launcher.py`, `tests/windows/test_installer_and_packaging.py` (contratos de empacotamento/launcher/workflow).
    - Contratos do painel: `tests/test_frontend_contract.py` (estrutura do `#bootstrapForm` e marcadores do modo Dono Único).
@@ -30,6 +31,7 @@
    - Defeito crítico corrigido no percurso: o formulário de tenant aparecia no modo Dono Único e o botão/token de bootstrap ficavam sempre visíveis (ver C006 em `TRADING-CHECKPOINTS.md`).
 6. **Instalador per-usuário sem UAC** (correção C006): `PrivilegesRequired=lowest` + ícone em `{userdesktop}` — o dono leigo instala sem elevação; pendente de prova no próximo artefato.
 7. **Senha do dono criada na 1ª execução** (correção C006, achado na inspeção do bundle): o launcher definia o servidor sem `ACCESS_PASSWORD` — o executável empacotado trancaria o dono (todo acesso autenticado respondia 500). Agora `ensure_owner_password()` cria a senha, salva em `%APPDATA%\DZ23-Trading-AI\owner_password.txt` e mostra em diálogo nativo; o painel abre direto em `/app`. Prova: 2 testes novos em `tests/windows/test_desktop_launcher.py`.
+8. **Suíte E2E versionada (C007):** `tests/e2e/` (Playwright + servidor uvicorn real, DATA_DIR temporário, Dono Único) — 5 testes verdes em navegador real cobrindo login do dono, menu completo (8 páginas), formulários, validação, floor embutido, governança quant/IA e contratos 4xx/401 com zero 5xx. Sem playwright no ambiente, a suíte pula explicitamente (CI Linux intacta). Screenshots: `docs/mission/evidence/e2e/01-visao-geral-dono.png`, `02-floor-embutido.png`, `03-mesa-quant.png`.
 
 ## Ainda NÃO comprovado (pendências de homologação)
 
@@ -50,4 +52,4 @@
 3. Instalar silenciosamente, verificar healthz e shortcuts, fechar, reinstalar e desinstalar preservando dados.
 4. Registrar cada item acima como PASS/FAIL com data, run id e caminhos — sem declarar homologação antes disso.
 
-*Última atualização: 2026-10-13 — commit C006 sobre `e3e6239`, branch `feat/integracao-mestre-20261012`.*
+*Última atualização: 2026-10-13 — batch C007 sobre `0eb40a2`, branch `feat/integracao-mestre-20261012`.*

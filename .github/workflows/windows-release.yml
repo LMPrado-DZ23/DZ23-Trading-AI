@@ -32,7 +32,8 @@ jobs:
           $linhas = foreach ($f in @("dist/DZ23-Trading-AI-Setup-v0.4.0.exe", "dist/DZ23-Trading-AI-windows-x64.zip")) {
             "$((Get-FileHash $f -Algorithm SHA256).Hash.ToLower())  $(Split-Path $f -Leaf)"
           }
-          $linhas | Out-File -Encoding ascii dist/SHA256SUMS.txt
+          # Grava com finais de linha LF: `sha256sum -c` no Linux/macOS falha com CRLF.
+          [System.IO.File]::WriteAllText("dist/SHA256SUMS.txt", ($linhas -join "`n"), [System.Text.UTF8Encoding]::new($false))
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
