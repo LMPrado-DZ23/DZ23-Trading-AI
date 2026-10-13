@@ -472,3 +472,32 @@ O log "Ciclos" do painel (`d["cycles"]`) é **por sessão, em memória, por desi
 ### Estado
 
 LIVE `BLOCKED_BY_POLICY` o tempo todo; **nada foi publicado** (sem tag/release — aguarda autorização explícita do dono).
+
+---
+
+## C015 — Painel sem o SaaS morto + re-homologação no bundle (item 15)
+
+- **UTC:** 2026-10-13T19:28Z–19:50Z
+- **Branch:** `feat/integracao-mestre-20261012` (code `ba3307d`; este batch documental)
+- **Artefato:** run `38456790614` (`ba3307d`) — Setup `sha256:dc5fe05a…` — **instalado sobre o anterior**; prova completa no item 15 de `WINDOWS-RELEASE-EVIDENCE.md`
+- **Motivação:** o §7 do `G2-SINGLE-OWNER-AUDIT.md` registrava o DOM do SaaS como "morto porém presente". O menu exibia ao dono duas páginas inalcançáveis ("Plano e pagamento", "Administração") — dívida de UX visível para quem usa o app.
+
+### Passos
+
+1. **Remoção real do DOM** em `service/static/index.html` (não `hide`): formulário de bootstrap, cadastro, login de inquilino, login social, página de planos/pagamento (PIX/assinatura), página de administração, campos legados e o JS correspondente (`bootstrap`, `criarConta`, `carregarProvedores`, `loadPlano`, `pagar`, `loadUsers`, …). Menu passa de 8 para **6 páginas**; portão com um único campo (senha do dono). `grep` de todos os identificadores removidos: zero ocorrências fora dos testes que pinam a ausência.
+2. **Contratos de teste convertidos para pinar a AUSÊNCIA** (o app não pode regredir com o SaaS voltando): `test_frontend_contract` (`test_the_saas_dom_is_gone_not_just_hidden`), `test_billing_woovi` (`TestPainelDePagamentoRemovido`), `test_signup` (`TestTelaDeCadastroRemovida`), `test_site_publico` (`TestLoginSocialRemovido`, campo único do portão) e `tests/e2e/test_panel_e2e.py` (6 páginas; `#loginTenant` com `to_have_count(0)`).
+3. **Suíte completa:** `2193 passed, 4 skipped, 71 subtests passed` (exit 0); **e2e Playwright: 6 passed** — inclui o teste de regressão dos 16 s no portão e "zero 5xx" navegando o menu novo.
+4. Push → CI `38456790548/38456795722/38456797773` e Windows `38456790614` — **todos verdes**.
+5. **Bundle re-homologado (item 15):** `sha256sum -c` OK; instalação sobre a existente exit 0; `healthz` na 1ª tentativa; Playwright: 16 s no portão → `ADMIN`; menu com **exatamente 6 rótulos corretos**; navegação pelas 6 páginas com título certo e **zero 5xx**; nenhum texto morto do SaaS visível; Mesa com 3 `aprovado (paper)` + 7 `experimental (paper)`; encerramento pelo botão (diálogo nativo + 200).
+6. **PAPER re-provado no artefato C015:** ciclo real pelo painel — ledger balanceado, `pendencias=[]`, fonte fixture (aviso honesto); relançar → reinício durável: OMS 2 ordens/posições, agendador `ciclos=2`, estágios 3+7 inalterados. Capturas `paper-ciclo-item14.png`/`paper-pos-restart-item14.png` atualizadas + `c015-painel-6-paginas.png`.
+7. **Docs:** item 15 em `WINDOWS-RELEASE-EVIDENCE.md`; G7 atualizado em `TRADING-GATES.md`; §7 do `G2-SINGLE-OWNER-AUDIT.md` — UI SaaS **resolvida**; nota do guia de onboarding **re-verificada e corrigida** (o `/v1/primeiros-passos` já estava limpo — a observação da auditoria estava desatualizada).
+8. **App deixado INSTALADO** na estação (estado de entrega), fechado pelo botão.
+
+### Notas de harness (não são defeito)
+
+- O harness de prova imprimia os ícones do menu e quebrou em cp1252; corrigido com `PYTHONUTF8` — o app nunca foi afetado.
+- A 1ª tentativa do modo "restart" do harness abortou com `TargetClosedError` (a janela controlada fechou) enquanto o servidor permanecia saudável (`healthz` 200); a reexecução passou integralmente. Flake de harness, registrado por honestidade.
+
+### Estado
+
+LIVE `BLOCKED_BY_POLICY` o tempo todo; **nada foi publicado** (sem tag/release — aguarda autorização explícita do dono).

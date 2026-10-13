@@ -21,12 +21,18 @@
   do Supervisor visível), ledger balanceado e `pendências=[]`; **reinício do processo restaura o estado durável do disco**
   (2 ordens do OMS, posições BTC/USDT+ETH/USDT, contador do agendador com `ultimo_ciclo` preservado, disponível
   699.70000105/1000); encerramento pelo botão nas 2 sessões. **App deixado instalado na estação (estado de entrega).**
+- **C015 — painel sem o SaaS morto + re-homologação (item 15)** (run Windows `38456790614`, artefato de `ba3307d`, item 15
+  de `WINDOWS-RELEASE-EVIDENCE.md`): o DOM morto do SaaS (planos/pagamento, administração, cadastro, bootstrap, login
+  social) foi **removido do painel** — o dono agora vê **exatamente 6 páginas**; contratos pinam a ausência; suíte completa
+  `2193 passed / 4 skipped / 71 subtests` + e2e 6/6; no bundle instalado: `sha256sum -c` OK, 16 s no portão → `ADMIN`,
+  6 páginas com título correto e **zero 5xx**, Mesa 3+7 por tier, PAPER ciclo e reinício durável re-provados. **App deixado
+  instalado (estado de entrega).**
 - **Branch:** `feat/integracao-mestre-20261012` (PR #7; M01 mergeado por fast-forward) + `feat/qoder-maestro-traders` (entrega M01)
 - **Base:** `main` (`80e99fb`)
 - **PR:** #7 (integração mestre) + branch M01 publicada
-- **HEAD:** `6c3940e` + batch C014 (docs: PAPER E2E no bundle instalado)
-- **UTC:** `2026-10-13T19:27:00Z`
-- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md` (G3 fechado; re-provado no bundle M01; PAPER E2E no bundle no item 14); checkpoints em `TRADING-CHECKPOINTS.md` (C000–C014 + M01)
+- **HEAD:** `ba3307d` + batch C015 (docs: painel sem SaaS morto, item 15)
+- **UTC:** `2026-10-13T19:51:00Z`
+- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md` (G3 fechado; re-provado nos bundles M01 e C015 — itens 13–15); checkpoints em `TRADING-CHECKPOINTS.md` (C000–C015 + M01)
 - **LIVE:** `BLOCKED_BY_POLICY` (inalterado; nenhuma operação com dinheiro real)
 
 ## Baseline Verificada e Conquistas

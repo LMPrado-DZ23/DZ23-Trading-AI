@@ -164,16 +164,21 @@ mesma recomendação se aplica, fora do escopo desta correção.)
   adversarial executada e verde.
 - Autenticação do processo forçada a dono único.
 - Portão de assinatura (402) removido da mesa.
+- **UI SaaS (DOM) removida — C015 (item 15, run `38456790614`):** os
+  formulários de cadastro/bootstrap, a tela de login de inquilino, a página
+  de planos/pagamento e o login social saíram do **DOM** (não apenas
+  `hide`). O painel do dono tem **exatamente 6 páginas** (Visão geral,
+  Configuração, Análises, Mesa de Agentes, Trading Floor, Risco); provado no
+  bundle instalado em navegador real com **zero 5xx** e a ausência pinada
+  por contrato de teste (`test_the_saas_dom_is_gone_not_just_hidden` e
+  correlatos). Evidência: `WINDOWS-RELEASE-EVIDENCE.md` item 15.
 
 **Remanescente (NÃO feito aqui — recomendado como follow-up focado):**
-- **UI SaaS (DOM):** `service/static/index.html` ainda contém formulário de
-  cadastro, tela de login de inquilino, página de planos/pagamento e botões de
-  login social. Estão **operacionalmente mortos** (todo clique recebe 404),
-  mas os elementos permanecem no DOM. Removê-los é um trabalho de frontend que
-  merece PR próprio para revisão visual, em vez de ir junto da correção de
-  segurança.
-- **Guia de onboarding** (`/v1/primeiros-passos`) ainda menciona configuração
-  de Woovi e callbacks OAuth.
+- **Guia de onboarding** (`/v1/primeiros-passos`): **re-verificado na C015 e
+  já está limpo** — é um checklist do usuário final (IA + chave, dados de
+  mercado, primeira análise, corretora de treino, ligar a mesa, backup), sem
+  menção a Woovi/checkout/callbacks OAuth. A observação anterior desta
+  auditoria estava desatualizada; nada a fazer.
 - **Armazenamento de segredos via DPAPI/Windows Credential Manager** e
   **threat model** documentado: previstos no G2 amplo, ainda pendentes.
 
