@@ -26,7 +26,11 @@ class JobStore:
 
     def _connect(self):
         if self.backend == "postgres":
-            return self._psycopg.connect(self._dsn, row_factory=self._dict_row)
+            # Sem teto, um endpoint morto pendura o import do serviço para
+            # sempre (select infinito do libpq); com teto, degrada para o
+            # banco local em segundos.
+            return self._psycopg.connect(self._dsn, row_factory=self._dict_row,
+                                         connect_timeout=5)
         conn = sqlite3.connect(self._sqlite_path, timeout=30)
         conn.row_factory = sqlite3.Row
         return conn

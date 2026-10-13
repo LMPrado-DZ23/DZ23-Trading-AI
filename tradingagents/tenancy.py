@@ -239,7 +239,8 @@ class PostgresTenantStore(TenantStore):
         self._init()
 
     def _connect(self):
-        return self._psycopg.connect(self.path, row_factory=self._dict_row)
+        return self._psycopg.connect(self.path, row_factory=self._dict_row,
+                                     connect_timeout=5)
 
     def _init(self):
         with self._connect() as c:
