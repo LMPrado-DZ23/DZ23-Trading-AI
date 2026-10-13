@@ -527,3 +527,44 @@ LIVE `BLOCKED_BY_POLICY` o tempo todo; **nada foi publicado** (sem tag/release �
 ### Estado
 
 LIVE `BLOCKED_BY_POLICY` o tempo todo; **nada foi publicado** (sem tag/release — aguarda autorização explícita do dono). A homologação no bundle Windows do novo portão de login e a re-homologação C016 (fonte de dados) ficam pendentes do artefato desta PR — sem declaração antecipada.
+
+---
+
+## C018 — Itens 16–17 homologados no bundle da integração (C016b + C017)
+
+- **UTC:** 2026-10-13T21:05Z–21:22Z
+- **Branch:** `feat/integracao-mestre-20261012` (HEAD `d8892dc` = PR #10 (C017) + PR #11 (kernel fix) + C016; este batch documental)
+- **Artefato:** run Windows `38467455263` (`d8892dc`) — Setup 69.805.469 B `sha256:24b29dc1b7e1ee9ee0328211aa9a410ce43806fde9e4a866bf4e6a16019fec37`; zip 88.540.652 B `sha256:865bb4e93e1d1f33916b133fcf5bd52cd6c0e1fafdeda54673e1b43202ed770c`; **`sha256sum -c SHA256SUMS.txt` → ambos OK direto**
+- **Motivação dupla:** (a) o defeito encontrado na 1ª homologação C016 — o **primeiro Salvar** dos padrões do painel (fixture/binance/testnet) reconstruía a mesa em instalação nova, zerando o log de ciclos; kernel fix em `service/app.py` (`_DESK_EFFECTIVE_DEFAULTS`: valores do painel que equivalem ao default efetivo não contam como mudança); (b) homologar no bundle o **portão premium do dono único** (C017) com a migração real do `owner_password.txt`.
+
+### Item 16 — Fonte de dados + kernel fix do primeiro Salvar (22/22 PASS, `HARNESS_EXIT=0`)
+
+1. **Pré-estado honesto (passo 0b):** as 3 chaves de mesa (`TRADINGAGENTS_DESK_FEED/EXCHANGE/BROKER_MODE`) saíram do `config.json` da estação (backup `config.pre-c016b.json`) para recriar a condição real de instalação nova.
+2. Instalação silenciosa exit 0 (7 s); 1ª abertura `healthz` 200; login do dono `ADMIN`.
+3. **Seletor "Fonte de dados"** na página Configuração: 2 opções — `fixture` = "Dados de treino (rotulado)", `real` = "Mercado real público (somente leitura)".
+4. Linha de base fixture: ciclo 0 → 1, ledger balanceado (1000).
+5. **Kernel fix provado:** primeiro Salvar com os padrões do painel → **ciclos 1 → 1** (a mesa não é reconstruída; antes, este era o defeito).
+6. Troca para mercado real → mesa reconstruída com aviso honesto "mercado real (leitura pública, cutoff na vela fechada)"; reconstrução zera o log de ciclos (mesa nova) — esperado.
+7. Diagnóstico do feed real: `estado=PRONTO`, BTC/USDT e ETH/USDT com **239 velas cada**, `qualidade=ok`, até a vela fechada; ciclo real **honesto**: "sem dados elegíveis" + descartados "snapshot vencido, não vira ordem".
+8. Volta para fixture: ciclo final ok; ledger balanceado (disponível 699.70); `pendencias_reconciliacao=[]`.
+9. Encerramento pelo botão: launcher exit 0; porta 8000 livre. Capturas `c016-fonte-dados.png`, `c016-feed-real.png`, `c016-mesa-real.png`, `c016-volta-fixture.png`.
+
+### Item 17 — Portão premium do dono único (24/24 PASS, `HARNESS_EXIT=0`)
+
+1. **Pré-estado real:** `owner_password.txt` presente (16 caracteres; valor nunca registrado) e `owner_credentials.json` ausente — condição real de migração.
+2. **Instância limpa (APPDATA isolado):** abre na 1ª tentativa; `setup_required=true`, `multi_tenant=false`, `live_trading=false`.
+3. **Assistente de 1ª execução:** login escondido, formulário de criação visível; **código de recuperação exibido uma única vez** (6 grupos × 5 símbolos, mascarado na evidência); botão "Abrir o painel" bloqueado até marcar "Anotei o código"; painel abre `ADMIN`; encerra pelo botão (exit 0, porta livre).
+4. **Migração real:** app do dono abre; `owner_password.txt` **removido**, `owner_credentials.json` criado (332 B) com `senha_hash` e `codigo_hash` em **Argon2id** (zero texto puro); **senha antiga continua entrando** (HTTP 200, `role=admin`); `setup_required=false`.
+5. **Portão premium:** marca "DZ23 Trading AI" + selos PAPER MODE / EXECUÇÃO GOVERNADA; **nenhum** texto morto do SaaS visível; senha errada → "Senha incorreta. Confira e tente de novo — maiúsculas e acentos contam."; "Esqueci minha senha" abre a recuperação e "Voltar ao login" retorna.
+6. Sessão abre com `ADMIN` e **exatamente 6 páginas** (Visão geral, Configuração, Análises, Mesa de Agentes, Trading Floor, Risco); botão "Fechar aplicativo" visível; encerramento pelo botão exit 0, porta livre. Capturas `c017-wizard-codigo.png`, `c017-portao-premium.png`, `c017-painel-apos-migracao.png`.
+
+### Notas de harness (não são defeito do app)
+
+- **Transitório de 1ª execução pós-instalação:** a 1ª execução do harness do item 17 (18:07) falhou no passo 2 — a instância limpa criou os DBs (~2 s) mas nunca respondeu `healthz` em 90 s; **não reproduzível** (reprodução manual com captura de stderr subiu na 1ª tentativa em ~1,5 s; mesmo precedente do C016 run #1). O harness ganhou captura stdout/stderr por tentativa + **uma** retentativa registrada; na execução final (18:16) os passos 2 e 3 passaram na 1ª tentativa (`tentativas: {step2_fresh: 1, step3_dono: 1}`).
+- O harness do item 17 tropeçou ao clicar em "Esqueci minha senha" com a sessão já aberta (o link vive no formulário de login, invisível no painel) — reordenado para o portão.
+- O harness do item 16 quebrou ao ler `tasklist` (cp850) sob `PYTHONUTF8` — corrigido capturando bytes e decodificando `utf-8/replace`.
+- CI da branch de integração em `d8892dc` verde: runs `38467455094`/`38467466557` (CI) + `38467455263` (Windows). PR #10 (`2347270`) e PR #11 (`5578497`) mergeados com CI verde (`38463073919`/`38463092060`/`38463588336`/`38463593735`/`38467042208`).
+
+### Estado
+
+LIVE `BLOCKED_BY_POLICY` o tempo todo; **nada foi publicado** (sem tag/release — aguarda autorização explícita do dono). App deixado **instalado** na estação (estado de entrega), com `owner_credentials.json` (Argon2id) e sem `owner_password.txt`.
