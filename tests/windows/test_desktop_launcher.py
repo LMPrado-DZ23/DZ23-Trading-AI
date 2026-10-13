@@ -4,8 +4,9 @@ from unittest.mock import patch
 from desktop.launcher import (
     _port_in_use,
     _wait_for_existing_instance,
-    ensure_owner_password,
     main,
+    migrate_legacy_owner_password,
+    owner_credentials_path,
     owner_password_path,
     run_backend,
     wait_and_open_ui,
@@ -119,38 +120,77 @@ def test_main_opens_existing_instance_without_starting_backend():
     # Instância duplicada: se já há um DZ23 servindo o loopback, apenas abre
     # o painel — sem segunda travinha de senha e sem disputar a porta 8000.
     with patch("desktop.launcher._healthz_ok", return_value=True) as mock_health, \
-            patch("desktop.launcher.ensure_owner_password") as mock_pwd, \
+            patch("desktop.launcher.migrate_legacy_owner_password") as mock_migrar, \
             patch("desktop.launcher.run_backend") as mock_backend, \
             patch("webbrowser.open") as mock_browser:
         main()
         mock_health.assert_called_once()
         mock_browser.assert_called_once_with("http://127.0.0.1:8000/app")
-        mock_pwd.assert_not_called()
+        mock_migrar.assert_not_called()
         mock_backend.assert_not_called()
 
 
-def test_owner_password_created_on_first_run_and_persisted(tmp_path, monkeypatch):
+def test_senha_legada_migra_para_hash_sem_perder_acesso(tmp_path, monkeypatch):
+    # A senha do dono estava em texto puro num txt. A migração cria o hash com
+    # a MESMA senha (o dono continua entrando com o que já sabia) e apaga o
+    # texto puro do disco — o arquivo antigo não pode sobrar para trás.
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.delenv("ACCESS_PASSWORD", raising=False)
+    texto = owner_password_path()
+    texto.parent.mkdir(parents=True, exist_ok=True)
+    texto.write_text("senha-antiga-do-dono", encoding="utf-8")
+
+    migrate_legacy_owner_password()
+
+    from service.api.owner_credentials import CredenciaisDoDono
+    credenciais = CredenciaisDoDono(owner_credentials_path())
+    assert credenciais.verificar_senha("senha-antiga-do-dono") is True
+    assert not texto.exists()
+    conteudo = owner_credentials_path().read_text(encoding="utf-8")
+    assert "$argon2id$" in conteudo
+    assert "senha-antiga-do-dono" not in conteudo
+
+
+def test_migracao_repetida_nao_mexe_no_hash_e_limpa_txt_orfao(tmp_path, monkeypatch):
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.delenv("ACCESS_PASSWORD", raising=False)
+    from service.api.owner_credentials import CredenciaisDoDono
+    credenciais = CredenciaisDoDono(owner_credentials_path())
+    credenciais.criar("senha-do-dono-2026")
+    antes = owner_credentials_path().read_text(encoding="utf-8")
+    orfao = owner_password_path()
+    orfao.parent.mkdir(parents=True, exist_ok=True)
+    orfao.write_text("um-txt-que-sobrou", encoding="utf-8")
+
+    migrate_legacy_owner_password()
+
+    assert owner_credentials_path().read_text(encoding="utf-8") == antes
+    assert not orfao.exists()  # txt órfão não fica no disco
+    assert credenciais.verificar_senha("senha-do-dono-2026") is True
+
+
+def test_migracao_nao_toca_nada_quando_o_ambiente_define_a_senha(tmp_path, monkeypatch):
+    # Modo explícito (dev/teste): ACCESS_PASSWORD manda; nada é migrado.
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.setenv("ACCESS_PASSWORD", "senha-via-ambiente")
+    texto = owner_password_path()
+    texto.parent.mkdir(parents=True, exist_ok=True)
+    texto.write_text("nao-mexer", encoding="utf-8")
+
+    migrate_legacy_owner_password()
+
+    assert texto.exists()
+    assert not owner_credentials_path().exists()
+
+
+def test_primeira_execucao_sem_senha_nao_cria_nada_aqui(tmp_path, monkeypatch):
+    # Sem txt legado: quem cria as credenciais é o assistente no navegador.
     monkeypatch.setenv("APPDATA", str(tmp_path))
     monkeypatch.delenv("ACCESS_PASSWORD", raising=False)
 
-    notificacoes = []
-    senha = ensure_owner_password(notify=lambda pw, path: notificacoes.append((pw, path)))
+    migrate_legacy_owner_password()
 
-    assert senha and len(senha) >= 12
-    assert os.environ["ACCESS_PASSWORD"] == senha
-    assert owner_password_path().read_text(encoding="utf-8").strip() == senha
-    assert len(notificacoes) == 1 and notificacoes[0][0] == senha
-
-    monkeypatch.delenv("ACCESS_PASSWORD")
-    senha2 = ensure_owner_password(notify=lambda pw, path: notificacoes.append((pw, path)))
-    assert senha2 == senha
-    assert len(notificacoes) == 1  # sem novo diálogo nas execuções seguintes
-
-
-def test_owner_password_env_wins_without_touching_file(tmp_path, monkeypatch):
-    monkeypatch.setenv("APPDATA", str(tmp_path))
-    monkeypatch.setenv("ACCESS_PASSWORD", "s3nh4-do-dono")
-    assert ensure_owner_password() == "s3nh4-do-dono"
+    assert not owner_credentials_path().exists()
     assert not owner_password_path().exists()
 
 
@@ -176,13 +216,13 @@ def test_port_busy_by_foreign_program_shows_dialog_without_starting_backend():
             patch("desktop.launcher._port_in_use", return_value=True), \
             patch("desktop.launcher._wait_for_existing_instance", return_value=False), \
             patch("desktop.launcher.show_port_busy_dialog") as mock_dialog, \
-            patch("desktop.launcher.ensure_owner_password") as mock_pwd, \
+            patch("desktop.launcher.migrate_legacy_owner_password") as mock_migrar, \
             patch("desktop.launcher.run_backend") as mock_backend, \
             patch("webbrowser.open") as mock_browser:
         main()
         mock_dialog.assert_called_once_with(8000)
         mock_browser.assert_not_called()
-        mock_pwd.assert_not_called()
+        mock_migrar.assert_not_called()
         mock_backend.assert_not_called()
 
 
@@ -232,7 +272,7 @@ def test_backend_death_during_startup_is_reported_not_hidden():
     with patch("desktop.launcher._healthz_ok", return_value=False), \
             patch("desktop.launcher._port_in_use", return_value=False), \
             patch("desktop.launcher.threading.Thread", _DeadThread), \
-            patch("desktop.launcher.ensure_owner_password"), \
+            patch("desktop.launcher.migrate_legacy_owner_password"), \
             patch("desktop.launcher.wait_and_open_ui", return_value=False), \
             patch("desktop.launcher.show_startup_failed_dialog") as mock_dialog, \
             patch("webbrowser.open") as mock_browser:

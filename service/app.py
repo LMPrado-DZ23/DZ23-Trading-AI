@@ -25,6 +25,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from service.api import diagnostics, security_center
+from service.api.owner_credentials import CredenciaisDoDono, erro_de_senha
 from tradingagents.agency import AgencyTask, build_llm_handler
 from tradingagents.agency.store import AgencyTaskStore
 from tradingagents.agency_runtime import AgencyRuntime
@@ -85,6 +86,10 @@ if DATABASE_URL and not os.environ.get("DATABASE_URL"):
 
 JOB_STORE = _build_job_store()
 PASSWORD = os.environ.get("ACCESS_PASSWORD", "")
+# Credenciais do dono com hash Argon2id (owner_credentials.json no DATA_DIR).
+# Quando o arquivo existe ele VENCE o ambiente: o segredo verificado está no
+# disco como hash, nunca em texto puro — o env é só o caminho legado (dev).
+OWNER_CREDENTIALS = CredenciaisDoDono(DATA / "owner_credentials.json")
 MULTI_TENANT_REQUESTED = os.environ.get("MULTI_TENANT_ENABLED", "false").lower() == "true"
 MULTI_TENANT_ENABLED = MULTI_TENANT_REQUESTED
 
@@ -335,8 +340,6 @@ def auth(request: Request, c: HTTPAuthorizationCredentials = Depends(bearer)):
             raise HTTPException(403, f"papel {principal.role} não possui a permissão {permission}")
         request.state.principal = principal
         return principal
-    if not PASSWORD:
-        raise HTTPException(500, "defina ACCESS_PASSWORD no ambiente")
     # Requisição anônima (ex.: página abrindo antes do login) NÃO conta como
     # tentativa de senha; só credencial ERRADA alimenta a trava de força-bruta.
     if not c or not c.credentials:
@@ -348,7 +351,15 @@ def auth(request: Request, c: HTTPAuthorizationCredentials = Depends(bearer)):
         if wait > 0:
             raise HTTPException(429, f"muitas tentativas erradas — espera {wait // 60 + 1} min")
         _FAILS.pop(ip, None)
-    if not c or not hmac.compare_digest(c.credentials, PASSWORD):
+    if OWNER_CREDENTIALS.existe():
+        ok = OWNER_CREDENTIALS.verificar_senha(c.credentials)
+    elif PASSWORD:
+        ok = hmac.compare_digest(c.credentials, PASSWORD)
+    else:
+        # Nada configurado ainda: não é senha errada, é primeira execução.
+        # O painel usa este 409 para abrir o assistente de configuração.
+        raise HTTPException(409, "primeira configuração pendente — crie a senha do dono no painel")
+    if not ok:
         r = _FAILS.setdefault(ip, {"n": 0, "until": 0})
         r["n"] += 1
         r["until"] = time.time() + LOCK_SECONDS
@@ -410,7 +421,66 @@ def auth_status():
         "multi_tenant": MULTI_TENANT_ENABLED,
         "bootstrap_required": bool(MULTI_TENANT_ENABLED and TENANT_STORE and TENANT_STORE.tenant_count() == 0),
         "live_trading": False,
+        # Primeira execução (nenhuma senha criada): o painel abre o assistente.
+        "setup_required": (not OWNER_CREDENTIALS.existe()) and not PASSWORD,
     }
+
+
+_SETUP_LOCK = threading.Lock()
+
+
+@app.post("/v1/auth/setup")
+async def owner_setup(req: Request):
+    """Assistente de primeira execução: cria a senha do dono e devolve o
+    código de recuperação UMA única vez. Só existe enquanto não há senha."""
+    body = await _json_body(req)
+    senha = str(body.get("senha", ""))
+    erro = erro_de_senha(senha)
+    if erro:
+        raise HTTPException(422, erro)
+    with _SETUP_LOCK:
+        if PASSWORD or OWNER_CREDENTIALS.existe():
+            raise HTTPException(409, "senha do dono já configurada")
+        codigo = OWNER_CREDENTIALS.criar(senha)
+    return {"ok": True, "codigo_recuperacao": codigo}
+
+
+@app.post("/v1/auth/recover")
+async def owner_recover(req: Request):
+    """Recuperação pelo código: troca a senha e devolve código NOVO (o antigo
+    morre no uso). Mesma trava de força-bruta do login."""
+    if not OWNER_CREDENTIALS.existe():
+        raise HTTPException(409, "senha do dono ainda não configurada")
+    body = await _json_body(req)
+    ip = _client_ip(req)
+    rec = _FAILS.get(ip)
+    if rec and rec["n"] >= MAX_FAILS:
+        wait = int(rec["until"] - time.time())
+        if wait > 0:
+            raise HTTPException(429, f"muitas tentativas erradas — espera {wait // 60 + 1} min")
+        _FAILS.pop(ip, None)
+    try:
+        novo = OWNER_CREDENTIALS.usar_codigo_de_recuperacao(
+            str(body.get("codigo", "")), str(body.get("nova_senha", "")))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    if not novo:
+        r = _FAILS.setdefault(ip, {"n": 0, "until": 0})
+        r["n"] += 1
+        r["until"] = time.time() + LOCK_SECONDS
+        raise HTTPException(401, "código de recuperação incorreto")
+    _FAILS.pop(ip, None)
+    return {"ok": True, "codigo_recuperacao": novo}
+
+
+@app.post("/v1/auth/recovery-code")
+async def owner_new_recovery_code(_=Depends(auth)):
+    """Código de recuperação novo para a sessão autenticada (ex.: dono migrado
+    do formato antigo nunca viu um código, ou perdeu o papel anotado)."""
+    novo = OWNER_CREDENTIALS.rotacionar_codigo()
+    if not novo:
+        raise HTTPException(409, "credenciais de arquivo não configuradas")
+    return {"ok": True, "codigo_recuperacao": novo}
 
 
 @app.get("/v1/auth/me")

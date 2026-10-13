@@ -60,6 +60,24 @@ def test_owner_mode_login_contract():
     assert "Entrar na sua mesa" in html
 
 
+def test_identidade_premium_do_login_do_dono():
+    # O login deixou de parecer página de SaaS: identidade DZ23 Trading AI
+    # (sem AGENCY), sem instrução para ler owner_password.txt, assistente
+    # de primeira execução, código de recuperação exibido uma vez e
+    # feedback acessível (aria-live).
+    html = (ROOT / "service/static/index.html").read_text(encoding="utf-8")
+    assert "DZ23 AGENCY" not in html
+    assert "DZ23 Trading AI" in html
+    assert "owner_password.txt" not in html
+    assert 'id="setupForm"' in html
+    assert "Primeira configuração" in html
+    assert 'id="recoverForm"' in html
+    assert "Esqueci minha senha" in html
+    assert 'id="codigoForm"' in html
+    assert "código de recuperação" in html
+    assert 'aria-live="polite"' in html
+
+
 def test_trading_floor_reuses_multitenant_session():
     html = (ROOT / "service/static/floor.html").read_text(encoding="utf-8")
     assert "sessionStorage.getItem('dz23_token')" in html

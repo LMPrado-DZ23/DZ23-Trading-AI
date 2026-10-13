@@ -5,7 +5,6 @@ DZ23 Trading AI — Windows Native Launcher & Local Server Supervisor
 import ctypes
 import logging
 import os
-import secrets
 import socket
 import threading
 import time
@@ -22,40 +21,57 @@ logging.basicConfig(
 logger = logging.getLogger("dz23.desktop")
 
 
+def owner_data_dir() -> Path:
+    return Path(os.environ.get("APPDATA", ".")) / "DZ23-Trading-AI"
+
+
 def owner_password_path() -> Path:
-    return Path(os.environ.get("APPDATA", ".")) / "DZ23-Trading-AI" / "owner_password.txt"
+    """Local do ANTIGO owner_password.txt — só a migração toca neste arquivo."""
+    return owner_data_dir() / "owner_password.txt"
 
 
-def ensure_owner_password(notify=None) -> str:
-    """Garante ACCESS_PASSWORD definido: do ambiente, do arquivo do dono ou criado na 1ª execução."""
+def owner_credentials_path() -> Path:
+    return owner_data_dir() / "owner_credentials.json"
+
+
+def migrate_legacy_owner_password() -> None:
+    """Migra a senha legada em texto puro para hash Argon2id, sem perder acesso.
+
+    - ACCESS_PASSWORD no ambiente: modo explícito (dev/teste) — não mexe em nada.
+    - owner_credentials.json em uso: apaga só o txt órfão, se houver.
+    - owner_password.txt presente: cria o hash com a MESMA senha (o dono
+      continua entrando com o que já sabia), gera código de recuperação e
+      apaga o texto puro do disco.
+
+    Silencioso de propósito: o assistente de primeira execução vive no
+    navegador; um diálogo bloqueante aqui quebraria a automação e o próprio
+    fluxo de encerramento limpo do app empacotado.
+    """
     if os.environ.get("ACCESS_PASSWORD"):
-        return os.environ["ACCESS_PASSWORD"]
-    path = owner_password_path()
-    if path.exists():
-        saved = path.read_text(encoding="utf-8").strip()
-        if saved:
-            os.environ["ACCESS_PASSWORD"] = saved
-            return saved
-    password = secrets.token_urlsafe(12)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(password, encoding="utf-8")
-    os.environ["ACCESS_PASSWORD"] = password
-    if notify:
-        notify(password, path)
-    return password
+        return
+    from service.api.owner_credentials import CredenciaisDoDono
 
-
-def show_first_run_dialog(password: str, path: Path) -> None:
+    credenciais = CredenciaisDoDono(owner_credentials_path())
+    texto_puro = owner_password_path()
+    if credenciais.existe():
+        texto_puro.unlink(missing_ok=True)
+        return
+    if not texto_puro.exists():
+        return
+    senha = texto_puro.read_text(encoding="utf-8").strip()
+    if not senha:
+        texto_puro.unlink(missing_ok=True)
+        return
     try:
-        ctypes.windll.user32.MessageBoxW(
-            None,
-            f"Sua senha de acesso ao painel foi criada:\n\n{password}\n\n"
-            f"Ela foi salva em:\n{path}\n\nGuarde esta senha.",
-            "DZ23 Trading AI — primeira execução",
-            0x40,
-        )
+        credenciais.criar(senha)
     except Exception:
-        logger.warning("Senha do dono criada em %s (sem diálogo disponível)", path)
+        # Migração que falha não pode trancar o dono fora: mantém o txt e o
+        # caminho legado (ACCESS_PASSWORD) funcionando até a próxima execução.
+        logger.exception("migração da senha legada falhou; mantendo owner_password.txt")
+        os.environ["ACCESS_PASSWORD"] = senha
+        return
+    texto_puro.unlink(missing_ok=True)
+    logger.info("senha legada migrada para hash Argon2id em %s", owner_credentials_path())
 
 
 def run_backend(host: str = "127.0.0.1", port: int = 8000):
@@ -64,8 +80,8 @@ def run_backend(host: str = "127.0.0.1", port: int = 8000):
     os.environ["PORT"] = str(port)
     os.environ["MULTI_TENANT_ENABLED"] = "false"
 
-    # Ensure data directory exists
-    user_data = Path(os.environ.get("APPDATA", ".")) / "DZ23-Trading-AI"
+    # Ensure data directory exists (a MESMA pasta que a migração de senha usa)
+    user_data = owner_data_dir()
     user_data.mkdir(parents=True, exist_ok=True)
     os.environ["DATA_DIR"] = str(user_data)
 
@@ -182,9 +198,11 @@ def main():
         show_port_busy_dialog(port)
         return
 
-    # Dono Único: senha criada na 1ª execução (mostrada no diálogo) — o painel
-    # não abre sessão sem ela; sem isso o app empacotado nega todo acesso.
-    ensure_owner_password(notify=show_first_run_dialog)
+    # Dono Único: senha legada em texto puro vira hash Argon2id (a MESMA senha
+    # continua valendo) e o texto puro sai do disco. Primeira execução sem
+    # senha nenhuma: o assistente no navegador cria — o launcher não deve
+    # bloquear em diálogo (automação e encerramento limpo dependem disso).
+    migrate_legacy_owner_password()
 
     # Run uvicorn in a daemon thread
     backend_thread = threading.Thread(
