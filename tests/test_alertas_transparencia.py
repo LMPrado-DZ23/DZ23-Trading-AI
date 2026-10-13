@@ -132,10 +132,12 @@ class TestNoServico:
     def test_public_page_never_leaks_account_data(self, tmp_path, monkeypatch):
         m, c, h = self._app(tmp_path, monkeypatch)
         c.post("/v1/config", headers=h, json={"vars": {
-            "TRANSPARENCIA_PUBLICA": "true", "EXCHANGE_API_KEY": "chave-secreta-xyz",
-            "GROQ_API_KEY": "gsk-secreta"}})
+            "TRANSPARENCIA_PUBLICA": "true",
+            "EXCHANGE_API_KEY": "chave-teste-0000000000",
+            "GROQ_API_KEY": "gsk-teste-0000000000"}})
         texto = c.get("/publico/legacy").text
-        assert "chave-secreta-xyz" not in texto and "gsk-secreta" not in texto
+        assert "chave-teste-0000000000" not in texto
+        assert "gsk-teste-0000000000" not in texto
         assert "saldo" not in texto.lower().split("o_que_nao_mostramos")[0]
 
 
@@ -155,12 +157,14 @@ class TestMudancaDeServidor:
         m, c, h = self._app(tmp_path, monkeypatch)
         monkeypatch.delenv("GROQ_API_KEY", raising=False)
         c.post("/v1/config", headers=h, json={"vars": {
-            "GROQ_API_KEY": "gsk-secreta-123", "EXCHANGE_API_SECRET": "segredo-456",
+            "GROQ_API_KEY": "gsk-teste-0000000001",
+            "EXCHANGE_API_SECRET": "segredo-teste-0000000000",
             "TRANSPARENCIA_NOME": "Mesa do Prado"}})
         c.get("/v1/desk/status", headers=h)
         r = c.get("/v1/mudanca/exportar", headers=h)
         assert r.status_code == 200
-        assert "gsk-secreta-123" not in r.text and "segredo-456" not in r.text
+        assert "gsk-teste-0000000001" not in r.text
+        assert "segredo-teste-0000000000" not in r.text
         d = r.json()
         assert d["formato"] == "dz23.mudanca/2"
         assert d["configuracao"]["TRANSPARENCIA_NOME"] == "Mesa do Prado"
@@ -176,7 +180,7 @@ class TestMudancaDeServidor:
         from tradingagents.desk.models import utcnow as agora
         m, c, h = self._app(tmp_path, monkeypatch)
         monkeypatch.delenv("GROQ_API_KEY", raising=False)
-        c.post("/v1/config", headers=h, json={"vars": {"GROQ_API_KEY": "gsk-antigo"}})
+        c.post("/v1/config", headers=h, json={"vars": {"GROQ_API_KEY": "gsk-teste-0000000002"}})
         c.get("/v1/desk/status", headers=h)
         mem = m._DESKS["legacy"]["memoria"]
         for _ in range(12):
@@ -209,7 +213,7 @@ class TestMudancaDeServidor:
         c.get("/v1/desk/status", headers=h)
         r = c.post("/v1/mudanca/importar", headers=h, json={
             "formato": "dz23.mudanca/1",
-            "configuracao": {"GROQ_API_KEY": "gsk-legado-999",
+            "configuracao": {"GROQ_API_KEY": "gsk-teste-0000000003",
                              "TRANSPARENCIA_NOME": "Mesa Antiga"}})
         assert r.status_code == 200
         cfg = c.get("/v1/config", headers=h).json()["config"]
