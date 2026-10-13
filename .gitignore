@@ -14,6 +14,8 @@ eval_results/
 .venv/
 dist/
 build/
+dist-diag/
+build-diag/
 *.pem
 *.key
 *.p12
