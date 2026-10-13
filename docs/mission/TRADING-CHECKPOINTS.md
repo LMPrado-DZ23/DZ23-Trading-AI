@@ -421,3 +421,27 @@ Fechado (`PASS`) com este artefato. Ressalvas honestas mantidas: sleep/wake, off
 
 Trader → Supervisor → risco → executor (nenhum atalho); frequência de operações intocada; sem promoção sem evidência; IA só por APIs externas e apenas como contexto (veta/reduz; nunca autoriza); **LIVE bloqueado** durante toda a missão.
 
+
+---
+
+## C013 — Homologação do bundle da ENTREGA M01 na branch de integração (item 13)
+
+- **UTC:** 2026-10-13T19:14Z–19:21Z
+- **Branch:** `feat/integracao-mestre-20261012` — fast-forward `0c3fc26..d6491ab` (M01) e push (runs CI `38453302349`/`38453307482` e Windows `38453302293`, todos success)
+- **Artefato:** `dz23-windows-x64` (157.319.893 B); Setup 69.765.446 B `sha256:bed915cf…`; zip 88.490.105 B `sha256:fdb8d10a…`
+- **Resultado:** ciclo completo verde no bundle da entrega — detalhamento no item 13 de `WINDOWS-RELEASE-EVIDENCE.md`
+
+### Passos
+
+1. `sha256sum -c SHA256SUMS.txt` **direto** no diretório baixado: Setup OK, zip OK.
+2. Instalação silenciosa sem elevação: exit 0; instalação limpa (pasta do programa não existia).
+3. 1ª abertura: `healthz` 200 na 1ª tentativa; `/readyz` READY/PAPER; `kill_switch=false`.
+4. Playwright no bundle: **16 s** de espera no portão → senha do dono → badge `ADMIN`.
+5. **Mesa de Agentes no bundle instalado:** "Traders (10 perfis)" com exatamente 10 linhas — 3 homologados `aprovado (paper)` (trend/reversion/breakout), 7 experimentais `experimental (paper)` (scalping/swing/momentum/volatility/arbitrage/statistical/adaptive). Captura `mesa-m01-item13.png`.
+6. Encerramento pelo botão "Fechar aplicativo": confirm nativo aceito → `POST /v1/app/quit 200` → **launcher exit 0 sozinho** → porta livre. Captura `encerrado-m01-item13.png`.
+7. Reinstalação: exit 0; mtimes de `agency.db`/`jobs.db`/`subscriptions.db`/`owner_password.txt` byte a byte idênticos.
+8. Desinstalação: exit 0; pasta do programa removida; `%APPDATA%` intacto (mtimes idênticos).
+
+### Nota
+
+Suíte completa re-executada na branch de integração pós-merge: **`2196 passed, 5 skipped, 71 subtests passed in 190.62s`, exit 0**. O gate de evidência do M01 foi provado no bundle: nenhum trader experimental operou; o dono vê o motivo e as ações por trader. LIVE `BLOCKED_BY_POLICY` o tempo todo; **nada foi publicado** (sem tag/release — aguarda autorização explícita).

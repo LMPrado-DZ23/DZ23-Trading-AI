@@ -5,7 +5,7 @@
 - **Release Version (alvo):** `v0.4.0-windows-local`
 - **Target OS:** Windows 10/11 x64 (nativo, loopback, Dono Único)
 - **Modo:** Executável empacotado (PyInstaller) + Instalador Inno Setup; sem SaaS/Cloud; sem Python no PC do usuário
-- **Status:** `PASS` — **ciclo final de homologação executado no ARTEFATO FINAL** (run `38450504893`, bundle do merge `0c3fc26` com C008+C009+C010): instalar → abrir sem timeout falso → login do dono após 16 s no portão → **encerrar pelo botão "Fechar aplicativo"** (shutdown gracioso, launcher exit 0 sozinho, porta livre) → **intruso real na 8000 → diálogo nativo de porta ocupada → WM_CLOSE → exit limpo** → reinstalar (dados byte a byte idênticos) → desinstalar (dados preservados). Ressalvas honestas: sleep/wake, offline/reconexão e crash não exercitados nesta estação; assinatura de código `BLOCKED_BY_EXTERNAL_DEPENDENCY` (sem certificado).
+- **Status:** `PASS` — **ciclo final de homologação executado no ARTEFATO FINAL** (run `38450504893`, bundle do merge `0c3fc26` com C008+C009+C010): instalar → abrir sem timeout falso → login do dono após 16 s no portão → **encerrar pelo botão "Fechar aplicativo"** (shutdown gracioso, launcher exit 0 sozinho, porta livre) → **intruso real na 8000 → diálogo nativo de porta ocupada → WM_CLOSE → exit limpo** → reinstalar (dados byte a byte idênticos) → desinstalar (dados preservados). **Re-provado no BUNDLE DA ENTREGA M01** (run `38453302293`, push de `d6491ab`): mesmo ciclo verde + o painel **"Mesa de Agentes" com os 10 traders por tier de evidência** renderizado ao dono no bundle instalado (3 homologados → "aprovado (paper)"; 7 experimentais → "experimental (paper)") — item 13. Ressalvas honestas: sleep/wake, offline/reconexão e crash não exercitados nesta estação; assinatura de código `BLOCKED_BY_EXTERNAL_DEPENDENCY` (sem certificado).
   - Correção V7: a versão anterior deste documento declarava `PASS` citando testes unitários e CI Linux.
     Isso é **insuficiente** (CI Linux não prova instalador Windows) — status corrigido; o PASS atual só cita o ciclo real no laptop do dono.
 
@@ -87,6 +87,21 @@
 
    **Nota de execução (harness, não defeito do app):** o Playwright por padrão auto-dispensa `confirm()` — o clique no botão só completou após aceitar o diálogo de confirmação do navegador; o app pergunta ao dono antes de encerrar (comportamento desejado).
 
+13. **HOMOLOGAÇÃO DO BUNDLE DA ENTREGA M01 — run `38453302293`** (push de `d6491ab`: M01 mergeado por fast-forward na branch de integração). Artefato `dz23-windows-x64` (157.319.893 B); Setup 69.765.446 B `sha256:bed915cf…`; zip 88.490.105 B `sha256:fdb8d10a…`; **`sha256sum -c SHA256SUMS.txt` → ambos OK direto** (formato LF mantido). Ciclo executado na estação Windows 11 com o binário baixado do CI:
+
+   | # | Passo | Resultado | Evidência |
+   |---|-------|-----------|-----------|
+   | 1 | Integridade dos artefatos | **PASS** | `sha256sum -c` direto no diretório baixado: Setup `bed915cf…` OK, zip `fdb8d10a…` OK |
+   | 2 | Instalação silenciosa sem elevação | **PASS** (exit 0) | instalação limpa (pasta do programa não existia); exe + `_internal` + `unins000` em `{localappdata}\DZ23-Trading-AI` |
+   | 3 | 1ª abertura | **PASS** | `healthz` 200 na 1ª tentativa; `/readyz` `READY`/`PAPER`, `kill_switch=false` |
+   | 4 | Playwright no bundle: portão do dono com **16 s** de espera | **PASS** | espera 16 s → senha do dono → badge `ADMIN` (trava 429 morta também no bundle M01) |
+   | 5 | Playwright: painel **"Mesa de Agentes"** com os 10 traders por evidência | **PASS** | "Traders (10 perfis)" com **exatamente 10 linhas**: 3 homologados → **"aprovado (paper)"** (trend/reversion/breakout) e 7 experimentais → **"experimental (paper)"** (scalping/swing/momentum/volatility/arbitrage/statistical/adaptive) — o tier vem do mandato (habilitação só por evidência). Captura: `docs/mission/evidence/windows-release/mesa-m01-item13.png` |
+   | 6 | Encerramento pelo botão "Fechar aplicativo" | **PASS** | diálogo nativo "Encerrar o aplicativo DZ23?…" aceito → `POST /v1/app/quit 200` → **processo do launcher exit 0 sozinho** → porta 8000 livre (`healthz` 000). Captura: `encerrado-m01-item13.png` |
+   | 7 | Reinstalação sobre a existente | **PASS** (exit 0) | mtimes de `agency.db`/`jobs.db`/`subscriptions.db`/`owner_password.txt` byte a byte idênticos; binário reinstalado presente |
+   | 8 | Desinstalação preservando dados | **PASS** (exit 0) | pasta do programa removida; `%APPDATA%\DZ23-Trading-AI` intacto (mtimes idênticos) |
+
+   **Nota de execução:** o mesmo harness Playwright do item 12 (aceita o `confirm()` do botão antes de seguir) — comportamento desejado do app, não defeito.
+
 ## Ainda NÃO comprovado (pendências de homologação)
 
 - [x] Instalação limpa em Windows 10/11 x64 real com o artefato gerado pelo CI — ciclo completo no artefato C008 (item 10).
@@ -106,6 +121,7 @@
 
 1. Push dos batches C009+C010 → builds de CI → merge do PR #8 (`0c3fc26`) → build do merge (`38450504893`) → artefato final baixado. **Feito.**
 2. Ciclo final no bundle: instalar → abrir → login → **encerrar pelo botão** → processo morto/porta livre → **intruso real na 8000 → diálogo "porta ocupada"** → reinstalar → desinstalar preservando dados. **Todos PASS — item 12.**
-3. Restam apenas sleep/wake/offline/crash (não exercitados nesta estação) e assinatura de código (`BLOCKED_BY_EXTERNAL_DEPENDENCY`) — declarados honestamente acima. G3 fechado com este artefato em `TRADING-GATES.md`.
+3. Ciclo da entrega M01 no bundle (`38453302293`, `d6491ab`): mesmo roteiro + painel "Mesa de Agentes" com os 10 traders por tier de evidência. **Todos PASS — item 13.**
+4. Restam apenas sleep/wake/offline/crash (não exercitados nesta estação) e assinatura de código (`BLOCKED_BY_EXTERNAL_DEPENDENCY`) — declarados honestamente acima. G3 fechado com o artefato do item 12 e re-provado com o artefato da entrega M01 (item 13) em `TRADING-GATES.md`. Publicação (tag/Release) segue aguardando autorização explícita do dono.
 
-*Última atualização: 2026-10-13 — homologação final do bundle `38450504893` (artefato de `0c3fc26`), item 12; branch `feat/integracao-mestre-20261012` (merge no PR #7) e artefato idêntico na branch de entrega `feat/qoder-maestro-traders`.*
+*Última atualização: 2026-10-13 — homologação do bundle da entrega M01 `38453302293` (artefato de `d6491ab`), item 13; branches `feat/integracao-mestre-20261012` (merge no PR #7) e `feat/qoder-maestro-traders`.*
