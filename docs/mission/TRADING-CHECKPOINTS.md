@@ -568,3 +568,27 @@ LIVE `BLOCKED_BY_POLICY` o tempo todo; **nada foi publicado** (sem tag/release �
 ### Estado
 
 LIVE `BLOCKED_BY_POLICY` o tempo todo; **nada foi publicado** (sem tag/release — aguarda autorização explícita do dono). App deixado **instalado** na estação (estado de entrega), com `owner_credentials.json` (Argon2id) e sem `owner_password.txt`.
+
+---
+
+## C019 — Portabilidade: modo da mesa + posse exclusiva, export sem segredos, CI Postgres/ARM64 (#29)
+
+- **UTC:** 2026-10-13T21:30Z–21:57Z
+- **Branch:** `feat/integracao-mestre-20261012` (HEAD `977adce` + fix de CI `8e369f1`; este batch documental)
+- **Motivação:** diretiva de portabilidade Windows↔Oracle ARM64 (workstream #29): transferir de servidor sem vazar credenciais, posse de execução exclusiva entre processos e validação ARM64 **sem declaração falsa de homologação**. Também endurece o CI de segredos do #30.
+
+### Passos
+
+1. **Modo da mesa + posse de execução** (`tradingagents/desk/modo.py`; rotas `GET/POST /v1/desk/modo` em `service/app.py`): estados `ATIVA`/`OBSERVADOR`/`PAUSADA`/`BLOQUEADA` persistidos no armazém; valor desconhecido no disco → **fail-closed** (BLOQUEADA com motivo e desbloqueio consciente). Posse exclusiva: renovada a cada ciclo, vence em 15 min; com o MESMO `DATABASE_URL`, o segundo processo **não executa** e o status mostra quem detém a posse. `desk_status` expõe `modo.estado`/`pode_executar`/`posse`.
+2. **Export/import sem segredos** (`/v1/mudanca/exportar`, formato `dz23.mudanca/2`): chaves de IA/corretora (`SECRETish`) ficam fora do pacote **por construção** e os nomes vão em `segredos_omitidos`; aviso "Este arquivo NÃO contém segredos". No import, pacote legado `/1` com chaves tem os segredos **descartados e relatados** (`restaurado`), nunca restaurados. Toast do painel atualizado; teste novo cobre o pacote legado.
+3. **CI de portabilidade** (`.github/workflows/ci.yml`): job `postgres` (service container postgres:16 — roda `tests/test_modo_da_mesa.py`, incluindo a **corrida da posse em banco real**) e job `arm64-deps` (QEMU+buildx `linux/arm64`; importa argon2/ccxt/fastapi/lxml/pandas/psycopg/uvicorn) — nomeado **"NÃO é homologação Oracle"**, por honestidade.
+4. **Realidade corrigida em compose/scripts/docs:** `docker-compose.yml` (o compose só tem o serviço DZ23 — `DATABASE_URL` aponta para banco externo; Postgres/Redis/Qdrant nunca existiram nele), `scripts/validate_docker_runtime.sh` (reiniciava serviços inexistentes; agora só `tradingagents`) e `DEPLOY.md` (compose de serviço único; Oracle "ter um Dockerfile não é homologação"; **"Sem autorização, não há produção"** — sem deploy nem DNS por conta própria).
+5. **Runbook PC→Oracle** (`RUNBOOK.md`): roteiro de 7 passos — parar+exportar no PC → transferir o JSON (sem segredos) → subir no Oracle com `ACCESS_PASSWORD` e volume `/data` → importar → **re-informar as credenciais no painel** → verificar Modo da mesa/posse/ciclo manual/status → rollback = religar o PC intacto.
+6. **Prova local:** suíte completa **`2251 passed / 5 skipped / 71 subtests`** (exit 0) no HEAD `977adce`; lote focado `46 passed / 1 skipped`; ruff estrito limpo.
+7. **Incidente de CI encontrado e corrigido (transparência):** o job "secrets, licenças e SBOM" flagrou a fixture sintética `gsk-secreta-123` (entropia 3,5069 > limiar 3,5 da regra `generic-api-key`) em `tests/test_alertas_transparencia.py:158`; valores trocados por equivalentes óbvios de teste de baixa entropia (2,26–2,62) no `8e369f1` — **sem allowlist**: o scanner segue ativo de ponta a ponta.
+8. **CI/Windows no `977adce`:** runs `38473108095` (push) / `38473110936` (PR) — **job `postgres` SUCCESS** (corrida da posse em Postgres real), `tests (py3.12)`, `ruff`, `dependency audit`, `clean-install smoke` e `public smoke checks` SUCCESS; `ARM64 build` em execução longa (QEMU; timeout 60 min); `secrets…` falhou → corrigido no `8e369f1`. **Windows Release Build `38473107903` SUCCESS.**
+9. **Docs:** este checkpoint + `TRADING-MISSION-STATE.md` + `TRADING-GATES.md` (G8) + backlog: P1-01 → `PASS_LOCAL` (mesa paper consumindo o feed público real; preenchimentos sandbox aguardam credencial do dono) e P1-07 → `BLOCKED_BY_EXTERNAL_DEPENDENCY` (histórico read-only da Binance do dono).
+
+### Estado
+
+LIVE `BLOCKED_BY_POLICY` o tempo todo; **nada foi publicado** (sem tag/release). **Oracle permanece NÃO homologado** — Dockerfile e job ARM64 não homologam nada; homologação exigirá o ciclo completo rodando lá, com evidência registrada. Prioridade Windows mantida.

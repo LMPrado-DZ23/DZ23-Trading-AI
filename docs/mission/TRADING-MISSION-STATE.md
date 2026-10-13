@@ -35,12 +35,19 @@
   completa `2226 passed / 5 skipped / 71 subtests` (exit 0), e2e Playwright `9 passed` (primeira execução + recuperação com a senha
   antiga morrendo, mobile 390×844), ruff limpo. **Homologação no bundle concluída — item 17** (ver C018).
 - **C018 — itens 16–17 homologados no bundle da integração** (run Windows `38467455263`, artefato de `d8892dc` = C016 + C017 + kernel fix PR #11; Setup `sha256:24b29dc1…` / zip `sha256:865bb4e9…`, `sha256sum -c` OK direto): **item 16 — fonte de dados (22/22 PASS, `HARNESS_EXIT=0`)** — seletor "Fonte de dados" no painel instalado com 2 opções honestas; feed real `PRONTO` (239 velas BTC/ETH, qualidade `ok`, cutoff na vela fechada); ciclo real se recusa a operar em dado velho ("snapshot vencido, não vira ordem"); **o defeito do "primeiro Salvar" morreu no kernel fix (PR #11) — salvar os padrões do painel em instalação nova não reconstrói mais a mesa (ciclos 1 → 1)**; volta a fixture com ledger balanceado (699.70) e `pendências=[]`. **item 17 — portão premium do dono único (24/24 PASS, `HARNESS_EXIT=0`)** — assistente de 1ª execução (instância limpa `setup_required=true`/`multi_tenant=false`), código de recuperação exibido uma única vez, **migração real do `owner_password.txt` → Argon2id sem perder acesso** (senha antiga continua entrando, `role=admin`; txt removido, JSON com `senha_hash`/`codigo_hash` Argon2id), marca "DZ23 Trading AI" e selos sem nenhum texto morto do SaaS, senha errada com aviso claro em PT, exatamente 6 páginas, encerramento pelo botão exit 0. App deixado instalado (estado de entrega).
-- **Branch:** `feat/integracao-mestre-20261012` (PR #7; M01 mergeado por fast-forward; C016 direto; PR #10 (login C017) e PR #11 (kernel fix) **mergeados**) + `feat/qoder-maestro-traders` (entrega M01) + `feat/login-dono-unico-premium` (C017) + `fix/primeiro-salvar-efetivo` (PR #11)
+- **C019 — Portabilidade (#29): modo da mesa + posse exclusiva, export sem segredos, CI Postgres/ARM64** (HEAD `977adce` + fix de CI `8e369f1`):
+  estados ATIVA/OBSERVADOR/PAUSADA/BLOQUEADA persistidos com fail-closed e desbloqueio consciente; posse de execução exclusiva renovada
+  a cada ciclo (vence em 15 min) — segundo processo no mesmo banco não executa; export `dz23.mudanca/2` **sem segredos** (nomes em
+  `segredos_omitidos`; pacote legado `/1` tem segredos descartados no import); CI ganhou job `postgres` (corrida da posse em banco real —
+  SUCCESS em `38473108095`) e job ARM64 (QEMU — **"NÃO é homologação Oracle"**); runbook PC→Oracle no `RUNBOOK.md`; suíte completa
+  `2251 passed / 5 skipped / 71 subtests` (exit 0); incidente gitleaks (fixture sintética, entropia 3,5069>3,5) corrigido em `8e369f1`
+  **sem allowlist**. Detalhe no C019 de `TRADING-CHECKPOINTS.md`.
+- **Branch:** `feat/integracao-mestre-20261012` (PR #7; M01 mergeado por fast-forward; C016 e C019 direto; PR #10 (login C017) e PR #11 (kernel fix) **mergeados**) + `feat/qoder-maestro-traders` (entrega M01) + `feat/login-dono-unico-premium` (C017) + `fix/primeiro-salvar-efetivo` (PR #11)
 - **Base:** `main` (`80e99fb`)
 - **PR:** #7 (integração mestre) + branch M01 publicada + **#10 (C017 login) e #11 (primeiro Salvar) mergeados na integração**
-- **HEAD:** `d8892dc` (integração: C016 + C017 + kernel fix do primeiro Salvar)
-- **UTC:** `2026-10-13T21:24:00Z`
-- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md` (G3 fechado; re-provado nos bundles M01, C015 e da integração — itens 13–17); checkpoints em `TRADING-CHECKPOINTS.md` (C000–C017 + M01 + C018)
+- **HEAD:** `8e369f1` (integração: C016 + C017 + kernel fix do primeiro Salvar + C019 + fix do gitleaks)
+- **UTC:** `2026-10-13T21:58:00Z`
+- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md` (G3 fechado; re-provado nos bundles M01, C015 e da integração — itens 13–17); checkpoints em `TRADING-CHECKPOINTS.md` (C000–C017 + M01 + C018 + C019)
 - **LIVE:** `BLOCKED_BY_POLICY` (inalterado; nenhuma operação com dinheiro real)
 
 ## Baseline Verificada e Conquistas
