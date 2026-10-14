@@ -1860,6 +1860,11 @@ def _desk_boot(tenant_id: str) -> dict:
         paper_price=Decimal("100"))
     coord = ExecutionCoordinator(mandate, ledger, risk,
                                  worker_id=f"worker-{tenant_id}", broker=broker)
+    # UMA referência econômica desde o primeiro boot: sem isto o risco ficava
+    # cego ao livro vivo (via mandate.capital e reservas), e o capital já
+    # investido parecia disponível para novas entradas. O restore re-liga ao
+    # livro reconstruído (execution.py).
+    risk.attach_portfolio_ledger(ledger)
     # Identidade e destino do relatório de reconciliação.
     coord.tenant_id = tenant_id
     coord.armazem = armazem
@@ -1972,7 +1977,8 @@ def _desk_boot(tenant_id: str) -> dict:
             raise
 
     orch = DeskOrchestrator(mandate, traders, worker_id=f"worker-{tenant_id}",
-                            risk=risk, positions_provider=ledger.open_positions,
+                            risk=risk,
+                            positions_provider=lambda: coord.ledger.open_positions(),
                             memoria=memoria, exchange=exchange_cfg,
                             analista=analista, vigia=_vigia_pilotos,
                             sala=sala_da_mesa)
@@ -2013,7 +2019,7 @@ def _desk_boot(tenant_id: str) -> dict:
     modo = ModoDaMesa(armazem, tenant_id)
     posse = PosseDeExecucao(armazem, tenant_id)
 
-    desk = {"orchestrator": orch, "ledger": ledger, "coordinator": coord,
+    desk = {"orchestrator": orch, "ledger": coord.ledger, "coordinator": coord,
             "memoria": memoria, "armazem": armazem, "recuperacao": recuperacao,
             "guardian": PositionGuardian(coord), "cycles": [],
             "feed_kind": feed_kind, "broker_mode": broker_mode,
