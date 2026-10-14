@@ -59,6 +59,46 @@ jobs:
             dist/SHA256SUMS.txt
           if-no-files-found: error
 
+  aceite-bundle:
+    # V8 §4: "Não basta testar a API: executar E2E no bundle Windows
+    # instalado" — a matriz de aceite TD-5 roda contra o ZIP do artefato,
+    # extraído num ambiente isolado (runner virgem + APPDATA descartável).
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        run: pip install uv
+      - name: Download artifact do bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: dz23-windows-x64
+          path: artefato
+      - name: Conferir hashes do artefato (SHA256SUMS)
+        shell: bash
+        working-directory: artefato
+        run: sha256sum -c SHA256SUMS.txt
+      - name: Extrair bundle (ambiente isolado)
+        shell: pwsh
+        run: Expand-Archive -Path artefato/DZ23-Trading-AI-windows-x64.zip -DestinationPath bundle -Force
+      - name: Aceite E2E no bundle do artefato (matriz TD-5, navegador real)
+        shell: pwsh
+        run: |
+          uv run --with playwright python scripts\homolog_aceite_td5_bundle.py
+          if ($LASTEXITCODE -ne 0) { throw "aceite no bundle falhou (exit $LASTEXITCODE)" }
+      - name: Upload evidências do aceite no bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aceite-td5-bundle-evidencias
+          path: docs/mission/evidence/v8-td5-exe/
+          if-no-files-found: warn
+
   publish-release:
     # Publicação de Release só em tag explícita (aprovação humana = criar a tag).
     if: startsWith(github.ref, 'refs/tags/v')
