@@ -43,6 +43,7 @@ from tradingagents.infra.supabase import resolve_database_url
 from tradingagents.job_store import JobStore
 from tradingagents.reconciliation_worker import ReconciliationMonitor
 from tradingagents.risk import RiskEngine
+from tradingagents.security import SecretStore
 from tradingagents.telemetry import AuditLog, EventBus, MetricsRegistry
 from tradingagents.tenancy import AuthError, PostgresTenantStore, Principal, TenantStore
 from tradingagents.workers import WorkerSupervisor
@@ -635,11 +636,72 @@ def tenant_cfg_path(tenant_id: str = "legacy") -> Path:
     return path
 
 
+def _secret_store(tenant_id: str = "legacy") -> SecretStore:
+    """Store de segredos cifrados em repouso (SEC-1), isolado por inquilino."""
+    return SecretStore(DATA, namespace=tenant_id)
+
+
+_SEGREDOS_MIGRADOS: set = set()
+
+
+def _migrar_segredos_plaintext(tenant_id: str = "legacy") -> None:
+    """SEC-1: move segredos em TEXTO CLARO que ainda estejam no config.json
+    para o store cifrado. Idempotente e FAIL-SAFE:
+      1) se o config.json não tem segredo declarado, não faz nada;
+      2) grava os segredos no store e VALIDA o round-trip (lê de volta);
+      3) só então faz BACKUP do config.json e reescreve SEM os segredos.
+    Se a validação falhar, aborta e deixa o config.json intacto — nunca
+    remove credencial sem recuperação provada. Não registra valores."""
+    if tenant_id in _SEGREDOS_MIGRADOS:
+        return
+    path = tenant_cfg_path(tenant_id)
+    if not path.exists():
+        _SEGREDOS_MIGRADOS.add(tenant_id)
+        return
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if not isinstance(doc, dict):
+        _SEGREDOS_MIGRADOS.add(tenant_id)
+        return
+    segredos = {k: str(v) for k, v in doc.items()
+                if k in SEGREDOS_DECLARADOS and isinstance(v, str) and v != ""}
+    if not segredos:
+        _SEGREDOS_MIGRADOS.add(tenant_id)
+        return
+    store = _secret_store(tenant_id)
+    try:
+        store.set_many(segredos)
+        relido = store.all()
+        if any(relido.get(k) != v for k, v in segredos.items()):
+            LOGGER.error("SEC-1: migração abortada (round-trip falhou); "
+                         "config.json preservado com os segredos.")
+            return
+    except Exception as exc:  # noqa: BLE001 — fail-safe de migração
+        LOGGER.error("SEC-1: migração de segredos falhou (%s); "
+                     "config.json preservado.", type(exc).__name__)
+        return
+    backup = path.with_suffix(".json.bak-pre-secret-store")
+    with contextlib.suppress(OSError):
+        if not backup.exists():
+            backup.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+            os.chmod(backup, 0o600)
+    publico = {k: v for k, v in doc.items() if k not in SEGREDOS_DECLARADOS}
+    escrever_json_atomico(path, publico)
+    with contextlib.suppress(OSError):
+        os.chmod(path, 0o600)
+    LOGGER.info("SEC-1: %d segredo(s) migrados para o store cifrado (%s).",
+                len(segredos), tenant_id)
+    _SEGREDOS_MIGRADOS.add(tenant_id)
+
+
 def load_cfg(tenant_id: str = "legacy") -> dict:
     # Em multi-tenant, variáveis de ambiente NÃO servem de configuração
     # padrão: senão a chave de IA do servidor (ou de um inquilino que mexeu
     # no processo) apareceria para todos. Só o modo de instalação única
     # ("legacy") herda do ambiente.
+    _migrar_segredos_plaintext(tenant_id)
     if MULTI_TENANT_ENABLED and tenant_id != "legacy":
         cfg: dict = {}
     else:
@@ -648,6 +710,10 @@ def load_cfg(tenant_id: str = "legacy") -> dict:
     if path.exists():
         with contextlib.suppress(ValueError):
             cfg.update(json.loads(path.read_text()))
+    # SEC-1: segredos cifrados em repouso sobrepõem o ambiente/arquivo. São a
+    # fonte autoritativa quando o dono salvou pela UI.
+    with contextlib.suppress(Exception):
+        cfg.update(_secret_store(tenant_id).all())
     return cfg
 
 
@@ -724,8 +790,17 @@ def configure_agency_llm(runtime, tenant_id: str) -> str | None:
         return f"LLM da agência indisponível ({type(exc).__name__})"
 
 def save_cfg(cfg: dict, tenant_id: str = "legacy"):
+    # SEC-1: segredos declarados vão CIFRADOS para o store; o config.json em
+    # disco guarda apenas configuração não-secreta. Assim um vazamento do
+    # arquivo (backup, print, suporte) não entrega as chaves.
     path = tenant_cfg_path(tenant_id)
-    escrever_json_atomico(path, cfg)
+    segredos = {k: str(v) for k, v in cfg.items()
+                if k in SEGREDOS_DECLARADOS and isinstance(v, (str, int, float))
+                and str(v) != ""}
+    if segredos:
+        _secret_store(tenant_id).set_many(segredos)
+    publico = {k: v for k, v in cfg.items() if k not in SEGREDOS_DECLARADOS}
+    escrever_json_atomico(path, publico)
     os.chmod(path, 0o600)
 
 

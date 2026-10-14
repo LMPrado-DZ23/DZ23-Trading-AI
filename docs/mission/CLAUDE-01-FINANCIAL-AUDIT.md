@@ -182,3 +182,85 @@ apenas), exceto o conjunto single-owner, entregue no PR #8.
 
 Continua como trabalho iterativo: testes adversariais dedicados por bloqueador,
 inventário de authz rota-a-rota e correções SEC-1/FIN-1 sob decisão humana.
+
+---
+
+## §10 — Auditoria do código novo (HEAD `30b8683`) + correções P0
+
+Escopo: módulos adicionados após o baseline `70b153d` e os P0 cruzados com a
+auditoria independente do ChatGPT (commit por ele examinado: `4b83e16`).
+Corretora SIMULADA em todos os testes de envio — nenhuma ordem real, nenhuma
+credencial real, LIVE não habilitado.
+
+### SEC-1 (P0) — CORRIGIDO: segredos cifrados em repouso
+
+- **Causa raiz:** `service/app.py::save_cfg` gravava as chaves de API em TEXTO
+  CLARO no `config.json` (só `chmod 600`).
+- **Correção:** novo `tradingagents/security/secret_store.py` (`SecretStore`)
+  cifra os segredos com Fernet (`cryptography`) em `secrets.<ns>.enc`. A
+  chave-mestra (`secret.key`, 0600) é ENVELOPADA por DPAPI no Windows quando
+  `win32crypt` está disponível, com fallback portátil (chave direta 0600) fora
+  do Windows / sem pywin32 — serve Windows e Oracle Linux sem quebrar
+  portabilidade e sem dependência obrigatória nova.
+- `save_cfg` passou a rotear segredos declarados para o store (config.json fica
+  só com config não-secreta); `load_cfg` sobrepõe os segredos decifrados.
+- **Migração fail-safe:** `_migrar_segredos_plaintext` move segredos legados do
+  config.json para o store, **valida o round-trip**, faz **backup**
+  (`config.json.bak-pre-secret-store`) e só então reescreve o arquivo sem os
+  segredos. Se a validação falhar, aborta e preserva tudo — nunca remove
+  credencial sem recuperação provada.
+- **Evidência:** `tests/test_secret_store_sec1.py` (12 testes): cifra em
+  repouso (o valor não aparece no arquivo), recuperação por instância nova,
+  isolamento por namespace, fail-closed em chave/arquivo corrompido, migração
+  com backup, POST→GET mascarado e disco sem texto claro, idempotência.
+- **Limitações:** no Oracle Linux headless sem keyring, a proteção efetiva da
+  `secret.key` recai sobre permissões de arquivo (0600) — adequado para serviço
+  de um único dono, porém não equivalente ao DPAPI; integrar Secret Service/
+  keyring quando houver sessão é um reforço futuro. Segredos já em `os.environ`
+  (modo legacy) seguem sendo herdados — é a configuração do próprio dono.
+
+### FIN-1 (P0) — CORRIGIDO: documentação do CCXTBridge alinhada à implementação
+
+- **Causa raiz:** o docstring afirmava que LIVE foi "removido" e que "nenhuma
+  configuração pode criar um cliente com endpoints reais" — falso; o ramo
+  `mode=="live"` existe e chama `create_order`.
+- **Correção:** docstring reescrito para descrever a capacidade LIVE real,
+  desligada por padrão e protegida por travas fail-closed, `BLOCKED_BY_POLICY`.
+  **Implementação não alterada** (gate LIVE intocado, por política).
+- **Evidência:** `tests/test_live_execution_blocked.py` (13 testes) prova as
+  recusas sem autorização e que, no estado atual do produto, a rota legada
+  `/v1/broker/order` responde 410 e o docstring não mais afirma remoção.
+
+### FIN-2 / FIN-3 — auditoria adversarial do envio (corretora simulada)
+
+- **Evidência:** `tests/test_fin_adversarial.py` (9 testes).
+- **FIN-3 (resposta perdida):** `clientOrderId` determinístico comprovado
+  (retry reusa o mesmo id → corretora deduplica); a tentativa é jornalizada
+  **antes** da chamada de rede (recuperação por `clientOrderId` mesmo sem a
+  resposta); em erro de rede o bridge **re-levanta** e **nunca** grava
+  `submit_ok` — nada de sucesso inventado. O tratamento de estado UNKNOWN e a
+  não-liberação de capital em timeout ambíguo já são cobertos por
+  `tests/test_auditoria_blockers.py::TestTimeoutAmbiguoNaoLiberaCapital`.
+- **FIN-2 (gates de autorização):** o gate de transporte
+  (`assert_secure_for_capital`) é camada independente e incontornável,
+  verificada antes de qualquer rede inclusive em testnet (estado vazio ou mark
+  inseguro ⇒ recusa, corretora nunca é tocada). A cadeia do desk (dono, conta,
+  estratégia, kill-switch, limites, reconciliação) é coberta por
+  `test_auditoria_blockers.py`, `test_kill_switch*.py` e
+  `test_reconciliation_state.py`.
+
+### Demais módulos novos — cobertura e limitações (honestidade de estado)
+
+| Área | Módulo(s) | Verificação nesta auditoria | Status |
+| :-- | :-- | :-- | :-- |
+| Copiloto / isolamento de ordens | `desk/piloto.py`, `desk/modo.py` | leitura + arquitetura: modo fixo `paper (simulado)`, LIVE bloqueado, autorização explícita do dono com gates; isolamento sustenta-se pela trava LIVE do bridge (provada) | VERIFICADO (arquitetura) + suíte |
+| Motor global de saída | `desk/saida.py` | suíte `test_motor_de_saida_global.py`, `test_desk_saidas.py` | BASELINE (testes verdes) |
+| Alertas + deduplicação | `desk/canais_alerta.py`, `desk/notificacao_viva.py` | suíte `test_centro_de_alertas.py`, `test_alertas_transparencia.py` | BASELINE |
+| Escola / certificação | `desk/escola.py`, `desk/conhecimento.py` | suíte `test_desk_escola.py`, `test_service_escola.py` | BASELINE |
+| Maestro / 10 traders | `desk/maestro.py`, `desk/salas.py` | suíte `test_desk_maestro.py`, `test_qoder_maestro_traders.py`, `test_salas.py` | BASELINE |
+| Laboratório quant / champion-challenger | `tradingagents/quant/*` | suíte `test_quant_intelligence.py` | BASELINE |
+
+**Limitação declarada:** "BASELINE" significa que a suíte de testes do próprio
+módulo foi reexecutada e passou — NÃO uma auditoria adversarial dedicada como a
+feita para SEC-1/FIN-1/2/3. Esses módulos permanecem como próximo alvo de
+aprofundamento adversarial. Nada aqui declara o G1 ou qualquer gate como PASS.
