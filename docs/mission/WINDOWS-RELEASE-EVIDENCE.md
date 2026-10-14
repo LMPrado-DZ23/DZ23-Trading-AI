@@ -218,6 +218,21 @@
 
    **Notas de execução (harness, não defeito do app):** as execuções r1 e r2 falharam por defeitos do próprio harness — (a) comparação case-sensitive contra o `inner_text()` de `h3` com `text-transform: uppercase` (o painel renderiza "TRADERS (10 PERFIS)"/"ESCOLA CENTRAL"; o diagnóstico da camada navegador capturou o DOM real — zero pageerrors, zero requestfailed, zero 5xx — e confirmou mesa/Escola corretas); (b) regex de chave de sala com `\w+`, que não cobria o hífen de `paper-legacy`. Corrigidos em `scripts/homolog_painel_bundle.py` (comparação em caixa baixa; chave validada por partes).
 
+21. **RECUPERAÇÃO DE CRASH (`taskkill /F`) NO BUNDLE — item 22** (artefato de `f07ea47`, run Windows `38494708308`) — **30/30 PASS** (`HARNESS_EXIT=0`), log `docs/mission/evidence/e2e/c021-item22-crash-f07ea47-r3.log`:
+
+   | # | Verificação | Resultado | Evidência |
+   |---|-----------|-----------|-----------|
+   | 1 | Sessão 1: APPDATA descartável, assistente, senha, ciclo PAPER real | **PASS** | healthz 23,1 s; *"20 propostas, 2 admitidas, 2 entradas, 0 saídas, 0 vetos"*; 2 ordens `filled`; ledger balanceado; patrimônio 999,80 |
+   | 2 | Crash à força do processo do harness | **PASS** | `taskkill /F` no PID próprio → exit 1; porta 8000 liberada pelo SO |
+   | 3 | Sessão 2: reabertura no MESMO APPDATA | **PASS** | sobe na mesma porta; senha do dono (Argon2id no disco) continua valendo |
+   | 4 | Estado durável byte a byte | **PASS** | ordens idênticas (id/estado/qtd/preço); ciclos 1→1 e `ultimo_ciclo` idêntico; posições e instrumentos abertos idênticos (BTC/ETH); **saldos/patrimônio/disponível idênticos (999,80 / 799,80000145)**; ledger balanceado; `pendencias_reconciliacao=[]`; durabilidade íntegra; modo `ativa` preservado |
+   | 5 | Encerramento gracioso | **PASS** | `POST /v1/app/quit` 200 → launcher exit 0 sozinho; porta liberada |
+
+   **Defeitos REAIS do app encontrados e corrigidos antes do verde** (o harness r2 no bundle antigo de `f26f1ed` reprovou 2 itens e virou regressão):
+   - **(A) risco cego ao livro vivo:** `attach_portfolio_ledger` só existia no restore — no 1º boot o risco lia `mandate.capital`/reservas e, após os fills, `disponível` mostrava 1000 e `instrumentos_abertos` ficava vazio com posições de verdade abertas (capital investido parecia livre).
+   - **(B) painel pós-reinício mentindo:** `restaurar_estado` substitui `coord.ledger`, mas `desk["ledger"]`, `positions_provider` e o agendador seguiam presos ao ledger de abertura — após o crash o painel mostrava patrimônio 1000 em vez de 999,80.
+   Correção em `service/app.py` `_desk_boot` (commit `f07ea47`): `risk.attach_portfolio_ledger(ledger)` logo após criar o coordinator; `positions_provider=lambda: coord.ledger.open_positions()`; `desk["ledger"] = coord.ledger`. Regressão pinada em `tests/test_livro_vivo_e_reinicio.py` (3 testes; RED→GREEN) + 172 testes das suítes vizinhas verdes. **Nota de execução (operação, não defeito do app):** a 1ª tentativa de r3 rodou contra o bundle ANTIGO porque o `/VERYSILENT` foi mangled pelo Git Bash (MSYS path conversion) e o setup abriu interativo; reinstalação com `//VERYSILENT` + conferência de tamanho/hash do EXE antes de re-rodar — os valores daquela execução eram idênticos aos do r2 (prova de que o binário era o velho).
+
 ## Ainda NÃO comprovado (pendências de homologação)
 
 - [x] Instalação limpa em Windows 10/11 x64 real com o artefato gerado pelo CI — ciclo completo no artefato C008 (item 10).
@@ -233,7 +248,8 @@
 - [x] **Identidade visual e portão premium do dono único no artefato FINAL (item 18)** — re-homologação `27/27 PASS` no bundle de `f26f1ed` (run `38489060888`).
 - [x] **Matriz de inicialização completa no bundle instalado (item 19)** — `24/24 PASS`: estação limpa, fallback sem tocar o vizinho, instância única, faixa ocupada com diálogo nativo, reinício e ciclo limpo com assistente+quit — no artefato de `f26f1ed`.
 - [x] **Escola Central e mesa autenticadas no painel do bundle final (item 21)** — `27/27 PASS` no mesmo artefato de `f26f1ed`: assistente → login → 6 páginas → 10 traders (3 homologado / 7 experimental) → ciclo real pelo botão (*20 propostas, 2 entradas*) → Escola Central com sala isolada `binance|paper-legacy|spot|paper` e autorização de piloto exclusiva do proprietário → zero 5xx → quit gracioso (launcher exit 0 sozinho).
-- [ ] Sleep/wake, offline/reconexão e recuperação de crash — não exercitados (fora do alcance desta estação sem suspender a máquina do dono).
+- [x] **Recuperação de crash (`taskkill /F`) no bundle instalado (item 22)** — `30/30 PASS` no artefato de `f07ea47` (run `38494708308`): estado durável (ordens, ciclos, `ultimo_ciclo`, posições, saldos/patrimônio/disponível, modo) idêntico antes/depois do kill à força; senha do dono persiste; zero pendências de reconciliação. **2 defeitos reais do app encontrados pelo harness e corrigidos** (risco cego ao livro vivo no 1º boot; painel pós-reinício preso ao ledger de abertura — commit `f07ea47`, regressão em `tests/test_livro_vivo_e_reinicio.py`).
+- [ ] Sleep/wake e offline/reconexão — não exercitados (fora do alcance desta estação sem suspender a máquina do dono). Recuperação de crash **FECHADA** (item 22).
 - [ ] Assinatura de código: somente com certificado autorizado (não há certificado disponível) — `BLOCKED_BY_EXTERNAL_DEPENDENCY`.
 
 ## Ciclo final — ENCERRADO (esta estação Windows 11)
@@ -250,4 +266,6 @@
 
 9. Mesmo artefato de `f26f1ed` (run `38489060888`): **item 21 — escola/mesa autenticada no painel do bundle** (`27/27 PASS`, `c021-item21-painel-f26f1ed-r3.log`): assistente descartável → login pelo portão → 6 páginas → mesa com 10 traders (3 homologado / 7 experimental) → ciclo real pelo botão (*20 propostas, 2 admitidas, 2 entradas*, ciclos 0→1) → Escola Central com a sala isolada `binance|paper-legacy|spot|paper` e pilotos com autorização exclusiva do proprietário → zero 5xx → `POST /v1/app/quit` → launcher exit 0 sozinho. App deixado **instalado** (estado de entrega), LIVE `BLOCKED_BY_POLICY`, nada publicado.
 
-*Última atualização: 2026-10-14 — itens 18, 19 e 21 homologados no artefato de `f26f1ed` (run `38489060888`): portão premium/identidade 27/27, matriz de inicialização 24/24 e escola/mesa autenticada no painel 27/27 no bundle instalado.*
+10. Artefato de `f07ea47` (run Windows `38494708308`): **item 22 — recuperação de crash (`taskkill /F`) no bundle instalado** (`30/30 PASS`, `c021-item22-crash-f07ea47-r3.log`): ciclo real → kill à força → reabertura no mesmo APPDATA com estado durável idêntico (ordens, ciclos, `ultimo_ciclo`, posições BTC/ETH, patrimônio 999,80, disponível 799,80000145), senha persistente, ledger balanceado, `pendencias_reconciliacao=[]` → quit gracioso (launcher exit 0). O harness encontrou **2 defeitos reais do app** (risco cego ao livro vivo; painel pós-reinício no ledger de abertura), corrigidos em `f07ea47` com regressão pinada (`tests/test_livro_vivo_e_reinicio.py`), 172 testes vizinhos verdes e ruff limpo antes da re-homologação. App deixado **instalado** (estado de entrega), LIVE `BLOCKED_BY_POLICY`, nada publicado.
+
+*Última atualização: 2026-10-14 — itens 18, 19, 21 e 22 homologados no bundle instalado: portão premium/identidade 27/27 e matriz de inicialização 24/24 e escola/mesa 27/27 no artefato de `f26f1ed`; recuperação de crash 30/30 no artefato de `f07ea47` (com 2 defeitos reais corrigidos: risco cego ao livro vivo e painel pós-reinício).*
