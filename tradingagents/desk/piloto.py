@@ -79,6 +79,30 @@ class AutorizacaoDePiloto:
     modo: str = MODO_DO_PILOTO
     schema: str = SCHEMA_PILOTO
 
+    def como_dict(self) -> dict:
+        """Serialização auditável: Decimal vira string, estado vira valor —
+        o mesmo contrato de `relatorio()`, para rota e painel nunca divergirem."""
+        return {
+            "authorization_id": self.authorization_id,
+            "tenant_id": self.tenant_id,
+            "agent_id": self.agent_id,
+            "estrategia": self.estrategia, "versao": self.versao,
+            "corretora": self.corretora, "conta": self.conta,
+            "capital_maximo": str(self.capital_maximo),
+            "perda_diaria_maxima": str(self.perda_diaria_maxima),
+            "perda_total_maxima": str(self.perda_total_maxima),
+            "prazo_dias": self.prazo_dias,
+            "condicoes_de_suspensao": list(self.condicoes_de_suspensao),
+            "estado": self.estado.value,
+            "solicitado_em": self.solicitado_em,
+            "autorizado_em": self.autorizado_em,
+            "valido_ate": self.valido_ate,
+            "revogada_em": self.revogada_em,
+            "motivo_revogacao": self.motivo_revogacao,
+            "motivo_suspensao": self.motivo_suspensao,
+            "modo": self.modo, "schema": self.schema,
+        }
+
 
 class SupervisorDePiloto:
     """Registra pedidos, aplica gates e vigia limites. NÃO opera nada.
@@ -168,6 +192,7 @@ class SupervisorDePiloto:
                   corretora: str, conta: str, capital_maximo: Decimal,
                   perda_diaria_maxima: Decimal, perda_total_maxima: Decimal,
                   prazo_dias: int, condicoes_de_suspensao=(),
+                  contexto: dict | None = None,
                   agora: datetime | None = None) -> AutorizacaoDePiloto:
         """Registra o PEDIDO do proprietário — ainda sem autorizar nada.
 
@@ -209,6 +234,10 @@ class SupervisorDePiloto:
             "perda_total_maxima": str(perda_total_maxima),
             "prazo_dias": int(prazo_dias),
             "condicoes_de_suspensao": [str(c) for c in condicoes_de_suspensao],
+            # Contexto de certificação em que o pedido foi feito: sem ele o
+            # vigia não consegue reavaliar a formatura — e formatura sem
+            # contexto não existe. Ausente vira {}, nunca um contexto suposto.
+            "contexto": dict(contexto or {}),
             "solicitado_em": agora.isoformat(), "autorizado_em": None,
             "valido_ate": None,
             "estado": EstadoDoPiloto.AGUARDANDO_AUTORIZACAO.value,
@@ -302,13 +331,31 @@ class SupervisorDePiloto:
         return self._de_dict(self._autorizacoes[agent_id])
 
     # -- supervisão contínua --------------------------------------------
-    def vigiar(self, *, agora: datetime | None = None) -> list[str]:
+    def _escola_da(self, d: dict, central):
+        """Escola que reavalia ESTE piloto: a do contexto em que o pedido
+        foi feito (via Escola Central), quando ambas conhecidas; senão a
+        escola fixa do supervisor (comportamento antigo)."""
+        doc = d.get("contexto")
+        if central is not None and isinstance(doc, dict) and doc:
+            try:
+                from .salas import ContextoDeCertificacao, EscolaDoPiloto
+                return EscolaDoPiloto(central,
+                                      ContextoDeCertificacao.de_dict(doc))
+            except Exception:
+                return self.escola
+        return self.escola
+
+    def vigiar(self, *, agora: datetime | None = None,
+               central=None) -> list[str]:
         """Reavalia os pilotos ativos e suspende o que deixou de valer.
 
         - prazo vencido ⇒ EXPIRADO;
         - escola sem formatura (revogada ou sem verificação) ⇒ SUSPENSO,
           porque operar sem elegibilidade viva é o que a escola existe
           para impedir. SUSPENSO não volta sozinho: exige revogação.
+
+        Com `central`, cada piloto é reavaliado NO CONTEXTO em que o pedido
+        foi feito — formatura na Binance não sustenta piloto na OKX.
         """
         agora = _utc(agora or datetime.now(timezone.utc))
         notas: list[str] = []
@@ -322,7 +369,8 @@ class SupervisorDePiloto:
                     motivo=f"prazo do piloto venceu em {valido_ate}")
                 notas.append(f"{agent_id}: piloto EXPIRADO (prazo venceu)")
                 continue
-            if self.escola is None:
+            escola = self._escola_da(d, central)
+            if escola is None:
                 self._transitar(
                     agent_id, EstadoDoPiloto.SUSPENSO, agora=agora,
                     motivo=("escola indisponível — elegibilidade não "
@@ -331,7 +379,7 @@ class SupervisorDePiloto:
                 notas.append(
                     f"{agent_id}: piloto SUSPENSO (escola indisponível)")
                 continue
-            ok, motivo = self.escola.elegivel_para_live(
+            ok, motivo = escola.elegivel_para_live(
                 d.get("estrategia", ""), str(d.get("versao", "1")))
             if not ok:
                 self._transitar(
@@ -343,7 +391,8 @@ class SupervisorDePiloto:
 
     def bloqueios(self, *, capital_em_uso=None, perda_hoje=None,
                   perda_total=None,
-                  agora: datetime | None = None) -> dict[str, str]:
+                  agora: datetime | None = None,
+                  central=None) -> dict[str, str]:
         """Quem NÃO pode abrir posição agora — e por quê, para o Maestro.
 
         O vigia roda antes: estado vencido/revogado/suspenso já chega aqui
@@ -351,7 +400,7 @@ class SupervisorDePiloto:
         dicionário — silêncio é permissão, e só para ENTRADAS.
         """
         agora = _utc(agora or datetime.now(timezone.utc))
-        self.vigiar(agora=agora)
+        self.vigiar(agora=agora, central=central)
         uso = capital_em_uso or {}
         hoje = perda_hoje or {}
         total = perda_total or {}

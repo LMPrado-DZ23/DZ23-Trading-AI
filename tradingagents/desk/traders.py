@@ -419,11 +419,16 @@ class ArbitrageTrader(BaseTrader):
         return ""
 
     def _evaluate(self, snap):
-        # Simula a comparação de cotações de outra exchange (ex: OKX) de forma determinística
-        # baseado no último dígito do preço ou timestamp para simular oportunidades realistas
+        # Simula a comparação de cotações de outra exchange (ex: OKX) a partir
+        # do ESTADO DE MERCADO (instrumento + último fechamento): o mesmo
+        # candle decide igual em qualquer réplica, e a mesma cena produz a
+        # mesma evidência. Antes o sorteio vinha do relógio (snap.cutoff):
+        # ciclos idênticos eram sorteados de novo a cada execução — flaky — e
+        # um laudo não podia ser reproduzido com o mesmo feed.
         from hashlib import md5
-        val = int(md5(str(snap.cutoff).encode()).hexdigest(), 16) % 100
-        # Oportunidade simulada em 5% dos ciclos
+        semente = f"{snap.instrument}|{snap.last:.4f}"
+        val = int(md5(semente.encode()).hexdigest(), 16) % 100
+        # Oportunidade simulada em 5% dos estados de mercado
         if val >= 5:
             return self._no(snap, "preços sincronizados entre as corretoras (sem arbitragem)")
 

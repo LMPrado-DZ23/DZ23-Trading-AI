@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
 
+from .execution import OrderState
 from .models import utcnow
 
 
@@ -134,6 +135,16 @@ class DeskScheduler:
                     try:
                         rec = self.coordinator.submit(intent)
                         out["ordens"].append({"ordem": rec.order_id, "estado": rec.state.value})
+                        # Compra executada vira posição NO LIVRO da mesa — sem
+                        # isto a gestão de saída fica cega em produção (o livro
+                        # só era alimentado em teste).
+                        if (rec.state is OrderState.FILLED
+                                and getattr(intent.action, "value", "") == "buy"
+                                and rec.filled_qty > 0 and rec.avg_price > 0):
+                            self.orchestrator.register_fill(
+                                intent.reservation.instrument, rec.filled_qty,
+                                rec.avg_price, intent.reservation.agent_id,
+                                rec.filled_qty * rec.avg_price)
                     except Exception as exc:
                         self.state.errors += 1
                         out.setdefault("erros", []).append(f"{type(exc).__name__}: {exc}"[:160])

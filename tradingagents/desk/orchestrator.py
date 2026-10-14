@@ -65,7 +65,7 @@ class DeskOrchestrator:
     def __init__(self, mandate: DeskMandate, traders, *, worker_id: str,
                  risk: RiskEngine | None = None, positions_provider=None,
                  memoria=None, exchange: str = "binance", analista=None,
-                 supervisor=None, conselheiro=None, vigia=None):
+                 supervisor=None, conselheiro=None, vigia=None, sala=None):
         self.mandate = mandate
         self.traders = list(traders)
         self.worker_id = worker_id
@@ -95,6 +95,12 @@ class DeskOrchestrator:
         # Livro da mesa: quem abriu o quê, a que preço. É daqui que sai a
         # gestão de saída — sem isso a mesa só compra e nunca realiza.
         self.book: dict[str, Position] = {}
+        # Sala da ESCOLA (BT-10): a evidência de operação vive por sala
+        # (corretora/conta/mercado/modo). Espelho de registro: falha vira
+        # aviso auditável e NÃO derruba a operação — a ordem já foi decidida
+        # pelo risco; a sala é registro, não a corretora.
+        self.sala = sala
+        self.avisos_sala: list[str] = []
 
         if supervisor is not None:
             self.supervisor = supervisor
@@ -249,11 +255,30 @@ class DeskOrchestrator:
             report.intents.append(intent)
         return report
 
+    def _avisar_sala(self, texto: str) -> None:
+        self.avisos_sala.append(texto[:200])
+        del self.avisos_sala[:-20]
+
     def register_fill(self, instrument: str, quantity, price, agent_id: str,
                       cost_basis) -> None:
         """Chamado quando uma compra executa: a posição entra no livro."""
         self.book[instrument] = Position(instrument, quantity, price, agent_id,
                                          cost_basis, opened_at=utcnow())
+        if self.sala is not None:
+            trader = next((t for t in self.traders
+                           if t.spec.agent_id == agent_id), None)
+            leitura = getattr(trader, "ultima_leitura", None)
+            try:
+                self.sala.registrar_entrada(
+                    instrument, quantity, price, agente=agent_id,
+                    estrategia=(getattr(trader, "strategy", "") or agent_id),
+                    versao=str(getattr(trader, "versao", "1")),
+                    horizonte=str(getattr(trader, "timeframe", "1h")),
+                    regime=(leitura.regime.value if leitura else "indefinido"))
+            except Exception as exc:
+                self._avisar_sala(
+                    f"entrada {instrument} não registrada na sala: "
+                    f"{type(exc).__name__}: {exc}")
 
     def close_position(self, instrument: str, preco_saida=None) -> Position | None:
         """Posição encerrada sai do livro, o instrumento fica livre — e o
@@ -285,6 +310,13 @@ class DeskOrchestrator:
                 versao=str(getattr(trader, "versao", "1")),
                 agente=pos.agent_id,
                 horizonte=str(getattr(trader, "timeframe", "1h"))))
+        if pos is not None and preco_saida is not None and self.sala is not None:
+            try:
+                self.sala.registrar_saida(instrument, preco_saida)
+            except Exception as exc:
+                self._avisar_sala(
+                    f"saída {instrument} não registrada na sala: "
+                    f"{type(exc).__name__}: {exc}")
         return pos
 
     # -- kill switch com semânticas distintas (cenário 13) -------------

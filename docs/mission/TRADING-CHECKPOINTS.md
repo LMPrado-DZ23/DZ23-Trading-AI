@@ -649,3 +649,35 @@ LIVE `BLOCKED_BY_POLICY` o tempo todo; **nada foi publicado** (sem tag/release).
 ### Estado
 
 LIVE `BLOCKED_BY_POLICY`. Nada publicado (sem tag/release). A falha real do dono (duplo clique sem console) está com causa-raiz provada e corrigida, com prova em binário `--windowed`; a homologação no bundle gerado por este push fica declarada como pendente até rodar a matriz completa.
+
+
+---
+
+## BT — Escola de Traders: do Batalhão à cadeia de piloto (missão do dono; tasks #42-#52)
+
+- **UTC:** 2026-10-13/14 (batches noturnos; BT-0->BT-10)
+- **Branch:** `feat/integracao-mestre-20261012` (BT-1 `134c05b` -> BT-9 `8bf78ad`; BT-10 neste batch)
+- **Motivação:** a arquitetura definitiva do dono — **UMA ESCOLA CENTRAL DE TRADERS com SALAS INDEPENDENTES POR CORRETORA**: escola única compartilhada pelos 10 traders; salas isolam histórico/saldo/posições/taxas/ledger/métricas por corretora+conta+mercado+modo; certificação é individual por trader+versão+ativo+horizonte e **não atravessa contexto** (formado na Binance != formado na OKX); conhecimento entre salas é compartilhado com rótulo e sem transferir certificação; Maestro Central supervisiona exposição global; IQ Option permanece laboratório experimental isolado. **A formação nunca ativa negociação real** — LIVE continua exclusivo do proprietário.
+
+### Cadeia entregue (BT-1..BT-9, nos commits da branch)
+
+1. **BT-1/2** — núcleo da escola (`tradingagents/desk/escola.py`): estados coletando->candidata->formada com IC vs equilíbrio e prova independente; revogação que derruba elegibilidade; laboratório de hipóteses pré-registradas com assinatura, execução única, controle aleatório (opt-in, 11º trader, homologado=False) e correção de Bonferroni.
+2. **BT-3/4** — supervisor de piloto (`tradingagents/desk/piloto.py`): cadeia **FORMADO -> ELEGÍVEL PARA LIVE -> AGUARDANDO AUTORIZAÇÃO DO PROPRIETÁRIO -> PILOTO AUTORIZADO** com gates de ativação (dono único, kill switch, integração, risco, envio real desativado); bloqueios por limite, suspensão por escola revogada, expiração por prazo; rotas `/v1/escola/*` e painel.
+3. **BT-6..9** — Escola Central + `RegistroDeSalas` (`tradingagents/desk/salas.py`): salas com chave `corretora|conta|mercado|modo`, pacote financeiro por sala (saldo/taxas/posições/desfechos), certificados por contexto, conhecimento rotulado entre salas, Maestro Central (pausa global + teto de exposição), storage NTFS-safe com chaves `%XX` e leitura UTF-8 forçada.
+
+### BT-10 — fechamento: isolamento + PAPER ponta a ponta + evidência (este batch)
+
+1. **Mesa espelhada na sala pelo caminho de produção:** `DeskOrchestrator` ganhou `sala` — `register_fill` registra a entrada na sala (posição com agente/estratégia/versão/regime) e `close_position` registra a saída; falha de espelho vira **aviso auditável** (`avisos_sala`), nunca derruba a ordem já decidida. O agendador agora **executa de verdade**: compra FILLED vira posição no livro da mesa (antes o livro só era alimentado em teste — a gestão de saída ficaria cega em produção).
+2. **Vigia de pilotos no ciclo com estado RELIDO:** `service/app.py` monta o vigia com instâncias novas de `SupervisorDePiloto`/`EscolaCentral` a cada ciclo — cache de boot bloquearia/liberaria a entrada errada quando autorização e formatura mudam por fora; falha do vigia cai no fail-closed do orquestrador e fica registrada em `avisos_vigia` (expostos no `desk/status`). Cada piloto é reavaliado **no contexto do pedido** (formatura na Binance não sustenta piloto na OKX).
+3. **Causa-raiz da flakiness do E2E (provada e corrigida):** `ArbitrageTrader._evaluate` (`traders.py`) sorteava a oportunidade simulada (~5%) pela hash do **relógio de parede** (`snap.cutoff`); no fixture, cada execução sorteava de novo — quando disparava, a arbitragem (confiança 0.85) vencia a seleção do supervisor sobre o momentum (0.7) e, sem pedido de piloto próprio, **burlava o vigia** produzindo 2 ordens na cena de 1 (reproduzido: iteração 6 do loop de 20x falhou com `assert 'trader-arbitrage' == 'trader-momentum'`). Correção: o sorteio deriva do **ESTADO DE MERCADO** (`instrumento|último fechamento`, quantizado `.4f`) — o mesmo candle decide igual em qualquer réplica e o laudo é reprodutível com o mesmo feed. Regressão pinada: `test_arbitrage_decide_pelo_estado_de_mercado_nao_pelo_relogio` (dois cutoffs que, sob a regra antiga, um concedia e o outro negava a oportunidade — a decisão agora é idêntica nos dois; vermelho determinístico antes, verde depois).
+4. **Prova E2E (o que os 4 testes `TestMesaEscolaE2E` provam, no app real via TestClient):** ciclo da mesa dispara 2 ordens e as posições aparecem na sala `binance|paper-legacy|spot|paper` com os agentes corretos (momentum/statistical); saída realizada move `saldo_realizado`/`taxas_acumuladas` e vira desfecho na sala; `POST /v1/escola/avaliar` avança a formação DAQUELA sala e a certificação segue isolada (Binance formada OK / OKX `coletando`; chave inexistente 404; body sem campos 422); o vigia **corta** a entrada do momentum pendente (1 ordem — BTC abstenção "Maestro/piloto"), **libera** após `autorizar` (2 ordens) e **corta de novo** após `revogar` (1 ordem). Formação semeada pelo caminho real (220 parcelas -> candidata -> 300 -> formada).
+5. **Evidência reproduzível:** loop 10x de `tests/test_service_escola.py` -> **22/22 passed em todas as 10 iterações** (iteração 6 era o ponto de falha histórico); suíte completa **`2404 passed / 6 skipped / 71 subtests`** (exit 0; +137 vs C020); maestria/regime `29 passed`; E2E escola+leigo `86 passed`; adjacentes (multiagente/scheduler/piloto/quant/auditoria) `146 passed / 1 skipped`; ruff estrito limpo nos 8 arquivos tocados.
+
+### Ressalvas declaradas (honestidade)
+
+- A homologação **no bundle Windows instalado** do ciclo escola/mesa (itens 18 e 21) segue **pendente** das tasks #39-#40 (matriz de inicialização + re-homologação) — o E2E acima roda o app real via servidor de testes, não o exe `--windowed` da estação.
+- IQ Option permanece **laboratório experimental** com métricas próprias; nenhum resultado financeiro é misturado entre salas por construção (chave de sala), e isso está pinado por teste.
+
+### Estado
+
+LIVE `BLOCKED_BY_POLICY` o tempo todo (nenhuma operação real; envio real desativado). **Nada publicado** (sem tag/release). A cadeia obrigatória da escola está implementada e provada de ponta a ponta no caminho de produção: a formação **não** habilita negociação real — autorização LIVE continua ato exclusivo do proprietário, com limites e gates.

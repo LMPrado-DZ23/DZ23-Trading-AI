@@ -5,6 +5,7 @@ com o motivo do fluxo de piloto; certificação não atravessa contexto; o
 controle aleatório entra só por opção explícita do dono.
 """
 import importlib
+from decimal import Decimal
 
 
 def _load_app(tmp_path, monkeypatch, **env):
@@ -230,3 +231,179 @@ class TestControleOptIn:
         st = c.get("/v1/desk/status", headers=H).json()
         ids = [a["id"] for a in st["agents"]]
         assert len(ids) == 11 and "trader-controle" in ids
+
+
+def _fechar_posicao(m, instrumento):
+    """Saída pelo caminho de produção: OMS fecha na corretora e o livro da
+    mesa encerra — é o mesmo par de chamadas que a operação usa."""
+    tid = next(iter(m._DESKS))
+    desk = m._DESKS[tid]
+    pos = desk["orchestrator"].book[instrumento]
+    saida = desk["coordinator"].close_position(
+        instrument=instrumento, quantity=pos.quantity,
+        price=pos.entry_price, cost_basis=pos.cost_basis,
+        agent_id=pos.agent_id)
+    assert saida["estado"] == "filled", saida
+    assert desk["orchestrator"].close_position(
+        instrumento, Decimal(str(saida["preco"]))) is not None
+    return saida
+
+
+def _solicitar_piloto(c, agent_id, estrategia, ativo):
+    return c.post("/v1/escola/pilotos/solicitar", headers=H, json={
+        "agent_id": agent_id, "estrategia": estrategia, "versao": "1",
+        "corretora": "binance", "conta": "paper-legacy", "ativo": ativo,
+        "horizonte": "1h", "capital_maximo": "100",
+        "perda_diaria_maxima": "10", "perda_total_maxima": "30",
+        "prazo_dias": 30})
+
+
+class TestMesaEscolaE2E:
+    """A MESA do app integrada à ESCOLA pelo caminho de produção:
+
+    - o ciclo da mesa espelha entradas na sala da escola;
+    - a saída realizada move saldo/taxa e vira desfecho na sala;
+    - POST /v1/escola/avaliar avança a formação DAQUELA sala, e a
+      certificação continua isolada por corretora;
+    - o VIGIA corta entrada no ciclo de quem não está autorizado — e
+      devolve a entrada quando autorizado; revogado corta de novo.
+    """
+
+    CHAVE = "binance|paper-legacy|spot|paper"
+
+    @staticmethod
+    def _semear_formada(m, *, estrategia, ativo):
+        """Formação pelo caminho real (parcela → prova independente),
+        gravada na MESMA sala que a mesa espelha."""
+        from datetime import datetime, timedelta, timezone
+
+        from tradingagents.desk.learning import Desfecho
+        from tradingagents.desk.salas import EscolaCentral
+
+        tid = next(iter(m._DESKS))
+        desk = m._DESKS[tid]
+        central = EscolaCentral(armazem=desk["armazem"], tenant_id=tid)
+        sala = desk["sala"]
+        base = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+
+        def lote(inicio, n):
+            for i in range(n):
+                sala.registrar_desfecho(Desfecho(
+                    estrategia=estrategia, regime="tendencia",
+                    instrumento=ativo,
+                    retorno=Decimal("0.010" if i % 2 == 0 else "0.012"),
+                    fechado_em=inicio + timedelta(minutes=i),
+                    versao="1", horizonte="1h"))
+
+        lote(base, 220)
+        av = central.avaliar(sala=sala, estrategia=estrategia, ativo=ativo,
+                             agora=base + timedelta(days=30))
+        assert av.estado.value == "candidata", av.motivo
+        lote(base + timedelta(days=31), 300)
+        av = central.avaliar(sala=sala, estrategia=estrategia, ativo=ativo,
+                             agora=base + timedelta(days=120))
+        assert av.estado.value == "formada", av.motivo
+
+    def test_ciclo_espelha_na_sala_e_saida_realiza(self, tmp_path, monkeypatch):
+        c, m = _client(tmp_path, monkeypatch)
+        r = c.post("/v1/desk/cycle", headers=H).json()
+        assert len(r["ordens"]) == 2
+
+        det = c.get("/v1/escola/salas/detalhe", headers=H,
+                    params={"chave": self.CHAVE}).json()
+        posicoes = det["sala"]["posicoes_abertas"]
+        assert set(posicoes) == {"BTC/USDT", "ETH/USDT"}
+        assert posicoes["BTC/USDT"]["agente"] == "trader-momentum"
+        assert posicoes["ETH/USDT"]["agente"] == "trader-statistical"
+
+        _fechar_posicao(m, "BTC/USDT")
+
+        det = c.get("/v1/escola/salas/detalhe", headers=H,
+                    params={"chave": self.CHAVE}).json()
+        sala = det["sala"]
+        assert Decimal(sala["saldo_realizado"]) != 0
+        assert Decimal(sala["taxas_acumuladas"]) > 0
+        assert sala["desfechos"] == 1
+        assert set(sala["posicoes_abertas"]) == {"ETH/USDT"}
+
+    def test_avaliacao_avanca_formacao_e_isola_contexto(self, tmp_path,
+                                                        monkeypatch):
+        c, m = _client(tmp_path, monkeypatch)
+        assert c.get("/v1/desk/status", headers=H).status_code == 200
+        self._semear_formada(m, estrategia="momentum", ativo="BTC/USDT")
+
+        r = c.post("/v1/escola/avaliar", headers=H, json={
+            "chave": self.CHAVE, "estrategia": "momentum",
+            "ativo": "BTC/USDT"})
+        assert r.status_code == 200, r.text
+        av = r.json()["avaliacao"]
+        assert av["estado"] == "formada" and av["aprovada"] is True
+        assert av["amostras"] >= 500
+
+        bin_ = c.get("/v1/escola/certificacao", headers=H, params={
+            "estrategia": "momentum", "corretora": "binance",
+            "mercado": "spot", "ativo": "BTC/USDT"}).json()
+        assert bin_["elegivel"] is True and bin_["estado"] == "formada"
+        okx = c.get("/v1/escola/certificacao", headers=H, params={
+            "estrategia": "momentum", "corretora": "okx",
+            "mercado": "spot", "ativo": "BTC/USDT"}).json()
+        assert okx["elegivel"] is False and okx["estado"] == "coletando"
+
+        assert c.post("/v1/escola/avaliar", headers=H, json={
+            "chave": "binance|nao-existe|spot|paper",
+            "estrategia": "momentum", "ativo": "BTC/USDT"}).status_code == 404
+        assert c.post("/v1/escola/avaliar", headers=H, json={
+            "chave": self.CHAVE}).status_code == 422
+
+    def test_piloto_aguardando_corta_entrada_no_ciclo(self, tmp_path,
+                                                      monkeypatch):
+        c, m = _client(tmp_path, monkeypatch)
+        assert c.get("/v1/desk/status", headers=H).status_code == 200
+        self._semear_formada(m, estrategia="momentum", ativo="BTC/USDT")
+        ped = _solicitar_piloto(c, "trader-momentum", "momentum", "BTC/USDT")
+        assert ped.status_code == 200, ped.text
+        assert ped.json()["autorizacao"]["estado"] == "aguardando_autorizacao"
+
+        ciclo = c.post("/v1/desk/cycle", headers=H).json()
+        assert len(ciclo["ordens"]) == 1
+        st = c.get("/v1/desk/status", headers=H).json()
+        assert [o["instrumento"] for o in st["orders"]] == ["ETH/USDT"]
+        assert any("trader-momentum" in a and "BTC/USDT" in a
+                   and "Maestro/piloto" in a for a in ciclo["abstencoes"]), \
+            ciclo["abstencoes"]
+
+    def test_autorizado_passa_e_revogado_corta_de_novo(self, tmp_path,
+                                                       monkeypatch):
+        c, m = _client(tmp_path, monkeypatch)
+        assert c.get("/v1/desk/status", headers=H).status_code == 200
+        self._semear_formada(m, estrategia="momentum", ativo="BTC/USDT")
+        assert _solicitar_piloto(c, "trader-momentum", "momentum",
+                                 "BTC/USDT").status_code == 200
+
+        # Ciclo com o piloto pendente: entrada do momentum cortada (e o
+        # pedido real assume a posse desta máquina — gate do ambiente).
+        assert len(c.post("/v1/desk/cycle", headers=H).json()["ordens"]) == 1
+        _fechar_posicao(m, "ETH/USDT")
+
+        aut = c.post("/v1/escola/pilotos/trader-momentum/autorizar",
+                     headers=H)
+        assert aut.status_code == 200, aut.text
+        assert aut.json()["autorizacao"]["estado"] == "piloto_autorizado"
+
+        ciclo2 = c.post("/v1/desk/cycle", headers=H).json()
+        assert len(ciclo2["ordens"]) == 2
+        assert not any("trader-momentum" in a and "Maestro/piloto" in a
+                       for a in ciclo2["abstencoes"])
+
+        rv = c.post("/v1/escola/pilotos/trader-momentum/revogar", headers=H,
+                    json={"motivo": "ensaio de revogação"})
+        assert rv.status_code == 200
+        tid = next(iter(m._DESKS))
+        for instr in list(m._DESKS[tid]["orchestrator"].book):
+            _fechar_posicao(m, instr)
+
+        ciclo3 = c.post("/v1/desk/cycle", headers=H).json()
+        assert len(ciclo3["ordens"]) == 1
+        assert any("trader-momentum" in a
+                   and "Maestro/piloto" in a for a in ciclo3["abstencoes"]), \
+            ciclo3["abstencoes"]

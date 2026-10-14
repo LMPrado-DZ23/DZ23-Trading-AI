@@ -1936,10 +1936,46 @@ def _desk_boot(tenant_id: str) -> dict:
 
         analista = AnalistaDeContexto(_consultar)
 
+    # BT-10: a mesa do app ganha SALA na escola (espelho financeiro) e
+    # VIGIA de pilotos (bloqueio de entradas). LIVE não cria sala por esta
+    # camada — operação real exige o fluxo de piloto autorizado.
+    from tradingagents.desk.piloto import SupervisorDePiloto
+    from tradingagents.desk.salas import ContextoDaSala, EscolaCentral, RegistroDeSalas
+    sala_da_mesa = None
+    sala_motivo = ""
+    if broker_mode in ("paper", "testnet"):
+        try:
+            sala_da_mesa = RegistroDeSalas(
+                armazem=armazem, tenant_id=tenant_id).abrir_sala(
+                ContextoDaSala(corretora=exchange_cfg, conta=mandate.account,
+                               mercado="spot", modo=broker_mode))
+        except Exception as exc:
+            sala_motivo = f"sala não registrada ({type(exc).__name__}: {exc})"[:200]
+    else:
+        sala_motivo = ("modo LIVE não cria sala por esta camada; operação "
+                       "real exige o fluxo de piloto autorizado")
+    _avisos_vigia: list[str] = []
+
+    def _vigia_pilotos() -> dict[str, str]:
+        """Quem o piloto bloqueia AGORA — reavaliado no contexto do pedido.
+        Estado RELIDO do armazém a cada ciclo (instâncias novas): autorização
+        e formatura mudam por fora deste processo, e cache de boot bloquearia
+        ou liberaria a entrada errada. Falha vira bloqueio (o orquestrador já
+        trata vigia quebrado como fail-closed); o aviso fica para auditoria."""
+        try:
+            sup = SupervisorDePiloto(armazem, tenant_id=tenant_id)
+            viva = EscolaCentral(armazem=armazem, tenant_id=tenant_id)
+            return sup.bloqueios(central=viva)
+        except Exception as exc:
+            _avisos_vigia.append(f"{type(exc).__name__}: {exc}"[:160])
+            del _avisos_vigia[:-10]
+            raise
+
     orch = DeskOrchestrator(mandate, traders, worker_id=f"worker-{tenant_id}",
                             risk=risk, positions_provider=ledger.open_positions,
                             memoria=memoria, exchange=exchange_cfg,
-                            analista=analista)
+                            analista=analista, vigia=_vigia_pilotos,
+                            sala=sala_da_mesa)
 
     feed_kind = (cfg.get("TRADINGAGENTS_DESK_FEED") or "fixture").strip().lower()
     if feed_kind == "real":
@@ -1981,7 +2017,8 @@ def _desk_boot(tenant_id: str) -> dict:
             "memoria": memoria, "armazem": armazem, "recuperacao": recuperacao,
             "guardian": PositionGuardian(coord), "cycles": [],
             "feed_kind": feed_kind, "broker_mode": broker_mode,
-            "modo": modo, "posse": posse,
+            "modo": modo, "posse": posse, "sala": sala_da_mesa,
+            "sala_motivo": sala_motivo, "avisos_vigia": _avisos_vigia,
             "scheduler": None, "estagios_antes": estagios_antes,
             "persistir_estagios": _persistir_estagios,
             "ia_modelo": cfg.get("TRADINGAGENTS_LLM_PROVIDER") or ""}
@@ -2173,6 +2210,9 @@ def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
         "guardiao": d["guardian"].watchlist(),
         "agendador": d["scheduler"].status(),
         "modo": {**d["modo"].resumo(), "posse": d["posse"].resumo()},
+        "escola": {"sala": (d["sala"].resumo() if d.get("sala") else None),
+                   "motivo": d.get("sala_motivo", ""),
+                   "avisos_vigia": d.get("avisos_vigia", [])[-5:]},
         "durabilidade": d["armazem"].estado() if d.get("armazem") else {},
         "fonte": {"dados": d["feed_kind"], "corretora": d["broker_mode"],
                   "aviso": ("mercado real (leitura pública, cutoff na vela fechada)"
@@ -2550,6 +2590,38 @@ def escola_certificacao(request: Request, estrategia: str, corretora: str,
                       "proprietário, com limites explícitos")}
 
 
+@app.post("/v1/escola/avaliar")
+async def escola_avaliar(req: Request, _=Depends(auth),
+                         __=Depends(require_plan)):
+    """Avalia uma estratégia NO CONTEXTO de uma sala: acumula amostras,
+    candidata e forma. É o único caminho pelo qual a escola avança — e
+    avançar aqui significa elegibilidade, nunca autorização de operar."""
+    from tradingagents.desk.salas import SalaError
+    body = await _json_body(req)
+    esc = _escola_of(req)
+    sala = _sala_por_chave(esc, str(body.get("chave") or ""))
+    estrategia = str(body.get("estrategia") or "").strip()
+    ativo = str(body.get("ativo") or "").strip()
+    if not estrategia or not ativo:
+        raise HTTPException(422, "estrategia e ativo são obrigatórios")
+    try:
+        av = esc["central"].avaliar(
+            sala=sala, estrategia=estrategia,
+            versao=str(body.get("versao") or "1"), ativo=ativo,
+            horizonte=str(body.get("horizonte") or "1h"))
+    except SalaError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"ok": True, "avaliacao": {
+        "chave": av.chave, "estrategia": av.estrategia, "versao": av.versao,
+        "estado": av.estado.value, "motivo": av.motivo,
+        "amostras": av.amostras, "n_efetivo": av.n_efetivo,
+        "media": str(av.media), "ic_inferior": str(av.ic_inferior),
+        "ic_superior": str(av.ic_superior), "aprovada": av.aprovada,
+        "atualizada_em": av.atualizada_em},
+        "aviso": ("formação habilita apenas o PROCESSO de autorização; "
+                  "negociação real continua exclusiva do proprietário")}
+
+
 @app.get("/v1/escola/maestro")
 def escola_maestro(request: Request, _=Depends(auth)):
     """Maestro Central: pausa global, exposição, conflitos entre salas."""
@@ -2590,10 +2662,11 @@ def _supervisor_of(request: Request, escola=None):
 def escola_pilotos(request: Request, _=Depends(auth)):
     """Cadeia do piloto por agente + modo do piloto + gates esperados."""
     from tradingagents.desk.piloto import GATES_ESPERADOS, MODO_DO_PILOTO
+    esc = _escola_of(request)
     sup = _supervisor_of(request)
     return {"modo": MODO_DO_PILOTO, "gates_esperados": list(GATES_ESPERADOS),
             "autorizacoes": sup.relatorio(),
-            "vigia": sup.vigiar(),
+            "vigia": sup.vigiar(central=esc["central"]),
             "aviso": ("a formação não habilita negociação real; autorizar "
                       "piloto é ato exclusivo do proprietário")}
 
@@ -2647,7 +2720,8 @@ async def escola_piloto_solicitar(req: Request, _=Depends(auth),
             perda_total_maxima=_decimal("perda_total_maxima"),
             prazo_dias=prazo,
             condicoes_de_suspensao=tuple(body.get("condicoes_de_suspensao")
-                                         or ()))
+                                         or ()),
+            contexto=contexto.como_dict())
     except (ValueError, SalaError) as exc:
         raise HTTPException(409, str(exc)) from exc
     return {"ok": True, "autorizacao": aut.como_dict()}

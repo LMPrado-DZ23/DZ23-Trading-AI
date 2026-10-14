@@ -27,9 +27,9 @@ IDS_ESPERADOS = ("trader-trend", "trader-reversion", "trader-breakout",
                  "trader-volatility", "trader-arbitrage",
                  "trader-statistical", "trader-adaptive")
 
-# Cutoff FIXO nos testes do supervisor: a arbitragem decide pela dispersão das
-# cotações daquele instante, então pregar o instante é o que torna a cena
-# determinística (com este valor, não há distorção entre corretoras).
+# Cutoff fixo nos testes do supervisor: a arbitragem decide pelo ESTADO DE
+# MERCADO (instrumento + último fechamento), então a cena do fixture já é
+# reprodutível por si — o cutoff é higiene do fixture, não variável de decisão.
 CUTOFF_FIXO = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 

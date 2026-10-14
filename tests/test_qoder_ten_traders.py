@@ -18,9 +18,10 @@ from tradingagents.desk.traders import (
     default_desk,
 )
 
-# Cutoff fixo e determinístico: o simulador de arbitragem decide por hash do
-# cutoff (~5% de chance de oportunidade), então datetime.now() tornaria o
-# resultado do supervisor flaky. 12:00 UTC foi verificado como não-oportunidade.
+# Cutoff fixo por higiene do fixture: determinístico por execução. A decisão
+# da arbitragem deriva do ESTADO DE MERCADO (instrumento + último fechamento),
+# não do relógio — o cutoff não influencia o resultado (ver teste de regressão
+# `test_arbitrage_decide_pelo_estado_de_mercado_nao_pelo_relogio`).
 CUTOFF_FIXO = datetime(2026, 10, 13, 12, 0, tzinfo=timezone.utc)
 
 
@@ -105,21 +106,56 @@ class TestIndividualTradersLogic:
         assert "expansão de volatilidade" in prop.reason
 
     def test_arbitrage_trader_finds_opportunity(self):
-        closes = [100.0] * 30 + [100.0, 100.5, 100.2, 100.8, 101.0]
+        # O sorteio da arbitragem deriva do ESTADO DE MERCADO (instrumento +
+        # último fechamento): a busca percorre estados de preço até encontrar
+        # um em que a distorção simulada acontece. O cutoff fica fixo de
+        # propósito — ele não pode influenciar a decisão.
         trader = ArbitrageTrader("trader-arbitrage", ("BTC/USDT",))
         trader.spec.stage = AgentStage.VALIDATED
         trader.regimes_favoraveis = None # bypass regime check for unit logic
 
         found_arbitrage = False
         for i in range(100):
-            cutoff = datetime(2026, 10, 13, 15 + (i // 60), i % 60, tzinfo=timezone.utc)
-            test_snap = MarketSnapshot("BTC/USDT", "1h", cutoff, tuple(Decimal(str(c)) for c in closes), "fixture", "ok")
+            last = Decimal("100.0") + Decimal(i) * Decimal("0.1")
+            closes = tuple(Decimal("100.0") for _ in range(30)) + (last,)
+            test_snap = MarketSnapshot("BTC/USDT", "1h", CUTOFF_FIXO, closes, "fixture", "ok")
             prop = trader.propose(test_snap)
             if prop.action is Action.BUY:
                 assert "arbitragem detectada" in prop.reason
                 found_arbitrage = True
                 break
-        assert found_arbitrage, "Should simulate arbitrage on some cutoffs"
+        assert found_arbitrage, "Should simulate arbitrage on some market states"
+
+    def test_arbitrage_decide_pelo_estado_de_mercado_nao_pelo_relogio(self):
+        # Regressão da causa-raiz da flakiness do supervisor: a arbitragem
+        # sorteava pela hash do CUTOFF (relógio de parede), então o mesmo
+        # mercado decidia diferente a cada execução. Estes dois cutoffs, sob a
+        # regra antiga, um concedia e o outro negava a oportunidade; a decisão
+        # agora depende só do estado de mercado e deve ser idêntica nos dois.
+        trader = ArbitrageTrader("trader-arbitrage", ("BTC/USDT",))
+        trader.spec.stage = AgentStage.VALIDATED
+        trader.regimes_favoraveis = None # bypass regime check for unit logic
+
+        antigo_dispara = datetime(2026, 10, 13, 15, 1, 29, tzinfo=timezone.utc)
+        antigo_nega = datetime(2026, 10, 13, 15, 0, 0, tzinfo=timezone.utc)
+
+        def decisao(cutoff, last):
+            closes = tuple(Decimal("100.0") for _ in range(30)) + (last,)
+            return trader.propose(MarketSnapshot(
+                "BTC/USDT", "1h", cutoff, closes, "fixture", "ok"))
+
+        # estado de mercado COM oportunidade simulada: BUY nos dois cutoffs
+        com = [decisao(c, Decimal("103.2"))
+               for c in (antigo_dispara, antigo_nega)]
+        assert all(p.action is Action.BUY for p in com)
+        assert com[0].reason == com[1].reason
+        assert "arbitragem detectada" in com[0].reason
+
+        # estado SEM oportunidade: NO_TRADE nos dois cutoffs
+        sem = [decisao(c, Decimal("101.0"))
+               for c in (antigo_dispara, antigo_nega)]
+        assert all(p.action is Action.NO_TRADE for p in sem)
+        assert sem[0].reason == sem[1].reason
 
     def test_statistical_trader_buys_on_spread_deviation(self):
         closes = [100.0] * 35 + [85.0]
