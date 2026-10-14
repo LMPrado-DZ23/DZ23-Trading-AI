@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from .backtest import BacktestConfig, BacktestResult, Bar, run_backtest
+from .backtest import BacktestConfig, BacktestResult, Bar, revisao_do_codigo, run_backtest
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,4 +27,5 @@ def windows(size: int, train_size: int, test_size: int, step: int | None = None)
 
 
 def run_walk_forward(bars: Sequence[Bar], train_size: int, test_size: int, signal, config: BacktestConfig) -> tuple[BacktestResult, ...]:
-    return tuple(run_backtest(bars[w.test_start:w.test_end], signal, config, code_revision=f"walk-forward:{w.train_start}:{w.train_end}") for w in windows(len(bars), train_size, test_size))
+    revisao = revisao_do_codigo()
+    return tuple(run_backtest(bars[w.test_start:w.test_end], signal, config, code_revision=revisao, janela=f"{w.train_start}:{w.train_end}") for w in windows(len(bars), train_size, test_size))

@@ -153,15 +153,15 @@ def analisar_livro(exchange: str, instrumento: str, bruto, *,
                  if total else Decimal("0"))
     obtido = obtido_em or agora
     idade = max(0, int((agora - obtido).total_seconds()))
-    campos = dict(
-        instrumento=instrumento, exchange=exchange,
-        obtido_em=obtido.isoformat(), idade_s=idade,
-        bid=bid, ask=ask,
-        spread_bps=spread_bps.quantize(_CASAS),
-        profundidade_bid=profundidade_bid,
-        profundidade_ask=profundidade_ask,
-        imbalance=imbalance.quantize(_CASAS),
-        niveis_usados=usados, niveis_bid=bids, niveis_ask=asks)
+    campos = {"instrumento": instrumento, "exchange": exchange,
+              "obtido_em": obtido.isoformat(), "idade_s": idade,
+              "bid": bid, "ask": ask,
+              "spread_bps": spread_bps.quantize(_CASAS),
+              "profundidade_bid": profundidade_bid,
+              "profundidade_ask": profundidade_ask,
+              "imbalance": imbalance.quantize(_CASAS),
+              "niveis_usados": usados, "niveis_bid": bids,
+              "niveis_ask": asks}
     if idade > max_idade_s:
         return LeituraDeLivro(estado="vencida", motivo=(
             f"leitura vencida: idade {idade} s excede validade de "

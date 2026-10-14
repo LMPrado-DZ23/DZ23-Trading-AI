@@ -50,15 +50,20 @@ def test_signal_only_sees_strictly_past_bars():
 
 
 def test_walk_forward_marks_each_window_with_its_own_revision():
-    """Cada dobra precisa provar de onde veio (item 8): tags distintas por
-    janela e hash próprio — dobra repetida não se confunde com a primeira."""
+    """Cada dobra carrega a revisão REAL do código (sha do commit HEAD) e a
+    SUA janela em campo próprio — dobra repetida não se confunde com a
+    primeira, e nenhum resultado se passa por mais reproduzível do que é."""
+    from tradingagents.research import revisao_do_codigo
+
     b = bars(40)
     cfg = BacktestConfig()
     resultados = run_walk_forward(b, train_size=20, test_size=5,
                                   signal=lambda history: 0, config=cfg)
     janelas = windows(40, 20, 5)
     assert len(resultados) == len(janelas) == 4
+    esperada = revisao_do_codigo()
     for r, j in zip(resultados, janelas, strict=True):
-        assert r.manifest["code_revision"] == f"walk-forward:{j.train_start}:{j.train_end}"
-    assert len({r.manifest["code_revision"] for r in resultados}) == 4
+        assert r.manifest["code_revision"] == esperada
+        assert r.manifest["janela"] == f"{j.train_start}:{j.train_end}"
+    assert len({r.manifest["janela"] for r in resultados}) == 4
     assert len({r.dataset_hash for r in resultados}) == 4

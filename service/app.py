@@ -3263,6 +3263,17 @@ def _retrato_da_sala(agent_id: str, request: Request, instrumento: str,
         modo=d["orchestrator"].mandate.mode.value, livro=livro)
 
 
+@app.get("/v1/desk/evolucao")
+def desk_evolucao(request: Request, _=Depends(auth)):
+    """Caderno GLOBAL de experimentos da evolução (AC-1/A3) — leitura pura.
+
+    O caderno por trader já vive na sala dele; aqui o dono vê a mesa
+    inteira: desempenho dos traders e o registro de experimentos com
+    resultado. Nada de escrita — evolução não altera código, permissões
+    nem limites (o aviso viaja junto, sempre)."""
+    return _desk_of(request)["evolucao"].relatorio()
+
+
 @app.get("/v1/desk/traders/{agent_id}/sala")
 def desk_trader_sala(agent_id: str, request: Request, _=Depends(auth),
                      instrumento: str = "", timeframe: str = "1h"):

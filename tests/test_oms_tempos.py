@@ -103,9 +103,6 @@ class TestCarimbosDaOrdem:
     def test_latencias_none_sem_carimbo(self):
         m = mandate()
         risk = RiskEngine(m)
-        ledger = Ledger(opening_cash=m.capital)
-        coord = ExecutionCoordinator(m, ledger, risk, worker_id="w1",
-                                     broker=None)
         res = risk.reserve(proposal(), Decimal("100"))
         intent = risk.intent(res, Action.BUY, Mode.PAPER, "w1",
                              idempotency_key="idem-sem-carimbo")
@@ -196,7 +193,9 @@ class TestTrilhaNaMesa:
 
     def _client(self, tmp_path, monkeypatch):
         import importlib
+
         from fastapi.testclient import TestClient
+
         from service.api.ia_provedores import CATALOGO
         for p in CATALOGO:            # máquina do dono tem chave de IA real
             if p["chave_env"]:

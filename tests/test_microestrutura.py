@@ -246,11 +246,12 @@ class TestRetratoEContaRota:
         from tradingagents.desk.sala_trader import retrato_do_trader
         livro = {"estado": "nao_aplicavel",
                  "motivo": "modo dados de treino (fixture) — sem livro"}
-        base = dict(trader={"id": "t1"}, instrumento="BTC/USDT",
-                    timeframe="1h", velas=None, fechamentos=["100", "101"],
-                    fonte="fixture", aviso_fonte="fixture", qualidade="ok",
-                    diario=[], transacoes=[], lotes=[], ordens=[], ciclos=[],
-                    experimentos=[], atribuicao={}, moeda="USDT", modo="paper")
+        base = {"trader": {"id": "t1"}, "instrumento": "BTC/USDT",
+                "timeframe": "1h", "velas": None, "fechamentos": ["100", "101"],
+                "fonte": "fixture", "aviso_fonte": "fixture",
+                "qualidade": "ok", "diario": [], "transacoes": [],
+                "lotes": [], "ordens": [], "ciclos": [], "experimentos": [],
+                "atribuicao": {}, "moeda": "USDT", "modo": "paper"}
         com = retrato_do_trader("t1", livro=livro, **base)
         sem = retrato_do_trader("t1", **base)
         assert com["livro"]["estado"] == "nao_aplicavel"
@@ -276,3 +277,15 @@ class TestRetratoEContaRota:
         assert livro["estado"] == "nao_aplicavel"
         assert "treino" in livro["motivo"]
         assert livro["somente_leitura"] is True
+
+
+class TestAnotacaoDoLivroRefletivel:
+    """AC-1/A4: o contrato de retorno de `leitura_de_livro` precisa ser
+    refletível — a anotação citada resolve no escopo do módulo (o import
+    vivia só dentro do método; `get_type_hints` quebrava com NameError)."""
+
+    def test_tipo_de_retorno_do_livro_resolve(self):
+        import typing
+
+        hints = typing.get_type_hints(PublicMarketFeed.leitura_de_livro)
+        assert hints["return"] is LeituraDeLivro

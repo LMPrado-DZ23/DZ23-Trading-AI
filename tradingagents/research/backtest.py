@@ -1,11 +1,41 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from decimal import Decimal
 from hashlib import sha256
+from pathlib import Path
+
+_RAIZ = Path(__file__).resolve().parents[2]
+# Ligado no import: o except não pode resolver via `subprocess.` depois de
+# o módulo ser trocado em teste (o falso `subprocess` não conhece a exceção).
+_SUBPROCESS_ERROR = subprocess.SubprocessError
+
+
+def revisao_do_codigo() -> str:
+    """Revisão do código que produziu o resultado — sha do commit HEAD.
+
+    Diretório sujo ⇒ sufixo `-dirty` (resultado não reproduzível tal como
+    está). Sem git (zip instalado, ambiente estranho) ⇒ `"working-tree"`
+    honesto em vez de sha inventado.
+    """
+    try:
+        sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=_RAIZ,
+            capture_output=True, text=True, timeout=10,
+        ).stdout.strip()
+        if not sha:
+            return "working-tree"
+        sujo = subprocess.run(
+            ["git", "diff", "--quiet"], cwd=_RAIZ,
+            capture_output=True, timeout=10,
+        ).returncode != 0
+        return f"{sha}-dirty" if sujo else sha
+    except (OSError, _SUBPROCESS_ERROR):
+        return "working-tree"
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,7 +73,7 @@ class BacktestResult:
     fills_rejeitados_por_liquidez: int = 0
 
 
-def run_backtest(bars: Iterable[Bar], signal: Callable[[tuple[Bar, ...]], int], config: BacktestConfig, *, code_revision: str = "working-tree") -> BacktestResult:
+def run_backtest(bars: Iterable[Bar], signal: Callable[[tuple[Bar, ...]], int], config: BacktestConfig, *, code_revision: str = "working-tree", janela: str = "") -> BacktestResult:
     ordered = tuple(sorted(bars, key=lambda bar: bar.timestamp))
     if any(bar.available_at > bar.timestamp for bar in ordered):
         raise ValueError("available_at não pode ser posterior ao timestamp observado")
@@ -80,5 +110,5 @@ def run_backtest(bars: Iterable[Bar], signal: Callable[[tuple[Bar, ...]], int], 
     for value in curve:
         peak = max(peak, value)
         drawdowns.append((peak - value) / peak if peak else Decimal("0"))
-    manifest = {"dataset_hash": dataset_hash, "code_revision": code_revision, "seed": str(config.seed), "cost_model": f"fee_bps={config.fee_bps};slippage_bps={config.slippage_bps}", "liquidity_model": f"max_participacao={config.max_participacao}"}
+    manifest = {"dataset_hash": dataset_hash, "code_revision": code_revision, "janela": janela, "seed": str(config.seed), "cost_model": f"fee_bps={config.fee_bps};slippage_bps={config.slippage_bps}", "liquidity_model": f"max_participacao={config.max_participacao}"}
     return BacktestResult(tuple(curve), trades, (equity / config.initial_equity) - 1, max(drawdowns, default=Decimal("0")), dataset_hash, manifest, fills_limitados, fills_rejeitados)

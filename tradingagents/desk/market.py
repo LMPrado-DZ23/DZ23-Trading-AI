@@ -17,9 +17,11 @@ from __future__ import annotations
 
 import threading
 import time
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
+from .microestrutura import LeituraDeLivro, analisar_livro
 from .models import MarketSnapshot
 
 TIMEFRAME_SECONDS = {"1m": 60, "5m": 300, "15m": 900, "1h": 3600,
@@ -105,7 +107,7 @@ class PublicMarketFeed:
 
     def leitura_de_livro(self, instrument: str, *, limit: int = 50,
                          niveis: int = 10, max_idade_s: int = 15,
-                         agora: datetime | None = None) -> "LeituraDeLivro":
+                         agora: datetime | None = None) -> LeituraDeLivro:
         """Livro L2 PÚBLICO e SEM escrita — mesma regra do resto do feed.
 
         Corretora sem `fetchOrderBook` nativo (flag True no ccxt;
@@ -113,10 +115,6 @@ class PublicMarketFeed:
         rede: sem leitura anterior ⇒ `indisponivel`; com leitura anterior
         ⇒ `vencida` (números ficam, motivo aponta a falha). Cache curto
         por (exchange, instrumento, limit)."""
-        from dataclasses import replace
-
-        from .microestrutura import LeituraDeLivro, analisar_livro
-
         agora = agora or datetime.now(timezone.utc)
         try:
             cliente = self.client

@@ -52,9 +52,9 @@ Precedente registrado (FM §12–§13): a abertura e o merge do PR da branch de 
 
 | # | Pendência | Tipo | Estado |
 | :-: | :--- | :--- | :--- |
-| 1 | `code_revision` real no manifest do research backtest (hoje default `"working-tree"`) | Débito de rastreabilidade (matriz §2.1) | Pendente — não comprovadamente necessário nesta rodada (§14); registrado |
-| 2 | Teste explícito de igualdade indicador-backtest×produção com warmup declarado (FQ-1 fez causalidade/prefixo; falta o teste de igualdade entre os dois contextos) | Débito de teste (matriz §2.1) | Pendente — registrado |
-| 3 | Fiação do `Laboratorio` em produção como caderno consultável (hoje instanciado só em testes; reuso via `evolucao`) | Débito de produto (matriz §2.1) | Pendente — registrado |
+| 1 | `code_revision` real no manifest do research backtest (hoje default `"working-tree"`) | Débito de rastreabilidade (matriz §2.1) | **FECHADO na rodada AC-1 (2026-10-14):** `revisao_do_codigo()` resolve sha HEAD (+`-dirty` se árvore suja; `"working-tree"` honesto sem git); campo `janela` separado no manifest; pino antigo atualizado — `tests/test_ac1_revisao_codigo.py` + `test_research.py` |
+| 2 | Teste explícito de igualdade indicador-backtest×produção com warmup declarado (FQ-1 fez causalidade/prefixo; falta o teste de igualdade entre os dois contextos) | Débito de teste (matriz §2.1) | **FECHADO na rodada AC-1 (2026-10-14):** `tests/test_ac1_igualdade_contextos.py` — janela do backtest = prefixo exato de produção, decisão igual no mesmo corte, warmup idêntico, RSI Cutler (decisão) e Wilder (painel) declarados e pinados como distintos |
+| 3 | Fiação do `Laboratorio` em produção como caderno consultável (hoje instanciado só em testes; reuso via `evolucao`) | Débito de produto (matriz §2.1) | **FECHADO (parcial, com decisão) na rodada AC-1 (2026-10-14):** caderno GLOBAL exposto em `GET /v1/desk/evolucao` (`evolucao.relatorio()`; leitura pura autenticada; o por-trader já vivia na sala). A classe `Laboratorio` PERMANECE só em testes por decisão: fiá-la duplicaria a maquinaria da Evolução (§2 — matriz AC-1 A3) |
 | 4 | Endpoint determinístico "perguntas do dono" (Copiloto §7) | Decisão de escopo | **ADIAR** (§3 item 5 da matriz) — reavaliar com evidência de erro por dispersão |
 | 5 | Primeiro confronto DZ23 × Freqtrade (protocolo pronto) | Rodada pontual (§4) | Não executado — protocolo em `FQ-2-PROTOCOLO-EQUIVALENCIA.md`; disparar só se um veredito da Escola for contestado |
 | 6 | Adaptador OpenBB (§6) | Integração opcional | **ADIAR** — sem caso de uso comprovado; sem B3 |

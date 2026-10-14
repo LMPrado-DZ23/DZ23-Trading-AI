@@ -47,6 +47,9 @@ def ema(valores, n: int) -> float | None:
 
 
 def rsi(valores, n: int = 14) -> float | None:
+    """RSI (Cutler) da última barra — média simples de ganhos/perdas da
+    janela. Diferente do RSI de Wilder (suavização recursiva) usado no
+    painel da sala e no Copiloto: valores distintos, cada um declarado."""
     v = _f(valores)
     if len(v) < n + 1:
         return None
