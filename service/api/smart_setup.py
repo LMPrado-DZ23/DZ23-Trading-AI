@@ -27,10 +27,12 @@ from __future__ import annotations
 import re
 
 # Pré-configuração segura (R1): valores aplicados SÓ quando o campo está
-# vazio. Português porque o dono é pt-BR; rodadas enxutas porque cada rodada
-# de debate é uma chamada paga.
+# vazio. Idioma "Portuguese" é o nome canônico da CLI E o valor exibível no
+# <select> do painel (o dono é pt-BR; um valor que o select não mostra
+# apareceria vazio depois de aplicar um perfil); rodadas enxutas porque cada
+# rodada de debate é uma chamada paga.
 PADROES_SEGUROS: dict[str, str] = {
-    "TRADINGAGENTS_OUTPUT_LANGUAGE": "Português (Brasil)",
+    "TRADINGAGENTS_OUTPUT_LANGUAGE": "Portuguese",
     "TRADINGAGENTS_DESK_CONTROLE": "0",
 }
 

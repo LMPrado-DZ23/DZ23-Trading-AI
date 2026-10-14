@@ -52,7 +52,7 @@ class TestConfigKeysECampos:
     def test_campos_de_chave_novos_sao_password(self):
         html = _html()
         for k in ("DEEPSEEK_API_KEY", "OPENAI_COMPATIBLE_API_KEY"):
-            m = re.search(r'<input[^>]*id="%s"[^>]*>' % k, html)
+            m = re.search(rf'<input[^>]*id="{k}"[^>]*>', html)
             assert m, f"campo {k} não encontrado"
             assert 'type="password"' in m.group(0), f"{k} sem type=password"
             assert f'id="s_{k}"' in html, f"{k} sem status CONFIGURADA"
@@ -184,3 +184,129 @@ class TestRenderE2e:
         assert c.get("/v1/ai/uso", headers=h).status_code == 200
         assert c.get("/v1/ai/modelos", headers=h,
                      params={"provedor": "openai"}).status_code == 200
+
+    def test_pagina_renderiza_o_card_de_smart_setup(self, tmp_path,
+                                                    monkeypatch):
+        from fastapi.testclient import TestClient
+        m = self._app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+        corpo = c.get("/app").text
+        assert "Configuração Inteligente" in corpo
+        assert 'id="ssPerfil"' in corpo
+        assert 'id="TRADINGAGENTS_IA_ORCAMENTO_BLOQUEIO"' in corpo
+
+
+class TestPainelSmartSetup:
+    """Missão V8 (Smart Setup + diretriz UX): o painel precisa entregar o
+    assistente, os perfis, o diagnóstico em 4 estados e o conserto do
+    gráfico de fundo que sobrepunha os campos de IA (R13)."""
+
+    def test_shell_fica_acima_do_grafico_de_fundo(self):
+        """R13: o SVG decorativo (position:fixed;z-index:0) pintava POR CIMA
+        do conteúdo estático depois do login — .shell precisa criar contexto
+        posicionado (z-index:1), senão as tabelas/campos de IA aparecem
+        atravessados pelo desenho."""
+        html = _html()
+        m = re.search(r"\.shell\{([^}]*)\}", html)
+        assert m, ".shell não encontrado no CSS"
+        regra = m.group(1)
+        assert "position:relative" in regra and "z-index:1" in regra, (
+            f".shell sem contexto posicionado — gráfico de fundo sobrepõe: {regra}")
+
+    def test_cfg_keys_inclui_bloqueio_de_orcamento(self):
+        html = _html()
+        m = re.search(r"const CFG_KEYS=\[([^\]]+)\]", html)
+        assert m
+        chaves = set(re.findall(r"'([A-Z_0-9]+)'", m.group(1)))
+        assert "TRADINGAGENTS_IA_ORCAMENTO_BLOQUEIO" in chaves
+
+    def test_card_smart_setup_com_os_controles(self):
+        html = _html()
+        assert "Configuração Inteligente" in html
+        for needle in ('id="ssPerfil"', 'id="ssEstado"', 'id="ssDiagnostico"',
+                       "ssLoad()", "ssAplicar()"):
+            assert needle in html, f"faltou no card Smart Setup: {needle}"
+        m = re.search(r'<select id="ssPerfil">(.*?)</select>', html, re.S)
+        assert m, "select de perfil não encontrado"
+        opcoes = set(re.findall(r'value="([a-z_]+)"', m.group(1)))
+        assert opcoes == {"pronto", "economico", "equilibrado", "avancado"}, (
+            f"perfis divergentes: {sorted(opcoes)}")
+
+    def test_bloqueio_orcamento_liga_e_desliga(self):
+        html = _html()
+        m = re.search(
+            r'<select id="TRADINGAGENTS_IA_ORCAMENTO_BLOQUEIO">(.*?)</select>',
+            html, re.S)
+        assert m, "select do bloqueio de orçamento não encontrado"
+        opcoes = set(re.findall(r'value="([^"]+)"', m.group(1)))
+        assert opcoes == {"0", "1"}, f"opções do bloqueio: {sorted(opcoes)}"
+        assert "Desligado" in m.group(1), (
+            "o padrão precisa estar explícito como desligado/informativo")
+
+    def test_botoes_apontam_para_rotas_reais_do_setup(self):
+        html = _html()
+        assert "'/v1/setup/estado" in html, "estado sem fiação no painel"
+        assert "'/v1/setup/aplicar'" in html, "aplicar sem fiação no painel"
+
+    def test_diagnostico_mostra_os_quatro_estados(self):
+        html = _html()
+        i = html.find("function ssDiagnostico")
+        assert i > 0, "função ssDiagnostico não encontrada"
+        trecho = html[i:i + 2000]
+        for estado in ("configurado", "conectado", "autenticado",
+                       "operacional"):
+            assert estado in trecho, f"diagnóstico sem o estado '{estado}'"
+
+    def test_assistente_de_primeira_execucao_lista_pendencias(self):
+        html = _html()
+        i = html.find("async function ssLoad")
+        assert i > 0, "função ssLoad não encontrada"
+        trecho = html[i:i + 2600]
+        assert "primeira_execucao" in trecho
+        assert "pendencias" in trecho
+        # campos aplicados só quando vazios — a tela precisa dizer isso
+        assert "vazio" in trecho or "nunca são sobrescritas" in html
+
+    def test_ssload_carrega_junto_com_a_configuracao(self):
+        html = _html()
+        i = html.find("async function loadConfig")
+        i_fim = html.find("async function saveConfig", i)
+        assert 0 < i < i_fim
+        assert "ssLoad()" in html[i:i_fim]
+
+    def test_aplicar_envia_perfil_e_descobertas_ao_backend(self):
+        html = _html()
+        assert "IA_MODELOS_POR_PROVEDOR" in html, (
+            "cache de descobertas por provedor ausente")
+        i = html.find("async function ssAplicar")
+        assert i > 0, "função ssAplicar não encontrada"
+        trecho = html[i:i + 1400]
+        assert "perfil" in trecho and "modelos" in trecho
+
+    def test_aplicar_conta_campos_como_objeto(self):
+        """Regressão (achado na homologação no navegador): a rota devolve
+        `aplicados` como DICT chave→valor; `.length` de dict é undefined e o
+        toast dizia 'nada para preencher' mesmo tendo preenchido campos."""
+        html = _html()
+        i = html.find("async function ssAplicar")
+        assert i > 0
+        trecho = html[i:i + 1400]
+        assert "Object.entries(d.aplicados" in trecho, (
+            "aplicados é dict — precisa contar com Object.entries/keys")
+
+    def test_idioma_do_smart_setup_cabe_no_select_manual(self):
+        """Regressão (achado na homologação): PADROES_SEGUROS escrevia
+        'Português (Brasil)', valor que o <select> do painel não exibe — o
+        campo aparecia VAZIO depois de aplicar um perfil, parecendo não
+        salvo. O padrão precisa ser um valor exibível no controle manual."""
+        from service.api.smart_setup import PADROES_SEGUROS
+        html = _html()
+        m = re.search(
+            r'<select id="TRADINGAGENTS_OUTPUT_LANGUAGE">(.*?)</select>', html,
+            re.S)
+        assert m, "select de idioma não encontrado"
+        opcoes = set(re.findall(r'value="([^"]+)"', m.group(1)))
+        valor = PADROES_SEGUROS["TRADINGAGENTS_OUTPUT_LANGUAGE"]
+        assert valor in opcoes, (
+            f"padrão de idioma '{valor}' não é exibível no select "
+            f"{sorted(opcoes)} — o campo apareceria vazio no painel")

@@ -147,7 +147,7 @@ class TestSugestaoEAplicarPerfis:
 
         r = aplicar({}, "pronto")
         ap = r["aplicados"]
-        assert ap["TRADINGAGENTS_OUTPUT_LANGUAGE"] == "Português (Brasil)"
+        assert ap["TRADINGAGENTS_OUTPUT_LANGUAGE"] == "Portuguese"
         assert ap["TRADINGAGENTS_MAX_DEBATE_ROUNDS"] == "1"
         assert ap["TRADINGAGENTS_DESK_CONTROLE"] == "0"
         # sem chave nenhuma: provedor NÃO é escolhido nem inventado
@@ -306,7 +306,7 @@ class TestEstado:
 
         cfg = {"TRADINGAGENTS_LLM_PROVIDER": "groq",
                "TRADINGAGENTS_QUICK_THINK_LLM": "llama-x",
-               "TRADINGAGENTS_OUTPUT_LANGUAGE": "Português (Brasil)",
+               "TRADINGAGENTS_OUTPUT_LANGUAGE": "Portuguese",
                "GROQ_API_KEY": "k"}
         e = estado(cfg, tem_config=True)
         assert e["primeira_execucao"] is False
