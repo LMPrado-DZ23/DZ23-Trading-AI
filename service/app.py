@@ -194,6 +194,7 @@ ALLOWED_KEYS = [
     "TRADINGAGENTS_QUICK_THINK_LLM", "TRADINGAGENTS_OUTPUT_LANGUAGE",
     "TRADINGAGENTS_MAX_DEBATE_ROUNDS", "TRADINGAGENTS_MAX_RISK_ROUNDS",
     "TRADINGAGENTS_LLM_FALLBACK", "TRADINGAGENTS_IA_ORCAMENTO_USD",
+    "TRADINGAGENTS_IA_ORCAMENTO_BLOQUEIO",
     "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY",
     "GOOGLE_API_KEY", "GROQ_API_KEY", "MISTRAL_API_KEY",
     "OPENROUTER_API_KEY", "OPENAI_COMPATIBLE_API_KEY",
@@ -831,6 +832,59 @@ def _registrar_ia_contexto(tenant_id: str, provedor, latencia_ms: float,
         "quando": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
 
+
+# Último teste de autenticação/descoberta por provedor, por inquilino
+# (Smart Setup): os estados configurado → conectado → autenticado →
+# operacional derivam desta evidência — nunca de um "ping" imaginário.
+# Em memória: é observação da sessão, não dado de negócio.
+_ULTIMO_TESTE: dict[str, dict[str, dict]] = {}
+
+
+def _registrar_teste(tenant_id: str, relatorio: dict) -> None:
+    """Guarda o resultado do teste/da descoberta para o diagnóstico visual.
+    Nunca guarda credencial — só estado, latência, limites e detalhe."""
+    provedor = str(relatorio.get("provedor") or "").strip()
+    if not provedor:
+        return
+    _ULTIMO_TESTE.setdefault(tenant_id, {})[provedor] = {
+        "estado": str(relatorio.get("estado") or ""),
+        "ok": bool(relatorio.get("ok")),
+        "latencia_ms": relatorio.get("latencia_ms"),
+        "detalhe": str(relatorio.get("detalhe") or ""),
+        "quando": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+
+
+def _orcamento_do_cfg(cfg: dict) -> tuple[float | None, str]:
+    """(USD, aviso). Vazio/inválido/≤0 devolve None com o motivo — um teto
+    de orçamento ilegível nunca vira teto zero 'por acidente'."""
+    bruto = str(cfg.get("TRADINGAGENTS_IA_ORCAMENTO_USD") or "").strip()
+    if not bruto:
+        return None, ""
+    try:
+        valor = float(bruto.replace(",", "."))
+    except ValueError:
+        return None, "orçamento inválido (use números, ex.: 5.00)"
+    if valor <= 0:
+        return None, "orçamento precisa ser maior que zero"
+    return valor, ""
+
+
+def _ia_bloqueio(tenant_id: str) -> str:
+    """Motivo de bloqueio do orçamento de IA ('' = permitido). Vale SÓ para
+    chamadas controladas pelo DZ23 e SÓ quando o dono liga o bloqueio no
+    painel — nunca toca travas de risco nem a execução da mesa."""
+    from service.api import smart_setup
+
+    cfg = load_cfg(tenant_id)
+    orcamento, _aviso = _orcamento_do_cfg(cfg)
+    if orcamento is None:
+        return ""
+    resumo = IA_USO.resumo(tenant_id, orcamento_usd=orcamento)
+    permitida, motivo = smart_setup.ia_permitida(
+        cfg, {**resumo["orcamento"], "parcial": resumo["custo_parcial"]})
+    return "" if permitida else motivo
+
 def upd(jid, **kw):
     JOB_STORE.update(jid, **kw)
 
@@ -1116,15 +1170,20 @@ async def ai_testar_provedor(req: Request, _=Depends(auth)):
     body = await _json_body(req)
     from service.api.ia_provedores import testar_provedor
 
-    return testar_provedor(load_cfg(request_tenant(req)),
-                           str(body.get("provedor") or ""))
+    relatorio = testar_provedor(load_cfg(request_tenant(req)),
+                                str(body.get("provedor") or ""))
+    _registrar_teste(request_tenant(req), relatorio)
+    return relatorio
 
 
 @app.get("/v1/ai/modelos")
 def ai_listar_modelos(request: Request, provedor: str = "", _=Depends(auth)):
     from service.api.ia_provedores import descobrir_modelos
 
-    return descobrir_modelos(load_cfg(request_tenant(request)), provedor)
+    tenant_id = request_tenant(request)
+    relatorio = descobrir_modelos(load_cfg(tenant_id), provedor)
+    _registrar_teste(tenant_id, relatorio)
+    return relatorio
 
 
 @app.get("/v1/ai/uso")
@@ -1133,18 +1192,60 @@ def ai_uso(request: Request, _=Depends(auth)):
     estimado (tabela de referência) e estado do orçamento — INFORMATIVO,
     nunca um gate. Valores sem preço de referência ficam explícitos."""
     tenant_id = request_tenant(request)
-    cfg = load_cfg(tenant_id)
-    bruto = str(cfg.get("TRADINGAGENTS_IA_ORCAMENTO_USD") or "").strip()
-    orcamento, aviso = None, ""
-    if bruto:
-        try:
-            orcamento = float(bruto.replace(",", "."))
-            if orcamento <= 0:
-                orcamento, aviso = None, "orçamento precisa ser maior que zero"
-        except ValueError:
-            aviso = "orçamento inválido (use números, ex.: 5.00)"
+    orcamento, aviso = _orcamento_do_cfg(load_cfg(tenant_id))
     return IA_USO.resumo(tenant_id, orcamento_usd=orcamento,
                          aviso_orcamento=aviso)
+
+
+@app.get("/v1/setup/estado")
+def setup_estado(request: Request, perfil: str = "pronto", _=Depends(auth)):
+    """Assistente de primeira execução (Smart Setup): só as pendências
+    realmente necessárias, sem percentual inventado. Não sai à rede."""
+    tenant_id = request_tenant(request)
+    cfg = load_cfg(tenant_id)
+    from service.api import smart_setup
+
+    return smart_setup.estado(
+        cfg, perfil=perfil, tem_config=tenant_cfg_path(tenant_id).exists(),
+        testes=_ULTIMO_TESTE.get(tenant_id, {}),
+        uso=IA_USO.resumo(tenant_id))
+
+
+@app.post("/v1/setup/aplicar")
+async def setup_aplicar(req: Request, _=Depends(auth)):
+    """Aplica um perfil SOMENTE em campos vazios — preferência já definida
+    pelo dono nunca é sobrescrita (atualizar o app não mexe em configuração)
+    e nenhuma chave de API é criada por aqui."""
+    body = await _json_body(req)
+    tenant_id = request_tenant(req)
+    cfg = load_cfg(tenant_id)
+    from service.api import smart_setup
+
+    perfil = str(body.get("perfil") or "pronto").strip().lower()
+    modelos = body.get("modelos") if isinstance(body.get("modelos"), dict) else {}
+    try:
+        resultado = smart_setup.aplicar(
+            cfg, perfil, testes=_ULTIMO_TESTE.get(tenant_id, {}),
+            modelos_por_provedor=modelos)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    save_cfg(resultado["cfg"], tenant_id)
+    if any(k.startswith("TRADINGAGENTS_DESK") for k in resultado["aplicados"]):
+        _desk_reset(tenant_id)
+    return {"perfil": perfil, "aplicados": resultado["aplicados"],
+            "mantidos": resultado["mantidos"], "sugestao": resultado["sugestao"]}
+
+
+@app.get("/v1/setup/diagnostico")
+def setup_diagnostico(request: Request, _=Depends(auth)):
+    """Estados por provedor (configurado/conectado/autenticado/operacional)
+    derivados de evidência local — último teste e registro de consumo."""
+    tenant_id = request_tenant(request)
+    from service.api import smart_setup
+
+    return {"provedores": smart_setup.diagnostico(
+        load_cfg(tenant_id), _ULTIMO_TESTE.get(tenant_id, {}),
+        IA_USO.resumo(tenant_id))}
 
 @app.post("/v1/jobs")
 async def new_job(req: Request, _=Depends(auth)):
@@ -2268,6 +2369,12 @@ def _revisor_de_ia(tenant_id: str, cfg: dict):
         return None
 
     def revisar(fatos: dict) -> str:
+        # Smart Setup (R7): com o bloqueio de orçamento ligado pelo dono, a
+        # revisão por IA é a chamada que para — o diário continua vivo e a
+        # entrada registra o motivo (registrar_revisao captura a exceção).
+        motivo_bloqueio = _ia_bloqueio(tenant_id)
+        if motivo_bloqueio:
+            raise RuntimeError(motivo_bloqueio)
         from service.api.ia_provedores import consultar_ia
 
         prompt = (
@@ -2403,8 +2510,14 @@ def _desk_boot(tenant_id: str) -> dict:
             fechada assim que o cliente existe. Duas mesas de inquilinos
             diferentes nunca se cruzam. Registra latência e o provedor que
             DE FATO respondeu (com fallback configurado, pode não ser o
-            principal).
+            principal). Com o bloqueio de orçamento ligado pelo dono, a
+            consulta para ANTES da rede — a mesa segue sem verificação
+            (a exceção vira parecer com motivo, no Analista).
             """
+            motivo_bloqueio = _ia_bloqueio(tenant_id)
+            if motivo_bloqueio:
+                raise RuntimeError(
+                    f"IA de contexto suspensa — {motivo_bloqueio}")
             from service.api.ia_provedores import consultar_ia
 
             inicio = time.perf_counter()

@@ -475,16 +475,30 @@ class TestNomesDeEstadoExistem:
 
 class TestCredencialDeInquilinoNaoVazaPorAmbiente:
     """ACHADO: a mesa escrevia a credencial do inquilino em os.environ sem
-    trava. Duas mesas concorrentes podiam trocar de chave entre si."""
+    trava. Duas mesas concorrentes podiam trocar de chave entre si.
+
+    V8 §6a: o env-mutation saiu de _desk_boot — a credencial agora vai
+    EXPLÍCITA para o cliente via service.api.ia_provedores.consultar_ia,
+    que só toca o ambiente sob _IA_ENV_LOCK e restaura na mesma janela.
+    O contrato migrou de lugar; a propriedade de segurança é a MESMA
+    (por isso os pinos abaixo apontam para o novo lar do fix)."""
 
     def test_desk_llm_call_is_not_an_unlocked_env_mutation(self):
         import inspect
 
         import service.app as m
         fonte = inspect.getsource(m._desk_boot)
-        assert "with _lock:" in fonte, (
-            "a consulta de IA da mesa mutila o ambiente global sem trava")
-        assert "api_key=chave" in fonte, (
+        assert "consultar_ia(cfg, prompt" in fonte, (
+            "a consulta da mesa deve delegar credencial explícita ao núcleo")
+        assert "os.environ.update(" not in fonte, (
+            "a mesa não pode mutar o ambiente global direto")
+
+        from service.api import ia_provedores as ia
+
+        nucleo = inspect.getsource(ia._invocar)
+        assert "with _IA_ENV_LOCK:" in nucleo, (
+            "a janela de ambiente da credencial exige a trava do núcleo")
+        assert 'kwargs["api_key"] = candidato["chave"]' in nucleo, (
             "o caminho preferido deve passar a credencial explicitamente")
 
     def test_job_path_still_holds_the_lock(self):

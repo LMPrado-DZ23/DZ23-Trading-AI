@@ -118,32 +118,55 @@ def _candidato(entrada: dict, cfg: dict, modelo_do_painel: str) -> dict:
     }
 
 
-def candidatos_llm(cfg: dict) -> list[dict]:
+def _grupo_custo(entrada: dict) -> tuple[int, float]:
+    """Ordenação de custo do provedor para tarefa simples: gratuitos por
+    desenho (local, ':free') primeiro, depois preço de referência conhecido
+    (entrada mais barata primeiro) e, por último, sem referência de preço —
+    nunca chutar um custo para 'fechar' uma ordem."""
+    from tradingagents.llm_clients import precos
+
+    modelo = str(entrada.get("quick_padrao") or "")
+    p = precos.preco(entrada["id"], modelo) if modelo else None
+    if p is None:
+        return (2, 0.0)
+    if p == (0.0, 0.0):
+        return (0, 0.0)
+    return (1, p[0])
+
+
+def candidatos_llm(cfg: dict, *, tarefa: str = "simples") -> list[dict]:
     """Fila de tentativas: principal do painel + fallbacks declarados.
 
-    Ordem: provedor principal primeiro (com o modelo rápido escolhido no
-    painel), depois `TRADINGAGENTS_LLM_FALLBACK` na ordem declarada. Nome
+    Ordem: provedor principal primeiro (escolha explícita do dono, com o
+    modelo rápido do painel). Os fallbacks seguem a ordem DECLARADA para
+    tarefa complexa; para tarefa simples saem ordenados por custo
+    (gratuitos e mais baratos primeiro; ordem declarada como desempate) —
+    roteamento inteligente do Smart Setup, sem trocar o principal. Nome
     desconhecido é ignorado — o catálogo é a definição do configurável.
     """
-    ordem: list[tuple[str, str]] = []
     principal = str(cfg.get("TRADINGAGENTS_LLM_PROVIDER") or "").strip().lower()
+    quick = str(cfg.get("TRADINGAGENTS_QUICK_THINK_LLM") or "").strip()
+    itens: list[tuple[bool, int, str, str]] = []  # (fixo, índice, nome, modelo)
+    vistos: set[str] = set()
     if principal:
-        quick = str(cfg.get("TRADINGAGENTS_QUICK_THINK_LLM") or "").strip()
-        ordem.append((principal, quick))
-    for bruto in str(cfg.get("TRADINGAGENTS_LLM_FALLBACK") or "").split(","):
+        itens.append((True, 0, principal, quick))
+        vistos.add(principal)
+    for indice, bruto in enumerate(
+            str(cfg.get("TRADINGAGENTS_LLM_FALLBACK") or "").split(",")):
         nome = bruto.strip().lower()
-        if nome:
-            ordem.append((nome, ""))
-    fila, visto = [], set()
-    for nome, modelo in ordem:
-        if nome in visto:
+        if not nome or nome in vistos:
             continue
-        visto.add(nome)
-        entrada = provedor_conhecido(nome)
-        if entrada is None:
+        vistos.add(nome)
+        if provedor_conhecido(nome) is None:
             continue
-        fila.append(_candidato(entrada, cfg, modelo))
-    return fila
+        itens.append((False, indice, nome, ""))
+    if tarefa == "simples":
+        fixos = [i for i in itens if i[0]]
+        moveis = [i for i in itens if not i[0]]
+        moveis.sort(key=lambda i: (_grupo_custo(provedor_conhecido(i[2])), i[1]))
+        itens = [*fixos, *moveis]
+    return [_candidato(provedor_conhecido(nome), cfg, modelo)
+            for _, _, nome, modelo in itens]
 
 
 def _texto(resposta) -> str:
@@ -216,19 +239,21 @@ def _invocar(candidato: dict, prompt: str,
 
 
 def consultar_ia(cfg: dict, prompt: str, *,
-                 criar_cliente: Callable | None = None) -> tuple[str, dict]:
+                 criar_cliente: Callable | None = None,
+                 tarefa: str = "simples") -> tuple[str, dict]:
     """Consulta o provedor do inquilino, com fallback declarado.
 
     Devolve (texto, meta). `meta["provedor"]` é o provedor que DE FATO
     respondeu (importa para o painel e para o registro de latência).
-    Levanta RuntimeError só quando NENHUM candidato respondeu — a mensagem
-    agrega os estados sem nunca citar valor de credencial.
+    `tarefa` controla o roteamento dos fallbacks (simples = mais barato
+    primeiro). Levanta RuntimeError só quando NENHUM candidato respondeu —
+    a mensagem agrega os estados sem nunca citar valor de credencial.
     """
     if criar_cliente is None:
         from tradingagents.llm_clients.factory import create_llm_client
 
         criar_cliente = create_llm_client
-    fila = candidatos_llm(cfg)
+    fila = candidatos_llm(cfg, tarefa=tarefa)
     if not fila:
         raise RuntimeError(
             "nenhum provedor de IA configurado para consulta de contexto")
