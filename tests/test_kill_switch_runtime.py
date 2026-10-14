@@ -28,17 +28,12 @@ def _app(monkeypatch, tmp_path):
 
 
 def _tenant(client):
-    r = client.post("/v1/auth/bootstrap",
-                    headers={"X-Tenant-Bootstrap": "bootstrap-secret"},
-                    json={"tenant_name": "Acme", "email": "admin@acme.test",
-                          "password": "correct horse battery staple"})
-    assert r.status_code == 200, r.text
-    tid = r.json()["tenant_id"]
-    login = client.post("/v1/auth/login",
-                        json={"tenant_id": tid, "email": "admin@acme.test",
-                              "password": "correct horse battery staple"})
-    assert login.status_code == 200, login.text
-    return {"Authorization": f"Bearer {login.json()['access_token']}"}
+    # No app de dono único, o cadastro/login multi-tenant não existe (404). O
+    # acesso é a senha do dono; a regressão do /v1/office/* (não dar 500 e
+    # manter LIVE bloqueado) vale igualmente pelo runtime legacy, que é o que
+    # o dono usa. A causa-raiz do shadowing continua coberta pelo teste que
+    # instancia TenantRuntime diretamente.
+    return {"Authorization": "Bearer unused-legacy-password"}
 
 
 def test_tenant_runtime_usa_o_killswitch_com_state(monkeypatch, tmp_path):

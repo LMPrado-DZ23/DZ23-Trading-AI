@@ -26,6 +26,45 @@ from pathlib import Path
 
 _WRITE_LOCK = threading.Lock()
 
+# Caracteres legítimos numa CHAVE lógica que o NTFS proíbe num NOME de
+# arquivo (`|` dava EINVAL no mkstemp; `:` e `/` também não passam). O `%`
+# entra no conjunto porque é o próprio marcador de escape — sem ele a
+# codificação não seria reversível.
+_PROIBIDOS_NO_NOME = frozenset('<>:"/\\|?*%')
+
+
+def _nome_seguro(chave: str) -> str:
+    """Chave lógica → nome de arquivo válido em QUALQUER sistema.
+
+    `sala::binance|paper-1|spot|paper` é chave legítima, e vira
+    `sala::binance%7Cpaper-1%7Cspot%7Cpaper` no arquivo. Determinístico e
+    reversível; chaves já seguras ("agentes", "maestro") não mudam de nome.
+    """
+    return "".join(f"%{ord(c):02X}" if c in _PROIBIDOS_NO_NOME else c
+                   for c in chave)
+
+
+def _chave_do_nome(nome: str) -> str:
+    """Nome de arquivo → chave lógica (inverso de `_nome_seguro`)."""
+    if "%" not in nome:
+        return nome
+    saida: list[str] = []
+    i = 0
+    while i < len(nome):
+        if nome[i] == "%" and i + 2 < len(nome):
+            escape = nome[i + 1:i + 3]
+            try:
+                c = chr(int(escape, 16))
+            except ValueError:
+                c = ""
+            if c in _PROIBIDOS_NO_NOME:
+                saida.append(c)
+                i += 3
+                continue
+        saida.append(nome[i])
+        i += 1
+    return "".join(saida)
+
 
 def escrever_json_atomico(caminho: Path, documento: dict) -> None:
     """Grava JSON sem janela de corrupção e sem corrida entre escritas.
@@ -86,7 +125,8 @@ class ArmazemDeEstado:
     # -- postgres ------------------------------------------------------
     def _conectar(self):
         import psycopg
-        return psycopg.connect(self.dsn)
+        # Teto de conexão: endpoint morto degrada para arquivo, não pendura.
+        return psycopg.connect(self.dsn, connect_timeout=5)
 
     def _criar_tabela(self) -> None:
         with self._conectar() as c, c.cursor() as cur:
@@ -100,7 +140,7 @@ class ArmazemDeEstado:
     # -- interface -----------------------------------------------------
     def _caminho(self, tenant_id: str, chave: str) -> Path:
         base = self.diretorio or Path(".")
-        return base / tenant_id / f"{chave}.json"
+        return base / tenant_id / f"{_nome_seguro(chave)}.json"
 
     def carregar(self, tenant_id: str, chave: str) -> dict | None:
         if self.backend == "postgres":
@@ -117,7 +157,7 @@ class ArmazemDeEstado:
         if not caminho.exists():
             return None
         try:
-            return json.loads(caminho.read_text())
+            return json.loads(caminho.read_text(encoding="utf-8"))
         except ValueError:
             return None
 
@@ -139,6 +179,59 @@ class ArmazemDeEstado:
         escrever_json_atomico(self._caminho(tenant_id, chave), documento)
         return "arquivo"
 
+    def salvar_posse(self, tenant_id: str, chave: str, documento: dict,
+                     *, dono: str, agora_epoch: float) -> tuple[bool, str]:
+        """Grava POSSE só se estiver livre, vencida, ou for do próprio dono.
+
+        No postgres a checagem vai para o SQL (UPSERT condicional): dois
+        processos disputando a mesma corrida não podem ambos "ganhar" — é o
+        que torna a posse exclusiva entre máquinas que compartilham o banco.
+        No arquivo, checa antes e CONFERE depois da escrita (o replace é
+        atômico); suficiente para os processos desta máquina.
+
+        Invariante do documento: `expira_em` é epoch (float); `dono` é texto.
+        Devolve (ganhou, onde).
+        """
+        if self.backend == "postgres":
+            try:
+                with self._conectar() as c, c.cursor() as cur:
+                    cur.execute(
+                        "INSERT INTO dz23_desk_state (tenant_id, chave, documento) "
+                        "VALUES (%s, %s, %s) "
+                        "ON CONFLICT (tenant_id, chave) DO UPDATE SET "
+                        "documento = EXCLUDED.documento, atualizado_em = now() "
+                        "WHERE dz23_desk_state.documento->>'expira_em' IS NULL "
+                        "OR (dz23_desk_state.documento->>'expira_em')::float8 <= %s::float8 "
+                        "OR dz23_desk_state.documento->>'dono' = %s "
+                        "RETURNING chave",
+                        (tenant_id, chave, json.dumps(documento, ensure_ascii=False),
+                         agora_epoch, dono))
+                    ganhou = cur.fetchone() is not None
+                return ganhou, "postgres"
+            except Exception as exc:
+                self.aviso = (f"falha ao gravar posse no banco "
+                              f"({type(exc).__name__}); conferido em arquivo local")
+        caminho = self._caminho(tenant_id, chave)
+        atual = None
+        if caminho.exists():
+            try:
+                atual = json.loads(caminho.read_text(encoding="utf-8"))
+            except ValueError:
+                atual = None
+        if isinstance(atual, dict) and atual.get("dono") != dono:
+            try:
+                expira = float(atual.get("expira_em") or 0)
+            except (TypeError, ValueError):
+                expira = 0.0
+            if expira > agora_epoch:
+                return False, "arquivo"
+        escrever_json_atomico(caminho, documento)
+        try:
+            lido = json.loads(caminho.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            lido = documento
+        return lido.get("dono") == dono, "arquivo"
+
     def listar(self, tenant_id: str) -> list[str]:
         if self.backend == "postgres":
             try:
@@ -151,7 +244,7 @@ class ArmazemDeEstado:
         base = (self.diretorio or Path(".")) / tenant_id
         if not base.exists():
             return []
-        return sorted(p.stem for p in base.glob("*.json"))
+        return sorted(_chave_do_nome(p.stem) for p in base.glob("*.json"))
 
     def estado(self) -> dict:
         return {"destino": self.backend,

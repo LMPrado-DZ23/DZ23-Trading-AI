@@ -39,11 +39,46 @@ class Desfecho:
     retorno: Decimal            # fração: 0.02 = +2%
     fechado_em: datetime
     forca_do_sinal: float = 0.0
+    # Procedência da evidência (Escola de Traders): a mesma estratégia pode
+    # ter VERSÕES — evidência de uma não promove a outra; a corretora muda o
+    # custo real; e o agente identifica de qual aluno veio a operação.
+    exchange: str = ""
+    versao: str = "1"
+    agente: str = ""
+    # Horizonte operacional (ex.: "1h", "4h", "1d"). A certificação por sala
+    # exige (corretora, mercado, ativo, horizonte): formado em 1h não é
+    # formado em swing — o mesmo sinal tem estatística diferente em cada um.
+    horizonte: str = "1h"
 
     def peso(self, agora: datetime | None = None) -> float:
         agora = agora or datetime.now(timezone.utc)
-        dias = max(0.0, (agora - self.fechado_em).total_seconds() / 86400)
+        fechado = self.fechado_em
+        if fechado.tzinfo is None:
+            fechado = fechado.replace(tzinfo=timezone.utc)
+        dias = max(0.0, (agora - fechado).total_seconds() / 86400)
         return 0.5 ** (dias / MEIA_VIDA_DIAS)
+
+
+def desfecho_para_dict(d: Desfecho) -> dict:
+    """Formato único de persistência — usado pela memória e pelas salas."""
+    return {"estrategia": d.estrategia, "regime": d.regime,
+            "instrumento": d.instrumento, "retorno": str(d.retorno),
+            "fechado_em": d.fechado_em.isoformat(),
+            "forca_do_sinal": d.forca_do_sinal,
+            "exchange": d.exchange, "versao": d.versao,
+            "agente": d.agente, "horizonte": d.horizonte}
+
+
+def desfecho_de_dict(d: dict) -> Desfecho:
+    """Reconstrói um desfecho persistido. Campos essenciais são exigidos —
+    um registro sem estratégia/resultado/data não é evidência utilizável."""
+    return Desfecho(
+        str(d["estrategia"]), str(d["regime"]), str(d["instrumento"]),
+        Decimal(str(d["retorno"])),
+        datetime.fromisoformat(str(d["fechado_em"])),
+        float(d.get("forca_do_sinal", 0.0)),
+        str(d.get("exchange", "")), str(d.get("versao", "1")),
+        str(d.get("agente", "")), str(d.get("horizonte", "1h")))
 
 
 @dataclass
@@ -95,21 +130,13 @@ class MemoriaDeDesempenho:
                 return
         for d in dados.get("desfechos", []):
             try:
-                self._desfechos.append(Desfecho(
-                    d["estrategia"], d["regime"], d["instrumento"],
-                    Decimal(str(d["retorno"])),
-                    datetime.fromisoformat(d["fechado_em"]),
-                    float(d.get("forca_do_sinal", 0.0))))
-            except (KeyError, ValueError):
+                self._desfechos.append(desfecho_de_dict(d))
+            except (KeyError, ValueError, TypeError):
                 continue
 
     def salvar(self) -> None:
-        payload = {"desfechos": [
-            {"estrategia": d.estrategia, "regime": d.regime,
-             "instrumento": d.instrumento, "retorno": str(d.retorno),
-             "fechado_em": d.fechado_em.isoformat(),
-             "forca_do_sinal": d.forca_do_sinal}
-            for d in self._desfechos[-2000:]]}
+        payload = {"desfechos": [desfecho_para_dict(d)
+                                 for d in self._desfechos[-2000:]]}
         if self.armazem is not None:
             self.armazem.salvar(self.tenant_id, "aprendizado", payload)
             return
@@ -122,6 +149,38 @@ class MemoriaDeDesempenho:
     def registrar(self, desfecho: Desfecho) -> None:
         self._desfechos.append(desfecho)
         self.salvar()
+
+    # -- consulta para a ESCOLA (prova independente por versão) ---------
+    def desfechos_de(self, estrategia: str, *, versao: str | None = None,
+                     desde: datetime | None = None) -> list[Desfecho]:
+        """Desfechos de uma estratégia — opcionalmente de UMA versão e
+        estritamente POSTERIORES a `desde`.
+
+        O corte é estrito (>) de propósito: a prova final da escola usa o
+        instante da candidatura como fronteira; reaproveitar um desfecho do
+        treino como prova seria fraude estatística.
+        """
+        saida = []
+        for d in self._desfechos:
+            if d.estrategia != estrategia:
+                continue
+            if versao is not None and (d.versao or "1") != str(versao):
+                continue
+            if desde is not None:
+                fechado = d.fechado_em
+                if fechado.tzinfo is None:
+                    fechado = fechado.replace(tzinfo=timezone.utc)
+                if not (fechado > desde):
+                    continue
+            saida.append(d)
+        return saida
+
+    def versoes_de(self, estrategia: str) -> list[str]:
+        return sorted({(d.versao or "1") for d in self._desfechos
+                       if d.estrategia == estrategia})
+
+    def estrategias(self) -> list[str]:
+        return sorted({d.estrategia for d in self._desfechos})
 
     def estatistica(self, estrategia: str, regime: str | Regime | None = None,
                     agora: datetime | None = None) -> Estatistica:
@@ -182,6 +241,31 @@ class MemoriaDeDesempenho:
         return False, (f"desempenho aceitável ({st.retorno_medio:+.2%}, "
                        f"{st.taxa_acerto:.0%} de acerto)")
 
+    def pode_promover(self, estrategia: str,
+                      agora: datetime | None = None) -> tuple[bool, str]:
+        """Gate determinístico para habilitar uma estratégia experimental.
+
+        O mandato é explícito: trader sem resultado estatístico suficiente NÃO
+        é habilitado. O veredito sai SÓ de operações FECHADAS (desfecho
+        realizado, líquido de custos) — promessa de backtest não promove.
+        """
+        st = self.estatistica(estrategia, None, agora)
+        if not st.maduro:
+            return False, (f"amostra insuficiente: {st.amostras}/{AMOSTRA_MINIMA} "
+                           "operações fechadas")
+        if st.retorno_medio <= 0:
+            return False, (f"retorno médio {st.retorno_medio:+.2%} não é "
+                           f"positivo em {st.amostras} operações")
+        if st.taxa_acerto < 0.45:
+            return False, (f"taxa de acerto {st.taxa_acerto:.0%} abaixo de 45% "
+                           f"em {st.amostras} operações")
+        rebaixar, _ = self.deve_rebaixar(estrategia, agora)
+        if rebaixar:
+            return False, "estratégia rebaixada pelo histórico"
+        return True, (f"evidência suficiente: {st.amostras} operações, "
+                      f"{st.taxa_acerto:.0%} de acerto, retorno médio "
+                      f"{st.retorno_medio:+.2%} (líquido de custos)")
+
     def melhor_regime(self, estrategia: str) -> tuple[str, float] | None:
         """Em que cenário esta estratégia funciona melhor (se é que funciona)."""
         melhores = []
@@ -212,4 +296,5 @@ class MemoriaDeDesempenho:
         return saida
 
 
-__all__ = ["MemoriaDeDesempenho", "Desfecho", "Estatistica", "AMOSTRA_MINIMA"]
+__all__ = ["MemoriaDeDesempenho", "Desfecho", "Estatistica", "AMOSTRA_MINIMA",
+           "desfecho_para_dict", "desfecho_de_dict"]

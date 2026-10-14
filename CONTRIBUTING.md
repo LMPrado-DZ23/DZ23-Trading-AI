@@ -11,19 +11,21 @@ Obrigado por contribuir. O projeto aceita correções, testes, documentação, m
 ## Desenvolvimento
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+uv sync --locked --extra desk --extra dev
+uv run uvicorn service.app:app --port 8080
 ```
+
+No Windows (PowerShell), os mesmos comandos funcionam; não é preciso ativar
+virtualenv manualmente.
 
 Antes de abrir um pull request:
 
 ```bash
-ruff check .
-python3 -m compileall -q tradingagents service scripts
-python3 -m pytest -q
-python3 scripts/smoke_agency_api.py
-python3 scripts/smoke_multitenant.py
+uv run ruff check .
+uv run python -m compileall -q tradingagents service scripts
+uv run pytest -q
+uv run python scripts/smoke_agency_api.py
+uv run python scripts/smoke_single_owner.py
 ```
 
 Se Docker estiver disponível:
@@ -40,7 +42,9 @@ docker compose build
 - Não trate texto de LLM como prova de ordem, fill, posição, saldo ou PnL.
 - Adicione testes para comportamento novo e regressão para comportamento corrigido.
 - Use Decimal para valores monetários e UTC para timestamps.
-- Faça isolamento por tenant explícito; não use estado global para dados de usuário.
+- O produto é single-owner: não reintroduza SaaS, multi-tenant, cadastro de
+  terceiros ou cobrança — esses recursos foram removidos de propósito e não
+  voltam por flag. Isolamento entre instalações é requisito de migração.
 - Documente limitações externas e não declare integração real validada usando somente mocks.
 
 ## Pull requests

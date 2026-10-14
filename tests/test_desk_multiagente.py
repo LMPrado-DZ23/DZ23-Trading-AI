@@ -67,9 +67,9 @@ def enable(traders):
 
 
 class TestCenario01MultiplosTraders:
-    def test_three_distinct_strategies_react_differently(self):
+    def test_ten_distinct_strategies_react_differently(self):
         traders = enable(default_desk(UNIVERSE))
-        assert len({t.strategy for t in traders}) == 3
+        assert len({t.strategy for t in traders}) == 10
         s = snap("BTC/USDT", uptrend())
         acts = {t.strategy: t.propose(s).action for t in traders}
         assert acts["trend_following"] is Action.BUY       # tendência clara
@@ -256,7 +256,7 @@ class TestCenario02CicloSemComandoHumano:
         report = desk.run_cycle(
             [snap("BTC/USDT", uptrend()), snap("ETH/USDT", crash())],
             {"BTC/USDT": Decimal("160"), "ETH/USDT": Decimal("70")})
-        assert report.proposals == 6          # 3 traders × 2 ativos
+        assert report.proposals == 20         # 10 traders × 2 ativos
         assert len(report.intents) == 2       # duas operações elegíveis simultâneas
         assert {i.reservation.instrument for i in report.intents} == set(UNIVERSE)
         assert all(i.mode is Mode.PAPER for i in report.intents)

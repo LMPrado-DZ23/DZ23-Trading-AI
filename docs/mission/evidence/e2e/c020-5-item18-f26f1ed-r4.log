@@ -1,0 +1,30 @@
+EXE: C:\Users\DZ23\AppData\Local\DZ23-Trading-AI\DZ23-Trading-AI.exe
+PASS — app instalado sobe e responde healthz — tentativas=1 segundos=23.4 porta=http://127.0.0.1:8000
+PASS — favicon.ico 200 e é ICO
+PASS — símbolo 192 servido (PNG)
+PASS — logomarca 192 servida (PNG)
+PASS — manifesto PWA com nome/marca/start_url/theme_color
+PASS — original NÃO é servido pelo painel (404) — HTTP 404
+PASS — estado do dono preservado após reinstalação (setup_required=false)
+PASS — backend expõe estado operacional real (modos + operacao_real) — modo_atual=PAPER
+PASS — símbolo DZ23 carregado no portão (≥64 px reais) — /static/marca/dz23-simbolo-192.png
+PASS — wordmark é "Trading AI"
+PASS — subtítulo "Inteligência coordenada. Risco governado."
+PASS — "DZ23 Trading AI" NÃO repetido no portão
+PASS — "TRADING PLATFORM" ausente
+PASS — selo PAPER MODE presente
+PASS — selo EXECUÇÃO GOVERNADA presente
+PASS — selo DINHEIRO REAL BLOQUEADO presente
+PASS — selo neutro de indisponibilidade NÃO apareceu com o backend vivo
+PASS — campo de senha mascarado e vazio
+PASS — toggle começa com aria-pressed=false
+PASS — toggle revela (type=text, aria-pressed=true)
+PASS — toggle oculta de novo
+PASS — aviso de servidor ausente NÃO aparece com o servidor vivo
+PASS — senha vazia → mensagem clara
+PASS — 1920×1080: sem rolagem horizontal, botão e senha dentro da tela
+PASS — 390×844: sem rolagem horizontal, botão e senha dentro da tela
+PASS — 360×640: sem rolagem horizontal, botão e senha dentro da tela
+PASS — porta efetiva liberada após encerrar
+TOTAL: 0 falha(s)
+HARNESS_EXIT=0

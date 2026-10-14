@@ -16,7 +16,7 @@ for attempt in $(seq 1 30); do
 done
 curl --fail --silent "$BASE_URL/healthz"
 curl --fail --silent "$BASE_URL/readyz"
-docker compose restart postgres redis qdrant tradingagents
+docker compose restart tradingagents
 sleep 5
 curl --fail --silent "$BASE_URL/healthz"
 curl --fail --silent "$BASE_URL/readyz"

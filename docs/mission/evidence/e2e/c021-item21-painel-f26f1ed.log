@@ -1,0 +1,24 @@
+EXE: C:\Users\DZ23\AppData\Local\DZ23-Trading-AI\DZ23-Trading-AI.exe
+PASS — estação limpa antes do teste (sem DZ23, faixa livre)
+PASS — instância descartável sobe e responde healthz — base=http://127.0.0.1:8000 em 23.1s
+PASS — primeira execução pede o assistente (setup_required=true) — HTTP 200
+PASS — assistente cria a senha do dono — HTTP 200
+PASS — dono entra no painel do bundle pelo portão (senha do assistente)
+PASS — papel do dono exibido como ADMIN
+PASS — estado do app READY no painel autenticado
+PASS — identidade do dono preenchida no cabeçalho — legacy
+PASS — página "Visão geral" ativa com título correto
+PASS — página "Configuração" ativa com título correto
+PASS — página "Análises" ativa com título correto
+PASS — página "Mesa de Agentes" ativa com título correto
+PASS — página "Trading Floor" ativa com título correto
+PASS — página "Risco" ativa com título correto
+FALHA — mesa carrega o livro com "Traders (10 perfis)"
+FALHA — botão "Escola Central" renderiza a escola no painel autenticado
+PASS — zero respostas 5xx durante o fluxo autenticado do dono
+PASS — POST /v1/app/quit com a senha do dono responde 200 — HTTP 200
+PASS — launcher encerra sozinho (exit 0) após o painel autenticado — exit=0
+PASS — porta efetiva liberada após o encerramento
+TOTAL: 2 falha(s)
+  - mesa carrega o livro com "Traders (10 perfis)"
+  - botão "Escola Central" renderiza a escola no painel autenticado

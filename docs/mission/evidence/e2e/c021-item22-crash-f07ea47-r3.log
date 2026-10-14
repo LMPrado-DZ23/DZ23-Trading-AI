@@ -1,0 +1,33 @@
+EXE: C:\Users\DZ23\AppData\Local\DZ23-Trading-AI\DZ23-Trading-AI.exe
+PASS — estação limpa antes do teste (nenhuma instância DZ23 na faixa 8000–8010) — se houver DZ23 aberto, feche-o — este harness NÃO mata o que não subiu
+PASS — instância descartável sobe e responde healthz — base=http://127.0.0.1:8000 em 23.1s
+PASS — primeira execução pede o assistente (setup_required=true) — HTTP 200
+PASS — assistente cria a senha do dono — HTTP 200
+PASS — ciclo PAPER real executa e admite entradas — HTTP 200 · resumo: "20 propostas, 2 admitidas, 2 entradas, 0 saídas, 0 vetos"
+PASS — sem erros no ciclo
+PASS — estado durável capturado antes do crash
+PASS — ordens do OMS registradas no livro — 2 ordens: ord-1:filled, ord-2:filled
+PASS — ledger balanceado antes do crash
+PASS — patrimônio coerente com o mandato (0 < patrimônio ≤ 1000) — patrimônio=999.80000000 disponível=799.80000145
+PASS — nenhuma pendência de reconciliação antes do crash — agendador=[] mesa=[]
+PASS — contador do agendador registrou o ciclo — ciclos=1 ultimo_ciclo=2026-10-14T01:28:23.607245+00:00
+crash simulado: taskkill /F /PID 52956 (processo do harness)
+PASS — processo morre à força (sem saída graciosa) — exit=1
+PASS — porta efetiva é liberada pelo SO após o crash — porta 8000
+PASS — reabertura após o crash sobe e responde healthz — base=http://127.0.0.1:8000 em 23.1s
+PASS — reabre sem tocar em outra porta (a mesma ficou livre) — 8000 -> 8000
+PASS — senha do dono continua valendo após o crash (Argon2id no disco) — HTTP 200
+PASS — estado durável lido do disco após o crash
+PASS — ordens do OMS idênticas (id/estado/qtd/preço) — 2 ordens antes e depois
+PASS — contador e ultimo_ciclo do agendador preservados — ciclos 1 -> 1 · ultimo_ciclo 2026-10-14T01:28:23.607245+00:00 -> 2026-10-14T01:28:23.607245+00:00
+PASS — posições abertas e instrumentos preservados — posições=['BTC/USDT', 'ETH/USDT'] abertos=['BTC/USDT', 'ETH/USDT']
+PASS — saldos/patrimônio/disponível idênticos após o crash — patrimônio 999.80000000 -> 999.80000000 · disponível 799.80000145 -> 799.80000145
+PASS — ledger segue balanceado após o crash
+PASS — ledger volta LIMPO (sem pendências de reconciliação) — agendador=[] mesa=[]
+PASS — store de durabilidade reporta estado íntegro na reabertura — {"destino": "arquivo", "durabilidade": "vive no volume deste servidor \u2014 se ele for descartado, o hist\u00f3rico se 
+PASS — modo da mesa preservado — ativa
+PASS — POST /v1/app/quit responde 200 após a recuperação — HTTP 200
+PASS — launcher encerra sozinho (exit 0) após a recuperação — exit=0
+PASS — porta liberada após o encerramento gracioso
+TOTAL: 0 falha(s)
+HARNESS_EXIT=0

@@ -9,9 +9,9 @@ services:
       - "8080:8080"
     environment:
       ACCESS_PASSWORD: "${ACCESS_PASSWORD:?defina uma senha forte de 20+ caracteres}"
-      # Opcional: PostgreSQL. Se a URL estiver errada ou o banco fora do ar,
-      # o serviço NÃO cai — degrada para o banco local e avisa no painel.
-      # DATABASE_URL: "postgresql://usuario:senha@postgres:5432/tradingagents"
+      # Opcional: PostgreSQL externo. Se a URL estiver errada ou o banco fora
+      # do ar, o serviço NÃO cai — degrada para o banco local e avisa no painel.
+      # DATABASE_URL: "postgresql://usuario:senha@host-do-banco:5432/tradingagents"
       DESK_INTERVAL_SECONDS: "300"
     volumes:
       - tradingagents-data:/data

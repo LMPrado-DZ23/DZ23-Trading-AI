@@ -21,13 +21,16 @@ from decimal import Decimal
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from service.api import diagnostics, security_center
+from service.api.owner_credentials import CredenciaisDoDono, erro_de_senha
 from tradingagents.agency import AgencyTask, build_llm_handler
 from tradingagents.agency.store import AgencyTaskStore
 from tradingagents.agency_runtime import AgencyRuntime
+from tradingagents.desk.models import AgentStage
+from tradingagents.desk.modo import EstadoDaMesa, ModoBloqueado
 from tradingagents.desk.storage import escrever_json_atomico
 from tradingagents.domain import (
     MarketSnapshot,
@@ -84,8 +87,31 @@ if DATABASE_URL and not os.environ.get("DATABASE_URL"):
 
 JOB_STORE = _build_job_store()
 PASSWORD = os.environ.get("ACCESS_PASSWORD", "")
+# Credenciais do dono com hash Argon2id (owner_credentials.json no DATA_DIR).
+# Quando o arquivo existe ele VENCE o ambiente: o segredo verificado está no
+# disco como hash, nunca em texto puro — o env é só o caminho legado (dev).
+OWNER_CREDENTIALS = CredenciaisDoDono(DATA / "owner_credentials.json")
 MULTI_TENANT_REQUESTED = os.environ.get("MULTI_TENANT_ENABLED", "false").lower() == "true"
-MULTI_TENANT_ENABLED = os.environ.get("MULTI_TENANT_ENABLED", "false").lower() == "true"
+MULTI_TENANT_ENABLED = MULTI_TENANT_REQUESTED
+
+# ── GATE G2 — APLICATIVO PESSOAL DE DONO ÚNICO (SINGLE-OWNER) ────────────────
+# Este é um aplicativo PESSOAL de um único dono. Toda a superfície de SaaS
+# (cadastro self-service, cobrança/Woovi, login social, multi-tenant e
+# administração de inquilinos) continua existindo apenas como CÓDIGO LEGADO
+# PRESERVADO — nenhum dado é apagado — porém é desligada de forma
+# INCONDICIONAL aqui. A trava é FAIL-CLOSED por construção: é uma constante
+# do código, NÃO uma flag de ambiente. Nenhuma variável (MULTI_TENANT_ENABLED,
+# SIGNUP_ENABLED, WOOVI_*, TENANT_*) pode reabri-la. Ao forçar o multi-tenant
+# a desligado AQUI, antes da construção de qualquer store, garantimos que a
+# autenticação do processo inteiro use sempre a senha do dono (ACCESS_PASSWORD)
+# e nunca o fluxo de inquilinos. A inalcançabilidade das rotas é reforçada,
+# em profundidade, pelo middleware `bloqueio_single_owner` mais abaixo e
+# provada por tests/test_single_owner_g2.py.
+SINGLE_OWNER_ENFORCED = True
+if SINGLE_OWNER_ENFORCED:
+    MULTI_TENANT_REQUESTED = False
+    MULTI_TENANT_ENABLED = False
+
 _TENANT_SIGNING_KEY = os.environ.get("TENANT_TOKEN_SIGNING_KEY")
 TENANT_STORE = None
 if MULTI_TENANT_ENABLED:
@@ -106,6 +132,10 @@ if MULTI_TENANT_ENABLED:
         HEALTH["avisos"].append(
             f"multi-tenant desligado: {_exc}. Defina TENANT_TOKEN_SIGNING_KEY "
             "com 32+ caracteres aleatórios e reinicie para habilitar contas.")
+# NOTA DE MERGE: a base (Qoder) definia aqui `SINGLE_OWNER_ENFORCED =
+# not MULTI_TENANT_ENABLED` — política flag-reabrível. Por DECISÃO ARQUITETURAL
+# (dono único permanente), essa redefinição foi removida: a trava fixa definida
+# acima é a única autoridade, e nenhuma flag reabre a superfície SaaS.
 TENANT_BOOTSTRAP_TOKEN = os.environ.get("TENANT_BOOTSTRAP_TOKEN", "")
 STATIC = Path(__file__).parent / "static"
 AGENCY_AUDIT = AuditLog(DATA / "agency-events.jsonl")
@@ -166,9 +196,15 @@ ALLOWED_KEYS = [
     "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET",
     "TRADINGAGENTS_DESK_FEED", "TRADINGAGENTS_DESK_BROKER",
     "TRADINGAGENTS_DESK_INSTRUMENTS", "TRADINGAGENTS_DESK_CAPITAL",
+    "TRADINGAGENTS_DESK_CONTROLE", "TRADINGAGENTS_DESK_TETO_EXPOSICAO",
     "LIVE_MAX_ORDER_VALUE", "LIVE_MAX_DAILY_LOSS",
     "LIVE_TRADING_CONFIRM",
     "ALERTA_TELEGRAM_TOKEN", "ALERTA_TELEGRAM_CHAT", "ALERTA_WEBHOOK_URL",
+    "ALERTA_TELEGRAM_WEBHOOK_SECRET", "ALERTA_DISCORD_WEBHOOK",
+    "ALERTA_WHATSAPP_TOKEN", "ALERTA_WHATSAPP_PHONE", "ALERTA_WHATSAPP_DESTINO",
+    "ALERTA_WINDOWS", "ALERTA_WEBPUSH", "ALERTA_VAPID_PUBLICA",
+    "EMAIL_SMTP_HOST", "EMAIL_SMTP_PORT", "EMAIL_SMTP_USER", "EMAIL_SMTP_PASS",
+    "EMAIL_SMTP_FROM", "EMAIL_SMTP_TO",
     "TRANSPARENCIA_PUBLICA", "TRANSPARENCIA_NOME",
 ]
 # Segredo é declarado, NÃO inferido pelo sufixo do nome. A heurística
@@ -181,6 +217,8 @@ SEGREDOS_DECLARADOS = {
     "OPENAI_COMPATIBLE_API_KEY", "FRED_API_KEY", "ALPHA_VANTAGE_API_KEY",
     "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET",
     "ALERTA_TELEGRAM_TOKEN", "ALERTA_TELEGRAM_CHAT", "ALERTA_WEBHOOK_URL",
+    "ALERTA_TELEGRAM_WEBHOOK_SECRET", "ALERTA_DISCORD_WEBHOOK",
+    "ALERTA_WHATSAPP_TOKEN", "EMAIL_SMTP_PASS",
     "LIVE_TRADING_CONFIRM",
 }
 # Rede de segurança: qualquer chave futura com cara de credencial também
@@ -190,10 +228,59 @@ SECRETish = tuple(sorted(
      if k in SEGREDOS_DECLARADOS
      or k.endswith(("_KEY", "_SECRET", "_TOKEN", "_PASSWORD", "_WEBHOOK_URL"))}))
 
+# Padrão EFETIVO do papel de cada chave que reconstrói a mesa. Instalação
+# nova não tem nada salvo; o painel reenvia todos os campos no primeiro
+# Salvar, incluindo os defaults dos seletores (fixture/binance/testnet).
+# Salvar o padrão não é mudança — senão o primeiro clique derruba a mesa.
+_DESK_EFFECTIVE_DEFAULTS = {
+    "TRADINGAGENTS_DESK_BROKER": "paper",
+    "TRADINGAGENTS_DESK_FEED": "fixture",
+    "TRADINGAGENTS_EXCHANGE": "binance",
+    "TRADINGAGENTS_BROKER_MODE": "testnet",
+}
+
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(diagnostics.router)
 app.include_router(security_center.router)
 bearer = HTTPBearer(auto_error=False)
+
+# ── GATE G2 — BLOQUEIO INCONDICIONAL DA SUPERFÍCIE SaaS ─────────────────────
+# Prefixos de rota que NÃO existem num aplicativo pessoal de dono único. O
+# casamento é por SEGMENTO (prefixo exato ou seguido de '/'), para jamais
+# atingir vizinhos legítimos — ex.: `/v1/admin/database` (inspeção do próprio
+# banco pelo dono) NÃO é afetado por `/v1/admin/tenants`.
+SAAS_BLOCKED_PREFIXES = (
+    "/v1/auth/signup",         # cadastro self-service
+    "/v1/auth/signup-status",  # vitrine do cadastro (sufixo '-status', não '/')
+    "/v1/auth/login",       # login multi-tenant (o dono usa ACCESS_PASSWORD)
+    "/v1/auth/bootstrap",   # bootstrap inicial de inquilino
+    "/v1/auth/oauth",       # login social (Google/Microsoft)
+    "/v1/admin/tenants",    # criação/gestão de inquilinos
+    "/v1/admin/users",      # criação/gestão de usuários de inquilino
+    "/v1/billing",          # planos, status de assinatura, checkout PIX
+    "/v1/webhooks/woovi",   # webhook de pagamento que ativaria plano
+)
+
+
+def rota_saas_bloqueada(path: str) -> bool:
+    """True se `path` pertence à superfície SaaS desligada no modo dono único."""
+    return any(path == pref or path.startswith(pref + "/")
+               for pref in SAAS_BLOCKED_PREFIXES)
+
+
+@app.middleware("http")
+async def bloqueio_single_owner(request: Request, call_next):
+    """Fecha a superfície SaaS ANTES da autenticação e ANTES do roteamento,
+    para QUALQUER método HTTP e autenticado ou não. Responde 404: no produto
+    pessoal esses recursos simplesmente não existem. Incondicional: não lê
+    nenhuma flag de ambiente, então configuração incorreta não o reabre."""
+    if SINGLE_OWNER_ENFORCED and rota_saas_bloqueada(request.url.path):
+        return JSONResponse(
+            {"detail": "recurso indisponível neste aplicativo pessoal "
+                       "(dono único); superfície SaaS desativada"},
+            status_code=404,
+        )
+    return await call_next(request)
 
 
 @app.on_event("startup")
@@ -273,8 +360,10 @@ def auth(request: Request, c: HTTPAuthorizationCredentials = Depends(bearer)):
             raise HTTPException(403, f"papel {principal.role} não possui a permissão {permission}")
         request.state.principal = principal
         return principal
-    if not PASSWORD:
-        raise HTTPException(500, "defina ACCESS_PASSWORD no ambiente")
+    # Requisição anônima (ex.: página abrindo antes do login) NÃO conta como
+    # tentativa de senha; só credencial ERRADA alimenta a trava de força-bruta.
+    if not c or not c.credentials:
+        raise HTTPException(401, "não autenticado")
     ip = _client_ip(request)
     rec = _FAILS.get(ip)
     if rec and rec["n"] >= MAX_FAILS:
@@ -282,13 +371,38 @@ def auth(request: Request, c: HTTPAuthorizationCredentials = Depends(bearer)):
         if wait > 0:
             raise HTTPException(429, f"muitas tentativas erradas — espera {wait // 60 + 1} min")
         _FAILS.pop(ip, None)
-    if not c or not hmac.compare_digest(c.credentials, PASSWORD):
+    if OWNER_CREDENTIALS.existe():
+        ok = OWNER_CREDENTIALS.verificar_senha(c.credentials)
+    elif PASSWORD:
+        ok = hmac.compare_digest(c.credentials, PASSWORD)
+    else:
+        # Nada configurado ainda: não é senha errada, é primeira execução.
+        # O painel usa este 409 para abrir o assistente de configuração.
+        raise HTTPException(409, "primeira configuração pendente — crie a senha do dono no painel")
+    if not ok:
         r = _FAILS.setdefault(ip, {"n": 0, "until": 0})
         r["n"] += 1
         r["until"] = time.time() + LOCK_SECONDS
         raise HTTPException(401, "não autenticado")
     _FAILS.pop(ip, None)
     return True
+
+
+_shutdown_hook = None
+
+
+def set_shutdown_hook(fn):
+    """Registra como desligar o servidor (o launcher liga no uvicorn.Server)."""
+    global _shutdown_hook
+    _shutdown_hook = fn
+
+
+@app.post("/v1/app/quit")
+async def app_quit(_=Depends(auth)):
+    if _shutdown_hook is None:
+        raise HTTPException(409, "servidor iniciado fora do launcher; encerre pelo terminal")
+    threading.Timer(0.3, _shutdown_hook).start()
+    return {"ok": True, "message": "servidor encerrando"}
 
 
 @app.post("/v1/auth/bootstrap")
@@ -327,7 +441,66 @@ def auth_status():
         "multi_tenant": MULTI_TENANT_ENABLED,
         "bootstrap_required": bool(MULTI_TENANT_ENABLED and TENANT_STORE and TENANT_STORE.tenant_count() == 0),
         "live_trading": False,
+        # Primeira execução (nenhuma senha criada): o painel abre o assistente.
+        "setup_required": (not OWNER_CREDENTIALS.existe()) and not PASSWORD,
     }
+
+
+_SETUP_LOCK = threading.Lock()
+
+
+@app.post("/v1/auth/setup")
+async def owner_setup(req: Request):
+    """Assistente de primeira execução: cria a senha do dono e devolve o
+    código de recuperação UMA única vez. Só existe enquanto não há senha."""
+    body = await _json_body(req)
+    senha = str(body.get("senha", ""))
+    erro = erro_de_senha(senha)
+    if erro:
+        raise HTTPException(422, erro)
+    with _SETUP_LOCK:
+        if PASSWORD or OWNER_CREDENTIALS.existe():
+            raise HTTPException(409, "senha do dono já configurada")
+        codigo = OWNER_CREDENTIALS.criar(senha)
+    return {"ok": True, "codigo_recuperacao": codigo}
+
+
+@app.post("/v1/auth/recover")
+async def owner_recover(req: Request):
+    """Recuperação pelo código: troca a senha e devolve código NOVO (o antigo
+    morre no uso). Mesma trava de força-bruta do login."""
+    if not OWNER_CREDENTIALS.existe():
+        raise HTTPException(409, "senha do dono ainda não configurada")
+    body = await _json_body(req)
+    ip = _client_ip(req)
+    rec = _FAILS.get(ip)
+    if rec and rec["n"] >= MAX_FAILS:
+        wait = int(rec["until"] - time.time())
+        if wait > 0:
+            raise HTTPException(429, f"muitas tentativas erradas — espera {wait // 60 + 1} min")
+        _FAILS.pop(ip, None)
+    try:
+        novo = OWNER_CREDENTIALS.usar_codigo_de_recuperacao(
+            str(body.get("codigo", "")), str(body.get("nova_senha", "")))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    if not novo:
+        r = _FAILS.setdefault(ip, {"n": 0, "until": 0})
+        r["n"] += 1
+        r["until"] = time.time() + LOCK_SECONDS
+        raise HTTPException(401, "código de recuperação incorreto")
+    _FAILS.pop(ip, None)
+    return {"ok": True, "codigo_recuperacao": novo}
+
+
+@app.post("/v1/auth/recovery-code")
+async def owner_new_recovery_code(_=Depends(auth)):
+    """Código de recuperação novo para a sessão autenticada (ex.: dono migrado
+    do formato antigo nunca viu um código, ou perdeu o papel anotado)."""
+    novo = OWNER_CREDENTIALS.rotacionar_codigo()
+    if not novo:
+        raise HTTPException(409, "credenciais de arquivo não configuradas")
+    return {"ok": True, "codigo_recuperacao": novo}
 
 
 @app.get("/v1/auth/me")
@@ -381,12 +554,27 @@ def list_tenant_users(request: Request, _=Depends(auth)):
     return {"users": TENANT_STORE.list_members(request_tenant(request))}
 
 
+# NOTA DE MERGE: a base (Qoder) trazia aqui uma segunda `rota_saas_bloqueada`
+# e um middleware `block_saas_routes` acoplados a `not MULTI_TENANT_ENABLED`
+# (política flag-reabrível). Removidos por decisão arquitetural: o bloqueio é
+# feito pela `rota_saas_bloqueada`/`bloqueio_single_owner` únicos lá de cima,
+# de forma incondicional (nenhuma flag reabre).
+
+
 @app.middleware("http")
 async def security_headers(request, call_next):
     resp = await call_next(request)
     resp.headers["X-Content-Type-Options"] = "nosniff"
-    resp.headers["X-Frame-Options"] = "DENY"
+    # O painel embute o Trading Floor em iframe same-origin (/floor). DENY
+    # bloquearia a própria tela; SAMEORIGIN mantém a proteção anti-clickjacking
+    # contra sites externos. Todo o resto segue DENY.
+    resp.headers["X-Frame-Options"] = "SAMEORIGIN" if request.url.path == "/floor" else "DENY"
     resp.headers["Referrer-Policy"] = "no-referrer"
+    # HTML do app muda a cada atualização: sem no-store o navegador pode
+    # continuar rodando a tela antiga em cache, inclusive a versão que
+    # pollava sem sessão e armava a trava de força-bruta do dono.
+    if request.url.path in {"/app", "/floor"}:
+        resp.headers["Cache-Control"] = "no-store"
     return resp
 
 # Provedores gratuitos/locais de primeira classe: todos falam o protocolo
@@ -545,6 +733,21 @@ def request_tenant(request: Request) -> str:
     principal = getattr(request.state, "principal", None)
     return principal.tenant_id if isinstance(principal, Principal) else "legacy"
 
+
+# Painel (item 7 do escopo): saúde e latência da última consulta de IA de
+# contexto, por inquilino. Só observabilidade — não guarda prompt nem resposta.
+_IA_CONTEXTO: dict[str, dict] = {}
+
+
+def _registrar_ia_contexto(tenant_id: str, provedor, latencia_ms: float,
+                           ok: bool) -> None:
+    _IA_CONTEXTO[tenant_id] = {
+        "provedor": str(provedor or ""),
+        "latencia_ms": round(latencia_ms, 1),
+        "ok": bool(ok),
+        "quando": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+
 def upd(jid, **kw):
     JOB_STORE.update(jid, **kw)
 
@@ -656,7 +859,9 @@ def marca(arquivo: str):
     nome arbitrário abriria leitura de qualquer arquivo do disco.
     """
     permitidos = {"favicon.ico", "favicon-32.png", "favicon-64.png",
-                  "dz23-logo.png", "dz23-logo-512.png", "dz23-logo-192.png"}
+                  "dz23-logo.png", "dz23-logo-512.png", "dz23-logo-192.png",
+                  "dz23-simbolo-512.png", "dz23-simbolo-192.png",
+                  "dz23-simbolo-64.png", "dz23-icone.ico"}
     if arquivo not in permitidos:
         raise HTTPException(status_code=404, detail="arquivo não encontrado")
     caminho = STATIC / "marca" / arquivo
@@ -668,6 +873,13 @@ def marca(arquivo: str):
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon():
     return FileResponse(STATIC / "marca" / "favicon.ico")
+
+
+@app.get("/manifest.webmanifest", include_in_schema=False)
+def manifest():
+    """Manifesto PWA: o painel instalável herda a identidade DZ23."""
+    return FileResponse(STATIC / "manifest.webmanifest",
+                        media_type="application/manifest+json")
 
 @app.get("/v1/config")
 def get_cfg(request: Request, _=Depends(auth)):
@@ -688,19 +900,31 @@ async def set_cfg(req: Request, _=Depends(auth)):
     body = await _json_body(req)
     tenant_id = request_tenant(req)
     cfg = load_cfg(tenant_id)
-    saved = []
+    saved, changed = [], []
     for k, v in (body.get("vars") or {}).items():
         if k in ALLOWED_KEYS and isinstance(v, str) and v.strip():
-            cfg[k] = v.strip()
+            novo = v.strip()
             saved.append(k)
+            atual = str(cfg.get(k) or "").strip()
+            if not atual:
+                # Nada salvo (nem no ambiente): o que vale é o padrão
+                # efetivo do papel da chave. Salvar esse padrão não é
+                # mudança e não pode reconstruir a mesa.
+                atual = _DESK_EFFECTIVE_DEFAULTS.get(k, "")
+            if atual != novo:
+                changed.append(k)
+            cfg[k] = novo
     if not saved:
         raise HTTPException(400, "nada para salvar")
     save_cfg(cfg, tenant_id)
     # Configuração que muda a mesa (corretora, feed, capital, limites) exige
     # reconstrução — senão o cliente salva e nada acontece até reiniciar.
+    # Só quando o valor REALMENTE mudou: o painel reenvia o formulário
+    # inteiro a cada Salvar, e um reenvio idêntico não pode derrubar a mesa
+    # (a autônoma pararia sem o dono ter pedido).
     if any(k.startswith(("TRADINGAGENTS_DESK", "LIVE_", "EXCHANGE_")) or
            k in ("TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE")
-           for k in saved):
+           for k in changed):
         _desk_reset(tenant_id)
     return {"saved": saved}
 
@@ -1250,8 +1474,16 @@ def require_plan(request: Request, feature: str = "mesa"):
     """Portão de acesso. Assinatura vencida bloqueia o que custa dinheiro
     (mesa, análises), mas NUNCA a página de pagamento nem o login — senão o
     cliente não consegue nem pagar para voltar."""
+    # GATE G2: num aplicativo pessoal de dono único não há plano a cobrar; o
+    # dono tem direito pleno. O portão de assinatura (402) é conceito de SaaS
+    # e fica desligado junto com o resto da superfície. A assinatura segue
+    # registrada apenas para preservar os dados antigos.
+    if SINGLE_OWNER_ENFORCED:
+        return SUBS.ensure("legacy")
     tenant = request_tenant(request)
     sub = SUBS.ensure(tenant)
+    if SINGLE_OWNER_ENFORCED or tenant == "legacy":
+        return sub
     if not sub.is_active():
         raise HTTPException(402, {
             "erro": "assinatura expirada",
@@ -1559,6 +1791,105 @@ def oauth_callback(provider: str, code: str = "", state: str = ""):
 # produto, não detalhe. Modo PAPER; esta superfície não liga capital real.
 _DESKS: dict[str, dict] = {}
 
+# Centro Inteligente de Alertas ⑤: fila durável por inquilino. Só o
+# despachante grava; o teste injeta transportes por aqui para nunca tocar
+# a internet de verdade.
+_FILAS_ALERTAS: dict = {}
+_TESTE_CANAL_TRANSPORTES: dict = {}
+
+
+def _nova_fila_alertas(tenant_id: str, armazem=None):
+    from tradingagents.desk.notificacao_viva import FilaDeAlertas
+    if armazem is None:
+        armazem = (_DESKS.get(tenant_id) or {}).get("armazem")
+    doc = armazem.carregar(tenant_id, "alertas") if armazem else None
+    return FilaDeAlertas.from_dict(doc)
+
+
+def _fila_alertas(tenant_id: str):
+    fila = _FILAS_ALERTAS.get(tenant_id)
+    if fila is None:
+        fila = _nova_fila_alertas(tenant_id)
+        _FILAS_ALERTAS[tenant_id] = fila
+    return fila
+
+
+def _persistir_fila_alertas(tenant_id: str) -> None:
+    fila = _FILAS_ALERTAS.get(tenant_id)
+    armazem = (_DESKS.get(tenant_id) or {}).get("armazem")
+    if fila is None or armazem is None:
+        return
+    try:
+        armazem.salvar(tenant_id, "alertas", fila.to_dict())
+    except Exception:
+        # A fila em memória segue viva; a próxima gravação tenta de novo.
+        LOGGER.warning("não foi possível persistir a fila de alertas")
+
+
+def _matriz_alertas(tenant_id: str):
+    from tradingagents.desk.notificacao_viva import MatrizDeRoteamento
+    armazem = (_DESKS.get(tenant_id) or {}).get("armazem")
+    doc = armazem.carregar(tenant_id, "alertas_matriz") if armazem else None
+    return MatrizDeRoteamento.from_dict(doc)
+
+
+def _despachar_alertas(tenant_id: str) -> dict:
+    """Tenta entregar o que está pendente, respeitando backoff e rate limit."""
+    from tradingagents.desk.canais_alerta import construir_canais
+    from tradingagents.desk.notificacao_viva import Despachante
+    fila = _fila_alertas(tenant_id)
+    canais = construir_canais(
+        load_cfg(tenant_id),
+        transportes=_TESTE_CANAL_TRANSPORTES.get(tenant_id))
+    despachante = Despachante(fila, canais, matriz=_matriz_alertas(tenant_id))
+    resultado = despachante.despachar()
+    _persistir_fila_alertas(tenant_id)
+    return resultado
+
+
+def _enfileirar_estado_da_mesa(tenant_id: str, alerta) -> None:
+    _fila_alertas(tenant_id).enfileirar(
+        tipo=alerta.codigo, severidade=alerta.severidade, titulo=alerta.titulo,
+        detalhe=alerta.detalhe, acao=alerta.acao, fonte="mesa",
+        dedupe_key=f"mesa:{alerta.codigo}")
+
+
+def _alertas_do_ciclo(tenant_id: str, out: dict) -> None:
+    """E2.5: saídas executadas e entradas confirmadas viram alerta."""
+    from datetime import timedelta as _td
+
+    from tradingagents.desk.models import utcnow
+    fila = _fila_alertas(tenant_id)
+    for enc in out.get("encerradas", []) or []:
+        if enc.get("estado") != "filled":
+            continue
+        motivo = str(enc.get("motivo") or enc.get("reason_code") or "")
+        code = str(enc.get("reason_code") or "")
+        tipo = "stop_atingido" if "STOP" in code.upper() else "saida_executada"
+        fila.enfileirar(
+            tipo=tipo, severidade="atencao",
+            titulo=f"Saída executada: {enc.get('instrumento', '?')}",
+            detalhe=(f"quantidade {enc.get('quantidade', '?')} a "
+                     f"{enc.get('preco', '?')}" + (f" — {motivo}" if motivo else "")),
+            acao="Confira a posição na aba Mesa de Agentes.",
+            fonte=str(enc.get("fonte") or "mesa"), preco=str(enc.get("preco") or ""),
+            dedupe_key=f"saida:{enc.get('ordem') or enc.get('instrumento')}",
+            dados={"instrumento": enc.get("instrumento", ""),
+                   "agente": enc.get("agente", ""),
+                   "reason_code": code},
+            validade=utcnow() + _td(hours=12))
+    for o in out.get("ordens", []) or []:
+        if o.get("estado") != "filled":
+            continue
+        fila.enfileirar(
+            tipo="confirmacao_entrada", severidade="informativo",
+            titulo=f"Entrada confirmada: {o.get('ordem', '')}",
+            detalhe="A ordem de compra executou na corretora.",
+            acao="A posição já aparece no gerente de saída global.",
+            fonte="mesa", dedupe_key=f"entrada:{o.get('ordem')}",
+            validade=utcnow() + _td(hours=12))
+
+
 
 def _desk_boot(tenant_id: str) -> dict:
     from decimal import Decimal
@@ -1586,6 +1917,7 @@ def _desk_boot(tenant_id: str) -> dict:
                           account=f"paper-{tenant_id}", mode=Mode.PAPER,
                           instruments=universe, capital=capital)
     from tradingagents.desk.learning import MemoriaDeDesempenho
+    from tradingagents.desk.modo import ModoDaMesa, PosseDeExecucao
     from tradingagents.desk.storage import ArmazemDeEstado
     # Servidor é descartável; o aprendizado não pode ser. Com banco externo,
     # o histórico dos agentes sobrevive à troca de máquina.
@@ -1594,11 +1926,37 @@ def _desk_boot(tenant_id: str) -> dict:
     memoria = MemoriaDeDesempenho(DATA / "desks" / tenant_id / "aprendizado.json",
                                   armazem=armazem, tenant_id=tenant_id)
     exchange_cfg = (cfg.get("TRADINGAGENTS_EXCHANGE") or "binance").lower()
+    # Trader de controle entra SÓ por opção explícita do dono
+    # (TRADINGAGENTS_DESK_CONTROLE=1): é o piso estatístico de comparação,
+    # não um trader a mais por padrão.
+    incluir_controle = str(cfg.get("TRADINGAGENTS_DESK_CONTROLE") or "") \
+        .strip().lower() in ("1", "true", "sim", "on", "yes")
     traders = default_desk(universe, memoria=memoria, exchange=exchange_cfg,
-                           capital=capital)
+                           capital=capital, incluir_controle=incluir_controle)
+    # ESTÁGIO INICIAL (mandato MAESTRO): os três traders preservados são
+    # HOMOLOGADOS e operam; os sete novos nascem EXPERIMENTAIS (shadow) e NÃO
+    # são habilitados sem evidência estatística. Promoções e pausas decididas
+    # pelo dono ficam persistidas e sobrevivem ao reinício.
+    estagios_salvos = armazem.carregar(tenant_id, "agentes") or {}
+    estagios_antes: dict[str, str] = {}
     for t in traders:
-        for stage in (AgentStage.VALIDATED, AgentStage.SHADOW, AgentStage.PAPER_ENABLED):
-            t.spec.move_to(stage)
+        t.spec.move_to(AgentStage.VALIDATED)
+        t.spec.move_to(AgentStage.SHADOW)
+        registro = estagios_salvos.get(t.spec.agent_id) or {}
+        salvo = registro.get("stage")
+        if salvo in ("shadow", "paper_enabled", "paused"):
+            if salvo != t.spec.stage.value:
+                t.spec.move_to(AgentStage(salvo))
+            estagios_antes[t.spec.agent_id] = registro.get("antes") or ""
+        elif t.homologado:
+            t.spec.move_to(AgentStage.PAPER_ENABLED)
+
+    def _persistir_estagios():
+        documento = {t.spec.agent_id: {"stage": t.spec.stage.value,
+                                       "antes": estagios_antes.get(t.spec.agent_id, "")}
+                     for t in traders}
+        with contextlib.suppress(Exception):
+            armazem.salvar(tenant_id, "agentes", documento)
 
     risk = RiskEngine(mandate)
     ledger = Ledger(opening_cash=mandate.capital)
@@ -1608,6 +1966,11 @@ def _desk_boot(tenant_id: str) -> dict:
         paper_price=Decimal("100"))
     coord = ExecutionCoordinator(mandate, ledger, risk,
                                  worker_id=f"worker-{tenant_id}", broker=broker)
+    # UMA referência econômica desde o primeiro boot: sem isto o risco ficava
+    # cego ao livro vivo (via mandate.capital e reservas), e o capital já
+    # investido parecia disponível para novas entradas. O restore re-liga ao
+    # livro reconstruído (execution.py).
+    risk.attach_portfolio_ledger(ledger)
     # Identidade e destino do relatório de reconciliação.
     coord.tenant_id = tenant_id
     coord.armazem = armazem
@@ -1646,33 +2009,86 @@ def _desk_boot(tenant_id: str) -> dict:
             import inspect
             aceita_credencial = "api_key" in inspect.signature(
                 create_llm_client).parameters
-            if aceita_credencial:
-                chave = next((v for v in llm_env.values() if v), "")
-                cliente = create_llm_client(conf.get("llm_provider"), conf,
-                                            api_key=chave)
-                return (cliente.complete(prompt) if hasattr(cliente, "complete")
-                        else str(cliente.invoke(prompt)))
-            with _lock:                      # janela fechada: um por vez
-                anterior = {k: os.environ.get(k) for k in llm_env}
-                os.environ.update(llm_env)
-                try:
-                    cliente = create_llm_client(conf.get("llm_provider"), conf)
-                    return (cliente.complete(prompt)
-                            if hasattr(cliente, "complete")
-                            else str(cliente.invoke(prompt)))
-                finally:
-                    for k, antes in anterior.items():
-                        if antes is None:
-                            os.environ.pop(k, None)
-                        else:
-                            os.environ[k] = antes
+            inicio = time.perf_counter()
+            ok = False
+            try:
+                if aceita_credencial:
+                    chave = next((v for v in llm_env.values() if v), "")
+                    cliente = create_llm_client(conf.get("llm_provider"), conf,
+                                                api_key=chave)
+                    resposta = (cliente.complete(prompt)
+                                if hasattr(cliente, "complete")
+                                else str(cliente.invoke(prompt)))
+                else:
+                    with _lock:                  # janela fechada: um por vez
+                        anterior = {k: os.environ.get(k) for k in llm_env}
+                        os.environ.update(llm_env)
+                        try:
+                            cliente = create_llm_client(conf.get("llm_provider"), conf)
+                            resposta = (cliente.complete(prompt)
+                                        if hasattr(cliente, "complete")
+                                        else str(cliente.invoke(prompt)))
+                        finally:
+                            for k, antes in anterior.items():
+                                if antes is None:
+                                    os.environ.pop(k, None)
+                                else:
+                                    os.environ[k] = antes
+                ok = True
+                return resposta
+            finally:
+                # Painel (item 7): latência e saúde do provedor externo.
+                # Registra o nome CONFIGURADO (openrouter, groq, gemini): é o
+                # que o dono escolheu na tela, não o adaptador interno.
+                _registrar_ia_contexto(tenant_id,
+                                       cfg.get("TRADINGAGENTS_LLM_PROVIDER"),
+                                       (time.perf_counter() - inicio) * 1000.0,
+                                       ok)
 
         analista = AnalistaDeContexto(_consultar)
 
+    # BT-10: a mesa do app ganha SALA na escola (espelho financeiro) e
+    # VIGIA de pilotos (bloqueio de entradas). LIVE não cria sala por esta
+    # camada — operação real exige o fluxo de piloto autorizado.
+    from tradingagents.desk.piloto import SupervisorDePiloto
+    from tradingagents.desk.salas import ContextoDaSala, EscolaCentral, RegistroDeSalas
+    sala_da_mesa = None
+    sala_motivo = ""
+    if broker_mode in ("paper", "testnet"):
+        try:
+            sala_da_mesa = RegistroDeSalas(
+                armazem=armazem, tenant_id=tenant_id).abrir_sala(
+                ContextoDaSala(corretora=exchange_cfg, conta=mandate.account,
+                               mercado="spot", modo=broker_mode))
+        except Exception as exc:
+            sala_motivo = f"sala não registrada ({type(exc).__name__}: {exc})"[:200]
+    else:
+        sala_motivo = ("modo LIVE não cria sala por esta camada; operação "
+                       "real exige o fluxo de piloto autorizado")
+    _avisos_vigia: list[str] = []
+
+    def _vigia_pilotos() -> dict[str, str]:
+        """Quem o piloto bloqueia AGORA — reavaliado no contexto do pedido.
+        Estado RELIDO do armazém a cada ciclo (instâncias novas): autorização
+        e formatura mudam por fora deste processo, e cache de boot bloquearia
+        ou liberaria a entrada errada. Falha vira bloqueio (o orquestrador já
+        trata vigia quebrado como fail-closed); o aviso fica para auditoria."""
+        try:
+            sup = SupervisorDePiloto(armazem, tenant_id=tenant_id)
+            viva = EscolaCentral(armazem=armazem, tenant_id=tenant_id)
+            return sup.bloqueios(central=viva)
+        except Exception as exc:
+            _avisos_vigia.append(f"{type(exc).__name__}: {exc}"[:160])
+            del _avisos_vigia[:-10]
+            raise
+
     orch = DeskOrchestrator(mandate, traders, worker_id=f"worker-{tenant_id}",
-                            risk=risk, positions_provider=ledger.open_positions,
+                            risk=risk,
+                            positions_provider=lambda: coord.ledger.open_positions(),
                             memoria=memoria, exchange=exchange_cfg,
-                            analista=analista)
+                            analista=analista, vigia=_vigia_pilotos,
+                            sala=sala_da_mesa,
+                            saidas_em_curso=coord.tem_saida_em_curso)
 
     feed_kind = (cfg.get("TRADINGAGENTS_DESK_FEED") or "fixture").strip().lower()
     if feed_kind == "real":
@@ -1705,10 +2121,32 @@ def _desk_boot(tenant_id: str) -> dict:
     # qualquer exposição nova (UNKNOWN => BLOCK).
     recuperacao = coord.restaurar_estado(armazem.carregar(tenant_id, "oms"))
 
-    desk = {"orchestrator": orch, "ledger": ledger, "coordinator": coord,
+    # Diário de gestão (políticas, trailing, parciais): sem restaurar, a
+    # posição sobreviveria ao reinício mas o GERENTE de saída morreria com o
+    # processo. A verdade financeira continua sendo o diário (ledger vence).
+    restauracao_livro = orch.restaurar_livro(
+        armazem.carregar(tenant_id, "livro"), ledger=coord.ledger)
+
+    # Centro Inteligente de Alertas ⑤: a fila durável é carregada agora; o
+    # que ficou pendente no processo anterior volta a ser tentado (ciclo ou
+    # rota) — alerta não morre junto com o processo.
+    _FILAS_ALERTAS[tenant_id] = _nova_fila_alertas(tenant_id, armazem)
+
+    # Modo da mesa e posse exclusiva de execução (#29, portabilidade): o
+    # dono decide o que a mesa faz; quem segura a posse é quem submete ordem.
+    modo = ModoDaMesa(armazem, tenant_id)
+    posse = PosseDeExecucao(armazem, tenant_id)
+
+    desk = {"orchestrator": orch, "ledger": coord.ledger, "coordinator": coord,
             "memoria": memoria, "armazem": armazem, "recuperacao": recuperacao,
+            "livro_restauracao": restauracao_livro,
             "guardian": PositionGuardian(coord), "cycles": [],
-            "feed_kind": feed_kind, "broker_mode": broker_mode, "scheduler": None}
+            "feed_kind": feed_kind, "broker_mode": broker_mode,
+            "modo": modo, "posse": posse, "sala": sala_da_mesa,
+            "sala_motivo": sala_motivo, "avisos_vigia": _avisos_vigia,
+            "scheduler": None, "estagios_antes": estagios_antes,
+            "persistir_estagios": _persistir_estagios,
+            "ia_modelo": cfg.get("TRADINGAGENTS_LLM_PROVIDER") or ""}
 
     def _persistir_oms():
         try:
@@ -1719,8 +2157,9 @@ def _desk_boot(tenant_id: str) -> dict:
 
     def _record(out):
         _persistir_oms()
-        # A cada ciclo, avalia e envia alertas — é o que acorda o dono sem
-        # ele precisar abrir o painel.
+        # A cada ciclo, avalia e ENTREGA alertas pela fila durável — é o que
+        # acorda o dono sem ele precisar abrir o painel. A entrega tem
+        # dedupe, backoff e rate limit; falha não derruba o ciclo.
         try:
             from tradingagents.desk.alerts import avaliar_estado
             coord_, led_, sched_ = desk["coordinator"], desk["ledger"], desk["scheduler"]
@@ -1732,11 +2171,13 @@ def _desk_boot(tenant_id: str) -> dict:
                 limite_perda=getattr(corretora_, "max_daily_loss", Decimal("0")),
                 mesa_deveria_rodar=True, mesa_rodando=True,
                 erros_do_ciclo=sched_.state.errors if sched_ else 0)
-            if alertas:
-                resultado = _notificador(tenant_id).enviar(alertas)
-                if resultado.get("falhas"):
-                    METRICS.inc("alerts.delivery_failed", len(resultado["falhas"]))
-                    LOGGER.warning("alert delivery failed: %s", len(resultado["falhas"]))
+            for alerta in alertas:
+                _enfileirar_estado_da_mesa(tenant_id, alerta)
+            _alertas_do_ciclo(tenant_id, out)
+            resultado = _despachar_alertas(tenant_id)
+            if resultado.get("falhas"):
+                METRICS.inc("alerts.delivery_failed", len(resultado["falhas"]))
+                LOGGER.warning("alert delivery failed: %s", len(resultado["falhas"]))
         except Exception as exc:
             METRICS.inc("alerts.delivery_callback_failed")
             LOGGER.exception("alert callback failed: %s", type(exc).__name__)
@@ -1754,8 +2195,50 @@ def _desk_boot(tenant_id: str) -> dict:
         orch, coord, snapshot_provider=snaps_fn, price_provider=prices_fn,
         state_path=data_dir / "state.json", on_cycle=_record,
         armazem=armazem, tenant_id=tenant_id,
-        interval_seconds=int(os.environ.get("DESK_INTERVAL_SECONDS", "300")))
+        interval_seconds=int(os.environ.get("DESK_INTERVAL_SECONDS", "300")),
+        guarda_operacao=lambda: _guarda_do_laco(modo, posse))
     return desk
+
+
+def _guarda_do_laco(modo, posse) -> tuple[str, str]:
+    """Porteiro fail-closed de cada ciclo autônomo (modo + posse).
+
+    observador: analisa sem executar; pausada/bloqueada: nada roda; ativa:
+    só executa com a posse — se outro processo (Oracle) a segura, este fica
+    em silêncio até o vencimento. Guarda quebrado NÃO libera: falha = bloquear.
+    """
+    try:
+        estado = modo.estado
+        if estado is EstadoDaMesa.OBSERVADOR:
+            return "observar", ""
+        ok, motivo = modo.pode_executar()
+        if not ok:
+            return "bloquear", motivo
+        ok, quem = posse.assumir()
+        if not ok:
+            return "bloquear", (f"posse de execução pertence a {quem} — outro "
+                                "processo está executando esta mesa")
+        return "executar", ""
+    except Exception as exc:
+        return "bloquear", f"guarda de modo/posse falhou ({type(exc).__name__})"
+
+
+def _guarda_do_pedido(d: dict) -> None:
+    """Antes de executar sob demanda: modo ativo E posse livre/desta máquina.
+
+    Observador passa daqui sem tocar na posse (quem só olha não trava a
+    execução de quem opera); quem submete ordem, assume a posse exclusiva."""
+    estado = d["modo"].estado
+    if estado is EstadoDaMesa.OBSERVADOR:
+        return                       # a rota decide o ciclo de observação
+    ok, motivo = d["modo"].pode_executar()
+    if not ok:
+        raise HTTPException(409, motivo)
+    ok, quem = d["posse"].assumir()
+    if not ok:
+        raise HTTPException(
+            409, f"posse de execução pertence a {quem} — pare o outro "
+                 "processo ou aguarde o vencimento (15 min sem renovação)")
 
 
 def _desk_of(request: Request) -> dict:
@@ -1780,6 +2263,52 @@ def _desk_reset(tenant_id: str) -> None:
         desk["scheduler"].stop()
 
 
+_ROTULO_ESTAGIO = {"registered": "pesquisa", "validated": "validado",
+                   "shadow": "experimental (paper)",
+                   "paper_enabled": "aprovado (paper)",
+                   "paused": "pausado", "retired": "bloqueado"}
+
+
+def _agente_para_painel(t, d: dict) -> dict:
+    """Linha do painel Mesa de Agentes: estado em PT-BR, evidência estatística
+    e o motivo do último NO_TRADE — para o leigo, tão importante quanto a
+    ordem enviada."""
+    memoria = d.get("memoria")
+    ok, motivo = (memoria.pode_promover(t.strategy) if memoria
+                  else (False, "memória indisponível"))
+    st = memoria.estatistica(t.strategy) if memoria else None
+    ultimo = ""
+    if d.get("cycles"):
+        ciclo = d["cycles"][-1]
+        for linha in ciclo.get("abstencoes", []):
+            if linha.startswith(t.spec.agent_id + " · "):
+                ultimo = linha.split(": ", 1)[-1]
+                break
+        if not ultimo:
+            for linha in ciclo.get("vetos", []):
+                if linha.startswith(t.spec.agent_id + ": "):
+                    ultimo = linha.split(": ", 1)[-1]
+                    break
+    provedor = d.get("ia_modelo") or ""
+    return {
+        "id": t.spec.agent_id, "strategy": t.spec.strategy,
+        "version": t.spec.version, "stage": t.spec.stage.value,
+        "stage_label": _ROTULO_ESTAGIO.get(t.spec.stage.value, t.spec.stage.value),
+        "tier": "homologado" if t.homologado else "experimental",
+        "universe": list(t.universe), "timeframe": t.timeframe, "needs": t.needs,
+        "regimes": [r.value for r in t.regimes_favoraveis],
+        "modelo_ia": (f"{provedor} · contexto (veta ou reduz; nunca autoriza)"
+                      if provedor else "desligado (núcleo determinístico)"),
+        "evidencia": {
+            "operacoes": st.amostras if st else 0,
+            "maduro": bool(st and st.maduro),
+            "taxa_acerto": round(st.taxa_acerto, 3) if st else 0.0,
+            "retorno_medio": round(st.retorno_medio, 5) if st else 0.0,
+            "elegivel": ok, "motivo": motivo},
+        "ultimo_no_trade": ultimo,
+    }
+
+
 @app.get("/v1/desk/status")
 def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
     try:
@@ -1793,9 +2322,7 @@ def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
         "mandate": {"account": orch.mandate.account, "mode": orch.mandate.mode.value,
                     "capital": str(orch.mandate.capital),
                     "instruments": list(orch.mandate.instruments)},
-        "agents": [{"id": t.spec.agent_id, "strategy": t.spec.strategy,
-                    "version": t.spec.version, "stage": t.spec.stage.value,
-                    "universe": list(t.universe)} for t in orch.traders],
+        "agents": [_agente_para_painel(t, d) for t in orch.traders],
         "risk": {"reservado": str(orch.risk.reserved_total),
                  "disponivel": str(orch.risk.available),
                  "instrumentos_abertos": sorted(orch.risk.open_instruments())},
@@ -1809,7 +2336,13 @@ def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
                           "atribuicao": {k: str(v) for k, v in led.attribution().items()},
                           "balanceado": led.is_balanced()},
         "guardiao": d["guardian"].watchlist(),
+        "posicoes": orch.livro_para_painel(),
+        "livro_restauracao": d.get("livro_restauracao", {}),
         "agendador": d["scheduler"].status(),
+        "modo": {**d["modo"].resumo(), "posse": d["posse"].resumo()},
+        "escola": {"sala": (d["sala"].resumo() if d.get("sala") else None),
+                   "motivo": d.get("sala_motivo", ""),
+                   "avisos_vigia": d.get("avisos_vigia", [])[-5:]},
         "durabilidade": d["armazem"].estado() if d.get("armazem") else {},
         "fonte": {"dados": d["feed_kind"], "corretora": d["broker_mode"],
                   "aviso": ("mercado real (leitura pública, cutoff na vela fechada)"
@@ -1822,21 +2355,37 @@ def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
 @app.post("/v1/desk/cycle")
 def desk_cycle(request: Request, _=Depends(auth), __=Depends(require_plan)):
     d = _desk_of(request)
+    if d["modo"].estado is EstadoDaMesa.OBSERVADOR:
+        # Observador: ciclo PURO — analisa e propõe, não submete, não grava
+        # o estado financeiro (quem executa é quem grava).
+        out = d["scheduler"].run_once(executar=False, persistir=False)
+        return {"ok": True, "modo": "observador",
+                "resumo": out.get("resumo", ""),
+                "propostas": out.get("propostas", []),
+                "ordens": [],       # explícito: nada foi enviado
+                "encerradas": [],   # explícito: nenhuma saída executada
+                "descartados": out.get("descartados", []),
+                "vetos": out.get("vetos", []), "abstencoes": out.get("abstencoes", []),
+                "erros": out.get("erros", [])}
+    _guarda_do_pedido(d)
     out = d["scheduler"].run_once()
-    enviados, encerrados = [], []
-    for o in out.get("ordens", []):
-        enviados.append(o)
-    return {"ok": True, "resumo": out.get("resumo", ""), "ordens": enviados,
-            "encerradas": encerrados, "descartados": out.get("descartados", [])}
+    return {"ok": True, "resumo": out.get("resumo", ""),
+            "ordens": out.get("ordens", []),
+            "encerradas": out.get("encerradas", []),
+            "descartados": out.get("descartados", []),
+            "vetos": out.get("vetos", []), "abstencoes": out.get("abstencoes", []),
+            "erros": out.get("erros", [])}
 
 
 @app.post("/v1/desk/scheduler/{action}")
 def desk_scheduler(action: str, request: Request, _=Depends(auth), __=Depends(require_plan)):
     """Liga/desliga o laço autônomo. Ligado, roda sozinho — fechar o
-    navegador não interrompe nada. Start reconcilia ANTES de retomar."""
+    navegador não interrompe nada. Start reconcilia ANTES de retomar —
+    e respeita o modo e a posse (em observador, o laço só analisa)."""
     d = _desk_of(request)
     sched = d["scheduler"]
     if action == "start":
+        _guarda_do_pedido(d)
         recuperacao = sched.recover()
         return {"ok": True, "iniciado": sched.start(), "recuperacao": recuperacao,
                 "status": sched.status()}
@@ -1845,6 +2394,100 @@ def desk_scheduler(action: str, request: Request, _=Depends(auth), __=Depends(re
         return {"ok": True, "parada": "controlada — posições seguem sob o guardião",
                 "a_encerrar": d["orchestrator"].drain(), "status": sched.status()}
     raise HTTPException(422, "ação deve ser start ou stop")
+
+
+@app.get("/v1/desk/modo")
+def desk_modo_obter(request: Request, _=Depends(auth)):
+    """Modo da mesa + quem segura a posse de execução — visível ao dono."""
+    d = _desk_of(request)
+    return {**d["modo"].resumo(), "posse": d["posse"].resumo()}
+
+
+@app.post("/v1/desk/modo")
+async def desk_modo_definir(req: Request, _=Depends(auth),
+                            __=Depends(require_plan)):
+    """Muda o modo da mesa. Sair de BLOQUEADA exige desbloqueio explícito."""
+    body = await _json_body(req)
+    d = _desk_of(req)
+    try:
+        d["modo"].definir(str(body.get("estado") or ""),
+                          motivo=str(body.get("motivo") or ""),
+                          por="dono",
+                          desbloqueio=bool(body.get("desbloqueio")))
+    except ModoBloqueado as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {**d["modo"].resumo(), "posse": d["posse"].resumo()}
+
+
+def _trader_da_mesa(d: dict, agent_id: str):
+    return next((t for t in d["orchestrator"].traders
+                 if t.spec.agent_id == agent_id), None)
+
+
+@app.post("/v1/desk/traders/{agent_id}/promover")
+def desk_trader_promover(agent_id: str, request: Request,
+                         _=Depends(auth), __=Depends(require_plan)):
+    """Habilita um trader experimental — SOMENTE com evidência estatística.
+
+    O mandato é explícito: trader sem resultado comprovado não é habilitado.
+    O veredito sai das operações FECHADAS (memória), nunca de confiança."""
+    d = _desk_of(request)
+    t = _trader_da_mesa(d, agent_id)
+    if t is None:
+        raise HTTPException(404, f"trader {agent_id} não existe nesta mesa")
+    if t.spec.stage is AgentStage.PAPER_ENABLED:
+        return {"ok": True, "agent_id": agent_id, "stage": t.spec.stage.value,
+                "motivo": "já habilitado"}
+    ok, motivo = d["memoria"].pode_promover(t.strategy)
+    if not ok:
+        raise HTTPException(409, f"{agent_id} ainda não elegível: {motivo}")
+    t.spec.move_to(AgentStage.PAPER_ENABLED)
+    d["estagios_antes"][agent_id] = ""
+    d["persistir_estagios"]()
+    return {"ok": True, "agent_id": agent_id, "stage": t.spec.stage.value,
+            "motivo": motivo}
+
+
+@app.post("/v1/desk/traders/{agent_id}/pausar")
+def desk_trader_pausar(agent_id: str, request: Request,
+                       _=Depends(auth), __=Depends(require_plan)):
+    """Pausa um trader: ele para de propor; posições abertas seguem sob o
+    guardião e o estágio anterior é lembrado para a retomada."""
+    d = _desk_of(request)
+    t = _trader_da_mesa(d, agent_id)
+    if t is None:
+        raise HTTPException(404, f"trader {agent_id} não existe nesta mesa")
+    if t.spec.stage is AgentStage.PAUSED:
+        return {"ok": True, "agent_id": agent_id, "stage": t.spec.stage.value,
+                "motivo": "já pausado"}
+    antes = t.spec.stage.value
+    d["estagios_antes"][agent_id] = antes
+    t.spec.move_to(AgentStage.PAUSED)
+    d["persistir_estagios"]()
+    return {"ok": True, "agent_id": agent_id, "stage": t.spec.stage.value,
+            "motivo": f"pausado (estava em {antes}) — posições seguem sob o guardião"}
+
+
+@app.post("/v1/desk/traders/{agent_id}/retomar")
+def desk_trader_retomar(agent_id: str, request: Request,
+                        _=Depends(auth), __=Depends(require_plan)):
+    """Retoma um trader pausado no estágio que ele tinha — sem pular etapas."""
+    d = _desk_of(request)
+    t = _trader_da_mesa(d, agent_id)
+    if t is None:
+        raise HTTPException(404, f"trader {agent_id} não existe nesta mesa")
+    if t.spec.stage is not AgentStage.PAUSED:
+        raise HTTPException(409, f"{agent_id} não está pausado "
+                                 f"(estágio {t.spec.stage.value})")
+    antes = d["estagios_antes"].get(agent_id) or "shadow"
+    alvo = antes if antes in ("shadow", "paper_enabled") else "shadow"
+    t.spec.move_to(AgentStage(alvo))
+    d["estagios_antes"][agent_id] = ""
+    d["persistir_estagios"]()
+    return {"ok": True, "agent_id": agent_id, "stage": t.spec.stage.value,
+            "motivo": f"retomado em {alvo}"}
 
 
 @app.get("/v1/desk/feed")
@@ -1902,6 +2545,362 @@ def desk_evaluation(request: Request, _=Depends(auth)):
         ressalvas.append("nenhuma posição FECHADA: resultado ainda não realizado")
     return {"por_agente": linhas, "conclusivo": not ressalvas, "ressalvas": ressalvas,
             "aviso": "retrospectivo e simulado; não é promessa de lucro"}
+
+
+# ------------------------------------------------- escola central + salas
+def _escola_of(request: Request) -> dict:
+    """UMA escola central e o catálogo de SALAS do tenant. Construída a cada
+    requisição: o estado vive no armazém, não em cache de processo — assim
+    duas superfícies (painel e CLI) nunca divergem."""
+    from decimal import Decimal as D
+
+    from tradingagents.desk.maestro import MaestroCentral
+    from tradingagents.desk.salas import EscolaCentral, RegistroDeSalas
+    from tradingagents.desk.storage import ArmazemDeEstado
+    tid = request_tenant(request)
+    d = _DESKS.get(tid)
+    armazem = d.get("armazem") if d else None
+    if armazem is None:
+        armazem = ArmazemDeEstado(os.environ.get("DATABASE_URL"),
+                                  diretorio=DATA / "desks")
+    cfg = load_cfg(tid)
+    teto = cfg.get("TRADINGAGENTS_DESK_TETO_EXPOSICAO")
+    registro = RegistroDeSalas(armazem=armazem, tenant_id=tid)
+    central = EscolaCentral(armazem=armazem, tenant_id=tid)
+    maestro = MaestroCentral(
+        registro, teto_exposicao_global=(D(str(teto)) if teto else None))
+    return {"armazem": armazem, "registro": registro, "central": central,
+            "maestro": maestro, "tenant_id": tid}
+
+
+def _contexto_da_sala(body: dict):
+    from tradingagents.desk.salas import ContextoDaSala
+    return ContextoDaSala(
+        corretora=str(body.get("corretora") or ""),
+        conta=str(body.get("conta") or ""),
+        mercado=str(body.get("mercado") or "spot"),
+        modo=str(body.get("modo") or "paper"),
+        payout=(body.get("payout") if body.get("payout") not in (None, "")
+                else None))
+
+
+def _sala_por_chave(esc: dict, chave: str):
+    """Sala pelo catálogo — abrir é idempotente, chave desconhecida é 404."""
+    from tradingagents.desk.salas import SalaError
+    if not chave:
+        raise HTTPException(422, "informe a sala (chave corretora|conta|mercado|modo)")
+    try:
+        if chave in esc["registro"].salas:
+            return esc["registro"].salas[chave]
+    except SalaError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    raise HTTPException(404, f"sala '{chave}' não existe — abra a sala primeiro")
+
+
+@app.get("/v1/escola/central")
+def escola_central(request: Request, _=Depends(auth)):
+    """Relatório da escola central: certificados, estados e justificativas."""
+    return _escola_of(request)["central"].relatorio()
+
+
+@app.get("/v1/escola/salas")
+def escola_salas(request: Request, _=Depends(auth)):
+    """Salas independentes por corretora/conta/mercado/modo + maestro."""
+    from tradingagents.desk.salas import corretoras_homologadas
+    esc = _escola_of(request)
+    return {"salas": esc["registro"].relatorio(),
+            "corretoras": corretoras_homologadas(),
+            "maestro": esc["maestro"].relatorio()}
+
+
+@app.post("/v1/escola/salas")
+async def escola_abrir_sala(req: Request, _=Depends(auth),
+                            __=Depends(require_plan)):
+    """Abre uma sala. Identidades são validadas contra o adaptador
+    homologado: mercado errado, laboratório fora de paper ou modo LIVE
+    são recusados com motivo — nunca silenciosamente ajustados."""
+    from tradingagents.desk.salas import SalaError
+    body = await _json_body(req)
+    esc = _escola_of(req)
+    try:
+        sala = esc["registro"].abrir_sala(_contexto_da_sala(body))
+    except SalaError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"ok": True, "sala": sala.resumo()}
+
+
+@app.get("/v1/escola/salas/detalhe")
+def escola_sala_detalhe(chave: str, request: Request, _=Depends(auth)):
+    """Retrato da sala + priors recebidos (de onde veio, o que afirma)."""
+    from tradingagents.desk.conhecimento import resumo_dos_priors
+    esc = _escola_of(request)
+    sala = _sala_por_chave(esc, chave)
+    return {"sala": sala.resumo(), "priors": resumo_dos_priors(sala)}
+
+
+@app.get("/v1/escola/salas/pacote")
+def escola_pacote(chave: str, request: Request, estrategias: str = "",
+                  _=Depends(auth)):
+    """Exporta o pacote de conhecimento da sala — SÓ estatísticas."""
+    from tradingagents.desk.conhecimento import montar_pacote
+    esc = _escola_of(request)
+    sala = _sala_por_chave(esc, chave)
+    filtro = tuple(e.strip() for e in estrategias.split(",") if e.strip())
+    return montar_pacote(sala, estrategias=filtro or None).como_dict()
+
+
+@app.post("/v1/escola/salas/conhecimento")
+async def escola_adotar_conhecimento(req: Request, _=Depends(auth),
+                                     __=Depends(require_plan)):
+    """Adota um pacote como PRIOR da sala de destino. Recusa eco da própria
+    sala e qualquer documento com campos de certificação."""
+    from datetime import datetime as _dt
+
+    from tradingagents.desk.conhecimento import (
+        AVISO_CONHECIMENTO,
+        SCHEMA_CONHECIMENTO,
+        PacoteDeConhecimento,
+        adotar_conhecimento,
+        campos_de_certificacao,
+    )
+    from tradingagents.desk.models import utcnow
+    from tradingagents.desk.salas import SalaError
+    body = await _json_body(req)
+    esc = _escola_of(req)
+    sala = _sala_por_chave(esc, str(body.get("chave") or ""))
+    doc = body.get("pacote")
+    if not isinstance(doc, dict):
+        raise HTTPException(422, "informe o pacote de conhecimento")
+    proibidos = campos_de_certificacao(doc)
+    if proibidos:
+        raise HTTPException(
+            409, "pacote traz campos de certificação "
+                 f"({', '.join(sorted(set(proibidos)))}): certificação não "
+                 "atravessa salas — a formação exige evidência própria no "
+                 "contexto de destino")
+    try:
+        gerado_em = _dt.fromisoformat(str(doc.get("gerado_em")))
+    except (TypeError, ValueError):
+        gerado_em = utcnow()
+    pacote = PacoteDeConhecimento(
+        origem=str(doc.get("origem") or ""),
+        corretora=str(doc.get("corretora") or ""),
+        mercado=str(doc.get("mercado") or ""),
+        gerado_em=gerado_em,
+        estatisticas=tuple(doc.get("estatisticas") or ()),
+        aviso=str(doc.get("aviso") or AVISO_CONHECIMENTO),
+        schema=str(doc.get("schema") or SCHEMA_CONHECIMENTO))
+    try:
+        registro = adotar_conhecimento(sala, pacote)
+    except SalaError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {"ok": True, "prior": registro}
+
+
+@app.get("/v1/escola/certificacao")
+def escola_certificacao(request: Request, estrategia: str, corretora: str,
+                        mercado: str = "spot", ativo: str = "",
+                        horizonte: str = "1h", versao: str = "1",
+                        _=Depends(auth)):
+    """Elegibilidade NO CONTEXTO informado. Um trader formado na Binance
+    não é considerado formado na OKX — a resposta diz isso com todas as
+    letras, em vez de fingir equivalência."""
+    from tradingagents.desk.salas import ContextoDeCertificacao
+    esc = _escola_of(request)
+    contexto = ContextoDeCertificacao(corretora=corretora, mercado=mercado,
+                                      ativo=ativo, horizonte=horizonte)
+    ok, motivo = esc["central"].elegivel_para_live(
+        estrategia, versao, contexto=contexto)
+    return {"contexto": contexto.chave,
+            "estado": esc["central"].estado_de(estrategia, versao,
+                                               contexto=contexto),
+            "elegivel": ok, "motivo": motivo,
+            "aviso": ("elegibilidade habilita apenas o PROCESSO de "
+                      "autorização; quem autoriza operação real é o "
+                      "proprietário, com limites explícitos")}
+
+
+@app.post("/v1/escola/avaliar")
+async def escola_avaliar(req: Request, _=Depends(auth),
+                         __=Depends(require_plan)):
+    """Avalia uma estratégia NO CONTEXTO de uma sala: acumula amostras,
+    candidata e forma. É o único caminho pelo qual a escola avança — e
+    avançar aqui significa elegibilidade, nunca autorização de operar."""
+    from tradingagents.desk.salas import SalaError
+    body = await _json_body(req)
+    esc = _escola_of(req)
+    sala = _sala_por_chave(esc, str(body.get("chave") or ""))
+    estrategia = str(body.get("estrategia") or "").strip()
+    ativo = str(body.get("ativo") or "").strip()
+    if not estrategia or not ativo:
+        raise HTTPException(422, "estrategia e ativo são obrigatórios")
+    try:
+        av = esc["central"].avaliar(
+            sala=sala, estrategia=estrategia,
+            versao=str(body.get("versao") or "1"), ativo=ativo,
+            horizonte=str(body.get("horizonte") or "1h"))
+    except SalaError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"ok": True, "avaliacao": {
+        "chave": av.chave, "estrategia": av.estrategia, "versao": av.versao,
+        "estado": av.estado.value, "motivo": av.motivo,
+        "amostras": av.amostras, "n_efetivo": av.n_efetivo,
+        "media": str(av.media), "ic_inferior": str(av.ic_inferior),
+        "ic_superior": str(av.ic_superior), "aprovada": av.aprovada,
+        "atualizada_em": av.atualizada_em},
+        "aviso": ("formação habilita apenas o PROCESSO de autorização; "
+                  "negociação real continua exclusiva do proprietário")}
+
+
+@app.get("/v1/escola/maestro")
+def escola_maestro(request: Request, _=Depends(auth)):
+    """Maestro Central: pausa global, exposição, conflitos entre salas."""
+    return _escola_of(request)["maestro"].relatorio()
+
+
+@app.post("/v1/escola/maestro/{acao}")
+async def escola_maestro_acao(acao: str, req: Request, _=Depends(auth),
+                              __=Depends(require_plan)):
+    """Pausa/retoma GLOBAL das salas. Motivo é obrigatório — auditoria."""
+    from tradingagents.desk.maestro import MaestroError
+    if acao not in ("pausar", "retomar"):
+        raise HTTPException(422, "ação deve ser pausar ou retomar")
+    body = await _json_body(req)
+    maestro = _escola_of(req)["maestro"]
+    try:
+        if acao == "pausar":
+            maestro.pausar_global(str(body.get("motivo") or ""))
+        else:
+            maestro.retomar_global(str(body.get("motivo") or ""))
+    except MaestroError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"ok": True, **maestro.relatorio()}
+
+
+# ------------------------------------------------------------ pilotos
+def _supervisor_of(request: Request, escola=None):
+    """Supervisor de pilotos do tenant. A elegibilidade, quando consultada,
+    é SEMPRE de um contexto de certificação explícito."""
+    from tradingagents.desk.piloto import SupervisorDePiloto
+    esc = _escola_of(request)
+    sup = SupervisorDePiloto(esc["armazem"], tenant_id=esc["tenant_id"],
+                             escola=escola)
+    return sup
+
+
+@app.get("/v1/escola/pilotos")
+def escola_pilotos(request: Request, _=Depends(auth)):
+    """Cadeia do piloto por agente + modo do piloto + gates esperados."""
+    from tradingagents.desk.piloto import GATES_ESPERADOS, MODO_DO_PILOTO
+    esc = _escola_of(request)
+    sup = _supervisor_of(request)
+    return {"modo": MODO_DO_PILOTO, "gates_esperados": list(GATES_ESPERADOS),
+            "autorizacoes": sup.relatorio(),
+            "vigia": sup.vigiar(central=esc["central"]),
+            "aviso": ("a formação não habilita negociação real; autorizar "
+                      "piloto é ato exclusivo do proprietário")}
+
+
+@app.post("/v1/escola/pilotos/solicitar")
+async def escola_piloto_solicitar(req: Request, _=Depends(auth),
+                                  __=Depends(require_plan)):
+    """Registra o PEDIDO do proprietário. Só aceita aluno FORMADO no
+    contexto de certificação informado — e isso não autoriza nada ainda."""
+    from decimal import Decimal as D
+
+    from tradingagents.desk.piloto import SupervisorDePiloto
+    from tradingagents.desk.salas import (
+        ContextoDeCertificacao,
+        EscolaDoPiloto,
+        SalaError,
+    )
+    body = await _json_body(req)
+
+    def _decimal(campo: str) -> D:
+        valor = body.get(campo)
+        if valor in (None, ""):
+            raise HTTPException(422, f"{campo} é obrigatório para o pedido")
+        try:
+            return D(str(valor))
+        except Exception as exc:
+            raise HTTPException(422, f"{campo} precisa ser numérico") from exc
+
+    try:
+        prazo = int(body.get("prazo_dias") or 0)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(422, "prazo_dias precisa ser um número inteiro") from exc
+    esc = _escola_of(req)
+    contexto = ContextoDeCertificacao(
+        corretora=str(body.get("corretora") or ""),
+        mercado=str(body.get("mercado") or "spot"),
+        ativo=str(body.get("ativo") or ""),
+        horizonte=str(body.get("horizonte") or "1h"))
+    sup = SupervisorDePiloto(
+        esc["armazem"], tenant_id=esc["tenant_id"],
+        escola=EscolaDoPiloto(esc["central"], contexto))
+    try:
+        aut = sup.solicitar(
+            str(body.get("agent_id") or ""),
+            estrategia=str(body.get("estrategia") or ""),
+            versao=str(body.get("versao") or "1"),
+            corretora=str(body.get("corretora") or ""),
+            conta=str(body.get("conta") or ""),
+            capital_maximo=_decimal("capital_maximo"),
+            perda_diaria_maxima=_decimal("perda_diaria_maxima"),
+            perda_total_maxima=_decimal("perda_total_maxima"),
+            prazo_dias=prazo,
+            condicoes_de_suspensao=tuple(body.get("condicoes_de_suspensao")
+                                         or ()),
+            contexto=contexto.como_dict())
+    except (ValueError, SalaError) as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {"ok": True, "autorizacao": aut.como_dict()}
+
+
+def _gates_do_ambiente(tenant_id: str, d: dict) -> list[dict]:
+    """Gates lidos do ESTADO REAL da mesa — não de checkboxes do usuário.
+    `envio_real_desativado` é a verdade desta versão: nenhuma rota envia
+    ordem real; LIVE continua bloqueado por construção."""
+    from tradingagents.desk.piloto import SupervisorDePiloto
+    posse = d["posse"].resumo()
+    return SupervisorDePiloto.gates_de_ativacao(
+        single_owner=bool(posse.get("valida") and posse.get("sou_eu")),
+        kill_switch=not _parada(tenant_id).bloqueia,
+        risco=bool(getattr(d["orchestrator"], "risk", None)),
+        reconciliacao=not d["coordinator"].pending_reconciliation(),
+        corretora=bool(d["broker_mode"]),
+        envio_real_desativado=(d["broker_mode"] != "live"))
+
+
+@app.post("/v1/escola/pilotos/{agent_id}/autorizar")
+def escola_piloto_autorizar(agent_id: str, request: Request,
+                            _=Depends(auth), __=Depends(require_plan)):
+    """Ato EXPLÍCITO do proprietário. Os gates são medidos no estado real
+    da mesa; qualquer reprovação devolve o motivo exato."""
+    d = _desk_of(request)
+    sup = _supervisor_of(request)
+    try:
+        aut = sup.autorizar(agent_id,
+                            gates=_gates_do_ambiente(request_tenant(request),
+                                                     d))
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {"ok": True, "autorizacao": aut.como_dict(),
+            "lembrete": ("piloto em modo paper (simulado) — envio real "
+                         "continua desativado")}
+
+
+@app.post("/v1/escola/pilotos/{agent_id}/revogar")
+async def escola_piloto_revogar(agent_id: str, req: Request,
+                                _=Depends(auth), __=Depends(require_plan)):
+    """Encerra o piloto com motivo auditável. Sem motivo, não revoga."""
+    body = await _json_body(req)
+    sup = _supervisor_of(req)
+    try:
+        aut = sup.revogar(agent_id, motivo=str(body.get("motivo") or ""))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"ok": True, "autorizacao": aut.como_dict()}
 
 
 @app.post("/v1/backup")
@@ -2211,6 +3210,24 @@ def desk_viability(request: Request, _=Depends(auth)):
             "aviso": "expectativa calculada; não é previsão"}
 
 
+@app.get("/v1/quant/status")
+def quant_status(request: Request, _=Depends(auth)):
+    """Painel da camada quant/IA: o que está instalado, em que papel, e a
+    garantia de governança (itens 7 e 9)."""
+    from tradingagents.quant import disponibilidade
+    return {
+        "modelos": disponibilidade(),
+        "quantitativo": ("features, ensemble, calibração de confiança e "
+                         "monitoramento de drift ativos — tudo determinístico"),
+        "governanca": ("nenhum modelo de IA envia ordens, altera limites de "
+                       "risco ou promove estratégias para LIVE"),
+        "aviso": ("modelos experimentais NÃO são presumidos superiores às "
+                  "estratégias matemáticas; promoção exige comparação "
+                  "champion/challenger com amostra mínima"),
+        "ia_contexto": _IA_CONTEXTO.get(request_tenant(request)),
+    }
+
+
 # =============================================================== ALERTAS ⑥
 def _notificador(tenant_id: str):
     from tradingagents.desk.alerts import Notificador
@@ -2248,25 +3265,185 @@ def listar_alertas(request: Request, _=Depends(auth)):
     """O que exigiria sua atenção AGORA, e o histórico do que já avisou."""
     tid = request_tenant(request)
     d = _desk_of(request)
-    notificador = _notificador(tid)
     alertas = _estado_para_alertas(d)
+    fila = _fila_alertas(tid)
+    from tradingagents.desk.canais_alerta import construir_canais
+    canais = construir_canais(load_cfg(tid),
+                              transportes=_TESTE_CANAL_TRANSPORTES.get(tid))
+    historico = [{"em": a.criado_em, "codigo": a.tipo,
+                  "severidade": a.severidade, "titulo": a.titulo,
+                  "detalhe": a.detalhe, "acao": a.acao, "estado": a.estado,
+                  "vencido": a.vencido()}
+                 for a in sorted(fila.alertas, key=lambda x: x.criado_em,
+                                 reverse=True)[:20]]
     return {"ativos": [{"codigo": a.codigo, "severidade": a.severidade,
                         "titulo": a.titulo, "detalhe": a.detalhe, "acao": a.acao}
                        for a in alertas],
-            "canal_configurado": notificador.configurado,
-            "historico": notificador.historico[-20:],
-            "como_configurar": ("Em Configuração: ALERTA_TELEGRAM_TOKEN e "
-                                "ALERTA_TELEGRAM_CHAT, ou ALERTA_WEBHOOK_URL")}
+            # "canal configurado" = canal EXTERNO com credencial. O painel e
+            # o toast do Windows não contam: existem sem configuração.
+            "canal_configurado": any(c.configurado()
+                                     and c.nome not in ("painel", "windows")
+                                     for c in canais),
+            "historico": historico,
+            "como_configurar": ("Em Configuração → Notificações: Telegram, "
+                                "Windows, painel na caixa de entrada, Discord "
+                                "e WhatsApp (opcionais)")}
 
 
 @app.post("/v1/alertas/verificar")
 def disparar_alertas(request: Request, _=Depends(auth)):
-    """Avalia e ENVIA o que houver. O worker chama isto a cada ciclo."""
+    """Avalia, enfileira (com dedupe) e entrega o que estiver pendente."""
     tid = request_tenant(request)
     d = _desk_of(request)
     alertas = _estado_para_alertas(d)
-    resultado = _notificador(tid).enviar(alertas)
-    return {"avaliados": len(alertas), **resultado}
+    for alerta in alertas:
+        _enfileirar_estado_da_mesa(tid, alerta)
+    resultado = _despachar_alertas(tid)
+    return {"avaliados": len(alertas),
+            "enviados": [e["id"] for e in resultado.get("entregues", [])],
+            "falhas": [f["id"] for f in resultado.get("falhas", [])],
+            "adiados": resultado.get("adiados", []),
+            "expirados": resultado.get("expirados", 0)}
+
+
+# ================================================ CENTRO DE NOTIFICAÇÕES ⑤
+# O dono liga, testa e vê o status de cada canal SEM terminal. Segredos
+# nunca aparecem: as respostas dizem apenas configurado/não configurado.
+@app.get("/v1/notificacoes/canais")
+def canais_de_notificacao(request: Request, _=Depends(auth)):
+    tid = request_tenant(request)
+    from tradingagents.desk.canais_alerta import construir_canais
+    canais = construir_canais(load_cfg(tid),
+                              transportes=_TESTE_CANAL_TRANSPORTES.get(tid))
+    d = _DESKS.get(tid) or {}
+    ultimos = d.get("testes_canal") or {}
+    return {"canais": [{"nome": c.nome, "prioridade": c.prioridade,
+                        "configurado": c.configurado(),
+                        "disponivel": c.disponivel(),
+                        "detalhe": c.detalhe(),
+                        "ultimo_teste": ultimos.get(c.nome, "")}
+                       for c in canais],
+            "aviso": ("sem nenhum canal externo configurado o alerta fica "
+                      "na Caixa de entrada do painel — nunca se perde, mas "
+                      "só aparece quando você abre o painel")}
+
+
+@app.post("/v1/notificacoes/testar")
+async def testar_canal_de_notificacao(req: Request, _=Depends(auth)):
+    """Teste de entrega REAL do canal escolhido — com evidência (latência,
+    resultado). Não marca como funcionando só porque aceitou chamada."""
+    tid = request_tenant(req)
+    body = await _json_body(req)
+    nome = str(body.get("canal") or "").strip()
+    from tradingagents.desk.canais_alerta import construir_canais
+    from tradingagents.desk.models import utcnow
+    canais = {c.nome: c for c in construir_canais(
+        load_cfg(tid), transportes=_TESTE_CANAL_TRANSPORTES.get(tid))}
+    canal = canais.get(nome)
+    if canal is None:
+        raise HTTPException(400, "canal desconhecido — opções: "
+                                 + ", ".join(canais))
+    if not canal.configurado():
+        raise HTTPException(400, f"canal {nome} ainda não configurado — "
+                                 f"{canal.detalhe()}")
+    if nome == "email":
+        resultado = canal.enviar_relatorio(
+            "Teste do canal de e-mail (relatórios)",
+            "Mensagem de teste do Centro de Alertas. Alertas NUNCA vão por "
+            "e-mail; este canal serve apenas a relatórios.")
+    else:
+        from datetime import timedelta
+
+        from tradingagents.desk.notificacao_viva import AlertaVivo
+        teste = AlertaVivo(
+            tipo="teste_de_canal", severidade="informativo",
+            titulo=f"Teste do canal {nome}",
+            detalhe="Mensagem de teste do Centro de Alertas",
+            acao="Nada a fazer — é apenas um teste",
+            fonte="painel", validade=utcnow() + timedelta(minutes=10))
+        try:
+            resultado = canal.enviar(teste)
+        except Exception as exc:
+            resultado = {"ok": False,
+                         "erro": f"{type(exc).__name__}: {exc}"[:160]}
+    d = _DESKS.get(tid)
+    if d is not None:
+        d.setdefault("testes_canal", {})[nome] = utcnow().isoformat()
+    if not resultado.get("ok"):
+        METRICS.inc("notif.teste_falhou")
+        raise HTTPException(502, "entrega falhou: "
+                                 + str(resultado.get("erro") or "sem detalhe"))
+    return {"ok": True, "canal": nome,
+            "detalhe": resultado.get("detalhe", ""),
+            "latencia_ms": resultado.get("latencia_ms", 0),
+            "em": utcnow().isoformat(),
+            "aviso": ("teste de entrega confirmado — o canal está de pé "
+                      "para os alertas reais")}
+
+
+@app.get("/v1/notificacoes/inbox")
+def inbox_de_notificacoes(request: Request, _=Depends(auth)):
+    tid = request_tenant(request)
+    _desk_of(request)
+    fila = _fila_alertas(tid)
+    caixa = fila.inbox()
+    caixa["fila"] = len(fila.pendentes())
+    # Auditoria recente de tentativas — o dono vê o que foi tentado e falhou.
+    tentativas = [t for a in fila.alertas for t in a.tentativas]
+    tentativas.sort(key=lambda t: t.get("em", ""), reverse=True)
+    caixa["auditoria"] = tentativas[:8]
+    caixa["como_configurar"] = "Configuração → Notificações"
+    return caixa
+
+
+@app.post("/v1/notificacoes/{alerta_id}/ack")
+def ack_de_notificacao(alerta_id: str, request: Request, _=Depends(auth)):
+    tid = request_tenant(request)
+    fila = _fila_alertas(tid)
+    alerta = fila.marcar_lido(alerta_id)
+    if alerta is None:
+        raise HTTPException(404, "alerta não encontrado")
+    _persistir_fila_alertas(tid)
+    return {"ok": True, "id": alerta.id, "lido_em": alerta.lido_em}
+
+
+@app.get("/v1/notificacoes/matriz")
+def ler_matriz_de_notificacao(request: Request, _=Depends(auth)):
+    tid = request_tenant(request)
+    _desk_of(request)
+    return _matriz_alertas(tid).to_dict()
+
+
+@app.put("/v1/notificacoes/matriz")
+async def salvar_matriz_de_notificacao(req: Request, _=Depends(auth)):
+    """Roteamento por trader/estratégia/corretora/ativo/severidade."""
+    from tradingagents.desk.notificacao_viva import MatrizDeRoteamento
+    tid = request_tenant(req)
+    d = _desk_of(req)
+    body = await _json_body(req)
+    matriz = MatrizDeRoteamento(body.get("regras") or [])
+    d["armazem"].salvar(tid, "alertas_matriz", {"regras": matriz.regras})
+    return {"ok": True, **matriz.to_dict()}
+
+
+@app.post("/v1/telegram/webhook")
+async def webhook_telegram(req: Request):
+    """Callbacks de botão do Telegram. Segredo do webhook autentica a
+    chamada (fail-closed sem segredo configurado). Botão NÃO opera na
+    corretora: só abre detalhes, registra leitura ou intenção."""
+    tid = request_tenant(req)
+    cfg = load_cfg(tid)
+    segredo = str(cfg.get("ALERTA_TELEGRAM_WEBHOOK_SECRET") or "").strip()
+    recebido = req.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    if not segredo or not hmac.compare_digest(recebido, segredo):
+        raise HTTPException(
+            401, "webhook sem segredo válido — configure "
+                 "ALERTA_TELEGRAM_WEBHOOK_SECRET e use-o no setWebhook")
+    body = await _json_body(req)
+    from tradingagents.desk.notificacao_viva import processar_callback_telegram
+    resultado = processar_callback_telegram(body, _fila_alertas(tid))
+    _persistir_fila_alertas(tid)
+    return resultado
 
 
 # ======================================================= TRANSPARÊNCIA ⑦
@@ -2313,26 +3490,32 @@ def pagina_publica(tenant_id: str):
 # ===================================================== MUDANÇA DE SERVIDOR
 @app.get("/v1/mudanca/exportar")
 def exportar_tudo(request: Request, _=Depends(auth)):
-    """Exporta TUDO o que importa do inquilino, pelo navegador.
+    """Exporta tudo o que importa do inquilino, pelo navegador — SEM segredos.
 
-    Servidor provisório: isto é o que você leva embora. Inclui configuração
-    (com os segredos, porque é uma restauração), aprendizado dos agentes,
-    estado da mesa e assinatura.
+    Servidor provisório: isto é o que você leva embora. A configuração vai
+    sem chaves de IA e sem credenciais de corretora: segredo não viaja em
+    arquivo de texto simples. Ao restaurar, as credenciais são informadas
+    de novo no painel do servidor novo.
     """
     tid = request_tenant(request)
     d = _DESKS.get(tid)
     armazem = d.get("armazem") if d else None
     sub = SUBS.get(tid)
+    cfg = load_cfg(tid)
+    segredos = sorted(k for k in cfg if k in SECRETish)
+    cfg_publica = {k: v for k, v in cfg.items() if k not in SECRETish}
     pacote = {
-        "formato": "dz23.mudanca/1",
+        "formato": "dz23.mudanca/2",
         "tenant_id": tid,
         "exportado_em": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "configuracao": load_cfg(tid),
+        "configuracao": cfg_publica,
+        "segredos_omitidos": segredos,
         "aprendizado": (armazem.carregar(tid, "aprendizado") if armazem else None),
         "mesa": (armazem.carregar(tid, "mesa") if armazem else None),
         "assinatura": (sub.to_row() if sub else None),
-        "aviso": ("Este arquivo contém SEGREDOS (chaves de IA e de corretora). "
-                  "Guarde como guardaria uma senha e nunca o publique."),
+        "aviso": ("Este arquivo NÃO contém segredos: chaves de IA e de "
+                  "corretora ficam de fora, de propósito. No servidor novo, "
+                  "informe cada credencial no painel (Configuração → APIs)."),
     }
     return pacote
 
@@ -2340,9 +3523,13 @@ def exportar_tudo(request: Request, _=Depends(auth)):
 @app.post("/v1/mudanca/importar")
 async def importar_tudo(req: Request, _=Depends(auth)):
     """Restaura num servidor novo. Idempotente: importar duas vezes não
-    duplica nem corrompe."""
+    duplica nem corrompe.
+
+    Segredos NUNCA entram por aqui: pacote antigo (/1) que traga chaves tem
+    os segredos descartados e relatados — credencial se digita no painel do
+    servidor novo, nunca se restaura de arquivo."""
     pacote = await _json_body(req)
-    if pacote.get("formato") != "dz23.mudanca/1":
+    if pacote.get("formato") not in ("dz23.mudanca/1", "dz23.mudanca/2"):
         raise HTTPException(422, "formato de pacote desconhecido")
     tid = request_tenant(req)
     restaurado = []
@@ -2350,10 +3537,21 @@ async def importar_tudo(req: Request, _=Depends(auth)):
     cfg = pacote.get("configuracao") or {}
     if cfg:
         limpo = {k: v for k, v in cfg.items()
-                 if k in ALLOWED_KEYS and isinstance(v, str) and v.strip()}
+                 if k in ALLOWED_KEYS and k not in SECRETish
+                 and isinstance(v, str) and v.strip()}
+        descartados = sorted(k for k in cfg if k in SECRETish)
         if limpo:
             save_cfg({**load_cfg(tid), **limpo}, tid)
             restaurado.append(f"configuração ({len(limpo)} itens)")
+        if descartados:
+            restaurado.append(
+                f"{len(descartados)} segredo(s) descartado(s) por segurança — "
+                "informe no painel: " + ", ".join(descartados))
+    omitidos = pacote.get("segredos_omitidos") or []
+    if omitidos:
+        restaurado.append(
+            f"{len(omitidos)} segredo(s) não viajam no pacote — "
+            "informe no painel")
 
     _desk_reset(tid)
     d = _desk_of(req)

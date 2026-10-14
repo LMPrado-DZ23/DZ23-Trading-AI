@@ -1,5 +1,6 @@
 """Auditoria de usabilidade: o serviço protege o leigo por construção."""
 import importlib
+import threading
 from pathlib import Path
 
 import pytest
@@ -127,11 +128,39 @@ class TestBruteForceLock:
         assert c.get("/v1/config", headers={"Authorization": "Bearer s3nh4"}).status_code == 200
         assert not m._FAILS  # acerto limpa o histórico
 
+    def test_anonymous_requests_never_lock_the_owner(self, tmp_path, monkeypatch):
+        # O painel embutido (iframe /floor) chama endpoints protegidos antes
+        # do login; esses 401 SEM credencial nenhuma (ou com "Bearer " vazio)
+        # não podem contar como tentativa de senha — senão o dono que só
+        # demora a digitar fica 15 min trancado fora do próprio painel.
+        c, m = self._client(tmp_path, monkeypatch)
+        for _ in range(10):
+            assert c.get("/v1/config").status_code == 401
+            assert c.get("/v1/config",
+                         headers={"Authorization": "Bearer "}).status_code == 401
+        assert m._FAILS == {}
+        assert c.get(
+            "/v1/config", headers={"Authorization": "Bearer s3nh4"}).status_code == 200
+
     def test_security_headers_present(self, tmp_path, monkeypatch):
         c, _ = self._client(tmp_path, monkeypatch)
         h = c.get("/healthz").headers
         assert h["X-Content-Type-Options"] == "nosniff"
         assert h["X-Frame-Options"] == "DENY"
+
+    def test_floor_allows_same_origin_iframe_embedding(self, tmp_path, monkeypatch):
+        # O painel embute /floor em iframe same-origin; DENY quebraria a tela.
+        c, _ = self._client(tmp_path, monkeypatch)
+        assert c.get("/floor").headers["X-Frame-Options"] == "SAMEORIGIN"
+        assert c.get("/app").headers["X-Frame-Options"] == "DENY"
+
+    def test_html_documents_never_cached_stale(self, tmp_path, monkeypatch):
+        # Depois de atualizar o app, o navegador não pode continuar rodando o
+        # HTML ANTIGO em cache: o floor antigo pollava sem sessão e, no
+        # servidor antigo, armava a trava de força-bruta trancando o dono.
+        c, _ = self._client(tmp_path, monkeypatch)
+        for rota in ("/app", "/floor"):
+            assert c.get(rota).headers.get("Cache-Control") == "no-store"
 
     def test_forwarded_for_is_ignored_without_trusted_proxy(self, tmp_path, monkeypatch):
         c, m = self._client(tmp_path, monkeypatch)
@@ -268,14 +297,24 @@ class TestArranqueResiliente:
         m = _load_app(tmp_path, monkeypatch)
         assert TestClient(m.app).get("/").status_code == 200
 
-    def test_requested_multitenant_never_falls_back_to_legacy_auth(self, tmp_path, monkeypatch):
+    def test_stray_multitenant_request_is_ignored_but_auth_stays_strong(self, tmp_path, monkeypatch):
+        # App de dono único: um pedido de multi-tenant (com chave inválida) é
+        # IGNORADO — forçado a desligado —, mas o acesso NUNCA fica aberto: a
+        # senha do dono continua obrigatória. (Antes, multi-tenant era um modo
+        # real e o fallback silencioso para senha única era um risco; hoje não
+        # há inquilinos, então a senha é o modelo pretendido.)
         from fastapi.testclient import TestClient
         monkeypatch.setenv("MULTI_TENANT_ENABLED", "true")
         monkeypatch.setenv("TENANT_TOKEN_SIGNING_KEY", "curta")
         m = _load_app(tmp_path, monkeypatch)
-        response = TestClient(m.app).get(
-            "/v1/config", headers={"Authorization": "Bearer s3nh4"})
-        assert response.status_code == 503
+        assert m.SINGLE_OWNER_ENFORCED is True
+        assert m.MULTI_TENANT_ENABLED is False
+        c = TestClient(m.app)
+        assert c.get("/v1/config").status_code == 401
+        assert c.get("/v1/config",
+                     headers={"Authorization": "Bearer errada"}).status_code == 401
+        assert c.get("/v1/config",
+                     headers={"Authorization": "Bearer s3nh4"}).status_code == 200
 
 
 class TestEmergencyStopPersistence:
@@ -607,3 +646,54 @@ class TestMarcaDoProduto:
         html = self._cliente().get("/").text
         assert "/static/marca/favicon" in html
         assert "/static/marca/dz23-logo-192.png" in html
+
+
+class TestEncerrarAplicativo:
+    """C009: o leigo precisa de um caminho de saída.
+
+    O executável é windowed (sem console); fechar o navegador não para o
+    servidor. Sem este contrato, o dono só consegue encerrar o app pelo
+    Gerenciador de Tarefas.
+    """
+
+    def _client(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = _load_app(tmp_path, monkeypatch)
+        m._FAILS.clear()
+        return TestClient(m.app), m
+
+    def test_quit_exige_senha_do_dono(self, tmp_path, monkeypatch):
+        c, _ = self._client(tmp_path, monkeypatch)
+        assert c.post("/v1/app/quit").status_code == 401
+        assert c.post(
+            "/v1/app/quit", headers={"Authorization": "Bearer errada"}
+        ).status_code == 401
+
+    def test_quit_sem_gancho_nao_mente(self, tmp_path, monkeypatch):
+        # Servidor iniciado fora do launcher (testes, uvicorn solto) não pode
+        # fingir que encerrou: sem gancho registrado, responde 409 e segue vivo.
+        c, _ = self._client(tmp_path, monkeypatch)
+        r = c.post("/v1/app/quit", headers={"Authorization": "Bearer s3nh4"})
+        assert r.status_code == 409
+
+    def test_quit_dispara_o_desligamento_com_senha_certa(self, tmp_path, monkeypatch):
+        c, m = self._client(tmp_path, monkeypatch)
+        parado = threading.Event()
+        m.set_shutdown_hook(parado.set)
+        r = c.post("/v1/app/quit", headers={"Authorization": "Bearer s3nh4"})
+        assert r.status_code == 200 and r.json()["ok"] is True
+        assert parado.wait(5), "gancho de desligamento não foi chamado"
+
+    def test_quit_continua_do_dono_com_env_multitenant(self, tmp_path, monkeypatch):
+        # Política fail-closed do dono único: MULTI_TENANT_ENABLED=true no
+        # ambiente não reabre o modo multi-tenant — o encerramento segue
+        # protegido apenas pela senha do dono e funciona normalmente.
+        monkeypatch.setenv("MULTI_TENANT_ENABLED", "true")
+        c, m = self._client(tmp_path, monkeypatch)
+        assert m.MULTI_TENANT_ENABLED is False
+        assert c.post("/v1/app/quit").status_code == 401
+        parado = threading.Event()
+        m.set_shutdown_hook(parado.set)
+        r = c.post("/v1/app/quit", headers={"Authorization": "Bearer s3nh4"})
+        assert r.status_code == 200 and r.json()["ok"] is True
+        assert parado.wait(5), "gancho de desligamento não foi chamado"

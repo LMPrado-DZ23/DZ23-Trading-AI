@@ -38,12 +38,18 @@ class TestIdentidadeDoProduto:
 
 class TestBadges:
     def test_the_new_badges_are_there(self):
-        for badge in ("PAPER MODE", "MULTI-TENANT", "EXECUÇÃO GOVERNADA"):
+        for badge in ("PAPER MODE", "EXECUÇÃO GOVERNADA"):
             assert badge in APP, f"falta a badge {badge}"
 
     def test_the_old_badges_are_gone(self):
         for badge in ("PAPER READY", "LIVE BLOCKED"):
             assert badge not in APP, f"{badge} continua na tela"
+
+    def test_multi_tenant_badge_is_gone(self):
+        # Dono Único é trava de código (SINGLE_OWNER_ENFORCED), não um modo
+        # que a flag reativa. Anunciar MULTI-TENANT na tela pessoal sugeria
+        # um recurso que este aplicativo não tem.
+        assert "MULTI-TENANT" not in APP, "a badge MULTI-TENANT voltou ao painel"
 
 
 class TestAfirmacoesProibidas:

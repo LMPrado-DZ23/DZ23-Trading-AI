@@ -4,9 +4,11 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - feat/integracao-mestre-20261012
 
 jobs:
-  build-release:
+  build:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,24 +16,46 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install uv and build dependencies
-        run: |
-          pip install uv pyinstaller
-          uv sync --extra dev
+      - name: Install uv
+        run: pip install uv
+      - name: Install locked project (desk + dev extras)
+        run: uv sync --extra desk --extra dev
       - name: Install Inno Setup
-        uses: BoringPlanets/inno-setup-action@v1.4
-        with:
-          path-to-iss: desktop/installer/setup.iss
+        run: choco install innosetup --no-progress -y
       - name: Build Executable Bundle
-        run: |
-          uv run python -m desktop.packaging.build_exe
+        run: uv run --with pyinstaller python -m desktop.packaging.build_exe
       - name: Compile Inno Setup Installer
-        run: |
-          iscc desktop/installer/setup.iss
+        run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" desktop/installer/setup.iss'
       - name: Zip Release Bundle and Calculate Hashes
         run: |
           Compress-Archive -Path dist/DZ23-Trading-AI/* -DestinationPath dist/DZ23-Trading-AI-windows-x64.zip
-          Get-FileHash dist/DZ23-Trading-AI-windows-x64.zip, dist/DZ23-Trading-AI-Setup-v0.4.0.exe -Algorithm SHA256 | Out-File dist/SHA256SUMS.txt
+          $linhas = foreach ($f in @("dist/DZ23-Trading-AI-Setup-v0.4.0.exe", "dist/DZ23-Trading-AI-windows-x64.zip")) {
+            "$((Get-FileHash $f -Algorithm SHA256).Hash.ToLower())  $(Split-Path $f -Leaf)"
+          }
+          # Grava com finais de linha LF: `sha256sum -c` no Linux/macOS falha com CRLF.
+          [System.IO.File]::WriteAllText("dist/SHA256SUMS.txt", ($linhas -join "`n"), [System.Text.UTF8Encoding]::new($false))
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dz23-windows-x64
+          path: |
+            dist/DZ23-Trading-AI-Setup-v0.4.0.exe
+            dist/DZ23-Trading-AI-windows-x64.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+
+  publish-release:
+    # Publicação de Release só em tag explícita (aprovação humana = criar a tag).
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dz23-windows-x64
+          path: dist
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:

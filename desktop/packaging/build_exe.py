@@ -16,6 +16,7 @@ def build_windows_exe():
 
     dist_dir = ROOT / "dist"
     static_dir = ROOT / "service" / "static"
+    icon = static_dir / "marca" / "dz23-icone.ico"
 
     cmd = [
         sys.executable,
@@ -25,6 +26,7 @@ def build_windows_exe():
         "--onedir",
         "--windowed",
         "--name=DZ23-Trading-AI",
+        f"--icon={icon}",
         f"--add-data={static_dir}{os.pathsep}service/static",
         "--collect-all=service",
         "--collect-all=tradingagents",

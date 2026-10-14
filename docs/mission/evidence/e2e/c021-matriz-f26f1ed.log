@@ -1,0 +1,30 @@
+EXE: C:\Users\DZ23\AppData\Local\DZ23-Trading-AI\DZ23-Trading-AI.exe
+PASS — C1: estação limpa antes do teste (sem DZ23, faixa livre)
+PASS — C1: inicialização limpa — healthz do DZ23 responde na 1ª porta da faixa — base=http://127.0.0.1:8000 em 23.1s
+PASS — C1: painel /app responde 200
+PASS — C1: manifesto PWA responde 200
+PASS — C1: limpeza deixou a faixa livre
+PASS — C2: programa estranho ouvindo a 8000 antes do teste
+PASS — C2: DZ23 sobe em porta alternativa (8001) com a 8000 ocupada — base=http://127.0.0.1:8001
+FALHA — C2: programa estranho segue vivo na 8000 (nada foi encerrado)
+PASS — C2: limpeza deixou a faixa livre
+PASS — C3: primeira instância saudável — base=http://127.0.0.1:8000
+PASS — C3: segunda instância sai sozinha (duplo clique não abre backend duplo) — exit=0
+PASS — C3: primeira instância continua saudável
+PASS — C3: limpeza deixou a faixa livre
+PASS — C4: DZ23 não finge iniciar quando a faixa inteira está ocupada — base=None
+PASS — C4: diálogo nativo "portas ocupadas" visível ao dono — janelas de topo do PID 50868: 3
+PASS — C4: diálogo explica o que fazer e promete não encerrar outros programas
+PASS — C4: limpeza deixou a faixa livre
+PASS — C5: sobe (1ª execução) — base=http://127.0.0.1:8000
+PASS — C5: reabre normalmente depois de fechado (reinício) — base=http://127.0.0.1:8000
+PASS — C5: limpeza deixou a faixa livre
+PASS — C6: instância descartável sobe — base=http://127.0.0.1:8000
+PASS — C6: primeira execução pede o assistente (setup_required=true) — HTTP 200
+PASS — C6: assistente cria a senha do dono — HTTP 200 {'ok': True, 'codigo_recuperacao': 'RKEXM-4QQJG-2FRCG-VQVVC-EBKFK-Y9B88'}
+PASS — C6: POST /v1/app/quit com a senha do dono responde 200 — HTTP 200
+PASS — C6: launcher encerra sozinho (exit 0) — nada de taskkill — exit=0
+PASS — C6: porta efetiva liberada após o encerramento
+PASS — C6: log persistente do launcher gravado — C:\Users\DZ23\AppData\Local\Temp\dz23-matriz-vp7gnhw7\DZ23-Trading-AI\logs\launcher.log
+TOTAL: 1 falha(s)
+  - C2: programa estranho segue vivo na 8000 (nada foi encerrado)

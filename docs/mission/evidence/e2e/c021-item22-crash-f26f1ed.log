@@ -1,0 +1,14 @@
+EXE: C:\Users\DZ23\AppData\Local\DZ23-Trading-AI\DZ23-Trading-AI.exe
+PASS — estação limpa antes do teste (nenhuma instância DZ23 na faixa 8000–8010) — se houver DZ23 aberto, feche-o — este harness NÃO mata o que não subiu
+PASS — instância descartável sobe e responde healthz — base=http://127.0.0.1:8000 em 23.1s
+PASS — primeira execução pede o assistente (setup_required=true) — HTTP 200
+PASS — assistente cria a senha do dono — HTTP 200
+PASS — ciclo PAPER real executa e admite entradas — HTTP 200 · resumo: "20 propostas, 2 admitidas, 2 entradas, 0 saídas, 0 vetos"
+Traceback (most recent call last):
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\DZ23-Trading-AI\scripts\homolog_crash_bundle.py", line 323, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\DZ23-Trading-AI\scripts\homolog_crash_bundle.py", line 201, in main
+    "; ".join(map(str, ciclo.get("erros", []))[:2]))
+              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^
+TypeError: 'map' object is not subscriptable

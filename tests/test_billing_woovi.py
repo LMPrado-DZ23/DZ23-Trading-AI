@@ -138,27 +138,31 @@ class TestCobranca:
         assert view["brcode"] and view["qrcode_imagem"]
 
 
-class TestPortaoDeAcesso:
-    """Assinatura vencida bloqueia o que custa dinheiro — mas nunca a página
-    de pagamento (senão o cliente não consegue nem voltar a pagar)."""
+class TestCobrancaDesativadaNoAppPessoal:
+    """Num app de dono único não há cobrança: as rotas de billing e o webhook
+    de pagamento não existem (404), e o desk NUNCA é bloqueado por assinatura
+    vencida — não há plano a pagar. A lógica de assinatura/cripto acima segue
+    testada como biblioteca preservada.
+
+    (Resolução de merge: a base refatorou esta classe para um fluxo SaaS
+    multi-tenant com login de inquilino; por DECISÃO ARQUITETURAL o modo dono
+    único é permanente e nenhuma flag reabre esse fluxo, então as asserções
+    corretas aqui são de bloqueio.)"""
 
     def _app(self, tmp_path, monkeypatch):
         import importlib
         monkeypatch.setenv("ACCESS_PASSWORD", "s3nh4")
         monkeypatch.setenv("DATA_DIR", str(tmp_path))
+        # Flags SaaS ligadas de propósito: o modo dono único as ignora.
+        monkeypatch.setenv("MULTI_TENANT_ENABLED", "true")
+        monkeypatch.setenv("TENANT_TOKEN_SIGNING_KEY",
+                           "chave-de-assinatura-bem-longa-0123456789")
         import service.app as m
         importlib.reload(m)
         m._FAILS.clear()
         return m
 
-    def test_trial_allows_the_desk(self, tmp_path, monkeypatch):
-        from fastapi.testclient import TestClient
-        m = self._app(tmp_path, monkeypatch)
-        c = TestClient(m.app)
-        r = c.get("/v1/desk/status", headers={"Authorization": "Bearer s3nh4"})
-        assert r.status_code == 200
-
-    def test_expired_subscription_blocks_the_desk_with_402(self, tmp_path, monkeypatch):
+    def test_desk_is_not_plan_gated_even_when_subscription_expired(self, tmp_path, monkeypatch):
         from datetime import datetime, timedelta, timezone
 
         from fastapi.testclient import TestClient
@@ -169,19 +173,27 @@ class TestPortaoDeAcesso:
         sub.expires_at = datetime.now(timezone.utc) - timedelta(days=1)
         sub.status = "expired"
         m.SUBS.save(sub)
-        assert c.get("/v1/desk/status", headers=h).status_code == 402
-        # ... mas o caminho para pagar continua aberto:
-        assert c.get("/v1/billing/status", headers=h).status_code == 200
-        assert c.get("/v1/billing/planos", headers=h).status_code == 200
+        # O dono tem direito pleno: sem 402.
+        assert c.get("/v1/desk/status", headers=h).status_code == 200
 
-    def test_webhook_route_is_public_but_requires_signature(self, tmp_path, monkeypatch):
+    def test_billing_routes_are_404(self, tmp_path, monkeypatch):
         from fastapi.testclient import TestClient
         m = self._app(tmp_path, monkeypatch)
         c = TestClient(m.app)
-        r = c.post("/v1/webhooks/woovi", content=evento())      # sem assinatura
-        assert r.status_code == 401
+        h = {"Authorization": "Bearer s3nh4"}
+        assert c.get("/v1/billing/status", headers=h).status_code == 404
+        assert c.get("/v1/billing/planos", headers=h).status_code == 404
+        assert c.post("/v1/billing/checkout", headers=h,
+                      json={"plano": "starter"}).status_code == 404
 
-    def test_signed_webhook_activates_the_plan(self, tmp_path, monkeypatch):
+    def test_woovi_webhook_route_is_404(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = self._app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+        r = c.post("/v1/webhooks/woovi", content=evento())
+        assert r.status_code == 404
+
+    def test_even_a_validly_signed_webhook_activates_nothing(self, tmp_path, monkeypatch):
         from fastapi.testclient import TestClient
         monkeypatch.setenv("WOOVI_WEBHOOK_PUBLIC_KEY", PUB_PEM)
         m = self._app(tmp_path, monkeypatch)
@@ -189,31 +201,20 @@ class TestPortaoDeAcesso:
         corpo = evento(tenant="legacy", plano="starter", charge="chg-x")
         r = c.post("/v1/webhooks/woovi", content=corpo,
                    headers={"x-webhook-signature": assinar(corpo)})
-        assert r.status_code == 200 and r.json()["plano"] == "starter"
-        assert m.SUBS.get("legacy").status == "active"
-        # e o acesso volta:
-        assert c.get("/v1/desk/status",
-                     headers={"Authorization": "Bearer s3nh4"}).status_code == 200
-
-    def test_forged_webhook_does_not_activate_anything(self, tmp_path, monkeypatch):
-        from fastapi.testclient import TestClient
-        monkeypatch.setenv("WOOVI_WEBHOOK_PUBLIC_KEY", PUB_PEM)
-        m = self._app(tmp_path, monkeypatch)
-        c = TestClient(m.app)
-        corpo = evento(tenant="legacy", plano="pro", charge="gratis")
-        r = c.post("/v1/webhooks/woovi", content=corpo,
-                   headers={"x-webhook-signature": base64.b64encode(b"lixo").decode()})
-        assert r.status_code == 401
-        assert m.SUBS.ensure("legacy").plan_code == "trial"   # nada mudou
+        assert r.status_code == 404                              # rota não existe
+        assert m.SUBS.ensure("legacy").plan_code == "trial"      # nada ativado
 
 
-class TestPainelDePagamento:
-    def test_payment_page_exists_with_handlers(self):
+class TestPainelDePagamentoRemovido:
+    def test_payment_ui_is_gone_from_the_personal_panel(self):
+        # A rota de cobrança segue morta na fronteira HTTP (C011); a tela
+        # não existe mais — o dono único não tem plano nem PIX para ver.
         from pathlib import Path
         html = Path("service/static/index.html").read_text(encoding="utf-8")
-        for needle in ['id="page-plano"', "loadPlano()", "pagar('", 'id="pixBox"',
-                       "/v1/billing/checkout", "/v1/billing/planos"]:
-            assert needle in html, f"faltou no painel: {needle}"
+        for vestigio in ['id="page-plano"', "loadPlano", "pagar(",
+                         'id="pixBox"', "/v1/billing/checkout",
+                         "/v1/billing/planos", "Planos", "PIX"]:
+            assert vestigio not in html, f"tela de pagamento ainda no painel: {vestigio}"
 
     def test_panel_never_embeds_the_woovi_token(self):
         from pathlib import Path

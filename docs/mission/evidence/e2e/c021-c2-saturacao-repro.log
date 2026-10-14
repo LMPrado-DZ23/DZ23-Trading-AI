@@ -1,0 +1,3 @@
+ANTIGO  listen(4) sem accept -> ['OK', 'OK', 'OK', 'OK', 'TimeoutError', 'TimeoutError', 'TimeoutError', 'TimeoutError', 'TimeoutError', 'TimeoutError', 'TimeoutError', 'TimeoutError']
+CORRIGIDO accept-drain      -> ['OK', 'OK', 'OK', 'OK', 'OK', 'OK', 'OK', 'OK', 'OK', 'OK', 'OK', 'OK']
+VEREDITO: falso-negativo era artefato do stub que nunca aceitava; DZ23 nao encerra terceiros (launcher sem taskkill/kill/terminate).

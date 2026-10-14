@@ -21,7 +21,8 @@ class SubscriptionStore:
         if self.dsn:
             import psycopg
             from psycopg.rows import dict_row
-            return psycopg.connect(self.dsn, row_factory=dict_row)
+            return psycopg.connect(self.dsn, row_factory=dict_row,
+                                   connect_timeout=5)
         conn = sqlite3.connect(self.sqlite_path, timeout=30)
         conn.row_factory = sqlite3.Row
         return conn

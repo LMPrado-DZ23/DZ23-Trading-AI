@@ -101,51 +101,25 @@ class TestPerfil:
         assert "SEGREDO-GOOGLE" not in str(exc.value)
 
 
-class TestFluxoNoServico:
-    def test_providers_route_shows_only_configured(self, tmp_path, monkeypatch):
-        m = _app(tmp_path, monkeypatch)
-        d = TestClient(m.app).get("/v1/auth/oauth/providers").json()["provedores"]
-        por_nome = {p["nome"]: p["disponivel"] for p in d}
-        assert por_nome["google"] is True and por_nome["microsoft"] is False
+class TestLoginSocialDesativadoNoServico:
+    """O login social é superfície de cadastro multi-tenant: não existe no app
+    pessoal. Toda a rota /v1/auth/oauth/* responde 404, mesmo com as
+    credenciais do provedor configuradas. A biblioteca OAuth acima (PKCE,
+    anti-CSRF, extração de e-mail) segue testada e preservada."""
 
-    def test_start_returns_url_and_state(self, tmp_path, monkeypatch):
+    def test_providers_route_is_404(self, tmp_path, monkeypatch):
         m = _app(tmp_path, monkeypatch)
-        d = TestClient(m.app).get("/v1/auth/oauth/google/start").json()
-        assert d["url"].startswith("https://accounts.google.com/") and d["state"]
+        assert TestClient(m.app).get("/v1/auth/oauth/providers").status_code == 404
 
-    def test_callback_creates_account_with_trial(self, tmp_path, monkeypatch):
+    def test_start_route_is_404(self, tmp_path, monkeypatch):
+        m = _app(tmp_path, monkeypatch)
+        assert TestClient(m.app).get("/v1/auth/oauth/google/start").status_code == 404
+
+    def test_callback_route_is_404_and_creates_no_account(self, tmp_path, monkeypatch):
         m = _app(tmp_path, monkeypatch)
         m._OAUTH_TRANSPORT = transporte()
         c = TestClient(m.app)
-        state = c.get("/v1/auth/oauth/google/start").json()["state"]
-        r = c.get(f"/v1/auth/oauth/google/callback?code=abc&state={state}")
-        assert r.status_code == 200, r.text
-        d = r.json()
-        assert d["conta_nova"] is True and d["access_token"]
-        assert m.SUBS.get(d["tenant_id"]).plan_code == "trial"
-        me = c.get("/v1/auth/me", headers={"Authorization": f"Bearer {d['access_token']}"})
-        assert me.status_code == 200
-
-    def test_second_login_reuses_the_same_tenant(self, tmp_path, monkeypatch):
-        m = _app(tmp_path, monkeypatch)
-        m._OAUTH_TRANSPORT = transporte()
-        c = TestClient(m.app)
-        s1 = c.get("/v1/auth/oauth/google/start").json()["state"]
-        a = c.get(f"/v1/auth/oauth/google/callback?code=x&state={s1}").json()
-        s2 = c.get("/v1/auth/oauth/google/start").json()["state"]
-        b = c.get(f"/v1/auth/oauth/google/callback?code=y&state={s2}").json()
-        assert a["tenant_id"] == b["tenant_id"] and b["conta_nova"] is False
-
-    def test_callback_without_state_is_refused(self, tmp_path, monkeypatch):
-        m = _app(tmp_path, monkeypatch)
-        m._OAUTH_TRANSPORT = transporte()
-        c = TestClient(m.app)
-        assert c.get("/v1/auth/oauth/google/callback?code=x&state=forjado").status_code == 401
-
-    def test_unverified_email_does_not_create_account(self, tmp_path, monkeypatch):
-        m = _app(tmp_path, monkeypatch)
-        m._OAUTH_TRANSPORT = transporte(verified=False)
-        c = TestClient(m.app)
-        state = c.get("/v1/auth/oauth/google/start").json()["state"]
-        r = c.get(f"/v1/auth/oauth/google/callback?code=x&state={state}")
-        assert r.status_code == 401
+        r = c.get("/v1/auth/oauth/google/callback?code=abc&state=qualquer")
+        assert r.status_code == 404
+        # Nenhuma conta/assinatura foi criada por um callback forjado.
+        assert m.TENANT_STORE is None
