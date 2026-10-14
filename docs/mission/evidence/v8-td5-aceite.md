@@ -39,8 +39,9 @@ item 07 — mesmo sistema de fila durável, prova encadeada intencional (nota no
 | :--- | :--- | :--- | :--- |
 | Local (uvicorn, DATA_DIR temporário) | `uv run --with playwright pytest tests/e2e/test_aceite_td5.py -q` | **13/13** | 2026-10-14 |
 | Local — suíte e2e completa | `uv run --with playwright pytest tests/e2e -q` | **26/26**, 4 corridas seguidas (~41–42 s) | 2026-10-14 |
-| Local — suíte unitária completa | `uv run pytest -q` | **3001 passed / 6 skipped / 71 subtests** (exit 0, 312,18 s) | 2026-10-14 |
+| Local — suíte unitária completa | `uv run pytest -q` | **3002 passed / 6 skipped / 71 subtests** (exit 0, 297,25 s — estado final do código, pós-§17/#106) | 2026-10-14 |
 | Bundle do artefato CI (runner Windows virgem) | job `aceite-bundle` (ver §5) | **13/13** — 37,79 s (run `38596224361`, commit `b3e9dae`) | 2026-10-14 |
+| Bundle do artefato CI — **artefato final** (RC §19 + V8.1 §4/§6) | job `aceite-bundle` (ver §5) | **13/13** — 75,63 s (run `38599535042`, commit `d131226`) | 2026-10-14 |
 
 ## 3. Defeitos REAIS encontrados pela matriz e corrigidos (RED→GREEN)
 
@@ -91,7 +92,9 @@ mesa QUENTE (monitor já com tick), e as 4 corridas completas de e2e seguidas fi
   dependências base (`uv run --with playwright`) — `pytest` não existia e a coleta dava `coletados=0` com o
   stderr oculto. Agora o job sincroniza `--extra desk --extra dev`, instala o Playwright no venv do projeto
   e o harness diagnostica ferramentas e coleta (imprimindo stdout+stderr) em vez de falhar mudo.
-- **Re-citação do artefato final:** o commit final desta fase (que acrescenta a decisão do ciclo — V8.1 §4 —
-  e os índices de risco da sala — V8.1 §6) gera um artefato novo; o aceite deste run permanece como prova do
-  harness e do bundle anterior, e o resultado do run do artefato final é registrado na sequência quando
-  concluído (mismo job `aceite-bundle`).
+- **Re-citação do artefato final (registrada em 2026-10-14):** `38599535042` (push de `d131226` — pacote
+  RC §19 + V8.1 §4/§6) — `build` SUCCESS e `aceite-bundle` SUCCESS: **13 passed in 75.63s**, mesmo desenho
+  (ZIP do artefato `dz23-windows-x64`, `sha256sum -c` OK, `%APPDATA%` temporário, guarda de isolamento);
+  `publish-release` skipped. O artefato `aceite-td5-bundle-evidencias` foi **baixado** e copiado para
+  `docs/mission/evidence/v8-td5-exe/` (mesmos 20 arquivos, 18 capturas regeradas) — a prova no bundle agora
+  corresponde ao artefato do commit da RC. O run `38596224361` permanece como prova original do harness.

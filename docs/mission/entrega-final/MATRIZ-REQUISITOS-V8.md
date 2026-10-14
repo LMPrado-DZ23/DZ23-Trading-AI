@@ -24,10 +24,9 @@ Regra de honestidade da missão (V8 §1/§16/§19): testes com mocks **não** s�
 dependências externas inacessíveis estão documentadas com precisão; `skip` não foi usado para ocultar falha;
 nenhum percentual de conclusão inventado.
 
-**Placar de execução (2026-10-14):** suíte unitária completa **3001 passed / 6 skipped / 71 subtests** (exit 0) ·
+**Placar de execução (2026-10-14):** suíte unitária completa **3002 passed / 6 skipped / 71 subtests** (exit 0, 297,25 s) ·
 E2E Playwright local **26/26** · aceite no bundle Windows do artefato CI **13/13** (run `38596224361`, commit
-`b3e9dae`). O placar do **artefato final desta fase** (decisão do ciclo + índices de risco) é registrado em
-`docs/mission/evidence/v8-td5-aceite.md` §5 no mesmo dia, quando o run correspondente concluir.
+`b3e9dae` — harness original). O **artefato final desta fase** (decisão do ciclo + índices de risco + pacote RC) foi re-citado no run `38599535042` (push de `d131226`): **13/13** em 75,63 s, com o artefato `aceite-td5-bundle-evidencias` baixado e copiado para `docs/mission/evidence/v8-td5-exe/` — placar registrado em `docs/mission/evidence/v8-td5-aceite.md` §2/§5.
 
 ---
 
@@ -214,10 +213,10 @@ Fonte linha a linha: `WINDOWS-RELEASE-EVIDENCE.md` (itens 1–22, todos com evid
 | Testes com provedores externos autorizados | Sem credenciais fornecidas | — | **BLOQUEADO_EXTERNO** |
 | Linux ARM64 quando ambiente disponível | Job ARM64 no CI (QEMU) — explicitamente **não** alegado como homologação Oracle | CI `arm64` job | **PARCIAL** |
 | Falhas reproduzíveis eliminadas, inclusive dependência indevida da porta 8000 | 74c319d (launcher isolado da porta 8000) + correções de flakiness (BT-10 arbitragem determinística; e2e com própria porta) | `test_desktop_launcher`; BT-10 | **HOMOLOGADO** |
-| Sem `skip` para ocultar falha; sem relaxar asserts | Nenhum skip novo; falha transiente registrada sem remoção (TD-5 §4); 4 skips históricos declarados | `v8-td5-aceite.md` §4 | **HOMOLOGADO** |
+| Sem `skip` para ocultar falha; sem relaxar asserts | Nenhum skip novo; falha transiente registrada sem remoção (TD-5 §4); 6 skips condicionais de ambiente declarados | `v8-td5-aceite.md` §4 | **HOMOLOGADO** |
 | Dependências externas e testes não executados registrados | §5 desta matriz + ressalvas por documento | — | **HOMOLOGADO** |
 
-*(Os 4 skips históricos da suíte: gates condicionais de ambiente — declarados em `RELATORIO-HOMOLOGACAO-V8.md` §4.)*
+*(Os 6 skips da suíte: gates condicionais de ambiente — declarados em `RELATORIO-HOMOLOGACAO-V8.md` §4.)*
 
 ## §17 GitHub e release
 
@@ -345,7 +344,7 @@ está implementada e testada; o que falta é a chave/credencial real, que a miss
    item 22: 2 defeitos reais de recuperação; BT-10: flakiness de arbitragem; primeiro-Salvar: kernel fix PR #11).
 2. **1 corrida transiente registrada** na suíte e2e completa sob carga (TD-5 §4) — não reproduzida em 4 corridas
    seguintes; mantida em registro, sem skip.
-3. **4 skips históricos da suíte** são condicionais de ambiente (declarados em B §4), não ocultação de falha.
+3. **6 skips da suíte** são condicionais de ambiente (declarados em B §4), não ocultação de falha.
 4. **PWA/push:** mecanismo completo; as provas em dispositivo físico e servidor HTTPS público estão bloqueadas
    (D5/D6). Nada foi declarado homologado apenas "porque o manifest existe" (proibição explícita do complemento).
 5. **Telegram/Discord:** código + testes prontos; entrega real depende das credenciais do dono (D3).

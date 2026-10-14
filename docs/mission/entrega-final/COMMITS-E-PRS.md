@@ -1,7 +1,7 @@
 # DZ23 TRADING AI — LISTA DE COMMITS E PRs (V8.1 §13.2)
 
 > Gerado por `git log --oneline main..HEAD` em 2026-10-14 (branch `fix/instalador-atualizacoes-windows`).
-> Base: `main` (`80e99fb`). **199 commits** de entrega da missão V7+V8+V8.1.
+> Base: `main` (`80e99fb`). **202 commits** de entrega da missão V7+V8+V8.1 — geração em `abe18cc` (a lista não inclui o commit da própria regeração).
 
 ## Pull Requests
 
@@ -19,11 +19,14 @@ C002–C004 (auditoria/integração) · P0 (CI/fees/kernel/single-owner/LIVE) ·
 INST-1..6 (instalador/upgrade real) · SEC-1/FIN-1..3 (segurança e gates financeiros) · PWA-1..5 · M01 ·
 BT-1..10 (Escola de Traders) · E1–E6 (exit, alertas, copiloto, evolução, multimercado) ·
 V8-§6a–e (provedores de IA) · SS-1..5 (Smart Setup + Modo Simples) · TD-1..5 (dashboards/UX/aceite) ·
-V8.1 (decisão do ciclo + índices de risco).
+V8.1 (decisão do ciclo + índices de risco) · RC §19 (pacote de entrega final).
 
 ## Commits (mais recente primeiro)
 
 ```
+abe18cc RC §17 (task #106): guias de instalação do produto real — fim dos guias SaaS no repositório
+d131226 RC §19 (task #104): pacote de entrega final — A matriz de requisitos, B relatório de homologação, C relatório ao proprietário + checklist de auditoria independente e registro do capital-piloto (V8.1 §12)
+16a8807 V8.1 §4+§6 (tasks #102/#103): decisão do ciclo OPERAR/AGUARDAR/BLOQUEAR/SUSPENDER + volatilidade/Sharpe/Sortino honestos na sala; aceite TD-5 com evidências (e2e local + bundle)
 b3e9dae TD-5/#100: aceite-bundle — venv do runner com extras (pytest) e diagnóstico de coleta (matriz TD-5 no bundle; missão V8 §4/§16)
 63a4622 TD-5/#100: aceite E2E no bundle do artefato CI em ambiente isolado (missão V8 §4/§13)
 ac2a1bc TD-5: matriz de aceite E2E (13 testes) + fixes responsivos 320px (missão V8; task #94/#99)

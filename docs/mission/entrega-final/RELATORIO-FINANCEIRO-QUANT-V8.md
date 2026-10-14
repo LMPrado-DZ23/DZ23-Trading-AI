@@ -28,7 +28,7 @@
 ## 3. Comprovação (baterias e evidências)
 
 - Gates: `tests/test_fin2_*` (matriz adversarial por achado), `tests/test_fin3_*` (resposta perdida),
-  `tests/test_kernel_*`, `tests/test_fees_*`, `tests/test_ledger_*` — todos verdes na suíte completa (3001).
+  `tests/test_kernel_*`, `tests/test_fees_*`, `tests/test_ledger_*` — todos verdes na suíte completa (3002).
 - Auditoria por achado: `docs/mission/evidence/auditoria-4b83e16-{sec1,fin1,fin2,fin3}*.md`.
 - Crash/concorrência: item 22 (30/30; reinício em operação) + C019 (corrida da posse em Postgres real no CI).
 - PAPER ponta a ponta: C014 (ciclo real no bundle instalado; ledger balanceado; `pendências=[]`; reinício

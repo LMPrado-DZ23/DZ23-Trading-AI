@@ -45,9 +45,9 @@ checksums vivem dentro do próprio artefato do CI (reprodutível a partir do com
 
 | Nível | Bateria | Placar | Evidência |
 | :--- | :--- | :--- | :--- |
-| Unit + integrado (local) | suíte completa `uv run pytest -q` | **3001 passed / 6 skipped / 71 subtests** (exit 0, 312,18 s) + **23 testes novos** da fase final (decisão do ciclo + índices de risco) | `v8-td5-aceite.md` §2; placar do artefato final no §5 |
+| Unit + integrado (local) | suíte completa `uv run pytest -q` | **3002 passed / 6 skipped / 71 subtests** (exit 0, 297,25 s) — **+24 testes desde o TD-4** (23 da fase final: decisão do ciclo + índices de risco; 1 do §17/#106: guias do produto real) | `v8-td5-aceite.md` §2; placar do artefato final no §5 |
 | E2E navegador real (local) | `uv run --with playwright pytest tests/e2e -q` | **26/26** (13 de painel + 13 de aceite TD-5), 4 corridas seguidas | `v8-td5-aceite.md` §2 |
-| E2E bundle Windows (CI, runner virgem) | job `aceite-bundle` sobre o ZIP do artefato | **13/13** em 37,79 s — 12 dashboards + fluxo do iniciante em 10 passos | run `38596224361`; `docs/mission/evidence/v8-td5-exe/` (20 arquivos) |
+| E2E bundle Windows (CI, runner virgem) | job `aceite-bundle` sobre o ZIP do artefato | **13/13** em 37,79 s (harness original) e **13/13** em 75,63 s (**artefato final da fase**) — 12 dashboards + fluxo do iniciante em 10 passos | runs `38596224361` e `38599535042`; `docs/mission/evidence/v8-td5-exe/` (20 arquivos) |
 | Instalador Windows (matriz CI) | cenários C1–C8 + extensões (≈143 verificações) | `TOTAL: 0 falha(s)` | run `38512611447`; `e2e/matriz-38512611447/` |
 | Portão premium/identidade no bundle | itens 17–19, 21 | **24/24**, **27/27**, **27/27** | C018/C021 (`WINDOWS-RELEASE-EVIDENCE.md`) |
 | Matriz de inicialização no bundle | 6 cenários (incl. intruso na porta, WM_CLOSE) | **24/24** | C021 |
@@ -67,7 +67,7 @@ outro ambiente (CI) ou por bateria equivalente — nenhum esconde falha:
 | :--- | :--- | :--- |
 | `tests/e2e/test_panel_e2e.py:14` (módulo inteiro) | `playwright` ausente na venv base (extra opcional) | a mesma bateria roda **26/26** com `uv run --with playwright pytest tests/e2e -q`; job `aceite-bundle` no CI |
 | `tests/e2e/test_aceite_td5.py:34` (módulo inteiro) | idem (o `importorskip` de módulo conta 1 skip, não 13) | idem — **13/13** no bundle do artefato |
-| `tests/test_modo_da_mesa.py:158` | sem `DATABASE_URL` | job `postgres` do CI (corrida da posse em banco real — run `38473108095`) |
+| `tests/test_modo_da_mesa.py:161` | sem `DATABASE_URL` | job `postgres` do CI (corrida da posse em banco real — run `38473108095`) |
 | `tests/test_desk_backup.py:58` | POSIX permissions (600) não existem em NTFS | execução em Linux/CI |
 | `tests/test_bedrock_provider.py:74` | `langchain_aws` ausente (extra opcional; Bedrock não é um dos 8 provedores principais) | instalável via extra; declarado |
 | `tests/test_quant_intelligence.py:74` | `lightgbm` ausente (extra opcional de quant) | instalável via extra; declarado |

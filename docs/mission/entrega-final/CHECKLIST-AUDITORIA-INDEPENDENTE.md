@@ -17,7 +17,7 @@
 **Profundo (reprodução):** execute você mesmo (não confie em captura):
 
 ```bash
-# 1) Suíte completa (esperado: 3001 passed, 6 skipped condicionais, 71 subtests, exit 0)
+# 1) Suíte completa (esperado: 3002 passed, 6 skipped condicionais, 71 subtests, exit 0)
 uv run pytest -q
 
 # 2) E2E com navegador real (esperado: 26 passed)
