@@ -254,6 +254,16 @@ class CCXTDeskBroker:
                 "fill_id": info.get("tradeId") or info.get("execId"),
                 "client_order_id": o.get("clientOrderId") or info.get("clOrdId")}
 
+    def _client_order_id_da_corretora(self, client_order_id: str,
+                                      instrument: str, side: str) -> str:
+        """O id que a CORRETORA recebe — derivado pela PRÓPRIA ponte.
+
+        Duas fórmulas divergentes fariam a reconciliação consultar um id
+        que ninguém conhece; por isso a derivação não é reimplementada aqui.
+        """
+        from tradingagents.brokers.ccxt_bridge import CCXTBridge
+        return CCXTBridge.client_order_id(client_order_id, instrument, side)
+
     def submit(self, client_order_id: str, instrument: str, side: str,
                quantity: Decimal, final_state: dict | None = None) -> dict:
         if client_order_id in self.submitted:
@@ -262,6 +272,11 @@ class CCXTDeskBroker:
         # produção, e o gate recusava tudo: o caminho real nunca chegava à
         # corretora. Cada ordem agora carrega a prova da própria decisão.
         estado = final_state if final_state is not None else self.final_state
+        # A identidade do LADO DA CORRETORA é calculada ANTES do envio: se a
+        # resposta se perder, é a ÚNICA chave pela qual a reconciliação
+        # poderá encontrar a ordem (auditoria FIN-3).
+        coid_ex = self._client_order_id_da_corretora(client_order_id,
+                                                     instrument, side)
         try:
             out = self.bridge.submit_order(
                 estado, job_id=client_order_id, symbol=instrument,
@@ -278,7 +293,8 @@ class CCXTDeskBroker:
                 raise BrokerTimeout(
                     f"envio ambíguo ({type(exc).__name__}): a corretora pode "
                     "ter recebido a ordem — reconciliar antes de qualquer "
-                    "nova exposição") from exc
+                    "nova exposição",
+                    external_client_id=coid_ex) from exc
             raise BrokerAdapterError(f"{type(exc).__name__}: {exc}"[:300]) from exc
         order = out.get("order") or {}
         result = {
@@ -288,6 +304,7 @@ class CCXTDeskBroker:
             "average": Decimal(str(order.get("average") or order.get("price") or 0)),
             "fee": Decimal(str((order.get("fee") or {}).get("cost") or 0)),
             "fee_currency": (order.get("fee") or {}).get("currency") or "",
+            "external_client_id": out.get("client_order_id") or coid_ex,
         }
         self.submitted[client_order_id] = result
         return result

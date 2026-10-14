@@ -52,7 +52,17 @@ class ExecutionRefused(RuntimeError):
 
 
 class BrokerTimeout(Exception):
-    """A corretora não respondeu: o efeito pode ou não existir."""
+    """A corretora não respondeu: o efeito pode ou não existir.
+
+    Carrega a identidade da ordem NO LADO DA CORRETORA quando conhecida
+    (auditoria FIN-3): sem ela, a reconciliação consulta um id que a
+    corretora nunca viu e "confirma" uma ausência que não existe.
+    """
+
+    def __init__(self, mensagem: str = "",
+                 *, external_client_id: str = "") -> None:
+        super().__init__(mensagem)
+        self.external_client_id = external_client_id
 
 
 def fingerprint(intent: OrderIntent) -> str:
@@ -93,6 +103,7 @@ class OrderRecord:
     fees: Decimal = Decimal("0")
     seen_fills: set = field(default_factory=set)
     external_id: str | None = None
+    external_client_id: str = ""
     note: str = ""
 
     @property
@@ -304,7 +315,12 @@ class ExecutionCoordinator:
         for rec in list(self.orders.values()):
             if not rec.nao_terminal:
                 continue
-            chave = rec.client_order_id or rec.order_id
+            # Prioridade da chave: o que a CORRETORA conhece primeiro.
+            # external_id = id de exchange; external_client_id = `dz23-*`
+            # derivado no envio (o id que a ordem TEM lá); os demais cobrem
+            # PAPER e registros anteriores a estes campos (FIN-3).
+            chave = (rec.external_id or rec.external_client_id
+                     or rec.client_order_id or rec.order_id)
             try:
                 remota = consultar_corretora(chave)
             except Exception as exc:
@@ -425,7 +441,8 @@ class ExecutionCoordinator:
 
         conhecidas = set()
         for r in self.orders.values():
-            for chave in (r.external_id, r.client_order_id, r.order_id):
+            for chave in (r.external_id, r.external_client_id,
+                          r.client_order_id, r.order_id):
                 if chave:
                     conhecidas.add(str(chave))
 
@@ -520,8 +537,13 @@ class ExecutionCoordinator:
         estado = str(remota.get("status", "")).lower()
         if estado in ("closed", "filled", "open", "partially_filled",
                       "partial", "new"):
-            self._aplicar_fills_remotos(rec, remota, relatorio, consultar_fills)
+            # Identidade da corretora ANTES dos fills: a consulta de
+            # execuções usa o id de exchange / clientOrderId DELA — adotar
+            # depois fazia a consulta sair com o argumento errado (FIN-3).
             rec.external_id = remota.get("id") or rec.external_id
+            rec.external_client_id = (remota.get("client_order_id")
+                                      or rec.external_client_id)
+            self._aplicar_fills_remotos(rec, remota, relatorio, consultar_fills)
         elif estado == "absent":
             rec.state = OrderState.CANCELLED
             rec.note = "reconciliada: ausente na corretora"
@@ -550,8 +572,9 @@ class ExecutionCoordinator:
             relatorio["fills_status"] = "UNKNOWN"
             return
         try:
-            fills = consultar_fills(rec.client_order_id or rec.order_id,
-                                    rec.external_id or "")
+            fills = consultar_fills(
+                rec.external_client_id or rec.client_order_id or rec.order_id,
+                rec.external_id or "")
         except Exception as exc:
             relatorio["divergencias"].append(
                 f"{rec.order_id}: consulta de execuções falhou "
@@ -933,8 +956,13 @@ class ExecutionCoordinator:
             resultado = self.broker.submit(
                 coid, ei.instrument, ei.side.value, ei.quantity,
                 **({"final_state": ei.provenance} if ei.provenance else {}))
-        except BrokerTimeout:
-            # 6. AMBÍGUO — mesma transição canônica para os dois lados
+        except BrokerTimeout as exc:
+            # 6. AMBÍGUO — mesma transição canônica para os dois lados.
+            # A identidade DO LADO DA CORRETORA viaja junto quando o broker
+            # a conhece: é por ela que a reconciliação encontrará a ordem
+            # mesmo sem a resposta do envio (auditoria FIN-3).
+            rec.external_client_id = (getattr(exc, "external_client_id", "")
+                                      or rec.external_client_id)
             self.marcar_incerta(
                 rec, f"{ei.descricao()} em estado ambíguo: pode ter sido "
                      "recebida pela corretora")
@@ -951,6 +979,11 @@ class ExecutionCoordinator:
             return rec
 
         rec.external_id = resultado.get("id") or ""
+        # A identidade que a CORRETORA conhece fica registrada desde o
+        # primeiro instante: é ela que a reconciliação e a consulta de
+        # execuções usam, não o id interno da mesa (FIN-3).
+        rec.external_client_id = (resultado.get("external_client_id")
+                                  or rec.external_client_id)
         rec.state = OrderState.ACKNOWLEDGED
         self.oms_version += 1
         # 7. FILLS individualizados: ACK não é execução
@@ -1177,6 +1210,7 @@ class ExecutionCoordinator:
                          filled_qty: Decimal = Decimal("0"),
                          avg_price: Decimal = Decimal("0"),
                          fees: Decimal = Decimal("0"), external_id: str = "",
+                         external_client_id: str = "",
                          note: str = "", seen_fills=None,
                          execution_intent=None) -> OrderRecord:
         """ÚNICO construtor de OrderRecord — usado pelo envio e pelo restore.
@@ -1193,6 +1227,7 @@ class ExecutionCoordinator:
         rec.avg_price = avg_price
         rec.fees = fees
         rec.external_id = external_id
+        rec.external_client_id = external_client_id
         rec.fingerprint = fingerprint
         rec.note = note
         rec.seen_fills = set(seen_fills or ())
@@ -1443,7 +1478,12 @@ class ExecutionCoordinator:
                 "fingerprint": r.fingerprint, "filled": str(r.filled_qty),
                 "preco_medio": str(r.avg_price), "fees": str(r.fees),
                 "fills_vistos": sorted(str(f) for f in r.seen_fills),
-                "external_id": r.external_id, "nota": r.note,
+                "external_id": r.external_id,
+                # A identidade DO LADO DA CORRETORA precisa sobreviver ao
+                # reinício: sem ela a reconciliação pós-restart consultaria
+                # um id que a corretora nunca viu (auditoria FIN-3).
+                "external_client_id": r.external_client_id,
+                "nota": r.note,
                 "instrumento": r.instrumento,
                 "quantidade": str(r.quantidade),
                 "lado": r.lado,
@@ -1618,7 +1658,9 @@ class ExecutionCoordinator:
             filled_qty=Decimal(str(od.get("filled") or 0)),
             avg_price=Decimal(str(od.get("preco_medio") or 0)),
             fees=Decimal(str(od.get("fees") or 0)),
-            external_id=od.get("external_id", ""), note=od.get("nota", ""),
+            external_id=od.get("external_id", ""),
+            external_client_id=od.get("external_client_id", ""),
+            note=od.get("nota", ""),
             seen_fills=od.get("fills_vistos") or [])
 
     def pending_reconciliation(self) -> list[OrderRecord]:
