@@ -1,7 +1,9 @@
 """Centro Inteligente de Alertas (E2/M5) — fila durável, canais e segurança."""
 from __future__ import annotations
 
+import contextlib
 import importlib
+import threading
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -212,6 +214,40 @@ class TestFilaNucleo:
         a, _ = enfileirar(f, agora=em())
         r = Despachante(f, [CanalPainel()]).despachar(agora=em(s=1))
         assert r["entregues"][0]["canal"] == "painel" and a.estado == "entregue"
+
+    def test_despacho_concorrente_nao_entrega_o_mesmo_alerta_duas_vezes(self):
+        # "Notificações repetidas": o despacho roda em threads diferentes
+        # (ciclo da mesa, copiloto manual e rota HTTP compartilham a mesma
+        # fila do inquilino). Sem serialização, as duas leem o alerta ainda
+        # 'novo' e entregam a MESMA notificação duas vezes — a barreira
+        # força exatamente essa sobreposição de forma determinística.
+        f = fila()
+        alerta, _ = enfileirar(f, agora=em())
+        barreira = threading.Barrier(2, timeout=3.0)
+
+        def segura(alerta_, agora_):
+            # No caminho serializado só uma thread chega aqui: a barreira
+            # vence por timeout — comportamento esperado, não falha.
+            with contextlib.suppress(threading.BrokenBarrierError):
+                barreira.wait()
+
+        canal = CanalFalso(nome="windows", efeito=segura)
+        resultados: list[dict] = []
+
+        def rodar():
+            resultados.append(
+                Despachante(f, [canal]).despachar(agora=em(s=1)))
+
+        t1 = threading.Thread(target=rodar)
+        t2 = threading.Thread(target=rodar)
+        t1.start()
+        t2.start()
+        t1.join(timeout=10)
+        t2.join(timeout=10)
+        assert not t1.is_alive() and not t2.is_alive()
+        assert len(canal.recebidos) == 1              # entregue UMA vez
+        assert sum(len(r["entregues"]) for r in resultados) == 1
+        assert alerta.estado == "entregue"
 
 
 class TestMatrizDeRoteamento:

@@ -1903,7 +1903,11 @@ def _persistir_fila_alertas(tenant_id: str) -> None:
     if fila is None or armazem is None:
         return
     try:
-        armazem.salvar(tenant_id, "alertas", fila.to_dict())
+        # Snapshot sob a trava da fila: gravar durante um despacho em outra
+        # thread serializaria estados no meio da entrega.
+        with fila.trava:
+            documento = fila.to_dict()
+        armazem.salvar(tenant_id, "alertas", documento)
     except Exception:
         # A fila em memória segue viva; a próxima gravação tenta de novo.
         LOGGER.warning("não foi possível persistir a fila de alertas")

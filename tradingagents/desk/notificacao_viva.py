@@ -21,6 +21,7 @@ Invariantes codificadas:
 """
 from __future__ import annotations
 
+import threading
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -147,6 +148,11 @@ class FilaDeAlertas:
             self.rate_limites.update(rate_limites)
         self.janela_rate_s = janela_rate_s
         self.alertas: list[AlertaVivo] = list(alertas or [])
+        # Serializa o DESPACHO desta fila: ciclo da mesa, copiloto manual e
+        # rota HTTP entregam a MESMA fila em threads diferentes. Sem a trava,
+        # dois despachos leem o mesmo alerta 'novo' e entregam a mesma
+        # notificação duas vezes (reproduzido no teste com barreira).
+        self.trava = threading.Lock()
         self._entregas_canal: dict[str, list[datetime]] = {}
 
     # -- entrada -------------------------------------------------------
@@ -327,6 +333,12 @@ class Despachante:
 
     def despachar(self, agora: datetime | None = None) -> dict:
         agora = agora or datetime.now(timezone.utc)
+        # Seção crítica POR FILA (não global): inquilinos distintos seguem
+        # despachando em paralelo; a mesma fila, nunca.
+        with self.fila.trava:
+            return self._despachar_interno(agora)
+
+    def _despachar_interno(self, agora: datetime) -> dict:
         expirados = self.fila.expirar_vencidos(agora)
         entregues, falhas, adiados = [], [], []
         for alerta in list(self.fila.pendentes(agora)):
