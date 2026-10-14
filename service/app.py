@@ -1981,7 +1981,8 @@ def _desk_boot(tenant_id: str) -> dict:
                             positions_provider=lambda: coord.ledger.open_positions(),
                             memoria=memoria, exchange=exchange_cfg,
                             analista=analista, vigia=_vigia_pilotos,
-                            sala=sala_da_mesa)
+                            sala=sala_da_mesa,
+                            saidas_em_curso=coord.tem_saida_em_curso)
 
     feed_kind = (cfg.get("TRADINGAGENTS_DESK_FEED") or "fixture").strip().lower()
     if feed_kind == "real":
@@ -2014,6 +2015,12 @@ def _desk_boot(tenant_id: str) -> dict:
     # qualquer exposição nova (UNKNOWN => BLOCK).
     recuperacao = coord.restaurar_estado(armazem.carregar(tenant_id, "oms"))
 
+    # Diário de gestão (políticas, trailing, parciais): sem restaurar, a
+    # posição sobreviveria ao reinício mas o GERENTE de saída morreria com o
+    # processo. A verdade financeira continua sendo o diário (ledger vence).
+    restauracao_livro = orch.restaurar_livro(
+        armazem.carregar(tenant_id, "livro"), ledger=coord.ledger)
+
     # Modo da mesa e posse exclusiva de execução (#29, portabilidade): o
     # dono decide o que a mesa faz; quem segura a posse é quem submete ordem.
     modo = ModoDaMesa(armazem, tenant_id)
@@ -2021,6 +2028,7 @@ def _desk_boot(tenant_id: str) -> dict:
 
     desk = {"orchestrator": orch, "ledger": coord.ledger, "coordinator": coord,
             "memoria": memoria, "armazem": armazem, "recuperacao": recuperacao,
+            "livro_restauracao": restauracao_livro,
             "guardian": PositionGuardian(coord), "cycles": [],
             "feed_kind": feed_kind, "broker_mode": broker_mode,
             "modo": modo, "posse": posse, "sala": sala_da_mesa,
@@ -2214,6 +2222,8 @@ def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
                           "atribuicao": {k: str(v) for k, v in led.attribution().items()},
                           "balanceado": led.is_balanced()},
         "guardiao": d["guardian"].watchlist(),
+        "posicoes": orch.livro_para_painel(),
+        "livro_restauracao": d.get("livro_restauracao", {}),
         "agendador": d["scheduler"].status(),
         "modo": {**d["modo"].resumo(), "posse": d["posse"].resumo()},
         "escola": {"sala": (d["sala"].resumo() if d.get("sala") else None),
@@ -2239,16 +2249,16 @@ def desk_cycle(request: Request, _=Depends(auth), __=Depends(require_plan)):
                 "resumo": out.get("resumo", ""),
                 "propostas": out.get("propostas", []),
                 "ordens": [],       # explícito: nada foi enviado
+                "encerradas": [],   # explícito: nenhuma saída executada
                 "descartados": out.get("descartados", []),
                 "vetos": out.get("vetos", []), "abstencoes": out.get("abstencoes", []),
                 "erros": out.get("erros", [])}
     _guarda_do_pedido(d)
     out = d["scheduler"].run_once()
-    enviados, encerrados = [], []
-    for o in out.get("ordens", []):
-        enviados.append(o)
-    return {"ok": True, "resumo": out.get("resumo", ""), "ordens": enviados,
-            "encerradas": encerrados, "descartados": out.get("descartados", []),
+    return {"ok": True, "resumo": out.get("resumo", ""),
+            "ordens": out.get("ordens", []),
+            "encerradas": out.get("encerradas", []),
+            "descartados": out.get("descartados", []),
             "vetos": out.get("vetos", []), "abstencoes": out.get("abstencoes", []),
             "erros": out.get("erros", [])}
 

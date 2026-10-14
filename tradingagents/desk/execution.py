@@ -1624,6 +1624,16 @@ class ExecutionCoordinator:
     def pending_reconciliation(self) -> list[OrderRecord]:
         return [r for r in self.orders.values() if r.needs_reconciliation]
 
+    def tem_saida_em_curso(self, instrument: str) -> bool:
+        """Há ordem de VENDA não-terminal para o instrumento?
+
+        O motor de saída consulta isto a cada avaliação: sem a checagem, o
+        ciclo autônomo emitiria uma venda nova a cada ciclo enquanto a
+        primeira ainda não liquidou — saída duplicada sobre o mesmo lote.
+        """
+        return any(r.instrumento == instrument and r.lado == "sell"
+                   and r.state not in TERMINAL for r in self.orders.values())
+
 
 class PositionGuardian:
     """Cuida das posições quando o trader é pausado ou a IA falha (MA-06)."""

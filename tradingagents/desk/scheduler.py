@@ -18,7 +18,8 @@ import contextlib
 import json
 import threading
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 
 from .execution import OrderState
@@ -91,6 +92,12 @@ class DeskScheduler:
             r.order_id for r in self.coordinator.pending_reconciliation()]
         if self.armazem is not None:
             self.armazem.salvar(self.tenant_id, "mesa", dict(self.state.__dict__))
+            # Livro de GESTÃO durável (M3/M4): política, topo, parcial e
+            # quantidade por posição sobrevivem ao reinício. Falha aqui não
+            # derruba o ciclo — o financeiro (OMS) já foi persistido.
+            with contextlib.suppress(Exception):
+                self.armazem.salvar(self.tenant_id, "livro",
+                                    self.orchestrator.livro_doc())
             return
         from .storage import escrever_json_atomico
         # Temporário único por escrita: o laço grava a cada ciclo e duas
@@ -121,16 +128,96 @@ class DeskScheduler:
                 fresh.append(snap)
         return fresh, discarded
 
+    def _executar_saida(self, s: dict) -> dict:
+        """Executa UMA saída estruturada do motor global (M3/M4).
+
+        Garantias codificadas aqui:
+        - Nunca mais que o LOTE vivo (o financeiro manda; o diário é gestão).
+        - Nunca duplica: com ordem de venda em curso para o instrumento, a
+          segunda saída vira "em_curso" — não uma segunda ordem.
+        - Procedência obrigatória (mesmo contrato das entradas).
+        """
+        inst = str(s.get("instrumento") or "")
+        agente = str(s.get("agente") or "")
+        base = {"instrumento": inst, "agente": agente,
+                "motivo": s.get("motivo", ""),
+                "reason_code": s.get("reason_code", ""),
+                "urgencia": s.get("urgencia", "")}
+        if not inst or not agente:
+            return {**base, "estado": "ignorada", "nota": "saída sem instrumento/agente"}
+        if self.coordinator.tem_saida_em_curso(inst):
+            existente = next(
+                (r.order_id for r in self.coordinator.orders.values()
+                 if r.instrumento == inst and r.lado == "sell" and r.nao_terminal),
+                "")
+            return {**base, "estado": "em_curso", "ordem": existente}
+        lot = self.coordinator.ledger.lot_quantity(inst, agente)
+        if lot <= 0:
+            # Sem lastro financeiro: o diário estava à frente do livro.
+            self.orchestrator.close_position(inst)
+            return {**base, "estado": "sem_lote",
+                    "nota": "livro financeiro sem lote vivo — diário limpo"}
+        fracao = Decimal(str(s.get("fracao") or "1"))
+        qtd = lot if fracao >= 1 else (lot * fracao)
+        if qtd <= 0:
+            qtd = lot
+        precos = self.price_provider() or {}
+        price = precos.get(inst) or (Decimal(str(s["preco_referencia"]))
+                                     if s.get("preco_referencia") else None)
+        if price is None or price <= 0:
+            raise RuntimeError("sem preço para executar a saída")
+        custo_lote = self.coordinator.ledger.lot_cost(inst, agente)
+        cost_basis = custo_lote * min(Decimal("1"), qtd / lot)
+        from .provenance import build_state, validar
+        visto = s.get("visto_em") or ""
+        try:
+            cutoff = datetime.fromisoformat(visto) if visto else None
+        except ValueError:
+            cutoff = None
+        prov = validar(build_state(
+            instrument=inst, cutoff=cutoff,
+            source=(s.get("fonte") or "fixture"),
+            strategy=s.get("politica") or "saida-global", agent_id=agente,
+            worker_id=getattr(self.orchestrator, "worker_id", "w1")))
+        out = self.coordinator.close_position(
+            instrument=inst, quantity=qtd, price=price, cost_basis=cost_basis,
+            agent_id=agente, provenance=prov)
+        estado = out.get("estado", "")
+        feito = {**base, "estado": estado, "ordem": out.get("order_id", ""),
+                 "quantidade": str(out.get("quantidade", qtd)),
+                 "preco": str(out.get("preco", price))}
+        if estado == "filled":
+            preco_real = Decimal(str(out.get("preco") or price))
+            if qtd >= lot:
+                self.orchestrator.close_position(inst, preco_saida=preco_real)
+            else:
+                self.orchestrator.registrar_saida_parcial(
+                    inst, qtd, preco_real,
+                    tomou_parcial_no_alvo=(s.get("reason_code")
+                                           == "PARTIAL_TARGET"))
+        return feito
+
     def run_once(self, executar: bool = True, persistir: bool = True) -> dict:
         """Um ciclo. `executar=False` = modo observador: analisa e propõe,
         nunca submete ordem; `persistir=False` mantém o ciclo puro — quem só
         observa não grava o estado financeiro da mesa que outro processo pode
         estar executando."""
         snaps, discarded = self.fresh_snapshots()
-        out = {"descartados": discarded, "ordens": [], "resumo": "sem dados elegíveis"}
+        out = {"descartados": discarded, "ordens": [], "encerradas": [],
+               "resumo": "sem dados elegíveis"}
         if snaps:
             report = self.orchestrator.run_cycle(snaps, self.price_provider())
             if executar:
+                # PROTEÇÃO PRIMEIRO: as saídas decididas pelo motor global
+                # executam antes de qualquer entrada nova do ciclo.
+                for s in getattr(report, "saidas", []):
+                    try:
+                        out["encerradas"].append(self._executar_saida(s))
+                    except Exception as exc:
+                        self.state.errors += 1
+                        out.setdefault("erros", []).append(
+                            f"saída {s.get('instrumento', '?')}: "
+                            f"{type(exc).__name__}: {exc}"[:160])
                 for intent in report.intents:
                     try:
                         rec = self.coordinator.submit(intent)
@@ -163,7 +250,9 @@ class DeskScheduler:
             # truncar em 6 escondia justamente os experimentais do fim da fila.
             out["vetos"] = [f"{a}: {w}" for a, w in report.vetoed][:12]
             out["abstencoes"] = [f"{a} · {i}: {r}" for a, i, r in report.abstentions][:24]
-            out["erros"] = report.errors[:4]
+            # Soma, não substitui: erro de saída do motor (antes daqui) não
+            # pode ser apagado pelo relatório do ciclo.
+            out["erros"] = out.get("erros", []) + report.errors[:4]
         self.state.cycles_run += 1
         self.state.last_cycle_at = utcnow().isoformat()
         if persistir:

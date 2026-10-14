@@ -58,9 +58,9 @@
 - **Branch:** `feat/integracao-mestre-20261012` (PR #7; M01 mergeado por fast-forward; C016, C019 e C020 direto; PR #10 (login C017) e PR #11 (kernel fix) **mergeados**) + `feat/qoder-maestro-traders` (entrega M01) + `feat/login-dono-unico-premium` (C017) + `fix/primeiro-salvar-efetivo` (PR #11)
 - **Base:** `main` (`80e99fb`)
 - **PR:** #7 (integração mestre) + branch M01 publicada + **#10 (C017 login) e #11 (primeiro Salvar) mergeados na integração**
-- **HEAD:** `f07ea47` (fix(desk): risco lê o livro vivo desde o 1º boot e reinício preserva estado financeiro) + commits deste batch (C021-6 — item 22: harness `homolog_crash_bundle.py`, regressão `tests/test_livro_vivo_e_reinicio.py`, evidências e docs)
-- **UTC:** `2026-10-14T01:30:00Z`
-- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md` (G3 fechado; re-provado nos bundles M01, C015 e da integração — itens 13–17; **C021 fechado no artefato de `f26f1ed`** — itens 18–19 e 21: matriz de inicialização 24/24 + identidade/portão premium 27/27 + escola/mesa autenticada no painel 27/27; **item 22 fechado no artefato de `f07ea47`** — recuperação de crash 30/30 com 2 defeitos reais do app encontrados e corrigidos); checkpoints em `TRADING-CHECKPOINTS.md` (C000–C021 + item 22 + M01 + BT-0..BT-10)
+- **HEAD:** `f3986f2` (docs: spec consolidado E1–E6 do programa V7) + este batch **E1 — Smart Position & Exit Manager GLOBAL** (`tradingagents/desk/saida.py` novo + autonomia de saída no ciclo + livro de gestão durável + painel)
+- **UTC:** `2026-10-14T02:05:00Z`
+- **Status:** `IN_PROGRESS` — gates atuais em `docs/mission/TRADING-GATES.md` (G3 fechado; re-provado nos bundles M01, C015 e da integração — itens 13–17; **C021 fechado no artefato de `f26f1ed`** — itens 18–19 e 21: matriz de inicialização 24/24 + identidade/portão premium 27/27 + escola/mesa autenticada no painel 27/27; **item 22 fechado no artefato de `f07ea47`** — recuperação de crash 30/30 com 2 defeitos reais do app encontrados e corrigidos); **E1 (motor global de saída) implementado e provado em teste** — suíte `2427 passed` (exit 0), 31 testes novos/adjacentes, 2 defeitos reais corrigidos (homologação no bundle Windows pendente do artefato do CI deste push); checkpoints em `TRADING-CHECKPOINTS.md` (C000–C021 + item 22 + M01 + BT-0..BT-10 + **E1**)
 - **LIVE:** `BLOCKED_BY_POLICY` (inalterado; nenhuma operação com dinheiro real)
 
 ## Baseline Verificada e Conquistas

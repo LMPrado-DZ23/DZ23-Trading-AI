@@ -278,7 +278,7 @@ class Sala:
     def registrar_entrada(self, instrumento: str, quantidade, preco, *,
                           agente: str = "", estrategia: str = "",
                           versao: str = "1", horizonte: str = "1h",
-                          regime: str = "indefinido",
+                          regime: str = "indefinido", politica: str = "",
                           quando: datetime | None = None) -> dict:
         if not instrumento:
             raise SalaError("entrada sem instrumento")
@@ -293,11 +293,49 @@ class Sala:
         posicao = {"quantidade": str(quantidade), "preco_entrada": str(preco),
                    "agente": agente, "estrategia": estrategia,
                    "versao": str(versao), "horizonte": horizonte,
-                   "regime": regime,
+                   "regime": regime, "politica": politica,
                    "aberta_em": (quando or utcnow()).isoformat()}
         self.posicoes[instrumento] = posicao
         self.salvar()
         return dict(posicao)
+
+    def registrar_reducao(self, instrumento: str, quantidade, preco, *,
+                          quando: datetime | None = None) -> dict:
+        """Saída PARCIAL: realiza o resultado só da fatia vendida e mantém o
+        resto da posição viva. Sem esta rota, uma redução parcial ou fecharia
+        a posição inteira (mentira no diário) ou sumiria com o resultado."""
+        posicao = self.posicoes.get(instrumento)
+        if posicao is None:
+            raise SalaError(f"{instrumento} não tem posição aberta nesta sala")
+        preco = Decimal(str(preco))
+        quantidade = Decimal(str(quantidade))
+        total = Decimal(posicao["quantidade"])
+        entrada = Decimal(posicao["preco_entrada"])
+        if preco <= 0 or quantidade <= 0:
+            raise SalaError("quantidade e preço da redução precisam ser "
+                            "positivos")
+        if quantidade > total:
+            raise SalaError(f"redução de {instrumento} maior que a posição "
+                            f"({quantidade} > {total})")
+        valor_ordem = quantidade * entrada
+        custo = custo_de_operar(instrumento, self.contexto.corretora,
+                                valor_ordem)
+        bruto = (preco - entrada) / entrada
+        liquido = retorno_liquido(bruto, custo)
+        resultado = valor_ordem * liquido
+        self.saldo_realizado += resultado
+        self.taxas_acumuladas += valor_ordem * custo.ida_e_volta
+        restante = total - quantidade
+        if restante <= 0:
+            return self.registrar_saida(instrumento, preco, quando=quando)
+        posicao["quantidade"] = str(restante)
+        self.salvar()
+        return {"instrumento": instrumento, "quantidade": str(quantidade),
+                "quantidade_restante": str(restante),
+                "preco_entrada": str(entrada), "preco_saida": str(preco),
+                "retorno_liquido": liquido, "resultado": resultado,
+                "saldo_realizado": self.saldo_realizado,
+                "custo": custo.detalhe()}
 
     def registrar_saida(self, instrumento: str, preco, *,
                         quando: datetime | None = None) -> dict:
