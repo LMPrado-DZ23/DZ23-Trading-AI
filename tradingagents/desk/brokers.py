@@ -297,15 +297,32 @@ class CCXTDeskBroker:
 
 
 def build_desk_broker(cfg: dict, *, final_state: dict, journal_path: str | None = None,
-                      paper_price: Decimal = Decimal("100")):
+                      paper_price: Decimal = Decimal("100"),
+                      live_authorized: bool = False):
     """Escolhe a corretora da mesa a partir da configuração salva.
 
     Sem `TRADINGAGENTS_DESK_BROKER=ccxt` explícito, a mesa opera em PAPER —
     o padrão nunca toca corretora externa por acidente.
+
+    Corretora em modo LIVE exige autorização explícita de CÓDIGO
+    (`live_authorized=True`) — configuração salva nunca basta, porque o
+    painel não pode ser a última fechadura de dinheiro real. Achado da
+    auditoria independente (FIN-1): sem isto, `TRADINGAGENTS_BROKER_MODE=live`
+    salvo pelo painel construía corretora LIVE com mandato PAPER, e o único
+    caminho de produção até `create_order` (este adaptador) ficava sem trava
+    de mesa. Os freios da ponte (frase exata, chaves, teto por ordem, teto
+    diário) continuam valendo por cima.
     """
     from .execution import PaperBroker
     if (cfg.get("TRADINGAGENTS_DESK_BROKER") or "paper").strip().lower() != "ccxt":
         return PaperBroker(paper_price), "paper"
+    modo_pedido = (cfg.get("TRADINGAGENTS_BROKER_MODE") or "").strip().lower()
+    if modo_pedido == "live" and not live_authorized:
+        from tradingagents.brokers.ccxt_bridge import BrokerSecurityError
+        raise BrokerSecurityError(
+            "a mesa recusa construir corretora em modo LIVE sem autorização "
+            "de código (live_authorized=True) — o painel não concede essa "
+            "autorização. Mantenha TRADINGAGENTS_BROKER_MODE=testnet.")
     env = {k: cfg.get(k, "") for k in
            ("TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
             "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET", "LIVE_TRADING_CONFIRM",

@@ -29,6 +29,7 @@ from service.api.owner_credentials import CredenciaisDoDono, erro_de_senha
 from tradingagents.agency import AgencyTask, build_llm_handler
 from tradingagents.agency.store import AgencyTaskStore
 from tradingagents.agency_runtime import AgencyRuntime
+from tradingagents.brokers.ccxt_bridge import BrokerSecurityError
 from tradingagents.desk.models import AgentStage
 from tradingagents.desk.modo import EstadoDaMesa, ModoBloqueado
 from tradingagents.desk.storage import escrever_json_atomico
@@ -227,6 +228,12 @@ SECRETish = tuple(sorted(
     {k for k in ALLOWED_KEYS
      if k in SEGREDOS_DECLARADOS
      or k.endswith(("_KEY", "_SECRET", "_TOKEN", "_PASSWORD", "_WEBHOOK_URL"))}))
+
+# Liberação de CÓDIGO para a mesa operar dinheiro real (auditoria FIN-1,
+# ADR-006). Só muda por decisão explícita do dono em código auditado — o
+# painel NÃO concede: `build_desk_broker` recusa LIVE sem autorização e o
+# checklist abaixo diz isso ao dono com todas as letras.
+MESA_LIVE_LIBERADA = False
 
 # Padrão EFETIVO do papel de cada chave que reconstrói a mesa. Instalação
 # nova não tem nada salvo; o painel reenvia todos os campos no primeiro
@@ -2127,9 +2134,14 @@ def _desk_boot(tenant_id: str) -> dict:
     risk = RiskEngine(mandate)
     ledger = Ledger(opening_cash=mandate.capital)
     data_dir = DATA / "desks" / tenant_id
+    # A autorização de LIVE é de CÓDIGO, não de configuração. O mandato
+    # desta mesa é PAPER (acima) e `live_authorized` só se torna verdadeiro
+    # por construção explícita em código auditado — salvar
+    # TRADINGAGENTS_BROKER_MODE=live no painel NÃO basta para a mesa.
+    # (Achado FIN-1 da auditoria independente.)
     broker, broker_mode = build_desk_broker(
         cfg, final_state={}, journal_path=str(data_dir / "broker.jsonl"),
-        paper_price=Decimal("100"))
+        paper_price=Decimal("100"), live_authorized=mandate.live_authorized)
     coord = ExecutionCoordinator(mandate, ledger, risk,
                                  worker_id=f"worker-{tenant_id}", broker=broker)
     # UMA referência econômica desde o primeiro boot: sem isto o risco ficava
@@ -2454,7 +2466,13 @@ def _desk_of(request: Request) -> dict:
                  "antes de operar novamente")
     desk = _DESKS.get(tid)
     if desk is None:
-        desk = _desk_boot(tid)
+        try:
+            desk = _desk_boot(tid)
+        except BrokerSecurityError as exc:
+            # Recusa deliberada da mesa (hoje: modo LIVE sem liberação de
+            # código). Deixar virar 500 mudo esconderia do dono a razão —
+            # e a razão é acionável: voltar para testnet.
+            raise HTTPException(409, f"mesa recusou arrancar: {exc}"[:400]) from exc
         _DESKS[tid] = desk
     return desk
 
@@ -3290,6 +3308,14 @@ def live_status(request: Request, _=Depends(auth)):
          "pronto": bool(d and any(r.state.value == "filled"
                                   for r in d["coordinator"].orders.values())),
          "acao": "Rode a mesa em testnet e veja uma ordem preenchida antes"},
+        # O selo de CÓDIGO da mesa (ADR-006). Sem ele, mesmo com todos os
+        # itens acima verdes, a mesa recusa arrancar em LIVE — e é bom que
+        # recuse: o painel nunca é a última fechadura de dinheiro real.
+        {"item": "Liberação de código para operar dinheiro real na mesa",
+         "pronto": MESA_LIVE_LIBERADA,
+         "acao": ("Indisponível neste lançamento: exige liberação de código "
+                  "auditada do dono (ADR-006); a mesa recusa corretora LIVE "
+                  "sem ela — mantenha o modo em testnet")},
     ]
     faltam = [i for i in checklist if not i["pronto"]]
     return {"pode_operar_real": not faltam, "checklist": checklist,

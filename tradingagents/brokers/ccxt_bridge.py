@@ -5,8 +5,12 @@ Regras (decisão do Prado, dono do sistema):
   Kraken, Gate.io, KuCoin, Mercado Bitcoin, Bitget) via CCXT.
 - MODO TESTNET: padrão; exchange sem testnet real ⇒ recusa (nunca degrada
   silenciosamente para live).
-- MODO LIVE (dinheiro real): removido nesta branch segura; nenhuma configuração
-  pode criar um cliente com endpoints reais.
+- MODO LIVE (dinheiro real): existe e é FECHADO por construção, não removido.
+  A ponte só cria cliente live com: (1) a frase exata do dono, (2) chaves
+  configuradas, (3) teto por ordem e (4) teto de perda diária — todos
+  positivos. Por cima disso, a MESA recusa construir corretora LIVE sem
+  autorização explícita de código (`live_authorized=True`), que o painel
+  não concede (auditoria FIN-1, ADR-006).
 - TODO envio de ordem passa OBRIGATORIAMENTE por assert_secure_for_capital
   (consumidor selado do Gate B) ANTES de qualquer chamada de rede.
 - Idempotência: clientOrderId determinístico derivado do job — retry NUNCA
