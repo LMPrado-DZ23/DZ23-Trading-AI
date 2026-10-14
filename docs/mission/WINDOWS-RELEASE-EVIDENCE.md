@@ -178,6 +178,32 @@
 
    **Notas de execução (harness, não defeito do app):** (a) a **1ª execução do harness (18:07) falhou no passo 2** — a instância limpa criou os DBs (~2 s) mas nunca respondeu `healthz` em 90 s; **não reproduzível**: reprodução manual com captura de stderr subiu na 1ª tentativa em ~1,5 s (mesmo precedente do C016 run #1; classe "transitório de 1ª execução pós-instalação"); o harness ganhou captura de stdout/stderr por tentativa + **uma** retentativa registrada — na execução final (18:16) os passos 2 e 3 passaram na 1ª tentativa (`tentativas: {step2_fresh: 1, step3_dono: 1}`); (b) o harness tropeçou ao clicar em "Esqueci minha senha" com a sessão já aberta (o link vive no formulário de login, invisível no painel) — reordenado para o portão, antes do login; (c) a estação termina com `owner_credentials.json` (Argon2id) e **sem** `owner_password.txt`; a senha antiga do dono permanece válida.
 
+18. **IDENTIDADE VISUAL E PORTÃO PREMIUM DO DONO ÚNICO — item 18** (artefato de `f26f1ed`, run `38489060888`) — **27/27 PASS** (`HARNESS_EXIT=0`), log `docs/mission/evidence/e2e/c020-5-item18-f26f1ed-r4.log`, capturas `c020-portao-bundle.png` / `c020-portao-1920x1080.png` / `c020-portao-390x844.png` / `c020-portao-360x640.png`:
+
+   | # | Verificação | Resultado | Evidência |
+   |---|-----------|-----------|-----------|
+   | 1 | App instalado sobe na estação | **PASS** | healthz em 23,4 s, 1ª tentativa (retentativa registrada do item 17 mantida no harness) |
+   | 2 | Contrato HTTP da marca | **PASS** | favicon ICO; símbolo e logomarca PNG; manifesto PWA (`DZ23 Trading AI` / `Trading AI` / `/app` / `#061526`); original **404**; dono preservado (`setup_required=false`) |
+   | 3 | Estado operacional real | **PASS** | `/v1/status/operacao` com `modos` + `operacao_real` (modo atual `PAPER`) |
+   | 4 | Portão premium | **PASS** | símbolo real ≥64 px; wordmark "Trading AI"; subtítulo; zero texto morto do SaaS; selos PAPER MODE / EXECUÇÃO GOVERNADA / DINHEIRO REAL BLOQUEADO vindos do backend (neutro só sem API) |
+   | 5 | Senha e acessibilidade | **PASS** | senha mascarada e vazia; toggle alterna `aria-pressed`/tipo; vazio → aviso claro; mensagem de servidor ausente só quando falha |
+   | 6 | Responsivo | **PASS** | 1920×1080, 390×844 e 360×640 sem rolagem horizontal nem corte |
+
+   **Notas de execução (harness, não defeito do app):** as 3 primeiras execuções falharam por defeitos do próprio harness — (a) navegação para a raiz `/` (site institucional) em vez de `/app` (o portão vive no painel); (b) `UnicodeEncodeError` do cp1252 estourando no `≥` com stdout canalizado; (c) strict mode do Playwright com 3 `.pwd-eye` no DOM (login/setup/recuperação). Corrigidos em `scripts/homolog_identidade_bundle.py` (UTF-8 forçado; rota `/app`; seletor escopado `#loginForm .pwd-eye`).
+
+19. **MATRIZ DE INICIALIZAÇÃO DA ESTAÇÃO — item 19** (mesmo artefato de `f26f1ed`, run `38489060888`) — **24/24 PASS** (`HARNESS_EXIT=0`), log `docs/mission/evidence/e2e/c021-matriz-f26f1ed-r2.log`:
+
+   | # | Cenário | Resultado | Evidência |
+   |---|---------|-----------|-----------|
+   | C1 | Estação limpa → inicialização limpa | **PASS** | healthz na 1ª porta da faixa (8000) em 23,1 s; painel `/app` 200; manifesto PWA 200; faixa deixada livre |
+   | C2 | Terceiro na 8000 → fallback sem tocar nele | **PASS** | DZ23 sobe na **8001**; o programa estranho **segue vivo** (nada foi encerrado) |
+   | C3 | Instância duplicada | **PASS** | a 2ª sai sozinha (exit 0); a 1ª segue saudável |
+   | C4 | Faixa inteira ocupada | **PASS** | DZ23 **não finge iniciar**; diálogo nativo "portas ocupadas" visível (3 janelas de topo) com promessa de não encerrar outros programas |
+   | C5 | Reinício | **PASS** | reabre normalmente depois de fechado |
+   | C6 | Ciclo limpo em APPDATA descartável | **PASS** | assistente (`setup_required=true`) → senha do dono → `POST /v1/app/quit` 200 → **launcher exit 0 sozinho** (nada de taskkill) → porta liberada → `launcher.log` persistido |
+
+   **Notas de execução (harness, não defeito do app):** o cenário C2 falhou na 1ª execução (r1) por defeito do harness — o ouvinte-sonda nunca chamava `accept()`; 4 sondagens enchiam o backlog do `listen()` e as seguintes estouravam o timeout de 0,5 s ("segue vivo" falso-negativo). Causa-raiz provada em isolamento, sem DZ23 (`c021-c2-saturacao-repro.log`: sonda antiga 4 OK → 8 TimeoutError; corrigida 12/12 OK). Correção em `scripts/matriz_inicializacao_win.py` (thread daemon que drena e recusa conexões). O launcher nunca mata terceiros: `desktop/launcher.py` não possui nenhuma syscall de encerramento (grep `taskkill|terminate|\.kill|psutil|os\.kill` → zero ocorrências).
+
 ## Ainda NÃO comprovado (pendências de homologação)
 
 - [x] Instalação limpa em Windows 10/11 x64 real com o artefato gerado pelo CI — ciclo completo no artefato C008 (item 10).
@@ -190,6 +216,8 @@
 - [x] Abertura como usuário + login do dono no navegador sem pressa (16 s no portão) no bundle CORRIGIDO — item 10, passos 2–6.
 - [x] Encerramento limpo com **saída pelo próprio app** — C009 (item 11): botão "Fechar aplicativo" + shutdown gracioso; **re-provado no BUNDLE FINAL — item 12, passo 5** (`/v1/app/quit 200`, `Application shutdown complete`, launcher exit 0 sozinho, porta livre).
 - [x] Porta ocupada por OUTRO processo (não-DZ23) — **C010**: sonda TCP real + espera da 1ª instância em boot + diálogo nativo de "porta ocupada"/"falha ao iniciar" (antes: falha silenciosa com navegador aberto numa página inexistente). Provado em dev com listener real (`PORTBUSY_LIVE_C010=PASS`) e **re-provado no BUNDLE FINAL — item 12, passo 6** (diálogo nativo encontrado, WM_CLOSE, exit 0 limpo, navegador não abriu).
+- [x] **Identidade visual e portão premium do dono único no artefato FINAL (item 18)** — re-homologação `27/27 PASS` no bundle de `f26f1ed` (run `38489060888`).
+- [x] **Matriz de inicialização completa no bundle instalado (item 19)** — `24/24 PASS`: estação limpa, fallback sem tocar o vizinho, instância única, faixa ocupada com diálogo nativo, reinício e ciclo limpo com assistente+quit — no artefato de `f26f1ed`.
 - [ ] Sleep/wake, offline/reconexão e recuperação de crash — não exercitados (fora do alcance desta estação sem suspender a máquina do dono).
 - [ ] Assinatura de código: somente com certificado autorizado (não há certificado disponível) — `BLOCKED_BY_EXTERNAL_DEPENDENCY`.
 
@@ -203,4 +231,6 @@
 6. Restam apenas sleep/wake, offline/reconexão e crash de SO (não exercitados nesta estação) e assinatura de código (`BLOCKED_BY_EXTERNAL_DEPENDENCY`) — declarados honestamente acima. G3 fechado com o artefato do item 12 e re-provado com os artefatos da entrega M01 (itens 13–14) e do painel C015 (item 15) em `TRADING-GATES.md`. Publicação (tag/Release) segue aguardando autorização explícita do dono.
 7. Artefato pós-C016b+C017 (`38467455263`, `d8892dc`): **item 16 — fonte de dados** (seletor fixture/real no painel instalado, feed real PRONTO com 239 velas, ciclo real honesto com "snapshot vencido, não vira ordem", **kernel fix: primeiro Salvar não reconstrói mais a mesa — ciclos 1 → 1**) e **item 17 — portão premium do dono único** (assistente de 1ª execução, código de recuperação uma única vez, **migração real `owner_password.txt` → Argon2id sem perder acesso**, marca correta sem o SaaS morto, 6 páginas). **22/22 e 24/24 PASS** nos harnesses; app deixado **instalado** (estado de entrega), LIVE `BLOCKED_BY_POLICY`, nada publicado.
 
-*Última atualização: 2026-10-13 — itens 16–17 homologados no artefato de `d8892dc` (run `38467455263`): fonte de dados + kernel fix do first-Save (22/22) e portão premium do dono único com migração Argon2id (24/24); branches `feat/integracao-mestre-20261012` e `feat/login-dono-unico-premium`.*
+8. Artefato pós-C020+C021 (`f26f1ed`, run Windows `38489060888`): **item 18 — identidade/portão premium re-homologado (`27/27 PASS`)** e **item 19 — matriz de inicialização completa (`24/24 PASS`)** no bundle instalado. A matriz provou: estação limpa, fallback sem tocar o vizinho, instância única, faixa ocupada com diálogo nativo, reinício e ciclo limpo com assistente+quit (launcher exit 0 sozinho). App deixado **instalado** (estado de entrega), LIVE `BLOCKED_BY_POLICY`, nada publicado.
+
+*Última atualização: 2026-10-14 — itens 18–19 homologados no artefato de `f26f1ed` (run `38489060888`): portão premium/identidade 27/27 e matriz de inicialização 24/24 no bundle instalado.*

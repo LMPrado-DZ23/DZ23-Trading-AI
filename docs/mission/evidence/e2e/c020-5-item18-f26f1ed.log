@@ -1,0 +1,39 @@
+Downloading playwright (36.9MiB)
+ Downloaded playwright
+Installed 4 packages in 150ms
+EXE: C:\Users\DZ23\AppData\Local\DZ23-Trading-AI\DZ23-Trading-AI.exe
+PASS — app instalado sobe e responde healthz — tentativas=1 segundos=23.5 porta=http://127.0.0.1:8000
+PASS — favicon.ico 200 e é ICO
+PASS — símbolo 192 servido (PNG)
+PASS — logomarca 192 servida (PNG)
+PASS — manifesto PWA com nome/marca/start_url/theme_color
+PASS — original NÃO é servido pelo painel (404) — HTTP 404
+PASS — estado do dono preservado após reinstalação (setup_required=false)
+PASS — backend expõe estado operacional real (modos + operacao_real) — modo_atual=PAPER
+Traceback (most recent call last):
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\DZ23-Trading-AI\scripts\homolog_identidade_bundle.py", line 294, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\DZ23-Trading-AI\scripts\homolog_identidade_bundle.py", line 278, in main
+    portao_e_responsivo()
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\DZ23-Trading-AI\scripts\homolog_identidade_bundle.py", line 179, in portao_e_responsivo
+    pagina.wait_for_selector("#authGate", state="visible")
+  File "C:\Users\DZ23\AppData\Local\uv\cache\archive-v0\hzPvuQRP2iOKR8XF\Lib\site-packages\playwright\sync_api\_generated.py", line 21370, in wait_for_selector
+    self._sync(
+  File "C:\Users\DZ23\AppData\Local\uv\cache\archive-v0\hzPvuQRP2iOKR8XF\Lib\site-packages\playwright\_impl\_sync_base.py", line 111, in _sync
+    return task.result()
+           ^^^^^^^^^^^^^
+  File "C:\Users\DZ23\AppData\Local\uv\cache\archive-v0\hzPvuQRP2iOKR8XF\Lib\site-packages\playwright\_impl\_page.py", line 431, in wait_for_selector
+    return await self._main_frame.wait_for_selector(**locals_to_params(locals()))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\AppData\Local\uv\cache\archive-v0\hzPvuQRP2iOKR8XF\Lib\site-packages\playwright\_impl\_frame.py", line 395, in wait_for_selector
+    await self._channel.send(
+  File "C:\Users\DZ23\AppData\Local\uv\cache\archive-v0\hzPvuQRP2iOKR8XF\Lib\site-packages\playwright\_impl\_connection.py", line 78, in send
+    return await self._connection.wrap_api_call(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\AppData\Local\uv\cache\archive-v0\hzPvuQRP2iOKR8XF\Lib\site-packages\playwright\_impl\_connection.py", line 636, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+playwright._impl._errors.TimeoutError: Page.wait_for_selector: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator("#authGate") to be visible
+

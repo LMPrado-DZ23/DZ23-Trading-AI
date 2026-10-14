@@ -15,6 +15,7 @@ o encerramento gracioso sem tocar no segredo do dono real.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
@@ -22,6 +23,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -109,6 +111,21 @@ def inicia(env_extra: dict | None = None) -> subprocess.Popen:
     return subprocess.Popen([str(EXE)], env=env)
 
 
+def _atender_recusando(servidor: socket.socket) -> None:
+    """Drena a fila do listen() e recusa cada conexão, como um serviço alheio
+    que não fala o protocolo do DZ23. Sem este accept(), as sondagens ficam
+    presas na fila do listen() e, esgotado o backlog, novas sondagens estouram
+    o timeout — a checagem "segue vivo" dava falso-negativo (o vizinho estava
+    vivo; ninguém o atendia)."""
+    while True:
+        try:
+            conexao, _ = servidor.accept()
+        except OSError:
+            return
+        with contextlib.suppress(OSError):
+            conexao.close()
+
+
 def ocupar(portas: list[int]) -> list[socket.socket]:
     """Abre ouvintes TCP reais (processo estranho simulado) nas portas dadas."""
     servidores = []
@@ -116,7 +133,8 @@ def ocupar(portas: list[int]) -> list[socket.socket]:
         s = socket.socket()
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind(("127.0.0.1", porta))
-        s.listen(4)
+        s.listen(16)
+        threading.Thread(target=_atender_recusando, args=(s,), daemon=True).start()
         servidores.append(s)
     return servidores
 

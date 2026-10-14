@@ -1,0 +1,23 @@
+EXE: C:\Users\DZ23\AppData\Local\DZ23-Trading-AI\DZ23-Trading-AI.exe
+PASS — app instalado sobe e responde healthz — tentativas=1 segundos=23.5 porta=http://127.0.0.1:8000
+PASS — favicon.ico 200 e é ICO
+PASS — símbolo 192 servido (PNG)
+PASS — logomarca 192 servida (PNG)
+PASS — manifesto PWA com nome/marca/start_url/theme_color
+PASS — original NÃO é servido pelo painel (404) — HTTP 404
+PASS — estado do dono preservado após reinstalação (setup_required=false)
+PASS — backend expõe estado operacional real (modos + operacao_real) — modo_atual=PAPER
+Traceback (most recent call last):
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\DZ23-Trading-AI\scripts\homolog_identidade_bundle.py", line 296, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\DZ23-Trading-AI\scripts\homolog_identidade_bundle.py", line 280, in main
+    portao_e_responsivo()
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\DZ23-Trading-AI\scripts\homolog_identidade_bundle.py", line 186, in portao_e_responsivo
+    checa(
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\DZ23-Trading-AI\scripts\homolog_identidade_bundle.py", line 42, in checa
+    print(f"{'PASS' if ok else 'FALHA'} — {nome}{sufixo}", flush=True)
+  File "C:\Program Files\Python312\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u2265' in position 41: character maps to <undefined>

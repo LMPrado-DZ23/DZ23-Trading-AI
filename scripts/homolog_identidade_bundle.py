@@ -29,6 +29,12 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+# Console/pipe no Windows usa cp1252 e não codifica caracteres como "≥" no
+# meio do log — um UnicodeEncodeError mataria o harness no meio da homologação.
+for _fluxo in (sys.stdout, sys.stderr):
+    if _fluxo is not None and hasattr(_fluxo, "reconfigure"):
+        _fluxo.reconfigure(encoding="utf-8", errors="replace")
+
 BASE = "http://127.0.0.1:8000"
 EXE = Path(os.environ["LOCALAPPDATA"]) / "DZ23-Trading-AI" / "DZ23-Trading-AI.exe"
 EVID = Path(__file__).resolve().parents[1] / "docs" / "mission" / "evidence" / "e2e"
@@ -175,7 +181,9 @@ def portao_e_responsivo() -> None:
     with sync_playwright() as p:
         navegador = p.chromium.launch()
         pagina = navegador.new_page(viewport={"width": 1366, "height": 768})
-        pagina.goto(BASE, wait_until="domcontentloaded")
+        # O portão do dono vive no painel (/app) — a raiz "/" é o site
+        # institucional; ir à raiz nunca mostraria #authGate (falso negativo).
+        pagina.goto(f"{BASE}/app", wait_until="domcontentloaded")
         pagina.wait_for_selector("#authGate", state="visible")
 
         # --- identidade do portão ---
@@ -218,7 +226,10 @@ def portao_e_responsivo() -> None:
         senha = pagina.locator("#loginPassword")
         checa("campo de senha mascarado e vazio", senha.get_attribute("type") == "password"
               and (senha.input_value() == ""))
-        olho = pagina.locator(".pwd-eye")
+        # Há 3 toggles .pwd-eye no DOM (login, setup e recuperação coexistem no
+        # portão de 4 estados): escopar no formulário de login evita que o
+        # strict mode do Playwright resolva ambíguo.
+        olho = pagina.locator("#loginForm .pwd-eye")
         checa("toggle começa com aria-pressed=false", olho.get_attribute("aria-pressed") == "false")
         olho.click()
         checa("toggle revela (type=text, aria-pressed=true)",
