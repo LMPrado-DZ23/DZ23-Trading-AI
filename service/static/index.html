@@ -176,6 +176,7 @@
     <section id="page-risk" class="page"><div class="page-head"><div><h2>Risco e execução</h2><p>Controles server-side; nenhum comando vai diretamente ao broker.</p></div><button class="btn secondary" onclick="loadRisk()">Atualizar</button></div><div class="grid"><div class="card span-6"><h3>Execution Engine</h3><div id="riskHealth" class="muted">Carregando...</div><div class="actions"><input class="input" id="killReason" placeholder="Motivo obrigatório para bloquear"><button class="btn danger" onclick="engageKillSwitch()">Acionar KillSwitch</button></div></div><div class="card span-6"><h3>Shadow Trading</h3><div id="shadowHealth" class="muted">Carregando...</div></div></div></section>
   </main></div><nav id="mobileNav" class="mobile-nav"></nav>
 </div><div id="toast" class="toast hide"></div>
+<script src="/static/vendor/lightweight-charts/lightweight-charts.standalone.production.js"></script>
 <script>
 const $=id=>document.getElementById(id);const pages=[['inicio','▶','Início'],['overview','⌂','Visão geral'],['config','⚙','Configuração'],['analysis','◫','Análises'],['mesa','♟','Mesa de Agentes'],['manual','▣','Minhas Operações'],['floor','◇','Trading Floor'],['risk','◆','Risco']];
 const CFG_KEYS=['TRADINGAGENTS_LLM_PROVIDER','TRADINGAGENTS_OUTPUT_LANGUAGE','TRADINGAGENTS_DEEP_THINK_LLM','TRADINGAGENTS_QUICK_THINK_LLM','TRADINGAGENTS_BACKEND_URL','TRADINGAGENTS_LLM_FALLBACK','TRADINGAGENTS_IA_ORCAMENTO_USD','TRADINGAGENTS_IA_ORCAMENTO_BLOQUEIO','OPENROUTER_API_KEY','GROQ_API_KEY','GOOGLE_API_KEY','MISTRAL_API_KEY','OPENAI_API_KEY','ANTHROPIC_API_KEY','DEEPSEEK_API_KEY','OPENAI_COMPATIBLE_API_KEY','FRED_API_KEY','ALPHA_VANTAGE_API_KEY','TRADINGAGENTS_EXCHANGE','TRADINGAGENTS_BROKER_MODE','TRADINGAGENTS_DESK_FEED','EXCHANGE_API_KEY','EXCHANGE_API_SECRET','ALERTA_TELEGRAM_TOKEN','ALERTA_TELEGRAM_CHAT','ALERTA_TELEGRAM_WEBHOOK_SECRET','ALERTA_WEBHOOK_URL','ALERTA_DISCORD_WEBHOOK','ALERTA_WHATSAPP_TOKEN','ALERTA_WHATSAPP_PHONE','ALERTA_WHATSAPP_DESTINO','ALERTA_WINDOWS','ALERTA_WEBPUSH','ALERTA_VAPID_PUBLICA','EMAIL_SMTP_HOST','EMAIL_SMTP_PORT','EMAIL_SMTP_USER','EMAIL_SMTP_PASS','EMAIL_SMTP_FROM','EMAIL_SMTP_TO'];
@@ -380,10 +381,10 @@ box.innerHTML=ml('Mesa',escapeHtml(d.modos.mesa)+' · '+(d.mesa_iniciada?'inicia
 +`<h3 style="margin-top:14px">Alertas ativos</h3>`+(ativos||'<div class="muted">nenhum alerta ativo</div>')
 +`<h3 style="margin-top:14px">Comparações (só evidência madura)</h3>`+comp
 +ml('Fonte',escapeHtml(String((d.fonte||{}).dados||'—'))+' — '+escapeHtml(String((d.fonte||{}).aviso||'')))}
-function fecharSala(){const c=$('salaTrader');if(c)c.style.display='none'}
+function fecharSala(){lcDescartar();const c=$('salaTrader');if(c)c.style.display='none'}
 function openSala(id){const c=$('salaTrader');if(c)c.style.display='';salaTraderLoad(id,window._salaTf||'1h')}
 function salaTf(tf){if(window._salaTrader)salaTraderLoad(window._salaTrader,tf)}
-async function salaTraderLoad(id,tf){const box=$('salaTraderOut');if(!box)return;window._salaTrader=id;window._salaTf=tf||'1h';box.innerHTML='<div class="muted">Carregando a sala de '+escapeHtml(String(id))+'…</div>';
+async function salaTraderLoad(id,tf){const box=$('salaTraderOut');if(!box)return;lcDescartar();window._salaTrader=id;window._salaTf=tf||'1h';box.innerHTML='<div class="muted">Carregando a sala de '+escapeHtml(String(id))+'…</div>';
 const r=await api('/v1/desk/traders/'+id+'/sala?timeframe='+encodeURIComponent(window._salaTf));if(!r.ok){box.innerHTML='<div class="bad">'+escapeHtml(r.data.detail||'sala indisponível')+'</div>';return}
 const d=r.data,m=d.mercado||{},p=d.portfolio||{},mq=m.marcacoes||[],t=d.trader||{};
 const tit=$('salaTraderTitulo');if(tit)tit.textContent=' — '+(t.id||id)+' · '+(t.strategy||'')+(t.version?' v'+t.version:'');
@@ -391,7 +392,8 @@ const ml=(k,v,cls)=>`<div class="metric-line"><span>${k}</span><b class="${cls||
 const pct=v=>(v==null)?'—':((Number(v)*100).toFixed(2)+'%');
 const num=v=>(v==null)?'—':escapeHtml(String(v));
 const tfs=['1m','5m','15m','1h','4h','1d'].map(x=>`<button class="btn ${x===m.timeframe?'primary':'secondary'}" onclick="salaTf('${x}')">${x}</button>`).join(' ');
-const grafico=m.tipo==='candles'?svgVelasMercado(m.velas||[],m,mq):svgLinhaMercado(m.fechamentos||[],m,mq);
+const grafico=graficoMercadoEscolha(m,mq);
+const graficoPort=graficoPortfolioEscolha(p.curva||[]);
 const ind=m.indicadores||{};const ult=a=>{a=a||[];for(let i=a.length-1;i>=0;i--)if(a[i]!=null)return a[i];return null};
 const niveis=(m.suportes||[]).map(v=>'S '+escapeHtml(String(v))).concat((m.resistencias||[]).map(v=>'R '+escapeHtml(String(v)))).join(' · ')||'—';
 const marcaChips=mq.length?mq.map(k=>`<span class="pill" title="${escapeHtml(k.motivo||'')}">${escapeHtml(k.tipo)}${k.preco!=null?' @ '+escapeHtml(String(k.preco)):''} · ${escapeHtml(String(k.t||'').slice(0,16))}</span>`).join(' '):'<span class="muted">sem marcações ainda</span>';
@@ -408,7 +410,7 @@ box.innerHTML=ml('Modo',escapeHtml(String(d.modo||'').toUpperCase())+' · moeda 
 +ml('Indicadores','SMA rápida '+(ult(ind.sma_rapida)!=null?escapeHtml(String(ult(ind.sma_rapida))):'—')+' · SMA lenta '+(ult(ind.sma_lenta)!=null?escapeHtml(String(ult(ind.sma_lenta))):'—')+' · RSI '+(ult(ind.rsi)!=null?Number(ult(ind.rsi)).toFixed(1):'—'))
 +ml('Suportes / Resistências',niveis)+`<div class="muted"><small>${escapeHtml(m.nota_sr||'')}</small></div>`
 +`<div style="margin-top:6px">${marcaChips}</div><div class="muted"><small>${escapeHtml(m.nota_marcacoes||'')}</small></div>`
-+`<h3 style="margin-top:14px">Portfólio do trader</h3>`+svgPortfolio(p.curva||[])
++`<h3 style="margin-top:14px">Portfólio do trader</h3>`+graficoPort
 +ml('Operações fechadas',p.operacoes+' · acertos '+p.acertos+' · hit rate '+pct(p.taxa_acerto))
 +ml('Expectativa por operação',pct(p.expectativa))
 +ml('Fator de lucro',p.profit_factor!=null?num(p.profit_factor):escapeHtml(p.motivo_profit_factor||'—'),p.profit_factor!=null?'':'warn')
@@ -421,7 +423,11 @@ box.innerHTML=ml('Modo',escapeHtml(String(d.modo||'').toUpperCase())+' · moeda 
 +ml('Custo total vivo',num((p.exposicao||{}).custo_total))
 +`<h3 style="margin-top:14px">Ordens abertas</h3>`+ordensLinhas
 +`<h3 style="margin-top:14px">Champion / Challenger</h3>`+expHTML
-+(d.avisos||[]).map(a=>`<div class="warn"><small>${escapeHtml(a)}</small></div>`).join('')}
++`<h3 style="margin-top:14px">Leitura por IA (séries estruturadas)</h3>`
++`<div class="actions"><button class="btn secondary" onclick="salaLeituraIA()">Pedir leitura à IA</button></div>`
++`<div id="salaLeituraIAOut" class="muted"><small>A IA lê as séries estruturadas do gráfico (fechamentos/velas, indicadores, níveis, marcações, curva) — nunca uma imagem e nunca para mandar ordem; não é promessa de lucro nem previsão exata de preços. Sem provedor configurado, nada é enviado.</small></div>`
++(d.avisos||[]).map(a=>`<div class="warn"><small>${escapeHtml(a)}</small></div>`).join('');
+lcDesenhar(m,mq,p.curva||[]);}
 function svgLinhaMercado(closes,m,marc){const cs=(closes||[]).map(Number).filter(Number.isFinite);
 if(cs.length<2)return '<div class="muted">série insuficiente para desenhar — '+escapeHtml((m||{}).aviso||'')+'</div>';
 const W=920,H=230,P=26;const mn=Math.min(...cs),mx=Math.max(...cs),rng=(mx-mn)||1;
@@ -463,6 +469,77 @@ const zero=mn<0?`<line x1="${P}" x2="${W-P}" y1="${Y(0)}" y2="${Y(0)}" stroke="#
 const pontos=c.map((x,i)=>`<circle cx="${X(i).toFixed(1)}" cy="${Y(x.a).toFixed(1)}" r="2.6" fill="${x.r>=0?'#3ba97a':'#c96a6a'}"><title>${escapeHtml(x.t)} · ${escapeHtml(x.i)} · retorno ${escapeHtml(String(x.r))} · acumulado ${escapeHtml(String(x.a))}${x.causa?' — '+escapeHtml(x.causa):''}</title></circle>`).join('');
 return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img"><rect width="${W}" height="${H}" fill="#0f141b" rx="8"/><polygon points="${area}" fill="#c96a6a" fill-opacity="0.14"><title>área em drawdown (queda desde o pico) — não é sugestão de compra nem previsão</title></polygon>${zero}<polyline fill="none" stroke="#69b0ff" stroke-width="1.8" points="${linha}"/>${pontos}</svg></div>`
 +'<div class="muted"><small>curva acumulada das operações FECHADAS do diário (soma simples de retornos, não composta; não é saldo de conta — o saldo vive no livro-razão).</small></div>'}
+let _lcMercado=null,_lcPortfolio=null;
+function lcDescartar(){try{if(_lcMercado){_lcMercado.remove();_lcMercado=null}}catch(e){}try{if(_lcPortfolio){_lcPortfolio.remove();_lcPortfolio=null}}catch(e){}}
+function temLC(){if(window.LightweightCharts&&typeof window.LightweightCharts.createChart==='function')return true;return false}
+function graficoMercadoEscolha(m,mq){
+if(!temLC())return (m||{}).tipo==='candles'?svgVelasMercado((m||{}).velas||[],m,mq):svgLinhaMercado((m||{}).fechamentos||[],m,mq);
+const nota=(m||{}).tipo==='candles'?'candles fechados (a vela em formação é descartada — usá-la seria olhar o futuro) com volume; SMA 9/21, níveis aproximados de S/R (pivôs de fechamentos — não são linhas de mercado) e marcações de execuções, abstenções e vetos.':'linha dos fechamentos da fonte '+escapeHtml(String((m||{}).fonte||''))+' — esta fonte não entrega OHLCV, então não há candles inventados; as marcações são listadas abaixo do gráfico.';
+return '<div id="lcMercado" class="chart" style="height:320px"></div><div class="muted"><small>'+nota+'</small></div>'}
+function graficoPortfolioEscolha(curva){
+if(!temLC())return svgPortfolio(curva);
+return '<div id="lcPortfolio" class="chart" style="height:260px"></div><div class="muted"><small>curva acumulada das operações FECHADAS do diário (soma simples de retornos, não composta; não é saldo de conta — o saldo vive no livro-razão).</small></div>'}
+function lcDesenhar(m,mq,curva){
+const el=$('lcMercado');
+if(el){try{_lcMercado=lcGraficoMercado(el,m,mq)}catch(e){el.outerHTML=(m||{}).tipo==='candles'?svgVelasMercado((m||{}).velas||[],m,mq):svgLinhaMercado((m||{}).fechamentos||[],m,mq)}}
+const elP=$('lcPortfolio');
+if(elP){try{_lcPortfolio=lcGraficoPortfolio(elP,curva||[])}catch(e){elP.outerHTML=svgPortfolio(curva||[])}}
+}
+function lcBase(el,altura,mostrarTempo){
+return window.LightweightCharts.createChart(el,{height:altura,layout:{background:{type:window.LightweightCharts.ColorType.Solid,color:'#0f141b'},textColor:'#9fb0c5'},grid:{vertLines:{color:'#1b2430'},horzLines:{color:'#1b2430'}},timeScale:{visible:mostrarTempo,timeVisible:mostrarTempo},rightPriceScale:{borderColor:'#1b2430'}})}
+function lcGraficoMercado(el,m,mq){
+m=m||{};mq=mq||[];
+const candles=m.tipo==='candles';
+let dados;
+if(candles){
+dados=(m.velas||[]).map(v=>({time:Math.floor(Date.parse(v.t)/1000),o:Number(v.o),h:Number(v.h),l:Number(v.l),c:Number(v.c),v:Number(v.v)||0})).filter(x=>Number.isFinite(x.time)&&Number.isFinite(x.o)&&Number.isFinite(x.h)&&Number.isFinite(x.l)&&Number.isFinite(x.c));
+if(dados.length<2)throw new Error('velas insuficientes');
+}else{
+dados=(m.fechamentos||[]).map((c,i)=>({time:i+1,c:Number(c)})).filter(x=>Number.isFinite(x.c));
+if(dados.length<2)throw new Error('fechamentos insuficientes');
+}
+const chart=lcBase(el,320,candles);
+let serie;
+if(candles){
+serie=chart.addSeries(LightweightCharts.CandlestickSeries,{upColor:'#3ba97a',downColor:'#c96a6a',borderVisible:false,wickUpColor:'#3ba97a',wickDownColor:'#c96a6a'});
+serie.setData(dados.map(x=>({time:x.time,open:x.o,high:x.h,low:x.l,close:x.c})));
+const vol=chart.addSeries(LightweightCharts.HistogramSeries,{priceScaleId:'volume',priceFormat:{type:'volume'},lastValueVisible:false,priceLineVisible:false});
+vol.setData(dados.map(x=>({time:x.time,value:x.v,color:x.c>=x.o?'rgba(59,169,122,0.45)':'rgba(201,106,106,0.45)'})));
+chart.priceScale('volume').applyOptions({scaleMargins:{top:0.82,bottom:0}});
+}else{
+serie=chart.addSeries(LightweightCharts.LineSeries,{color:'#69b0ff',lineWidth:2,priceLineVisible:false,lastValueVisible:false});
+serie.setData(dados.map(x=>({time:x.time,value:x.c})));
+}
+const ind=m.indicadores||{};
+const sma=(lista,cor)=>{const pts=[];(lista||[]).forEach((v,i)=>{if(v!=null&&dados[i]&&Number.isFinite(Number(v)))pts.push({time:dados[i].time,value:Number(v)})});if(!pts.length)return;chart.addSeries(LightweightCharts.LineSeries,{color:cor,lineWidth:1,priceLineVisible:false,lastValueVisible:false}).setData(pts)};
+sma(ind.sma_rapida,'#f0b35e');sma(ind.sma_lenta,'#7fa4ff');
+(m.suportes||[]).forEach(v=>{if(Number.isFinite(Number(v)))serie.createPriceLine({price:Number(v),color:'#3ba97a',lineStyle:LightweightCharts.LineStyle.Dashed,lineWidth:1,axisLabelVisible:false,title:'suporte aprox. (pivô de fechamento)'})});
+(m.resistencias||[]).forEach(v=>{if(Number.isFinite(Number(v)))serie.createPriceLine({price:Number(v),color:'#c96a6a',lineStyle:LightweightCharts.LineStyle.Dashed,lineWidth:1,axisLabelVisible:false,title:'resistência aprox. (pivô de fechamento)'})});
+if(candles&&mq.length){
+const idxDe=t=>{let i0=0;const alvo=Date.parse(t);for(let i=0;i<dados.length;i++){if(dados[i].time*1000<=alvo)i0=i}return i0};
+const marks=mq.filter(k=>k&&k.t).map(k=>{const i=idxDe(k.t);const tipo=k.tipo||'';
+const cor=tipo==='compra'?'#3ba97a':tipo==='venda'?'#c96a6a':tipo==='veto'?'#a78bfa':'#f0b35e';
+const texto=(tipo+(k.preco!=null?' @ '+k.preco:'')+(k.motivo?' — '+String(k.motivo):'')).slice(0,90);
+return {time:dados[i].time,position:tipo==='venda'?'aboveBar':'belowBar',color:cor,shape:tipo==='compra'?'arrowUp':tipo==='venda'?'arrowDown':'circle',text:texto}});
+if(marks.length)LightweightCharts.createSeriesMarkers(serie,marks);
+}
+return chart;
+}
+function lcGraficoPortfolio(el,curva){
+const dados=(curva||[]).map(x=>({time:Math.floor(Date.parse(String(x.t))/1000),v:Number(x.acumulado),r:Number(x.retorno)})).filter(x=>Number.isFinite(x.time)&&Number.isFinite(x.v));
+if(!dados.length)throw new Error('sem operações fechadas');
+const chart=lcBase(el,260,true);
+const serie=chart.addSeries(LightweightCharts.AreaSeries,{lineColor:'#69b0ff',topColor:'rgba(105,176,255,0.25)',bottomColor:'rgba(105,176,255,0.02)',lineWidth:2,priceLineVisible:false});
+serie.setData(dados.map(x=>({time:x.time,value:x.v})));
+LightweightCharts.createSeriesMarkers(serie,dados.map(x=>({time:x.time,position:'inBar',color:x.r>=0?'#3ba97a':'#c96a6a',shape:'circle',text:''})));
+return chart;
+}
+async function salaLeituraIA(){const out=$('salaLeituraIAOut');if(!out||!window._salaTrader)return;out.innerHTML='<small>Consultando a IA…</small>';
+const r=await api('/v1/desk/traders/'+window._salaTrader+'/sala/leitura?timeframe='+encodeURIComponent(window._salaTf||'1h'),{method:'POST'});
+if(!r.ok){out.innerHTML='<div class="bad">'+escapeHtml(r.data.detail||'leitura indisponível')+'</div>';return}
+const d=r.data;
+if(!d.ok){out.innerHTML='<div class="warn"><small>'+escapeHtml(d.motivo||'leitura indisponível agora')+'</small></div>';return}
+out.innerHTML='<div class="event"><b>Leitura da IA ('+escapeHtml(String(d.provedor||'provedor'))+')</b><small style="white-space:pre-wrap">'+escapeHtml(String(d.leitura||''))+'</small><small>'+escapeHtml(String(d.aviso||''))+'</small></div>'}
 async function deskModoLoad(){const r=await api('/v1/desk/modo');if(!r.ok)return;const d=r.data;const sel=$('modoMesa');if(sel)sel.value=d.estado;const st=$('modoMesaEstado');if(st)st.textContent=d.estado_label+(d.motivo?' — '+d.motivo:'');const ps=$('posseMesa');if(ps){ps.textContent=d.posse.valida?(d.posse.sou_eu?'nesta máquina':'em '+d.posse.dono):'livre';ps.className='config-status '+(d.posse.valida&&!d.posse.sou_eu?'warn':'')}const pi=$('posseMesaInfo');if(pi)pi.textContent=d.posse.valida?(d.posse.sou_eu?'este computador executa agora':'outro processo executa (expira '+d.posse.expira_em_iso+')'):'nenhum processo executando';const b=$('btnDesbloquear');if(b)b.classList.toggle('hide',d.estado!=='bloqueada')}
 async function deskModo(desbloqueio){const r=await api('/v1/desk/modo',{method:'POST',body:JSON.stringify({estado:$('modoMesa').value,desbloqueio:!!desbloqueio})});toast(r.ok?('Modo da mesa: '+r.data.estado_label):(r.data.detail||'falhou'),r.ok?'ok':'bad');deskModoLoad()}
 async function desbloquearMesa(){if(!confirm('Desbloquear a mesa e voltar a permitir execução?'))return;deskModo(true)}

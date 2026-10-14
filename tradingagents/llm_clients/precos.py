@@ -46,10 +46,13 @@ POR_PROVEDOR: dict[str, dict[str, tuple[float, float]]] = {
         "deepseek-reasoner": (0.55, 2.19),
     },
     "groq": {
-        "llama-3.1-8b-instant": (0.05, 0.08),
-        "llama-3.3-70b-versatile": (0.59, 0.79),
-        "gemma2-9b-it": (0.20, 0.20),
-        "mixtral-8x7b-32768": (0.24, 0.24),
+        # Lista pública do provedor, docs oficiais (console.groq.com/docs)
+        # consultadas ao vivo em 2026-10-14: os llama/gemma/mixtral foram
+        # descontinuados e respondem 404 — manter preço de modelo morto
+        # seria referência falsa. Cached input do 120b (0.075) é camada à
+        # parte; a tabela usa o input padrão.
+        "openai/gpt-oss-20b": (0.075, 0.30),
+        "openai/gpt-oss-120b": (0.15, 0.60),
     },
     "mistral": {
         "mistral-small-latest": (0.10, 0.30),

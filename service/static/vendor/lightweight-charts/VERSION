@@ -1,0 +1,7 @@
+lightweight-charts 5.2.1
+licença: Apache-2.0 (texto completo no arquivo LICENSE desta pasta)
+fonte: tarball oficial do registro npm (npm pack lightweight-charts@5.2.1;
+  o campo "license" do pacote publicado aponta para Apache-2.0)
+vendorizado em: 2026-10-14
+servido localmente em /static/vendor/lightweight-charts/ — sem CDN, sem
+scraping, sem chamada de rede do navegador para terceiros.

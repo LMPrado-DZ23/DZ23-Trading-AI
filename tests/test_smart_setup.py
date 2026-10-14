@@ -78,6 +78,43 @@ class TestSugerirModelos:
         assert sug["rapido"] == ""
         assert sug["profundo"] == "gpt-4o"
 
+    def test_nao_chat_ficam_fora_da_sugestao(self):
+        """Achado ao vivo (2026-10-14, lista real do Groq): sem preços de
+        referência, a sugestão escolhia por ordem da API e chegou a indicar
+        'whisper-large-v3-turbo' (transcrição de áudio) como modelo
+        profundo. Famílias que não são de chat nunca entram."""
+        from service.api.smart_setup import sugerir_modelos
+
+        lista = ["whisper-large-v3", "whisper-large-v3-turbo",
+                 "canopylabs/orpheus-v1-english",
+                 "meta-llama/llama-prompt-guard-2-22m",
+                 "openai/gpt-oss-120b", "openai/gpt-oss-20b",
+                 "allam-2-7b", "qwen/qwen3.8-27b"]
+        sug = sugerir_modelos("groq", lista)
+        nao_chat = {"whisper-large-v3", "whisper-large-v3-turbo",
+                    "canopylabs/orpheus-v1-english",
+                    "meta-llama/llama-prompt-guard-2-22m"}
+        assert sug["rapido"] not in nao_chat
+        assert sug["profundo"] not in nao_chat
+        assert sug["rapido"] == "allam-2-7b"
+        assert sug["profundo"] == "openai/gpt-oss-120b"
+
+    def test_sugestao_so_com_nao_chat_nao_inventa(self):
+        from service.api.smart_setup import sugerir_modelos
+
+        sug = sugerir_modelos("groq", ["whisper-large-v3-turbo"])
+        assert sug["rapido"] == "" and sug["profundo"] == ""
+
+    def test_elegivel_chat_reconhece_familias(self):
+        from service.api.smart_setup import elegivel_chat
+
+        assert elegivel_chat("openai/gpt-oss-safeguard-20b")  # variante de chat
+        assert elegivel_chat("qwen/qwen3.8-27b")
+        assert not elegivel_chat("whisper-large-v3-turbo")
+        assert not elegivel_chat("canopylabs/orpheus-v1-english")
+        assert not elegivel_chat("meta-llama/llama-prompt-guard-2-22m")
+        assert not elegivel_chat("")
+
 
 class TestProvedoresConfigurados:
     def test_so_conta_quem_tem_chave(self):
@@ -161,7 +198,10 @@ class TestSugestaoEAplicarPerfis:
         r = aplicar({"GROQ_API_KEY": "k"}, "pronto")
         ap = r["aplicados"]
         assert ap["TRADINGAGENTS_LLM_PROVIDER"] == "groq"
-        assert ap["TRADINGAGENTS_QUICK_THINK_LLM"] == "llama-3.1-8b-instant"
+        # padrão de fábrica verificado AO VIVO (2026-10-14): os llama do
+        # Groq foram descontinuados e respondiam 404 — o catálogo agora
+        # aponta para os modelos gpt-oss servidos pela API real.
+        assert ap["TRADINGAGENTS_QUICK_THINK_LLM"] == "openai/gpt-oss-20b"
         # sem descoberta não há profundo — nada de nome fixo desatualizado
         assert "TRADINGAGENTS_DEEP_THINK_LLM" not in ap
         assert any("Buscar modelos" in n for n in r["sugestao"]["notas"])
@@ -344,7 +384,7 @@ class TestRoteamentoPorCusto:
 
         def criar(**kw):
             tentativas.append(kw["model"])
-            if kw["model"] == "llama-3.1-8b-instant":
+            if kw["model"] == "openai/gpt-oss-20b":
                 raise RuntimeError("provedor principal fora")
             resposta = type("R", (), {"content": "ok", "usage_metadata": {}})()
             return type("C", (), {"get_llm": lambda self: type(
@@ -355,7 +395,7 @@ class TestRoteamentoPorCusto:
                "MISTRAL_API_KEY": "k", "OPENROUTER_API_KEY": "k"}
         texto, meta = ia_provedores.consultar_ia(cfg, "p", criar_cliente=criar)
         assert meta["provedor"] == "openrouter"   # o gratuito, não o mistral
-        assert tentativas[0] == "llama-3.1-8b-instant"
+        assert tentativas[0] == "openai/gpt-oss-20b"
         assert tentativas[1] == "meta-llama/llama-3.3-70b-instruct:free"
 
 

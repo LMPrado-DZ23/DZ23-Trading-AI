@@ -71,6 +71,24 @@ _TOKENS_PROFUNDOS = frozenset({
 _SEGMENTO_PARAMS = re.compile(r"^(\d{1,4})(x\d{1,4})?b$", re.IGNORECASE)
 _SEPARADORES = re.compile(r"[-_./:@ ]+")
 
+# Famílias vistas AO VIVO (2026-10-14, lista real do Groq) que não são de
+# chat: áudio/transcrição (whisper, orpheus/TTS) e guardas de prompt. Sem
+# isso, sem preços de referência, a sugestão chegou a indicar
+# "whisper-large-v3-turbo" como modelo profundo — a primeira chamada real
+# do dono falharia. "safeguard" (openai/gpt-oss-safeguard) é variante de
+# chat e NÃO está nesta lista.
+_TOKENS_NAO_CHAT = frozenset({
+    "whisper", "orpheus", "tts", "embed", "embedding", "rerank", "guard",
+})
+
+
+def elegivel_chat(modelo: str) -> bool:
+    """False para famílias de áudio/TTS/embedding/guarda — o sugeridor só
+    oferece modelos que respondem conversa."""
+    segmentos = [s for s in _SEPARADORES.split(str(modelo or "").lower()) if s]
+    return bool(segmentos) and not any(
+        seg in _TOKENS_NAO_CHAT for seg in segmentos)
+
 
 def classificar_modelo(modelo: str) -> str:
     """'rapido' | 'profundo' | 'neutro' pelos tokens do nome. Neutro é
@@ -109,7 +127,8 @@ def sugerir_modelos(provedor: str, modelos: list[str]) -> dict:
             return (9e9, 0)   # sem referência: nunca na frente de um preço real
         return (p[0], 0)
 
-    classificados = [(i, m, classificar_modelo(m)) for i, m in enumerate(modelos)]
+    classificados = [(i, m, classificar_modelo(m))
+                     for i, m in enumerate(modelos) if elegivel_chat(m)]
     rapidos = [(i, m) for i, m, c in classificados if c == "rapido"]
     profundos = [(i, m) for i, m, c in classificados if c == "profundo"]
     rapidos.sort(key=lambda t: (_custo(t[1]), t[0]))

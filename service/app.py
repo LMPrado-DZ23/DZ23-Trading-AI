@@ -599,8 +599,12 @@ async def security_headers(request, call_next):
 # (a credencial dedicada OPENAI_COMPATIBLE_API_KEY é herança do Gate A:
 # um backend redirecionado jamais recebe a chave da OpenAI de verdade).
 FREE_PROVIDERS = {
+    # Padrões de fábrica do Groq verificados AO VIVO em 2026-10-14: os llama
+    # foram descontinuados e respondiam 404 — a lista real da API serve os
+    # gpt-oss. Sempre que o dono buscar modelos no painel, a descoberta real
+    # manda (R3); estes nomes são só o último recurso honesto.
     "groq":       {"url": "https://api.groq.com/openai/v1", "key_from": "GROQ_API_KEY",
-                   "deep": "llama-3.3-70b-versatile", "quick": "llama-3.1-8b-instant"},
+                   "deep": "openai/gpt-oss-120b", "quick": "openai/gpt-oss-20b"},
     "mistral":    {"url": "https://api.mistral.ai/v1", "key_from": "MISTRAL_API_KEY",
                    "deep": "mistral-large-latest", "quick": "mistral-small-latest"},
     "openrouter": {"url": "https://openrouter.ai/api/v1", "key_from": "OPENROUTER_API_KEY",
@@ -1013,6 +1017,27 @@ def marca(arquivo: str):
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon():
     return FileResponse(STATIC / "marca" / "favicon.ico")
+
+
+@app.get("/static/vendor/lightweight-charts/{arquivo}", include_in_schema=False)
+def vendor_lightweight_charts(arquivo: str):
+    """Biblioteca de gráficos vendorizada (Lightweight Charts, Apache-2.0).
+
+    Servida pela MESMA origem, para o painel funcionar offline e sem CDN.
+    Nome simples e allowlist, como a marca: aceitar caminho arbitrário
+    abriria leitura de qualquer arquivo do disco.
+    """
+    permitidos = {"lightweight-charts.standalone.production.js",
+                  "LICENSE", "VERSION"}
+    if arquivo not in permitidos:
+        raise HTTPException(status_code=404, detail="arquivo não encontrado")
+    caminho = STATIC / "vendor" / "lightweight-charts" / arquivo
+    if not caminho.exists():
+        raise HTTPException(status_code=404, detail="arquivo não encontrado")
+    tipo = ("application/javascript" if arquivo.endswith(".js")
+            else "text/plain")
+    return FileResponse(caminho, media_type=tipo,
+                        headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.get("/manifest.webmanifest", include_in_schema=False)
@@ -3086,9 +3111,8 @@ def desk_evaluation(request: Request, _=Depends(auth)):
             "aviso": "retrospectivo e simulado; não é promessa de lucro"}
 
 
-@app.get("/v1/desk/traders/{agent_id}/sala")
-def desk_trader_sala(agent_id: str, request: Request, _=Depends(auth),
-                     instrumento: str = "", timeframe: str = "1h"):
+def _retrato_da_sala(agent_id: str, request: Request, instrumento: str,
+                     timeframe: str) -> dict:
     """Sala individual do trader (TD-2): gráfico de mercado (OHLCV/volume/
     indicadores/S-R/marcações/sinais/abstenções) e gráfico de portfólio
     (curva, P&L, custos, drawdown, exposição, hit rate, expectativa,
@@ -3174,6 +3198,52 @@ def desk_trader_sala(agent_id: str, request: Request, _=Depends(auth),
         atribuicao=atribuicao,
         moeda=str(getattr(led, "currency", "") or "USDT"),
         modo=d["orchestrator"].mandate.mode.value)
+
+
+@app.get("/v1/desk/traders/{agent_id}/sala")
+def desk_trader_sala(agent_id: str, request: Request, _=Depends(auth),
+                     instrumento: str = "", timeframe: str = "1h"):
+    """Sala individual do trader (TD-2) — leitura pura; sem caminho de
+    ordem."""
+    return _retrato_da_sala(agent_id, request, instrumento, timeframe)
+
+
+@app.post("/v1/desk/traders/{agent_id}/sala/leitura")
+def desk_trader_sala_leitura(agent_id: str, request: Request,
+                             _=Depends(auth), instrumento: str = "",
+                             timeframe: str = "1h"):
+    """IA lê o gráfico por SÉRIES ESTRUTURADAS (TD-3, task #92).
+
+    Envia os NÚMEROS verificáveis da sala (fechamentos/velas, indicadores,
+    níveis, marcações, curva) — nunca imagem, nunca ordem. Sem provedor
+    configurado NADA é enviado e a resposta diz o motivo; a leitura é
+    opcional por desenho, e o orçamento de IA do dono continua valendo."""
+    from tradingagents.desk.sala_trader import prompt_de_leitura
+    retrato = _retrato_da_sala(agent_id, request, instrumento, timeframe)
+    tenant_id = request_tenant(request)
+    cfg = load_cfg(tenant_id)
+    if not cfg.get("TRADINGAGENTS_LLM_PROVIDER"):
+        return {"ok": False,
+                "motivo": ("sem provedor de IA configurado — a leitura por "
+                           "IA é opcional; configure em Configuração → IA. "
+                           "Nada foi enviado.")}
+    motivo_bloqueio = _ia_bloqueio(tenant_id)
+    if motivo_bloqueio:
+        return {"ok": False, "motivo": motivo_bloqueio}
+    from service.api.ia_provedores import consultar_ia
+    try:
+        texto, meta = consultar_ia(cfg, prompt_de_leitura(retrato))
+    except Exception as exc:                    # rede/provedor: falha honesta
+        return {"ok": False,
+                "motivo": f"falha ao consultar a IA: {type(exc).__name__}"}
+    with contextlib.suppress(Exception):
+        IA_USO.registrar(tenant_id, meta)
+    return {"ok": True, "leitura": texto,
+            "provedor": str((meta or {}).get("provedor", "")),
+            "aviso": ("leitura da IA sobre as séries estruturadas do "
+                      "gráfico (números verificáveis — não é imagem); não é "
+                      "promessa de lucro nem previsão exata de preços; quem "
+                      "decide é o dono.")}
 
 
 # ------------------------------------------------- escola central + salas

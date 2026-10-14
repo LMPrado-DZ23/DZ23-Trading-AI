@@ -14,6 +14,7 @@ desenha. Cada camada pode ser testada sozinha.
 """
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -308,6 +309,83 @@ def experimentos_do_trader(registros: dict, resultados: dict,
     return saida
 
 
+def prompt_de_leitura(retrato: dict) -> str:
+    """Prompt da IA que lê o gráfico por SÉRIES ESTRUTURADAS (TD-3).
+
+    A IA recebe NÚMEROS verificáveis (fechamentos/velas, indicadores,
+    níveis, marcações, curva) — nunca uma imagem, nunca permissão de
+    inventar dado, prometer lucro, prever preço exato ou sugerir ordem.
+    Puro de propósito: monta texto; quem envia é a rota."""
+    m = dict(retrato.get("mercado") or {})
+    p = dict(retrato.get("portfolio") or {})
+    ind = dict(m.get("indicadores") or {})
+    trader = dict(retrato.get("trader") or {})
+
+    def _ultimo(serie):
+        for v in reversed(list(serie or [])):
+            if v is not None:
+                return v
+        return None
+
+    linhas = [
+        (f"Trader: {trader.get('id', '')} "
+         f"(estratégia {trader.get('strategy', '')})"),
+        f"Modo: {retrato.get('modo', '')} · moeda {retrato.get('moeda', '')}",
+        (f"Mercado: {m.get('instrumento', '')} · timeframe "
+         f"{m.get('timeframe', '')} · gráfico tipo {m.get('tipo', '')} · "
+         f"fonte {m.get('fonte', '')} (qualidade {m.get('qualidade', '')})"),
+        f"Rótulo da fonte: {m.get('aviso', '')}",
+    ]
+    if m.get("tipo") == "candles":
+        linhas.append("Últimas velas fechadas (t,o,h,l,c,v): "
+                      + json.dumps(list(m.get("velas") or [])[-10:],
+                                   ensure_ascii=False))
+    else:
+        linhas.append("Fechamentos (mais antigo → mais recente): "
+                      + ", ".join(str(c)
+                                  for c in (m.get("fechamentos") or [])[-10:]))
+    linhas.append(
+        "Indicadores (último valor): SMA rápida "
+        f"{_ultimo(ind.get('sma_rapida'))} · SMA lenta "
+        f"{_ultimo(ind.get('sma_lenta'))} · RSI {_ultimo(ind.get('rsi'))}")
+    linhas.append(
+        "Níveis aproximados (pivôs de fechamento): suportes "
+        f"{m.get('suportes') or []} · resistências {m.get('resistencias') or []}"
+    )
+    marc = list(m.get("marcacoes") or [])
+    linhas.append(f"Marcações: {len(marc)} — "
+                  + json.dumps(marc[-12:], ensure_ascii=False))
+    linhas.append(
+        f"Portfólio: operações fechadas {p.get('operacoes')} · hit rate "
+        f"{p.get('taxa_acerto')} · expectativa {p.get('expectativa')} · "
+        f"fator de lucro {p.get('profit_factor')} (motivo quando indefinido: "
+        f"{p.get('motivo_profit_factor') or '—'}) · drawdown "
+        f"{p.get('drawdown')} · custos {p.get('custos_total')} · resultado "
+        f"bruto do livro {p.get('resultado_bruto_livro')} · líquido estimado "
+        f"{p.get('resultado_liquido_estimado')}")
+    linhas.append(
+        "Exposição viva: "
+        + json.dumps((p.get("exposicao") or {}).get("posicoes") or [],
+                     ensure_ascii=False))
+    linhas.append(
+        f"Champion/Challenger: {len(retrato.get('champion_challenger') or [])} "
+        "experimento(s) — veredito pendente não é aprovação")
+    return (
+        "Você lê o gráfico de um trader a partir das SÉRIES ESTRUTURADAS "
+        "abaixo (números verificáveis do livro-razão, do diário de operações "
+        "fechadas e dos ciclos da mesa — não é imagem, não é opinião). Em "
+        "português, descreva com objetividade o que os dados mostram: "
+        "tendência ou regime aparente, posição dos indicadores, níveis "
+        "aproximados de suporte/resistência, marcações e resultado "
+        "acumulado. Regras absolutas: (1) NUNCA invente preço, vela, "
+        "indicador, nível ou resultado que não esteja nos dados; (2) NUNCA "
+        "prometa lucro nem faça previsão exata de preços — fale em cenários "
+        "condicionais e probabilidades; (3) NUNCA sugira ordem, entrada, "
+        "alvo ou tamanho de posição — quem decide é o dono; (4) se a fonte "
+        "for FIXTURE, diga que são dados de treino e que não provam o "
+        "mercado.\nDados:\n" + "\n".join(linhas))
+
+
 AVISOS_DE_HONESTIDADE = (
     "Os gráficos derivam das operações FECHADAS (diário), dos lançamentos "
     "do livro-razão e dos ciclos da mesa — nunca de números inventados.",
@@ -373,5 +451,6 @@ def retrato_do_trader(agent_id: str, *, trader: dict, instrumento: str,
 __all__ = ["AVISOS_DE_HONESTIDADE", "curva_de_resultado", "drawdown_maximo",
            "experimentos_do_trader", "exposicao_do_trader", "indicadores",
            "marcacoes_de_execucao", "marcacoes_dos_ciclos", "media_movel",
-           "metricas_portfolio", "ordens_do_trader", "retrato_do_trader",
-           "rsi", "suportes_e_resistencias", "velas_de_rows"]
+           "metricas_portfolio", "ordens_do_trader", "prompt_de_leitura",
+           "retrato_do_trader", "rsi", "suportes_e_resistencias",
+           "velas_de_rows"]

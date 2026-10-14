@@ -401,7 +401,7 @@ class TestSondagemDeProvedores:
             transport=self._transport(lambda _req: httpx.Response(200, text="<html>")))
         assert r["ok"] is False and r["fonte"] == "catalogo"
         assert r["estado"] == "resposta_ilegivel"
-        assert r["modelos"] == ["llama-3.1-8b-instant"]
+        assert r["modelos"] == ["openai/gpt-oss-20b"]
 
     def test_endereco_nao_confiavel_e_recusado_antes_da_rede(self):
         from service.api import ia_provedores
@@ -514,7 +514,7 @@ class TestRotasProvedores:
         r = c.get("/v1/ai/modelos", headers=h, params={"provedor": "groq"})
         d = r.json()
         assert d["fonte"] == "catalogo" and d["estado"] == "sem_chave"
-        assert d["modelos"] == ["llama-3.1-8b-instant"]
+        assert d["modelos"] == ["openai/gpt-oss-20b"]
 
 
 class TestRemoverCredenciais:
@@ -575,7 +575,7 @@ class TestPrecos:
     def test_preco_conhecido_e_prefixo_mais_longo(self):
         from tradingagents.llm_clients import precos
 
-        assert precos.preco("groq", "llama-3.1-8b-instant") == (0.05, 0.08)
+        assert precos.preco("groq", "openai/gpt-oss-20b") == (0.075, 0.30)
         # versionado casa com o prefixo MAIS longo — não com o curto
         assert precos.preco("openai", "gpt-4o-mini-2024-07-18") == (0.15, 0.60)
         assert precos.preco("google", "gemini-2.0-flash-lite-001") == (0.075, 0.30)
@@ -596,7 +596,7 @@ class TestPrecos:
         assert precos.custo_estimado(
             "openai", "gpt-4o-mini", 1_000_000, 0) == pytest.approx(0.15)
         assert precos.custo_estimado(
-            "groq", "llama-3.1-8b-instant", 0, 1_000_000) == pytest.approx(0.08)
+            "groq", "openai/gpt-oss-20b", 0, 1_000_000) == pytest.approx(0.30)
         assert precos.custo_estimado("openai_compatible", "x", 10, 10) is None
 
     def test_referencia_datada(self):
@@ -613,14 +613,14 @@ class TestRegistroDeUso:
 
     def test_conta_chamada_tokens_e_custo(self, tmp_path):
         r = self._reg(tmp_path)
-        r.registrar("t1", {"provedor": "groq", "modelo": "llama-3.1-8b-instant",
+        r.registrar("t1", {"provedor": "groq", "modelo": "openai/gpt-oss-20b",
                            "tokens": {"entrada": 1000, "saida": 500}})
         resumo = r.resumo("t1")
         assert resumo["total"]["chamadas"] == 1
         assert resumo["total"]["tokens_entrada"] == 1000
         assert resumo["total"]["tokens_saida"] == 500
-        # (1000*0.05 + 500*0.08)/1e6 = 0.00009 USD
-        assert resumo["total"]["custo_estimado_usd"] == pytest.approx(0.00009)
+        # (1000*0.075 + 500*0.30)/1e6 = 0.000225 USD
+        assert resumo["total"]["custo_estimado_usd"] == pytest.approx(0.000225)
         assert resumo["por_provedor"]["groq"]["chamadas"] == 1
         assert resumo["custo_parcial"] is False
         assert resumo["orcamento"]["definido"] is False
@@ -629,7 +629,7 @@ class TestRegistroDeUso:
     def test_sem_tokens_e_sem_preco_contam_honestamente(self, tmp_path):
         r = self._reg(tmp_path)
         r.registrar("t1", {"provedor": "groq",
-                           "modelo": "llama-3.1-8b-instant", "tokens": None})
+                           "modelo": "openai/gpt-oss-20b", "tokens": None})
         r.registrar("t1", {"provedor": "openai_compatible", "modelo": "meu",
                            "tokens": {"entrada": 10, "saida": 10}})
         resumo = r.resumo("t1")
@@ -641,7 +641,7 @@ class TestRegistroDeUso:
 
     def test_persiste_e_rele_do_disco(self, tmp_path):
         self._reg(tmp_path).registrar(
-            "t1", {"provedor": "groq", "modelo": "llama-3.1-8b-instant",
+            "t1", {"provedor": "groq", "modelo": "openai/gpt-oss-20b",
                    "tokens": {"entrada": 1, "saida": 1}})
         assert self._reg(tmp_path).resumo("t1")["total"]["chamadas"] == 1
 
@@ -683,12 +683,12 @@ class TestRotaUso:
     def test_uso_mostra_o_que_o_app_registrou(self, tmp_path, monkeypatch):
         m, c, h = self._app(tmp_path, monkeypatch)
         m.IA_USO.registrar("legacy", {
-            "provedor": "groq", "modelo": "llama-3.1-8b-instant",
+            "provedor": "groq", "modelo": "openai/gpt-oss-20b",
             "tokens": {"entrada": 2000, "saida": 1000}})
         d = c.get("/v1/ai/uso", headers=h).json()
         assert d["total"]["chamadas"] == 1
         assert d["total"]["tokens_entrada"] == 2000
-        assert d["total"]["custo_estimado_usd"] == pytest.approx(0.00018)
+        assert d["total"]["custo_estimado_usd"] == pytest.approx(0.00045)
 
     def test_orcamento_configurado_aceita_virgula(self, tmp_path, monkeypatch):
         _, c, h = self._app(tmp_path, monkeypatch)
@@ -707,8 +707,9 @@ class TestRotaUso:
         assert d["orcamento"]["definido"] is False
         assert "inválido" in d["orcamento"]["aviso"]
 
-    def test_os_dois_caminhos_de_consulta_registram_uso(self):
+    def test_os_caminhos_de_consulta_registram_uso(self):
         fonte = (RAIZ / "service" / "app.py").read_text(encoding="utf-8")
-        assert fonte.count("IA_USO.registrar(") == 2, (
-            "os DOIS caminhos de consulta (IA de contexto e revisor do "
-            "diário) precisam registrar consumo — um deles perdeu o registro")
+        assert fonte.count("IA_USO.registrar(") == 3, (
+            "os TRÊS caminhos de consulta (IA de contexto, revisor do "
+            "diário e leitura da sala do trader) precisam registrar "
+            "consumo — um deles perdeu o registro")

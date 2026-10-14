@@ -60,7 +60,7 @@ CATALOGO: list[dict] = [
      "url_padrao": "https://api.deepseek.com/v1",
      "url_sonda": "https://api.deepseek.com/v1", "descoberta": "openai"},
     {"id": "groq", "nome": "Groq", "cliente": "openai_compatible",
-     "chave_env": "GROQ_API_KEY", "quick_padrao": "llama-3.1-8b-instant",
+     "chave_env": "GROQ_API_KEY", "quick_padrao": "openai/gpt-oss-20b",
      "url_padrao": "https://api.groq.com/openai/v1",
      "url_sonda": "https://api.groq.com/openai/v1", "descoberta": "openai",
      "gratuito": True},
