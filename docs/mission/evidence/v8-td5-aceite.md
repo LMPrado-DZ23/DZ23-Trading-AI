@@ -42,6 +42,7 @@ item 07 — mesmo sistema de fila durável, prova encadeada intencional (nota no
 | Local — suíte unitária completa | `uv run pytest -q` | **3002 passed / 6 skipped / 71 subtests** (exit 0, 297,25 s — estado final do código, pós-§17/#106) | 2026-10-14 |
 | Bundle do artefato CI (runner Windows virgem) | job `aceite-bundle` (ver §5) | **13/13** — 37,79 s (run `38596224361`, commit `b3e9dae`) | 2026-10-14 |
 | Bundle do artefato CI — **artefato final** (RC §19 + V8.1 §4/§6) | job `aceite-bundle` (ver §5) | **13/13** — 75,63 s (run `38599535042`, commit `d131226`) | 2026-10-14 |
+| Bundle do artefato CI — **artefato de congelamento** (lote final de docs) | job `aceite-bundle` (ver §5) | **13/13** — 29,19 s (run `38602691878`, commit `3a8f362`) | 2026-10-14 |
 
 ## 3. Defeitos REAIS encontrados pela matriz e corrigidos (RED→GREEN)
 
@@ -98,3 +99,12 @@ mesa QUENTE (monitor já com tick), e as 4 corridas completas de e2e seguidas fi
   `publish-release` skipped. O artefato `aceite-td5-bundle-evidencias` foi **baixado** e copiado para
   `docs/mission/evidence/v8-td5-exe/` (mesmos 20 arquivos, 18 capturas regeradas) — a prova no bundle agora
   corresponde ao artefato do commit da RC. O run `38596224361` permanece como prova original do harness.
+- **Selo de congelamento (registrado em 2026-10-14; task #105):** `38602691878` (push de `3a8f362` — lote
+  final de docs do estado de entrega; nenhum arquivo de código/produto mudou desde `d131226`) — `build`
+  SUCCESS, `aceite-bundle` SUCCESS (**13 passed em 29,19 s**) e `publish-release` skipped; a Matriz do
+  Instalador `38602691850` também fechou VERDE (`TOTAL: 0 falha(s)`). O artefato
+  `aceite-td5-bundle-evidencias` foi baixado e recopiado para `docs/mission/evidence/v8-td5-exe/`
+  (9 arquivos atualizados: `launcher.log`, `pytest-aceite-bundle.txt` e 7 capturas). **A partir daqui o
+  conteúdo está CONGELADO**: o push do selo é docs-only (esta linha + changelog §17 expandido +
+  correção de referência no ledger em `TRADING-CHECKPOINTS.md`) e não engendra novo artefato de conteúdo;
+  qualquer mudança de código/produto futura invalida este congelamento e exige nova re-citação.

@@ -8,9 +8,18 @@ Breaking changes within the 0.x line are called out explicitly.
 
 ## [0.5.0] — 2026-10-14
 
-Windows installer/updater hardening: in-place updates preserve financial data,
-every version change is preceded by a verified backup, and the app is closed
-gracefully — never via taskkill — before any file is replaced.
+Release candidate prepared for independent audit. Consolidates the governed
+multi-agent desk program built on top of 0.4.0 — supervised trading school,
+manual copilot, intelligent alert center, autonomous strategy evolution,
+multimarket policy layer, first-class AI configuration, installable PWA
+panel — on a hardened Windows installer/updater that preserves financial
+data across in-place updates (verified backup before every version change;
+the app is closed gracefully, never via taskkill).
+
+**Financial state: LIVE is blocked by policy.** The app operates in PAPER
+and Manual Copilot only; no path trades real money without explicit owner
+authorization. Audit package (requirements matrix, homologation report,
+rollback plan): `docs/mission/entrega-final/`.
 
 ### Added
 
@@ -32,6 +41,85 @@ gracefully — never via taskkill — before any file is replaced.
 - Windows CI matrix (`installer-matrix.yml`) proves the full cycle on a
   virgin runner, including a real 0.4.0 → new-version upgrade with
   representative (fictitious) data.
+- Governed 10-trader desk with supervisor, per-trader contract gates and
+  promote/pause/resume routes; supervision never goes blind — when the desk
+  cannot start, the panel still shows why.
+- Trading school (Escola/Batalhão): PAPER pilot lifecycle
+  (FORMADO → ELEGÍVEL → AGUARDANDO → AUTORIZADO), pre-registered hypothesis
+  lab with frozen signatures, central school with independent rooms per
+  broker, and a multi-room maestro for conflict and global-exposure
+  supervision.
+- Manual Copilot ("Minhas Operações"): read-only monitoring of positions the
+  owner records by hand, with deterministic signals (trend, RSI, levels,
+  invalidation). It never creates or cancels orders, and monitoring costs
+  are never estimated.
+- Smart Exit: global, deterministic position/exit manager wired into the
+  desk cycle.
+- Intelligent alert center: durable queue, Windows notifications with
+  homologated real delivery, Telegram/Discord webhooks (fail-closed), and
+  per-queue serialized dispatch.
+- Autonomous strategy evolution: auditable per-trader memory, frozen
+  champion/challenger experiments, walk-forward on common windows with
+  Bonferroni correction, promotion only in PAPER, and auditable rollback.
+- Multimarket policy layer: 7 asset classes with complete session/lot/tick
+  metadata; crypto spot/futures homologated, B3 and US classes present but
+  closed by policy — no broker adapter activated (ADR-005).
+- AI configuration: multi-provider catalog, provider testing that never
+  leaves the machine when no key is set, model discovery with declared
+  source, usage/cost/budget tracking, and credential removal that reports
+  what still lives in the environment.
+- Smart Setup: idempotent first-run configuration, ready/economic/balanced/
+  advanced profiles, automatic selection only among configured providers,
+  and honest four-state diagnostics
+  (configured/connected/authenticated/operational).
+- Modes and dashboards: Simple mode as the default (CONECTAR → MODO → PLAY
+  on the same desk routes), Advanced mode per device; maestro global panel;
+  per-trader room charts (candles, SMA 9/21, RSI, support/resistance, trade
+  markers); manual-copilot dashboard with its "Acompanhar esta operação"
+  button; beginner first-run flow.
+- Installable PWA panel with real Web Push (VAPID): per-device
+  subscriptions, a minimal service worker that never caches authenticated
+  pages, and automatic pruning of expired subscriptions.
+- Cycle decision: every cycle publishes OPERAR / AGUARDAR / BLOQUEAR /
+  SUSPENDER with its reason; volatility/Sharpe/Sortino are omitted with an
+  explicit motive below the minimum sample instead of being fabricated.
+- Windows notification identity (AUMID) with honest mode labels:
+  [SIMULADO (PAPER)] / [TESTNET] / [REAL (LIVE)].
+- Brand identity: the original logo preserved byte-for-byte with a
+  reproducible asset generator (plus a separate symbol for icon/favicon),
+  premium login, palette applied across panel/site/floor, multi-size
+  Windows icon, and a PWA manifest.
+
+### Fixed
+
+- Launcher died silently on double-click in console-less builds: uvicorn's
+  logging called `sys.stdout.isatty()` with `stdout=None` before any port
+  bind. The launcher now pre-checks ports 8000–8010 with fallback, keeps a
+  persistent `launcher.log`, and marks health at `/healthz`.
+- The two AI context-consultation paths called client methods that never
+  existed — the context AI had never worked in production. Both now go
+  through one verified call.
+- Duplicate alerts: the same alert could be delivered twice by concurrent
+  threads sharing a tenant queue; dispatch is now serialized per queue.
+- Lost-response reconciliation: an order whose acknowledgment was lost was
+  marked absent while still alive at the broker; reconciliation now keys on
+  the broker's own order identity.
+- Panel structure defects found by geometry probing: an orphan `div` pushed
+  `<main>` behind the sidebar; the Floor iframe was blocked by
+  `frame-ancestors 'none'` CSP — both fixed with regression pins.
+- Truthfulness defects found in browser homologation: a toast reporting a
+  dictionary length, a language option that did not exist, and 15–49 px
+  overflow in preset 320 px layouts.
+
+### Security
+
+- Real-money trading is fail-closed: the desk refuses LIVE without the code
+  seal, the kill switch and the owner/account/strategy/limit gates —
+  proven by an adversarial matrix, not by intention.
+- API secrets at rest are encrypted with DPAPI on Windows with verified
+  migration; CI enforces secret scanning, dependency audit and SBOM, with
+  checksummed artifacts.
+- Alert webhooks reject unauthorized deliveries (fail-closed 401).
 
 ## [0.4.0] — 2026-08-31
 
