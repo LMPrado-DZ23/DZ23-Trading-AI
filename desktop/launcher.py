@@ -27,6 +27,7 @@ Contrato com o INSTALADOR (atualização no Windows):
 
 from __future__ import annotations
 
+import contextlib
 import ctypes
 import json
 import logging
@@ -471,9 +472,20 @@ def show_startup_failed_dialog(porta: int, caminho_log: Path | None = None) -> N
     _mensagem_box("DZ23 Trading AI — falha ao iniciar", texto)
 
 
+def _definir_identidade_windows() -> None:
+    """AUMID do processo: janela/toasts agrupam sob 'DZ23 Trading AI' e as
+    notificações passam a ter nome próprio nas Configurações do Windows."""
+    if not _WINDOWS:
+        return
+    with contextlib.suppress(Exception):
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "DZ23 Trading AI")
+
+
 def main(argv: list[str] | None = None) -> int:
     from tradingagents.versao import versao_do_pacote
 
+    _definir_identidade_windows()
     host = "127.0.0.1"
     argumentos = list(sys.argv[1:] if argv is None else argv)
 

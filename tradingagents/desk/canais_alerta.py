@@ -16,6 +16,7 @@ Regras que valem para TODOS os canais:
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import time
 from datetime import datetime
@@ -23,6 +24,41 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 PAINEL_PADRAO = "http://127.0.0.1:8000/"
+
+# Identidade do app no Windows (AUMID). O valor já era usado no E2 (o
+# Windows criou 'Notifications\Settings\DZ23 Trading AI' ao exibir o
+# primeiro toast); o que faltava era o REGISTRO em Classes\AppUserModelId —
+# sem ele o app não aparece com nome próprio na lista de remetentes das
+# Configurações e o toast fica sem identidade gerenciável.
+AUMID = "DZ23 Trading AI"
+
+
+def registrar_identidade_windows(icone: str = "") -> dict:
+    """Registra HKCU\\Software\\Classes\\AppUserModelId\\<AUMID> (idempotente).
+
+    Mexe SOMENTE na chave do próprio app. DisplayName faz o toast sair com
+    nome nas Configurações do Windows; IconUri usa o exe instalado quando
+    existir. Nunca falha o chamador: devolve ok=False com o motivo.
+    """
+    if sys.platform != "win32":
+        return {"ok": False,
+                "detalhe": "identidade de toast é exclusiva do Windows"}
+    if not icone:
+        padrao = os.path.join(os.environ.get("LOCALAPPDATA", ""),
+                              "DZ23-Trading-AI", "DZ23-Trading-AI.exe")
+        icone = padrao if padrao and os.path.exists(padrao) else ""
+    try:
+        import winreg
+        with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER,
+                                f"Software\\Classes\\AppUserModelId\\{AUMID}",
+                                0, winreg.KEY_SET_VALUE) as chave:
+            winreg.SetValueEx(chave, "DisplayName", 0, winreg.REG_SZ, AUMID)
+            if icone:
+                winreg.SetValueEx(chave, "IconUri", 0, winreg.REG_SZ, icone)
+        return {"ok": True, "detalhe": f"identidade '{AUMID}' registrada"}
+    except Exception as exc:
+        return {"ok": False,
+                "detalhe": f"falha ao registrar identidade: {exc}"[:160]}
 
 _SCRIPT_TOAST = (
     "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI."
@@ -38,7 +74,7 @@ _SCRIPT_TOAST = (
     "$textos.Item(1).AppendChild($tpl.CreateTextNode('{corpo}')) | Out-Null; "
     "$toast = [Windows.UI.Notifications.ToastNotification]::new($tpl); "
     "[Windows.UI.Notifications.ToastNotificationManager]::"
-    "CreateToastNotifier('DZ23 Trading AI').Show($toast)")
+    "CreateToastNotifier('{aumid}').Show($toast)")
 
 
 def _ligado(cfg: dict, chave: str, padrao: bool = True) -> bool:
@@ -157,12 +193,13 @@ class CanalWindows(CanalBase):
     def _entregar(self, alerta, *, agora=None) -> dict:
         titulo = alerta.titulo.replace("'", "''")[:60]
         corpo = f"{alerta.detalhe} {alerta.acao}".replace("'", "''")[:120]
-        script = _SCRIPT_TOAST.format(titulo=titulo, corpo=corpo)
+        script = _SCRIPT_TOAST.format(titulo=titulo, corpo=corpo, aumid=AUMID)
         if self._executar is not None:
             self._executar(script)
             return {"ok": True, "detalhe": "executor de teste"}
         if sys.platform != "win32":
             return {"ok": False, "erro": "plataforma sem toast nativo"}
+        identidade = registrar_identidade_windows()
         import subprocess
         proc = subprocess.run(
             ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
@@ -170,7 +207,16 @@ class CanalWindows(CanalBase):
         if proc.returncode != 0:
             return {"ok": False,
                     "erro": (proc.stderr or "powershell falhou")[:160]}
-        return {"ok": True, "detalhe": "toast exibido"}
+        # Honestidade: sucesso aqui é entrega à API do Windows — NUNCA prova
+        # de que o dono viu. O texto reflete só o que foi provado.
+        if identidade["ok"]:
+            detalhe = (f"toast entregue à API do Windows sob a identidade "
+                       f"'{AUMID}' — a visualização depende do usuário "
+                       f"(Não Perturbe/notificações desligadas suprimem)")
+        else:
+            detalhe = ("toast entregue à API do Windows, mas a identidade "
+                       f"do app não foi registrada: {identidade['detalhe']}")
+        return {"ok": True, "detalhe": detalhe}
 
 
 class CanalDiscord(CanalBase):

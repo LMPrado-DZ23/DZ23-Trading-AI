@@ -67,8 +67,15 @@ Source: "backup_dados.ps1"; DestDir: "{tmp}"; Flags: dontcopy
 Type: filesandordirs; Name: "{app}\_internal"
 
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
-Name: "{userdesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"
+Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; AppUserModelID: "DZ23 Trading AI"
+Name: "{userdesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; AppUserModelID: "DZ23 Trading AI"
+
+[Registry]
+; Identidade do app no Windows (AUMID): sem este registro o toast sai sem
+; nome próprio e o app não aparece na lista de remetentes das Configurações
+; (achado N01 do dono). Só mexe na chave do PRÓPRIO DZ23.
+Root: HKCU; Subkey: "Software\Classes\AppUserModelId\DZ23 Trading AI"; ValueType: string; ValueName: "DisplayName"; ValueData: "DZ23 Trading AI"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\AppUserModelId\DZ23 Trading AI"; ValueType: string; ValueName: "IconUri"; ValueData: "{app}\{#AppExeName}"
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "Abrir o {#AppName}"; Flags: nowait postinstall skipifsilent

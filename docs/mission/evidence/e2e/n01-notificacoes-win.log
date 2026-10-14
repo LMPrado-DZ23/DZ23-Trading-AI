@@ -1,0 +1,13 @@
+04:01:01Z identidade alvo: AUMID='DZ23 Trading AI'
+04:01:01Z CHECA identidade_registrada: OK — identidade 'DZ23 Trading AI' registrada
+04:01:01Z CHECA aumid_display_name: OK
+04:01:01Z INFO icon_uri=C:\Users\DZ23\AppData\Local\DZ23-Trading-AI\DZ23-Trading-AI.exe
+04:01:01Z CHECA toast_1: OK — toast entregue à API do Windows sob a identidade 'DZ23 Trading AI' — a visualização depende do usuário (Não Perturbe/notificações desligadas
+04:01:01Z CHECA toast_2: OK — toast entregue à API do Windows sob a identidade 'DZ23 Trading AI' — a visualização depende do usuário (Não Perturbe/notificações desligadas
+04:01:02Z CHECA toast_3: OK — toast entregue à API do Windows sob a identidade 'DZ23 Trading AI' — a visualização depende do usuário (Não Perturbe/notificações desligadas
+04:01:02Z CHECA toast_4: OK — toast entregue à API do Windows sob a identidade 'DZ23 Trading AI' — a visualização depende do usuário (Não Perturbe/notificações desligadas
+04:01:02Z CHECA toast_5: OK — toast entregue à API do Windows sob a identidade 'DZ23 Trading AI' — a visualização depende do usuário (Não Perturbe/notificações desligadas
+04:01:03Z CHECA toast_novo_processo: OK — egue à API do Windows sob a identidade 'DZ23 Trading AI' — a visualização depende do usuário (Não Perturbe/notificações desligadas suprimem)
+04:01:03Z CHECA remetente_nas_configuracoes: OK — Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\DZ23 Trading AI
+RESULTADO=OK
+CHECAGENS=9/9

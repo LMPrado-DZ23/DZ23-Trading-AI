@@ -1857,12 +1857,43 @@ def _enfileirar_estado_da_mesa(tenant_id: str, alerta) -> None:
         dedupe_key=f"mesa:{alerta.codigo}")
 
 
+def _rotulo_modo_execucao(broker_mode: str) -> str:
+    """Rótulo HONESTO do modo: o alerta nunca pode sugerir corretora real
+    quando a ordem saiu da simulação (achado N01: o texto dizia 'executou
+    na corretora' para ordem PAPER)."""
+    modo = (broker_mode or "paper").strip().lower()
+    if modo == "live":
+        return "REAL (LIVE)"
+    if modo == "testnet":
+        return "TESTNET (sem dinheiro real)"
+    return "SIMULADO (PAPER)"
+
+
+def montar_alerta_entrada(ordem_id: str, broker_mode: str) -> dict:
+    """Texto do alerta de entrada conforme o MODO REAL da ordem."""
+    modo = (broker_mode or "paper").strip().lower()
+    if modo == "live":
+        detalhe = "Ordem de compra executada na corretora REAL (LIVE)."
+    elif modo == "testnet":
+        detalhe = ("Ordem de compra executada no TESTNET da corretora — "
+                   "ambiente de teste, sem dinheiro real.")
+    else:
+        detalhe = ("Ordem de compra executada na SIMULAÇÃO (paper) — "
+                   "não foi enviada à corretora real.")
+    return {"titulo": (f"[{_rotulo_modo_execucao(modo)}] "
+                       f"Entrada confirmada: {ordem_id}"),
+            "detalhe": detalhe,
+            "acao": "A posição já aparece no gerente de saída global."}
+
+
 def _alertas_do_ciclo(tenant_id: str, out: dict) -> None:
     """E2.5: saídas executadas e entradas confirmadas viram alerta."""
     from datetime import timedelta as _td
 
     from tradingagents.desk.models import utcnow
     fila = _fila_alertas(tenant_id)
+    modo = str((_DESKS.get(tenant_id) or {}).get("broker_mode") or "paper")
+    rotulo = _rotulo_modo_execucao(modo)
     for enc in out.get("encerradas", []) or []:
         if enc.get("estado") != "filled":
             continue
@@ -1871,7 +1902,7 @@ def _alertas_do_ciclo(tenant_id: str, out: dict) -> None:
         tipo = "stop_atingido" if "STOP" in code.upper() else "saida_executada"
         fila.enfileirar(
             tipo=tipo, severidade="atencao",
-            titulo=f"Saída executada: {enc.get('instrumento', '?')}",
+            titulo=f"[{rotulo}] Saída executada: {enc.get('instrumento', '?')}",
             detalhe=(f"quantidade {enc.get('quantidade', '?')} a "
                      f"{enc.get('preco', '?')}" + (f" — {motivo}" if motivo else "")),
             acao="Confira a posição na aba Mesa de Agentes.",
@@ -1884,11 +1915,11 @@ def _alertas_do_ciclo(tenant_id: str, out: dict) -> None:
     for o in out.get("ordens", []) or []:
         if o.get("estado") != "filled":
             continue
+        aviso = montar_alerta_entrada(str(o.get("ordem", "")), modo)
         fila.enfileirar(
             tipo="confirmacao_entrada", severidade="informativo",
-            titulo=f"Entrada confirmada: {o.get('ordem', '')}",
-            detalhe="A ordem de compra executou na corretora.",
-            acao="A posição já aparece no gerente de saída global.",
+            titulo=aviso["titulo"], detalhe=aviso["detalhe"],
+            acao=aviso["acao"],
             fonte="mesa", dedupe_key=f"entrada:{o.get('ordem')}",
             validade=utcnow() + _td(hours=12))
 
