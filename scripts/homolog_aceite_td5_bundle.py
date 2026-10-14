@@ -5,7 +5,11 @@ instalado") e §13 ("Utilizar ambientes isolados"): este harness extrai o
 `DZ23-Trading-AI-windows-x64.zip` do artefato, sobe o exe com um APPDATA
 DESCARTÁVEL (nunca toca em %APPDATA%\DZ23-Trading-AI do dono), cria a senha
 do dono pelo assistente de primeira execução (mesmo caminho do proprietário)
-e roda a MESMA matriz `tests/e2e/test_aceite_td5.py` com navegador real.
+e roda as MESMAS matrizes `tests/e2e/test_aceite_td5.py` (TD-5) e
+`tests/e2e/test_fm6_app_isolado.py` (FM-6 §11) com navegador real — e, ao
+final, prova "Reinício e recuperação" (§11) no exe: encerra pelo caminho de
+produção e sobe de novo com o MESMO APPDATA, conferindo que o assistente não
+volta e que os dados (posições do copiloto) sobrevivem.
 
 Segurança (não negociável):
 - Se QUALQUER instância DZ23 já respondia na faixa 8000–8010 ANTES do boot,
@@ -119,7 +123,7 @@ def espera_healthz(proc: subprocess.Popen, segundos: float) -> str | None:
 
 
 def roda_pytest(base: str, senha: str, evidencias: Path) -> None:
-    """Roda a matriz de aceite contra o bundle e cobra o placar EXATO.
+    """Roda as DUAS matrizes de aceite contra o bundle e cobra o placar EXATO.
 
     Skip silencioso é falha (§16: não ocultar falhas usando skip): o placar
     de coletados vem do próprio pytest e o de aprovados tem de bater.
@@ -134,7 +138,7 @@ def roda_pytest(base: str, senha: str, evidencias: Path) -> None:
             "PYTHONUNBUFFERED": "1",
         }
     )
-    alvo = "tests/e2e/test_aceite_td5.py"
+    alvos = ["tests/e2e/test_aceite_td5.py", "tests/e2e/test_fm6_app_isolado.py"]
 
     # Ferramentas do próprio ambiente do harness: falha aqui precisa dized
     # o QUE falta (um pytest ausente coletava 0 e parecia "nenhum teste").
@@ -148,7 +152,7 @@ def roda_pytest(base: str, senha: str, evidencias: Path) -> None:
               pronto.stderr.decode("utf-8", "replace").strip()[-200:])
 
     coleta = subprocess.run(
-        [sys.executable, "-m", "pytest", alvo, "--collect-only", "-q",
+        [sys.executable, "-m", "pytest", *alvos, "--collect-only", "-q",
          "-p", "no:cacheprovider"],
         cwd=str(REPO_ROOT), env=env, capture_output=True, text=True,
         encoding="utf-8", errors="replace", timeout=600,
@@ -164,7 +168,7 @@ def roda_pytest(base: str, senha: str, evidencias: Path) -> None:
 
     inicio = time.time()
     prova = subprocess.run(
-        [sys.executable, "-m", "pytest", alvo, "-v", "-p", "no:cacheprovider"],
+        [sys.executable, "-m", "pytest", *alvos, "-v", "-p", "no:cacheprovider"],
         cwd=str(REPO_ROOT), env=env, capture_output=True, text=True,
         encoding="utf-8", errors="replace", timeout=1800,
     )
@@ -183,6 +187,66 @@ def roda_pytest(base: str, senha: str, evidencias: Path) -> None:
         aprovados == coletados and not ocultos and prova.returncode == 0,
         "" if aprovados == coletados else "placar divergente (falha/skip oculto?)",
     )
+
+
+def verifica_reinicio(base: str, senha: str, exe: Path, temp: Path,
+                      proc: subprocess.Popen):
+    """§11 "Reinício e recuperação" — no exe REAL, com o MESMO APPDATA.
+
+    Encerra pelo caminho de produção, sobe de novo e confere que: o
+    assistente NÃO volta (a senha persistiu), o login continua valendo e os
+    dados do copiloto (posições registradas pelo aceite) sobrevivem ao
+    reinício. Devolve (proc_novo, base_nova) — base_nova None se alguma
+    etapa falhou (o proc devolvido é o que está vivo, para a limpeza).
+    """
+    status, antes = req(f"{base}/v1/manual/positions", bearer=senha)
+    instrumentos_antes = sorted(
+        str(p.get("instrumento", "")) for p in (antes.get("posicoes") or []))
+    total_antes = int((antes.get("resumo") or {}).get("total", -1))
+    checa("reinício: posições legíveis ANTES do encerramento",
+          status == 200 and total_antes >= 1,
+          f"HTTP {status} total={total_antes} antes={instrumentos_antes}")
+
+    status, _ = req(f"{base}/v1/app/quit", "POST", {}, bearer=senha)
+    checa("reinício: encerramento pelo caminho real responde 200",
+          status == 200, f"HTTP {status}")
+    try:
+        codigo = proc.wait(timeout=40)
+        checa("reinício: launcher encerra sozinho (exit 0)", codigo == 0,
+              f"exit={codigo}")
+    except subprocess.TimeoutExpired:
+        checa("reinício: launcher encerra sozinho (exit 0)", False,
+              "seguia vivo após 40s")
+        return proc, None
+
+    env = dict(os.environ)
+    env.pop("ACCESS_PASSWORD", None)
+    env["APPDATA"] = str(temp)  # o MESMO APPDATA: a persistência está em prova
+    novo = subprocess.Popen(
+        [str(exe)], cwd=str(exe.parent), env=env,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    t0 = time.time()
+    nova_base = espera_healthz(novo, 120)
+    checa("reinício: sobe de novo com o mesmo APPDATA",
+          nova_base is not None,
+          f"base={nova_base} em {round(time.time() - t0, 1)}s")
+    if not nova_base:
+        return novo, None
+
+    status, estado = req(f"{nova_base}/v1/auth/status")
+    checa("reinício: assistente NÃO volta (setup_required=false)",
+          status == 200 and estado.get("setup_required") is False,
+          f"HTTP {status} setup_required={estado.get('setup_required')}")
+
+    status, depois = req(f"{nova_base}/v1/manual/positions", bearer=senha)
+    instrumentos_depois = sorted(
+        str(p.get("instrumento", "")) for p in (depois.get("posicoes") or []))
+    checa("reinício: login antigo continua valendo e posições sobrevivem",
+          status == 200 and instrumentos_depois == instrumentos_antes,
+          f"HTTP {status} antes={instrumentos_antes} depois={instrumentos_depois}")
+
+    return novo, nova_base
 
 
 def main() -> int:
@@ -243,17 +307,26 @@ def main() -> int:
 
         roda_pytest(base, args.senha, evidencias)
 
-        status, _ = req(f"{base}/v1/app/quit", "POST", {}, bearer=args.senha)
-        checa("POST /v1/app/quit responde 200 (caminho de encerramento real)",
-              status == 200, f"HTTP {status}")
-        try:
-            codigo = proc.wait(timeout=40)
-            checa("launcher encerra sozinho (exit 0)", codigo == 0, f"exit={codigo}")
-        except subprocess.TimeoutExpired:
-            checa("launcher encerra sozinho (exit 0)", False, "seguia vivo após 40s")
-        porta_efetiva = int(base.rsplit(":", 1)[1])
-        checa("porta efetiva liberada após o encerramento",
-              not porta_aceita(porta_efetiva))
+        # §11 "Reinício e recuperação": encerramento do 1º ciclo + 2º boot
+        # com o mesmo APPDATA acontecem dentro do verificador.
+        proc, base_reinicio = verifica_reinicio(base, args.senha, exe, temp, proc)
+
+        if proc is not None and proc.poll() is None and base_reinicio:
+            status, _ = req(f"{base_reinicio}/v1/app/quit", "POST", {},
+                            bearer=args.senha)
+            checa("POST /v1/app/quit responde 200 (caminho de encerramento real)",
+                  status == 200, f"HTTP {status}")
+            try:
+                codigo = proc.wait(timeout=40)
+                checa("launcher encerra sozinho (exit 0)", codigo == 0, f"exit={codigo}")
+            except subprocess.TimeoutExpired:
+                checa("launcher encerra sozinho (exit 0)", False, "seguia vivo após 40s")
+            porta_efetiva = int(base_reinicio.rsplit(":", 1)[1])
+            checa("porta efetiva liberada após o encerramento",
+                  not porta_aceita(porta_efetiva))
+        elif base_reinicio is None:
+            checa("encerramento final pelo caminho real", False,
+                  "reinício não completou — encerramento final não pôde rodar")
     finally:
         if proc is not None and proc.poll() is None:
             # Emergência: mata SÓ o PID desta instância isolada.

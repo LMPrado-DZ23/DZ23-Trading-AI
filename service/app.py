@@ -2890,10 +2890,9 @@ def _decisao_da_mesa(d) -> dict:
     posse = d["posse"].resumo()
     coord, led = d["coordinator"], d["ledger"]
     perda = Decimal("0")
-    try:
+    with contextlib.suppress(Exception):
+        # freio indisponível: não inventa perda
         perda = Decimal(str(coord.estado_do_dia().get("perda_do_dia") or "0"))
-    except Exception:
-        pass                       # freio indisponível: não inventa perda
     ponte = getattr(coord.broker, "bridge", None)
     limite = getattr(ponte, "max_daily_loss", None) or Decimal("0")
     return decidir_do_ciclo(
