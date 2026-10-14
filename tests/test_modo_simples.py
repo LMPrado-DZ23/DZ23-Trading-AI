@@ -156,6 +156,50 @@ class TestSegurancaVisivelNoModoSimples:
             "dados vencidos/inconsistentes: a mesa recusa e avisa — dito na tela")
 
 
+class TestCapacidadesVisiveisNoModoSimples:
+    """Missão §1 (auditoria funcional): o Simples mostra uma visão das
+    principais capacidades com estado HONESTO (os quatro estados exatos) e
+    caminho clicável para TODAS as telas — nada escondido por acidente."""
+
+    def test_card_de_capacidades_na_pagina_inicio(self):
+        pagina = _pagina_inicio(_html())
+        assert 'id="capacidadesLista"' in pagina, (
+            "card de capacidades ausente no Início")
+        for estado in ("disponível", "configuração necessária",
+                       "bloqueado por segurança", "ainda não implementado"):
+            assert estado in pagina, (
+                f"estado {estado!r} não apresentado na tela")
+
+    def test_abrir_troca_para_avancado_quando_a_tela_esta_oculta(self):
+        html = _html()
+        trecho = _trecho(html, "function abrirPagina(", tam=400)
+        assert "PAGINAS_SIMPLES.includes(id)" in trecho, (
+            "abrirPagina precisa saber quais telas o Simples já mostra")
+        assert "uiModoSet('avancado')" in trecho, (
+            "telas ocultas no Simples precisam de acesso em um clique")
+        assert "showPage(id)" in trecho, "abrirPagina precisa navegar de fato"
+
+    def test_capacidades_derivam_de_fontes_reais_e_levam_a_cada_tela(self):
+        html = _html()
+        trecho = _trecho(html, "async function capacidadesLoad(", tam=3600)
+        assert "'/v1/config'" in trecho, (
+            "estado das capacidades precisa vir da configuração real")
+        assert "'/v1/status/operacao'" in trecho, (
+            "o bloqueio do dinheiro real precisa vir do servidor")
+        assert "escapeHtml(" in trecho, (
+            "dados do servidor precisam passar por escapamento")
+        for alvo in ("'mesa'", "'analysis'", "'manual'", "'risk'", "'floor'",
+                     "'config'"):
+            assert alvo in trecho, f"capacidade sem caminho para {alvo}"
+
+    def test_bloqueio_do_live_vem_do_servidor_nao_de_selo_fixo(self):
+        html = _html()
+        trecho = _trecho(html, "async function capacidadesLoad(", tam=3600)
+        assert "bloqueado por segurança" in trecho
+        assert "operacao_real" in trecho, (
+            "o motivo do bloqueio do LIVE precisa vir de /v1/status/operacao")
+
+
 class TestConectarModoPlayFiacaoReal:
     def test_play_e_parar_usam_as_mesmas_rotas_da_mesa(self):
         html = _html()

@@ -412,6 +412,23 @@ def test_modo_simples_assistente_conectar_modo_play(page, live_server, owner_pas
     page.locator("#btnInicioParar").click()
     expect(page.locator("#iniMesaEstado")).to_contain_text("PARADA", timeout=15000)
 
+    # §1 da missão de auditoria funcional: o Simples mostra as capacidades
+    # com estado honesto (4 estados) e acesso de UM CLIQUE a todas as telas —
+    # telas ocultas no Simples abrem ligando o Avançado, nada escondido.
+    caps = page.locator("#capacidadesLista")
+    expect(caps).to_contain_text("disponível", timeout=15000)
+    expect(caps).to_contain_text("configuração necessária")
+    expect(caps).to_contain_text("bloqueado por segurança")
+    expect(caps).to_contain_text("ainda não implementado")
+    page.locator("#capacidadesLista").scroll_into_view_if_needed()
+    page.screenshot(path=str(evidence_dir / "09b-inicio-capacidades.png"))
+    page.locator('[data-abrir="mesa"]').first.click()
+    expect(page.locator("#page-mesa")).to_have_class(re.compile(r"\bactive\b"))
+    assert page.evaluate("localStorage.getItem('dz23_ui_modo')") == "avancado"
+    page.select_option("#uiModo", "simples")
+    expect(page.locator("#pageTitle")).to_have_text("Início")
+    expect(page.locator("#sideNav button")).to_have_count(3)
+
     # Avançado mostra TODAS as páginas; o Simples continua acessível
     modo_avancado(page)
     expect(page.locator("#sideNav button")).to_have_count(len(PAGINAS))
@@ -423,3 +440,51 @@ def test_modo_simples_assistente_conectar_modo_play(page, live_server, owner_pas
 
     # A escolha é preferência do aparelho (localStorage), nunca do servidor
     assert page.evaluate("localStorage.getItem('dz23_ui_modo')") == "simples"
+
+
+def test_fm3_corretora_catalogo_capacidades_e_preparo_real(page, live_server, owner_password, evidence_dir):
+    # FM-3 (§3+§4): a tela mostra o catálogo real, as capacidades anunciadas
+    # SEM credenciais e SEM rede, a reconciliação e a preparação para REAL —
+    # visível, verificável e BLOQUEADA (nada aqui ativa dinheiro real).
+    entrar_como_dono(page, live_server, owner_password)
+
+    # §4 — preparação: checklist do servidor, com o bloqueio dito de frente
+    page.locator("#preparoRealCard").scroll_into_view_if_needed()
+    page.get_by_role("button", name=re.compile("Ver preparação")).click()
+    prep = page.locator("#preparoReal")
+    expect(prep).to_contain_text("BLOQUEADO", timeout=15000)
+    expect(prep).to_contain_text("Frase de autorização digitada")
+    expect(prep).to_contain_text("Liberação de código para operar dinheiro real")
+    expect(prep).to_contain_text("Indisponível neste lançamento")
+    expect(prep).to_contain_text("NÃO ativa nada")
+    page.screenshot(path=str(evidence_dir / "09c-fm3-preparo-real.png"))
+
+    # §3 — catálogo e capacidades na tela de corretora (Modo Avançado)
+    modo_avancado(page)
+    page.locator('[data-page="config"]').first.click()
+    expect(page.locator("#pageTitle")).to_have_text("Configuração")
+    page.get_by_role("button", name=re.compile("Catálogo e capacidades")).click()
+    cat = page.locator("#brokerCatalogo")
+    expect(cat).to_contain_text("Salas fixas", timeout=15000)
+    expect(cat).to_contain_text("Binance")
+    expect(cat).to_contain_text("planejada, não validada")
+    expect(cat).to_contain_text("desligada")
+    page.screenshot(path=str(evidence_dir / "09d-fm3-catalogo.png"))
+
+    # Capacidades do primeiro adaptador instalado: anúncio local, não teste
+    cat.locator("button", has_text="Capacidades").first.click()
+    det = page.locator("#brokerDetalhe")
+    expect(det).to_contain_text("sem credenciais e sem rede", timeout=15000)
+    expect(det).to_contain_text("UNVERIFIED")
+    expect(det).to_contain_text("verificado: não")
+
+    # Reconciliação: relatório real do portão (FECHADO sem acesso à corretora)
+    page.get_by_role("button", name="Reconciliar com a corretora").click()
+    expect(det).to_contain_text("Reconciliação com a corretora", timeout=15000)
+    expect(det).to_contain_text(re.compile(r"portão: (LIBERADO|FECHADO)"))
+    expect(det).to_contain_text("ordens conferidas")
+    page.screenshot(path=str(evidence_dir / "09e-fm3-reconciliacao.png"))
+
+    # A escolha do modo é do aparelho — devolve ao Simples ao final
+    page.select_option("#uiModo", "simples")
+    expect(page.locator("#pageTitle")).to_have_text("Início")
