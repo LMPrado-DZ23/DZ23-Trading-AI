@@ -24,7 +24,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from service.api import diagnostics, security_center
+from service.api import diagnostics, security_center, segredos_em_repouso
 from service.api.owner_credentials import CredenciaisDoDono, erro_de_senha
 from tradingagents.agency import AgencyTask, build_llm_handler
 from tradingagents.agency.store import AgencyTaskStore
@@ -642,6 +642,60 @@ def tenant_cfg_path(tenant_id: str = "legacy") -> Path:
     return path
 
 
+# Segredo cifrado que não pôde ser decifrado NESTE contexto (outro usuário
+# do Windows, outra máquina, blob corrompido). Fica registrado por inquilino
+# para o painel contar a verdade — e o valor permanece no arquivo: perder
+# credencial por falha de leitura é pior que o próprio risco.
+_SEGREDOS_ILEGIVEIS: dict[str, dict[str, str]] = {}
+
+
+def _segredos_do_disco(do_disco: dict, tenant_id: str, path: Path) -> None:
+    """Decifra o que der, migra texto claro legado — sem perder nada.
+
+    1) Valor cifrado: decifra em memória; ilegível fica registrado e INTACTO.
+    2) Valor em texto claro no arquivo (config anterior à cifragem): com
+       proteção disponível, reescreve o arquivo com os segredos cifrados —
+       a verificação de ida-e-volta acontece ANTES de tocar o disco; falhou,
+       o arquivo não é tocado e a migração é retentada no próximo uso.
+       No POSIX não há o que migrar: o 0600 do arquivo é a proteção real.
+    """
+    registry = _SEGREDOS_ILEGIVEIS.setdefault(tenant_id, {})
+    if segredos_em_repouso.tem_protecao():
+        migrados = {}
+        for chave in SECRETish:
+            valor = do_disco.get(chave)
+            if (isinstance(valor, str) and valor
+                    and not segredos_em_repouso.e_cifrado(valor)):
+                try:
+                    migrados[chave] = segredos_em_repouso.cifrar(valor)
+                except segredos_em_repouso.SegredoIlegivel:
+                    migrados = {}
+                    break        # verificação falhou: NÃO gravar nada
+        if migrados:
+            try:
+                materializado = {**do_disco, **migrados}
+                escrever_json_atomico(path, materializado)
+                os.chmod(path, 0o600)
+                do_disco.update(migrados)
+                LOGGER.info("segredos em repouso migrados para cifrado (%s)",
+                            tenant_id)
+            except Exception as exc:
+                # arquivo intocado: o texto claro continua legível e a
+                # migração é retentada no próximo uso
+                LOGGER.warning("migração de segredos falhou (%s): %s",
+                               tenant_id, type(exc).__name__)
+    for chave in SECRETish:
+        valor = do_disco.get(chave)
+        if not segredos_em_repouso.e_cifrado(valor):
+            continue
+        try:
+            do_disco[chave] = segredos_em_repouso.decifrar(valor)
+            registry.pop(chave, None)
+        except segredos_em_repouso.SegredoIlegivel as exc:
+            registry[chave] = str(exc)   # valor fica como está no arquivo
+            LOGGER.warning("segredo %s ilegível neste contexto", chave)
+
+
 def load_cfg(tenant_id: str = "legacy") -> dict:
     # Em multi-tenant, variáveis de ambiente NÃO servem de configuração
     # padrão: senão a chave de IA do servidor (ou de um inquilino que mexeu
@@ -654,7 +708,10 @@ def load_cfg(tenant_id: str = "legacy") -> dict:
     path = tenant_cfg_path(tenant_id)
     if path.exists():
         with contextlib.suppress(ValueError):
-            cfg.update(json.loads(path.read_text()))
+            do_disco = json.loads(path.read_text())
+            if isinstance(do_disco, dict):
+                _segredos_do_disco(do_disco, tenant_id, path)
+                cfg.update(do_disco)
     return cfg
 
 
@@ -732,7 +789,17 @@ def configure_agency_llm(runtime, tenant_id: str) -> str | None:
 
 def save_cfg(cfg: dict, tenant_id: str = "legacy"):
     path = tenant_cfg_path(tenant_id)
-    escrever_json_atomico(path, cfg)
+    # Segredo vai CIFRADO para o disco (SEC-1 da auditoria: chmod 0600 sozinho
+    # não protege no Windows). Valor já cifrado passa intacto — nunca cifrar
+    # de novo, nunca tratar um token ilegível como ausente. Falha de cifragem
+    # (com verificação de ida-e-volta) ABORTA o save: nada é gravado em claro.
+    para_disco = dict(cfg)
+    for chave in SECRETish:
+        valor = para_disco.get(chave)
+        if (isinstance(valor, str) and valor
+                and not segredos_em_repouso.e_cifrado(valor)):
+            para_disco[chave] = segredos_em_repouso.cifrar(valor)
+    escrever_json_atomico(path, para_disco)
     os.chmod(path, 0o600)
 
 
@@ -893,17 +960,23 @@ def manifest():
 
 @app.get("/v1/config")
 def get_cfg(request: Request, _=Depends(auth)):
-    cfg = load_cfg(request_tenant(request))
+    tenant = request_tenant(request)
+    cfg = load_cfg(tenant)
+    ilegiveis = _SEGREDOS_ILEGIVEIS.get(tenant, {})
     out = {}
     for k in ALLOWED_KEYS:
         v = cfg.get(k, "")
         if not v:
             out[k] = {"set": False}
         elif k in SECRETish:
-            out[k] = {"set": True, "hint": "•••" + str(v)[-4:]}
+            out[k] = {"set": True,
+                      "hint": ("ilegível neste contexto — re-colar substitui"
+                               if k in ilegiveis else "•••" + str(v)[-4:])}
         else:
             out[k] = {"set": True, "value": v}
-    return {"config": out}
+    return {"config": out,
+            "segredos_em_repouso": {**segredos_em_repouso.status(),
+                                    "ilegiveis": dict(ilegiveis)}}
 
 @app.post("/v1/config")
 async def set_cfg(req: Request, _=Depends(auth)):
