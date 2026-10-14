@@ -39,6 +39,20 @@ function Hash-Sha256([string]$Caminho) {
   return (Get-FileHash -LiteralPath $Caminho -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 
+# O log do instalador fica AO LADO dos backups — inclusive em FALHA. A
+# mensagem do instalador promete "detalhes em %APPDATA%\...-backups"; sem
+# isto, a falha morria junto com o arquivo temporario do Inno.
+function Gravar-LogNoDestino([string]$Sufixo) {
+  try {
+    New-Item -ItemType Directory -Path $DestinoBase -Force | Out-Null
+    $stampLog = (Get-Date).ToString('yyyyMMdd-HHmmss')
+    $arquivo = Join-Path $DestinoBase "instalador-backup-$stampLog.$Sufixo.log"
+    [System.IO.File]::WriteAllLines($arquivo, $script:LINHAS,
+      (New-Object System.Text.UTF8Encoding($false)))
+    return $arquivo
+  } catch { return '' }
+}
+
 function Caminho-Relativo([string]$Raiz, [string]$Completo) {
   $rel = $Completo.Substring($Raiz.Length + 1)
   return $rel.Replace('\', '/')
@@ -70,6 +84,7 @@ try {
     if (-not (Test-Path -LiteralPath $copia)) {
       Add-Linha 'RESULTADO=FALHOU'
       Add-Linha ('MOTIVO=ARQUIVO_FALTANDO:' + $rel)
+      Gravar-LogNoDestino 'FALHA' | Out-Null
       Encerrar 2
     }
     $hOrigem = Hash-Sha256 $f.FullName
@@ -77,6 +92,7 @@ try {
     if ($hOrigem -ne $hCopia) {
       Add-Linha 'RESULTADO=FALHOU'
       Add-Linha ('MOTIVO=HASH_DIVERGENTE:' + $rel)
+      Gravar-LogNoDestino 'FALHA' | Out-Null
       Encerrar 2
     }
     $linhasManifest.Add("$hOrigem *$rel") | Out-Null
@@ -109,10 +125,8 @@ try {
   Add-Linha ('ARQUIVOS=' + $arquivos.Count)
   Add-Linha ('BYTES=' + $totalBytes)
 
-  # Log proprio do instalador, ao lado dos backups.
-  New-Item -ItemType Directory -Path $DestinoBase -Force | Out-Null
-  [System.IO.File]::WriteAllLines((Join-Path $DestinoBase "instalador-backup-$stamp.log"),
-    $script:LINHAS, (New-Object System.Text.UTF8Encoding($false)))
+  # Log proprio do instalador, ao lado dos backups (tambem em FALHA).
+  Gravar-LogNoDestino 'OK' | Out-Null
 
   Write-Saida
   exit 0
@@ -123,5 +137,6 @@ try {
     # Backup incompleto nao pode parecer valido.
     Remove-Item -LiteralPath $destino -Recurse -Force -ErrorAction SilentlyContinue
   }
+  Gravar-LogNoDestino 'FALHA' | Out-Null
   Encerrar 2
 }

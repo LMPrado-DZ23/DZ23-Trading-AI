@@ -261,6 +261,8 @@ begin
   Linhas := LerLinhas(Saida);
   Resultado := ValorEm(Linhas, 'RESULTADO');
   GravarStatus('BACKUP=' + Resultado);
+  if ValorEm(Linhas, 'MOTIVO') <> '' then
+    GravarStatus('BACKUP_MOTIVO=' + ValorEm(Linhas, 'MOTIVO'));
   if ValorEm(Linhas, 'DESTINO') <> '' then
     GravarStatus('BACKUP_DESTINO=' + ValorEm(Linhas, 'DESTINO'));
   Result := (Resultado = 'OK') or (Resultado = 'SEM_DADOS');

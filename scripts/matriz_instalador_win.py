@@ -36,6 +36,7 @@ A matriz destrutiva so roda em ambiente que ela mesma criou do zero.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -215,14 +216,25 @@ def fecha_pelo_painel(base: str) -> int:
     return status
 
 
-def cli_quit() -> int:
-    r = subprocess.run([str(EXE_APP), "--quit"], capture_output=True, timeout=120)
-    return r.returncode
+def cli_quit() -> int | None:
+    """Cli do app. Timeout = binario antigo sem contrato --quit (inicia a app
+    inteira e nunca sai): limpa o DZ23 e retorna None — a checagem falha com
+    honestidade e a matriz NAO trava 120s por cenario."""
+    try:
+        r = subprocess.run([str(EXE_APP), "--quit"], capture_output=True, timeout=120)
+        return r.returncode
+    except subprocess.TimeoutExpired:
+        encerra_dz23_limpeza()
+        return None
 
 
-def cli_version() -> int:
-    r = subprocess.run([str(EXE_APP), "--version"], capture_output=True, timeout=120)
-    return r.returncode
+def cli_version() -> int | None:
+    try:
+        r = subprocess.run([str(EXE_APP), "--version"], capture_output=True, timeout=120)
+        return r.returncode
+    except subprocess.TimeoutExpired:
+        encerra_dz23_limpeza()
+        return None
 
 
 def info_versao_exe(exe: Path) -> str:
@@ -231,8 +243,11 @@ def info_versao_exe(exe: Path) -> str:
         f"$i=(Get-Item -LiteralPath '{exe}').VersionInfo; "
         "Write-Output ($i.FileVersion + '|' + $i.ProductVersion + '|' + $i.CompanyName)",
     ]
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
-    return (r.stdout or "").strip()
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+        return (r.stdout or "").strip()
+    except subprocess.TimeoutExpired:
+        return "TIMEOUT"
 
 
 def encerra_dz23_limpeza(p: subprocess.Popen | None = None) -> None:
@@ -334,10 +349,17 @@ def roda_setup(exe: Path, rotulo: str, extra: list[str] | None = None) -> tuple:
         f"/LOG={log_path}", f"/DZ23STATUS={status_path}",
     ]
     args += extra or []
-    r = subprocess.run(args, capture_output=True, timeout=1800)
+    try:
+        r = subprocess.run(args, capture_output=True, timeout=1800)
+        codigo = r.returncode
+    except subprocess.TimeoutExpired:
+        # Setup pendurado nao pode derrubar a matriz inteira: encerra o
+        # instalador e segue — a checagem de exit reporta o timeout.
+        subprocess.run(["taskkill", "/IM", exe.name, "/F"], capture_output=True)
+        codigo = None
     st = le_status(status_path)
-    grava_json(f"{rotulo}.telemetria.json", {"exit": r.returncode, **st})
-    return r.returncode, st
+    grava_json(f"{rotulo}.telemetria.json", {"exit": codigo, **st})
+    return codigo, st
 
 
 def roda_uninstall() -> int:
@@ -355,8 +377,9 @@ def roda_ps(script: Path, argumentos: list[str], rotulo: str) -> dict:
     saida = EVID / f"{rotulo}.ps.txt"
     cmd = ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
            "-File", str(script)] + argumentos + ["-SaidaArquivo", str(saida)]
-    subprocess.run(cmd, capture_output=True, timeout=900)
-    return le_status(saida)
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        subprocess.run(cmd, capture_output=True, timeout=900)
+    return le_status(saida)  # timeout: a saida parcial decide pelo conteudo
 
 
 # ---------------------------------------------------------------------------
@@ -419,6 +442,18 @@ def lista_backups() -> list[str]:
         return []
     return sorted(p.name for p in DIR_BACKUPS.iterdir()
                   if p.is_dir() and p.name.startswith("pre-upgrade-"))
+
+
+def copia_logs_backup(rotulo: str) -> None:
+    """Copia para a evidencia os logs que o instalador grava AO LADO dos
+    backups — inclusive os de FALHA (a mensagem do instalador os promete; a
+    evidencia precisa sobreviver ao runner efemero)."""
+    if not DIR_BACKUPS.exists():
+        return
+    EVID.mkdir(parents=True, exist_ok=True)
+    for log in sorted(DIR_BACKUPS.glob("instalador-backup-*.log*")):
+        with contextlib.suppress(OSError):
+            shutil.copy2(log, EVID / f"{rotulo}-{log.name}")
 
 
 def backup_mais_recente() -> Path | None:
@@ -555,6 +590,7 @@ def c3_upgrade_preserva_dados(setup_novo: Path, versao_nova: str) -> str | None:
 
     codigo, st = roda_setup(setup_novo, "c3-upgrade")
     chaves = st["chaves"]
+    copia_logs_backup("c3-upgrade")
     checa("C3: atualizacao conclui (exit 0)", codigo == 0, f"exit={codigo}")
     checa("C3: cenario ATUALIZACAO", chaves.get("CENARIO") == "ATUALIZACAO",
           str(chaves.get("CENARIO")))
@@ -603,6 +639,14 @@ def c3_upgrade_preserva_dados(setup_novo: Path, versao_nova: str) -> str | None:
 
 
 def c4_app_novo_funcional(versao_nova: str) -> None:
+    # Pre-condicao: sem a versao nova instalada (C3 abortou), o exe antigo
+    # nem entende --quit — sem esta guarda a matriz inteira travava 120s
+    # por cenario e morria em cascata.
+    reg = le_registro() or {}
+    if reg.get("display_version") != versao_nova:
+        checa("C4: pre-condicao — versao nova instalada (C3 concluiu)", False,
+              f"registro={reg.get('display_version')!r}")
+        return
     checa("C4: --quit SEM instancia rodando retorna 1 (nada para fechar)",
           cli_quit() == 1)
     p = inicia_app()
