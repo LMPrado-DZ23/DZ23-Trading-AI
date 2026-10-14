@@ -3316,6 +3316,110 @@ async def escola_maestro_acao(acao: str, req: Request, _=Depends(auth),
     return {"ok": True, **maestro.relatorio()}
 
 
+# ------------------------------------------------- painel global (TD-1)
+def _moeda_da_sala(sala, resumo: dict) -> str:
+    """Moeda da sala pela cadeia VERIFICÁVEL: livro → classe → cripto.
+    Nada de chute: sem fonte confirmável, fica não declarada — e moeda
+    não declarada nunca entra em soma (sem conversão identificada)."""
+    if getattr(sala, "ledger", None) is not None:
+        return str(sala.ledger.currency or "")
+    from tradingagents.desk.mercados import classe_de
+    classe = str(resumo.get("classe") or "")
+    if classe:
+        try:
+            return classe_de(classe).moeda
+        except Exception:
+            return ""
+    ctx = resumo.get("contexto") or {}
+    if str(ctx.get("corretora") or "") in ("binance", "bybit", "okx"):
+        chave = ("cripto_futuros" if ctx.get("mercado") == "futuros"
+                 else "cripto_spot")
+        try:
+            return classe_de(chave).moeda
+        except Exception:
+            return ""
+    return ""
+
+
+@app.get("/v1/maestro/painel")
+def maestro_painel(request: Request, _=Depends(auth)):
+    """Painel Global do Maestro: retrato consolidado da agência INTEIRA.
+
+    PAPER/TESTNET/LIVE segregados; moedas nunca somadas sem conversão
+    identificada e verificável; LIVE sempre declarado bloqueado. A mesa
+    segue o caminho normal (parada de emergência vira motivo declarado,
+    não cegueira: a supervisão global continua visível)."""
+    from tradingagents.desk.painel_global import retrato_global
+    tid = request_tenant(request)
+    esc = _escola_of(request)
+    mesa_motivo = ""
+    try:
+        d = _desk_of(request)
+    except HTTPException as exc:
+        d = _DESKS.get(tid)
+        mesa_motivo = str(exc.detail)
+    except Exception as exc:      # mesa indisponível não cega a supervisão
+        d = _DESKS.get(tid)
+        mesa_motivo = f"{type(exc).__name__}: {exc}"[:200]
+
+    agentes, posicoes, ciclo = [], [], None
+    contabilidade: dict = {}
+    risco: dict = {}
+    fonte: dict = {}
+    alertas: list = []
+    modo_mesa, moeda_mesa = "paper", "USDT"
+    if d is not None:
+        orch, led = d["orchestrator"], d["ledger"]
+        agentes = [_agente_para_painel(t, d) for t in orch.traders]
+        posicoes = orch.livro_para_painel()
+        contabilidade = {
+            "saldos": {k: str(v) for k, v in led.balances().items()},
+            "patrimonio": str(led.equity()), "balanceado": led.is_balanced()}
+        risco = {"reservado": str(orch.risk.reserved_total),
+                 "disponivel": str(orch.risk.available),
+                 "instrumentos_abertos": sorted(orch.risk.open_instruments())}
+        modo_mesa = orch.mandate.mode.value
+        moeda_mesa = str(getattr(led, "currency", "") or "USDT")
+        ciclo = d["cycles"][-1] if d.get("cycles") else None
+        fonte = {"dados": d.get("feed_kind", ""),
+                 "corretora": d.get("broker_mode", ""),
+                 "aviso": ("mercado real (leitura pública, cutoff na vela "
+                           "fechada)" if d.get("feed_kind") == "real" else
+                           "dados de FIXTURE — provam a mesa, não o mercado")}
+        with contextlib.suppress(Exception):
+            alertas = [{"codigo": a.codigo, "severidade": a.severidade,
+                        "titulo": a.titulo, "detalhe": a.detalhe,
+                        "acao": a.acao} for a in _estado_para_alertas(d)]
+
+    salas = []
+    for chave, sala in sorted(esc["registro"].salas.items()):
+        try:
+            r = sala.resumo()
+        except Exception:
+            continue
+        ctx = r.get("contexto") or {}
+        salas.append({"chave": r.get("chave") or chave,
+                      "corretora": ctx.get("corretora", ""),
+                      "conta": ctx.get("conta", ""),
+                      "mercado": ctx.get("mercado", ""),
+                      "modo": ctx.get("modo", ""),
+                      "moeda": _moeda_da_sala(sala, r),
+                      "saldo_realizado": r.get("saldo_realizado", "0"),
+                      "taxas_acumuladas": r.get("taxas_acumuladas", "0"),
+                      "posicoes_abertas": r.get("posicoes_abertas") or {},
+                      "laboratorio": r.get("laboratorio"),
+                      "tem_ledger": bool(r.get("tem_ledger"))})
+
+    retrato = retrato_global(
+        agentes=agentes, posicoes=posicoes, contabilidade=contabilidade,
+        salas=salas, ciclo=ciclo, fonte=fonte, alertas=alertas,
+        maestro=esc["maestro"].relatorio(), risco=risco,
+        moeda_mesa=moeda_mesa, modo_mesa=modo_mesa)
+    retrato["mesa_iniciada"] = d is not None
+    retrato["mesa_motivo"] = mesa_motivo
+    return retrato
+
+
 # ------------------------------------------------------------ pilotos
 def _supervisor_of(request: Request, escola=None):
     """Supervisor de pilotos do tenant. A elegibilidade, quando consultada,
