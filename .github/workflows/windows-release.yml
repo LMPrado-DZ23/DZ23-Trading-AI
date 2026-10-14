@@ -74,6 +74,10 @@ jobs:
           python-version: "3.12"
       - name: Install uv
         run: pip install uv
+      - name: Install locked project (desk + dev extras)
+        run: uv sync --extra desk --extra dev
+      - name: Install Playwright no venv do projeto
+        run: uv pip install --python .venv/Scripts/python.exe playwright
       - name: Download artifact do bundle
         uses: actions/download-artifact@v4
         with:
@@ -89,7 +93,7 @@ jobs:
       - name: Aceite E2E no bundle do artefato (matriz TD-5, navegador real)
         shell: pwsh
         run: |
-          uv run --with playwright python scripts\homolog_aceite_td5_bundle.py
+          .venv\Scripts\python.exe scripts\homolog_aceite_td5_bundle.py
           if ($LASTEXITCODE -ne 0) { throw "aceite no bundle falhou (exit $LASTEXITCODE)" }
       - name: Upload evidências do aceite no bundle
         if: always()

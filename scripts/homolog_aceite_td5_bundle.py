@@ -136,6 +136,17 @@ def roda_pytest(base: str, senha: str, evidencias: Path) -> None:
     )
     alvo = "tests/e2e/test_aceite_td5.py"
 
+    # Ferramentas do próprio ambiente do harness: falha aqui precisa dized
+    # o QUE falta (um pytest ausente coletava 0 e parecia "nenhum teste").
+    for ferramenta in ("pytest", "playwright.sync_api"):
+        pronto = subprocess.run(
+            [sys.executable, "-c", f"import {ferramenta}"],
+            capture_output=True,
+        )
+        checa(f"ambiente do aceite tem {ferramenta}",
+              pronto.returncode == 0,
+              pronto.stderr.decode("utf-8", "replace").strip()[-200:])
+
     coleta = subprocess.run(
         [sys.executable, "-m", "pytest", alvo, "--collect-only", "-q",
          "-p", "no:cacheprovider"],
@@ -146,7 +157,9 @@ def roda_pytest(base: str, senha: str, evidencias: Path) -> None:
     checa("matriz coletada com os testes de aceite (navegador disponível)",
           coletados > 0, f"coletados={coletados}")
     if coletados == 0:
-        print(coleta.stdout[-3000:], flush=True)
+        print(f"--- stdout (rc={coleta.returncode}) ---\n{coleta.stdout[-3000:]}",
+              flush=True)
+        print(f"--- stderr ---\n{coleta.stderr[-3000:]}", flush=True)
         return
 
     inicio = time.time()
