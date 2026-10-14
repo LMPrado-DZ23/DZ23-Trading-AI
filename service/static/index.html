@@ -149,6 +149,7 @@
 <button class="btn danger" onclick="paradaEmergencia()" style="background:#8f2f3f;color:#fff">PARADA DE EMERGÊNCIA</button>
 </div><div id="deskMsg" class="message"></div></div>
 <div class="card span-12" id="painelGlobal"><h3>Painel Global do Maestro</h3><div id="painelGlobalOut" class="muted">Carregando...</div><small class="muted">PAPER, TESTNET e LIVE nunca são somados; moedas diferentes não entram na mesma conta sem conversão identificada e verificável. Este painel lê — quem autoriza operação real é o proprietário.</small></div>
+<div class="card span-12" id="salaTrader" style="display:none"><h3>Sala individual do trader<span id="salaTraderTitulo" class="muted"></span> <button class="btn secondary" onclick="fecharSala()">Fechar</button></h3><div id="salaTraderOut" class="muted">Carregando...</div><small class="muted">Os gráficos derivam do livro-razão, do diário de operações fechadas e dos ciclos da mesa — nunca de números inventados. Em PAPER, resultados são de execução simulada; nada aqui é promessa de lucro nem previsão exata de preços. LIVE permanece bloqueado.</small></div>
 <div class="card span-12" id="deskOut"><div class="muted">Carregando...</div></div></div></section>
     <section id="page-manual" class="page">
       <div class="page-head"><div><h2>Minhas Operações</h2><p>Registre aqui o que você JÁ executou na sua corretora. O copiloto acompanha, calcula e alerta — ele nunca opera por você.</p></div><button class="btn secondary" onclick="manualLoad()">Atualizar</button></div>
@@ -353,7 +354,7 @@ $('deskOut').innerHTML=`<div class="metric-line"><span>Mesa autônoma</span><b c
 <h3 style="margin-top:14px">Ciclos</h3>${(d.ciclos||[]).slice().reverse().map(x=>`<div class="event"><b>${escapeHtml(x.resumo)}</b><small>${escapeHtml(x.origem)}</small>${(x.abstencoes||[]).length?'<small>sem operar: '+escapeHtml(x.abstencoes.join(' | '))+'</small>':''}</div>`).join('')||'<div class="muted">nenhum ciclo</div>'}`}
 async function deskCycle(){const r=await api('/v1/desk/cycle',{method:'POST'});if(!r.ok)return toast(r.data.detail||'falhou','bad');const enc=r.data.encerradas||[];if(enc.length)$('deskMsg').innerHTML=enc.map(e=>`<div class="event"><b>Saída ${escapeHtml(e.instrumento||'?')}: ${escapeHtml(e.estado||'')}</b><small>${escapeHtml(e.reason_code||'')} — ${escapeHtml(e.motivo||'')}</small></div>`).join('');toast(r.data.resumo,'ok');deskLoad()}
 async function deskSched(action){const r=await api('/v1/desk/scheduler/'+action,{method:'POST'});toast(r.ok?(action==='start'?'Mesa ligada — roda sozinha, pode fechar o navegador':'Mesa parada; posições seguem com o guardião'):(r.data.detail||'falhou'),r.ok?'ok':'bad');deskLoad()}
-function deskAcoes(x){const id=encodeURIComponent(x.id);if(x.stage==='paused')return `<button class="btn secondary" onclick="deskTrader('${id}','retomar')">Retomar</button>`;const pausar=`<button class="btn secondary" onclick="deskTrader('${id}','pausar')">Pausar</button>`;if(x.stage==='paper_enabled')return pausar;const el=x.evidencia||{};if(el.elegivel)return pausar+` <button class="btn primary" onclick="deskTrader('${id}','promover')">Habilitar</button>`;return pausar+` <button class="btn secondary" disabled title="${escapeHtml(el.motivo||'sem evidência estatística ainda')}">Habilitar</button>`}
+function deskAcoes(x){const id=encodeURIComponent(x.id);const sala=`<button class="btn secondary" onclick="openSala('${id}')">Sala</button>`;if(x.stage==='paused')return sala+` <button class="btn secondary" onclick="deskTrader('${id}','retomar')">Retomar</button>`;const pausar=`<button class="btn secondary" onclick="deskTrader('${id}','pausar')">Pausar</button>`+sala;if(x.stage==='paper_enabled')return pausar;const el=x.evidencia||{};if(el.elegivel)return pausar+` <button class="btn primary" onclick="deskTrader('${id}','promover')">Habilitar</button>`;return pausar+` <button class="btn secondary" disabled title="${escapeHtml(el.motivo||'sem evidência estatística ainda')}">Habilitar</button>`}
 async function deskTrader(id,acao){const r=await api('/v1/desk/traders/'+id+'/'+acao,{method:'POST'});toast(r.ok?(r.data.motivo||'ok'):(r.data.detail||'não permitido'),r.ok?'ok':'bad');deskLoad()}
 async function painelGlobalLoad(){const box=$('painelGlobalOut');if(!box)return;const r=await api('/v1/maestro/painel');if(!r.ok){box.innerHTML='<div class="muted">'+escapeHtml(r.data.detail||'painel indisponível')+'</div>';return}
 const d=r.data,pat=d.patrimonio,t=d.traders,o=d.oportunidades,p=d.posicoes,e=d.exposicao,ma=d.maestro||{};
@@ -379,6 +380,89 @@ box.innerHTML=ml('Mesa',escapeHtml(d.modos.mesa)+' · '+(d.mesa_iniciada?'inicia
 +`<h3 style="margin-top:14px">Alertas ativos</h3>`+(ativos||'<div class="muted">nenhum alerta ativo</div>')
 +`<h3 style="margin-top:14px">Comparações (só evidência madura)</h3>`+comp
 +ml('Fonte',escapeHtml(String((d.fonte||{}).dados||'—'))+' — '+escapeHtml(String((d.fonte||{}).aviso||'')))}
+function fecharSala(){const c=$('salaTrader');if(c)c.style.display='none'}
+function openSala(id){const c=$('salaTrader');if(c)c.style.display='';salaTraderLoad(id,window._salaTf||'1h')}
+function salaTf(tf){if(window._salaTrader)salaTraderLoad(window._salaTrader,tf)}
+async function salaTraderLoad(id,tf){const box=$('salaTraderOut');if(!box)return;window._salaTrader=id;window._salaTf=tf||'1h';box.innerHTML='<div class="muted">Carregando a sala de '+escapeHtml(String(id))+'…</div>';
+const r=await api('/v1/desk/traders/'+id+'/sala?timeframe='+encodeURIComponent(window._salaTf));if(!r.ok){box.innerHTML='<div class="bad">'+escapeHtml(r.data.detail||'sala indisponível')+'</div>';return}
+const d=r.data,m=d.mercado||{},p=d.portfolio||{},mq=m.marcacoes||[],t=d.trader||{};
+const tit=$('salaTraderTitulo');if(tit)tit.textContent=' — '+(t.id||id)+' · '+(t.strategy||'')+(t.version?' v'+t.version:'');
+const ml=(k,v,cls)=>`<div class="metric-line"><span>${k}</span><b class="${cls||''}">${v}</b></div>`;
+const pct=v=>(v==null)?'—':((Number(v)*100).toFixed(2)+'%');
+const num=v=>(v==null)?'—':escapeHtml(String(v));
+const tfs=['1m','5m','15m','1h','4h','1d'].map(x=>`<button class="btn ${x===m.timeframe?'primary':'secondary'}" onclick="salaTf('${x}')">${x}</button>`).join(' ');
+const grafico=m.tipo==='candles'?svgVelasMercado(m.velas||[],m,mq):svgLinhaMercado(m.fechamentos||[],m,mq);
+const ind=m.indicadores||{};const ult=a=>{a=a||[];for(let i=a.length-1;i>=0;i--)if(a[i]!=null)return a[i];return null};
+const niveis=(m.suportes||[]).map(v=>'S '+escapeHtml(String(v))).concat((m.resistencias||[]).map(v=>'R '+escapeHtml(String(v)))).join(' · ')||'—';
+const marcaChips=mq.length?mq.map(k=>`<span class="pill" title="${escapeHtml(k.motivo||'')}">${escapeHtml(k.tipo)}${k.preco!=null?' @ '+escapeHtml(String(k.preco)):''} · ${escapeHtml(String(k.t||'').slice(0,16))}</span>`).join(' '):'<span class="muted">sem marcações ainda</span>';
+const expo=(p.exposicao||{}).posicoes||[];
+const expoRows=expo.length?expo.map(x=>`<tr><td>${escapeHtml(x.instrumento)}</td><td>${escapeHtml(x.quantidade)}</td><td>${escapeHtml(x.custo)}</td></tr>`).join(''):'<tr><td colspan="3" class="muted">nenhuma posição viva deste trader</td></tr>';
+const ordens=p.ordens_abertas||[];
+const ordensLinhas=ordens.length?ordens.map(o=>`<div class="event"><b>${escapeHtml(String(o.id||o.order_id||'—'))}</b><small>${escapeHtml(String(o.instrumento||''))} · ${escapeHtml(String(o.estado||''))} · qtd ${escapeHtml(String(o.qtd||''))}</small></div>`).join(''):'<div class="muted">nenhuma ordem aberta deste trader</div>';
+const champ=d.champion_challenger||[];
+const expHTML=champ.length?champ.map(e=>{const ver=e.resultado?('veredito: '+escapeHtml(JSON.stringify(e.resultado).slice(0,180))):'pendente — sem veredito (não é aprovado por omissão)';return `<div class="event"><b>${escapeHtml(String(e.titulo||e.id||''))}</b><small>champion ${escapeHtml(JSON.stringify(e.champion||{}).slice(0,90))} · challenger ${escapeHtml(JSON.stringify(e.challenger||{}).slice(0,90))}</small><small>${ver}</small></div>`}).join(''):'<div class="muted">nenhum experimento pré-registrado deste trader</div>';
+box.innerHTML=ml('Modo',escapeHtml(String(d.modo||'').toUpperCase())+' · moeda '+escapeHtml(String(d.moeda||'—'))+' · LIVE bloqueado')
++(m.aviso?`<div class="warn">${escapeHtml(m.aviso)}</div>`:'')
++`<h3 style="margin-top:10px">Mercado — ${escapeHtml(String(m.instrumento||''))} ${escapeHtml(String(m.timeframe||''))}</h3>`
++`<div class="actions">${tfs}</div>`+grafico
++ml('Indicadores','SMA rápida '+(ult(ind.sma_rapida)!=null?escapeHtml(String(ult(ind.sma_rapida))):'—')+' · SMA lenta '+(ult(ind.sma_lenta)!=null?escapeHtml(String(ult(ind.sma_lenta))):'—')+' · RSI '+(ult(ind.rsi)!=null?Number(ult(ind.rsi)).toFixed(1):'—'))
++ml('Suportes / Resistências',niveis)+`<div class="muted"><small>${escapeHtml(m.nota_sr||'')}</small></div>`
++`<div style="margin-top:6px">${marcaChips}</div><div class="muted"><small>${escapeHtml(m.nota_marcacoes||'')}</small></div>`
++`<h3 style="margin-top:14px">Portfólio do trader</h3>`+svgPortfolio(p.curva||[])
++ml('Operações fechadas',p.operacoes+' · acertos '+p.acertos+' · hit rate '+pct(p.taxa_acerto))
++ml('Expectativa por operação',pct(p.expectativa))
++ml('Fator de lucro',p.profit_factor!=null?num(p.profit_factor):escapeHtml(p.motivo_profit_factor||'—'),p.profit_factor!=null?'':'warn')
++ml('Custos acumulados (diário)',num(p.custos_total))
++ml('Drawdown máximo',pct(p.drawdown))
++ml('Resultado bruto do livro',num(p.resultado_bruto_livro))
++ml('Resultado líquido estimado',num(p.resultado_liquido_estimado))
++`<div class="muted"><small>${escapeHtml(p.nota_resultado||'')}</small></div>`
++`<h3 style="margin-top:14px">Exposição viva</h3><div class="table-wrap"><table class="table"><thead><tr><th>Instrumento</th><th>Quantidade</th><th>Custo restante</th></tr></thead><tbody>${expoRows}</tbody></table></div>`
++ml('Custo total vivo',num((p.exposicao||{}).custo_total))
++`<h3 style="margin-top:14px">Ordens abertas</h3>`+ordensLinhas
++`<h3 style="margin-top:14px">Champion / Challenger</h3>`+expHTML
++(d.avisos||[]).map(a=>`<div class="warn"><small>${escapeHtml(a)}</small></div>`).join('')}
+function svgLinhaMercado(closes,m,marc){const cs=(closes||[]).map(Number).filter(Number.isFinite);
+if(cs.length<2)return '<div class="muted">série insuficiente para desenhar — '+escapeHtml((m||{}).aviso||'')+'</div>';
+const W=920,H=230,P=26;const mn=Math.min(...cs),mx=Math.max(...cs),rng=(mx-mn)||1;
+const X=i=>P+i*(W-2*P)/(cs.length-1),Y=v=>H-P-(v-mn)/rng*(H-2*P);
+const linha=cs.map((v,i)=>X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ');
+const ind=(m||{}).indicadores||{};
+const poly=a=>{const s=[];(a||[]).forEach((v,i)=>{if(v!=null)s.push(X(i).toFixed(1)+','+Y(Number(v)).toFixed(1))});return s.join(' ')};
+const ov=[['sma_rapida','#f0b35e'],['sma_lenta','#7fa4ff']].map(([k,c])=>poly(ind[k])?`<polyline fill="none" stroke="${c}" stroke-opacity=".85" stroke-width="1.4" points="${poly(ind[k])}"/>`:'').join('');
+const linhasSR=(m.suportes||[]).map(v=>`<line x1="${P}" x2="${W-P}" y1="${Y(Number(v))}" y2="${Y(Number(v))}" stroke="#3ba97a" stroke-dasharray="4 4" stroke-width="1"><title>suporte aproximado (pivô de fechamentos) ${escapeHtml(String(v))}</title></line>`).join('')+(m.resistencias||[]).map(v=>`<line x1="${P}" x2="${W-P}" y1="${Y(Number(v))}" y2="${Y(Number(v))}" stroke="#c96a6a" stroke-dasharray="4 4" stroke-width="1"><title>resistência aproximada (pivô de fechamentos) ${escapeHtml(String(v))}</title></line>`).join('');
+return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img"><rect width="${W}" height="${H}" fill="#0f141b" rx="8"/><polyline fill="none" stroke="#69b0ff" stroke-width="1.8" points="${linha}"/>${ov}${linhasSR}</svg></div>`
++'<div class="muted"><small>linha dos fechamentos da fonte '+escapeHtml(String((m||{}).fonte||''))+' — esta fonte não entrega OHLCV, então não há candles inventados; as marcações são listadas abaixo do gráfico.</small></div>'}
+function svgVelasMercado(velas,m,marc){const vs=(velas||[]).filter(v=>v&&v.o!=null&&v.c!=null&&v.h!=null&&v.l!=null);
+if(vs.length<2)return '<div class="muted">velas insuficientes para desenhar.</div>';
+const W=920,H=260,P=26,VH=42;const n=vs.length;
+const hs=vs.map(v=>Number(v.h)),ls=vs.map(v=>Number(v.l));
+const mn=Math.min(...ls),mx=Math.max(...hs),rng=(mx-mn)||1;
+const passo=(W-2*P)/n,bw=Math.max(1.5,passo*0.62);
+const cx=i=>P+(i+0.5)*passo;
+const Y=v=>P+(H-2*P-VH)*(1-(v-mn)/rng);
+const corpo=vs.map((v,i)=>{const o=Number(v.o),c=Number(v.c);const so=Math.max(Y(o),Y(c)),sc=Math.min(Y(o),Y(c));const verde=c>=o;const cor=verde?'#3ba97a':'#c96a6a';return `<line x1="${cx(i).toFixed(1)}" x2="${cx(i).toFixed(1)}" y1="${Y(Number(v.h)).toFixed(1)}" y2="${Y(Number(v.l)).toFixed(1)}" stroke="${cor}" stroke-width="1"/>`+`<rect x="${(cx(i)-bw/2).toFixed(1)}" y="${so.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1,sc-so).toFixed(1)}" fill="${cor}"><title>${escapeHtml(String(v.t||''))} O ${escapeHtml(String(v.o))} H ${escapeHtml(String(v.h))} L ${escapeHtml(String(v.l))} C ${escapeHtml(String(v.c))}</title></rect>`}).join('');
+const vols=vs.map(v=>Number(v.v)||0);const vmax=Math.max(...vols)||1;
+const vol=vs.map((v,i)=>`<rect x="${(cx(i)-bw/2).toFixed(1)}" y="${(H-P-(vols[i]/vmax)*(VH-6)).toFixed(1)}" width="${bw.toFixed(1)}" height="${((vols[i]/vmax)*(VH-6)).toFixed(1)}" fill="#3f5872"><title>volume ${escapeHtml(String(v.v))}</title></rect>`).join('');
+const ind=(m||{}).indicadores||{};
+const poly=a=>{const s=[];(a||[]).forEach((v,i)=>{if(v!=null)s.push(cx(i).toFixed(1)+','+Y(Number(v)).toFixed(1))});return s.join(' ')};
+const ov=[['sma_rapida','#f0b35e'],['sma_lenta','#7fa4ff']].map(([k,c])=>poly(ind[k])?`<polyline fill="none" stroke="${c}" stroke-opacity=".85" stroke-width="1.4" points="${poly(ind[k])}"/>`:'').join('');
+const idxDe=t=>{let m0=0;for(let i=0;i<vs.length;i++){if(Date.parse(vs[i].t)<=Date.parse(t))m0=i}return m0};
+const marca=(marc||[]).map(k=>{if(k.preco==null&&k.tipo!=='veto'&&k.tipo!=='abstencao')return '';const i=idxDe(k.t);const y=k.preco!=null?Y(Number(k.preco)):P+8;const cor=k.tipo==='compra'?'#3ba97a':k.tipo==='venda'?'#c96a6a':k.tipo==='veto'?'#a78bfa':'#f0b35e';return `<circle cx="${cx(i).toFixed(1)}" cy="${y.toFixed(1)}" r="3.4" fill="${cor}" stroke="#0f141b"><title>${escapeHtml(k.tipo)} ${escapeHtml(String(k.t||''))}${k.preco!=null?' @ '+escapeHtml(String(k.preco)):''}${k.motivo?' — '+escapeHtml(k.motivo):''}</title></circle>`}).join('');
+return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img"><rect width="${W}" height="${H}" fill="#0f141b" rx="8"/>${corpo}${ov}${vol}${marca}</svg></div>`
++'<div class="muted"><small>candles fechados (a vela em formação é descartada — usá-la seria olhar o futuro) com volume; SMA 9/21 e marcações de execuções, abstenções e vetos.</small></div>'}
+function svgPortfolio(curva){const c=(curva||[]).map(x=>({t:String(x.t||''),a:Number(x.acumulado),r:x.retorno,i:String(x.instrumento||''),causa:String(x.causa||'')})).filter(x=>Number.isFinite(x.a));
+if(!c.length)return '<div class="muted">sem operações fechadas — nada a desenhar (posição aberta é expectativa, não resultado).</div>';
+if(c.length===1)return '<div class="muted">uma operação fechada: acumulado '+escapeHtml(String(c[0].a))+' (a curva ganha forma com mais desfechos).</div>';
+const W=920,H=220,P=26;const as=c.map(x=>x.a);const mn=Math.min(0,...as),mx=Math.max(0,...as),rng=(mx-mn)||1;
+const X=i=>P+i*(W-2*P)/(c.length-1),Y=v=>P+(H-2*P)*(1-(v-mn)/rng);
+let pico=-Infinity;const dd=c.map((x,i)=>{pico=Math.max(pico,x.a);return {x:X(i),top:Y(pico),v:Y(x.a)}});
+const area=dd.map(d=>d.x.toFixed(1)+','+d.top.toFixed(1)).join(' ')+' '+dd.slice().reverse().map(d=>d.x.toFixed(1)+','+d.v.toFixed(1)).join(' ');
+const linha=c.map((x,i)=>X(i).toFixed(1)+','+Y(x.a).toFixed(1)).join(' ');
+const zero=mn<0?`<line x1="${P}" x2="${W-P}" y1="${Y(0)}" y2="${Y(0)}" stroke="#5a6b80" stroke-dasharray="3 5" stroke-width="1"/>`:'';
+const pontos=c.map((x,i)=>`<circle cx="${X(i).toFixed(1)}" cy="${Y(x.a).toFixed(1)}" r="2.6" fill="${x.r>=0?'#3ba97a':'#c96a6a'}"><title>${escapeHtml(x.t)} · ${escapeHtml(x.i)} · retorno ${escapeHtml(String(x.r))} · acumulado ${escapeHtml(String(x.a))}${x.causa?' — '+escapeHtml(x.causa):''}</title></circle>`).join('');
+return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img"><rect width="${W}" height="${H}" fill="#0f141b" rx="8"/><polygon points="${area}" fill="#c96a6a" fill-opacity="0.14"><title>área em drawdown (queda desde o pico) — não é sugestão de compra nem previsão</title></polygon>${zero}<polyline fill="none" stroke="#69b0ff" stroke-width="1.8" points="${linha}"/>${pontos}</svg></div>`
++'<div class="muted"><small>curva acumulada das operações FECHADAS do diário (soma simples de retornos, não composta; não é saldo de conta — o saldo vive no livro-razão).</small></div>'}
 async function deskModoLoad(){const r=await api('/v1/desk/modo');if(!r.ok)return;const d=r.data;const sel=$('modoMesa');if(sel)sel.value=d.estado;const st=$('modoMesaEstado');if(st)st.textContent=d.estado_label+(d.motivo?' — '+d.motivo:'');const ps=$('posseMesa');if(ps){ps.textContent=d.posse.valida?(d.posse.sou_eu?'nesta máquina':'em '+d.posse.dono):'livre';ps.className='config-status '+(d.posse.valida&&!d.posse.sou_eu?'warn':'')}const pi=$('posseMesaInfo');if(pi)pi.textContent=d.posse.valida?(d.posse.sou_eu?'este computador executa agora':'outro processo executa (expira '+d.posse.expira_em_iso+')'):'nenhum processo executando';const b=$('btnDesbloquear');if(b)b.classList.toggle('hide',d.estado!=='bloqueada')}
 async function deskModo(desbloqueio){const r=await api('/v1/desk/modo',{method:'POST',body:JSON.stringify({estado:$('modoMesa').value,desbloqueio:!!desbloqueio})});toast(r.ok?('Modo da mesa: '+r.data.estado_label):(r.data.detail||'falhou'),r.ok?'ok':'bad');deskModoLoad()}
 async function desbloquearMesa(){if(!confirm('Desbloquear a mesa e voltar a permitir execução?'))return;deskModo(true)}

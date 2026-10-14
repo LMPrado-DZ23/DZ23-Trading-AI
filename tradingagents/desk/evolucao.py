@@ -715,6 +715,16 @@ class EvolucaoAutonoma:
     def eventos(self) -> list[dict]:
         return list(self._eventos)
 
+    def experimentos(self) -> dict:
+        """Registros pré-registrados (LEITURA) — a sala individual exibe
+        champion/challenger sem tocar no estado interno."""
+        return {a: dict(r) for a, r in self._experimentos.items()}
+
+    def resultados_dos_experimentos(self) -> dict:
+        """Vereditos já executados (LEITURA) — sem veredito o experimento
+        continua pendente, jamais 'aprovado' por omissão."""
+        return {a: dict(r) for a, r in self._resultados.items()}
+
     def relatorio(self) -> dict:
         agentes = sorted({r.agent_id for r in self._diario}
                          | set(self._versoes) | set(self._suspensoes))

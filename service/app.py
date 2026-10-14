@@ -2644,7 +2644,8 @@ def _desk_boot(tenant_id: str) -> dict:
     copiloto = _copiloto(tenant_id, armazem)
 
     desk = {"orchestrator": orch, "ledger": coord.ledger, "coordinator": coord,
-            "memoria": memoria, "armazem": armazem, "recuperacao": recuperacao,
+            "memoria": memoria, "evolucao": evolucao,
+            "armazem": armazem, "recuperacao": recuperacao,
             "livro_restauracao": restauracao_livro,
             "guardian": PositionGuardian(coord), "cycles": [],
             "feed_kind": feed_kind, "broker_mode": broker_mode,
@@ -3083,6 +3084,96 @@ def desk_evaluation(request: Request, _=Depends(auth)):
         ressalvas.append("nenhuma posição FECHADA: resultado ainda não realizado")
     return {"por_agente": linhas, "conclusivo": not ressalvas, "ressalvas": ressalvas,
             "aviso": "retrospectivo e simulado; não é promessa de lucro"}
+
+
+@app.get("/v1/desk/traders/{agent_id}/sala")
+def desk_trader_sala(agent_id: str, request: Request, _=Depends(auth),
+                     instrumento: str = "", timeframe: str = "1h"):
+    """Sala individual do trader (TD-2): gráfico de mercado (OHLCV/volume/
+    indicadores/S-R/marcações/sinais/abstenções) e gráfico de portfólio
+    (curva, P&L, custos, drawdown, exposição, hit rate, expectativa,
+    profit factor, Champion/Challenger).
+
+    Leitura pura de fontes verificáveis (velas, diário, livro-razão,
+    ciclos da mesa); fixture sempre ROTULADO como fixture. Sem caminho de
+    ordem — quem autoriza operação é o dono."""
+    from tradingagents.desk.market import (
+        TIMEFRAME_SECONDS,
+        MarketDataError,
+        MarketFeedProviders,
+        PublicMarketFeed,
+    )
+    from tradingagents.desk.models import utcnow
+    from tradingagents.desk.sala_trader import (
+        experimentos_do_trader,
+        retrato_do_trader,
+        velas_de_rows,
+    )
+    d = _desk_of(request)
+    t = _trader_da_mesa(d, agent_id)
+    if t is None:
+        raise HTTPException(404, f"trader {agent_id} não existe nesta mesa")
+    if timeframe not in TIMEFRAME_SECONDS:
+        raise HTTPException(422, "timeframe deve ser um de: "
+                            + ", ".join(sorted(TIMEFRAME_SECONDS)))
+    universo = tuple(t.universe) or \
+        tuple(d["orchestrator"].mandate.instruments)
+    if instrumento and instrumento not in universo:
+        raise HTTPException(422, "instrumento fora do universo do trader: "
+                            f"{instrumento}")
+    instrumento = instrumento or (universo[0] if universo else "")
+
+    cfg = load_cfg(request_tenant(request))
+    feed_kind = d.get("feed_kind", "fixture")
+    velas = None
+    fechamentos: list[str] = []
+    qualidade = feed_kind
+    if feed_kind == "real":
+        feed = PublicMarketFeed(cfg.get("TRADINGAGENTS_EXCHANGE") or "binance")
+        snap = MarketFeedProviders(feed, [instrumento], timeframe=timeframe,
+                                   limit=240).snapshots()[0]
+        qualidade = snap.quality
+        fechamentos = [str(c) for c in snap.closes]
+        try:
+            # Mesma leitura pública do snapshot (cache de 30 s do feed):
+            # somente leitura, nunca chave; vela em formação descartada.
+            rows = feed.ohlcv(instrumento, timeframe, 240)
+            velas = velas_de_rows(rows, timeframe, agora=utcnow())
+        except MarketDataError:
+            velas = None                    # cai para a linha dos fechamentos
+        aviso_fonte = ("mercado real (leitura pública, somente leitura) — "
+                       + qualidade)
+    else:
+        snaps = [s for s in d["snaps_fn"]() if s.instrument == instrumento]
+        if snaps:
+            fechamentos = [str(c) for c in snaps[0].closes]
+            qualidade = snaps[0].quality
+        velas = None
+        aviso_fonte = ("dados de FIXTURE (rotulados) — provam a mesa, não o "
+                       "mercado; o gráfico mostra os fechamentos, sem OHLCV "
+                       "inventado")
+
+    led, coord = d["ledger"], d["coordinator"]
+    evo = d.get("evolucao")
+    diario = evo.diario(agent_id) if evo else []
+    lotes = [lote for inst in universo for lote in led.position_lots(inst)]
+    ordens = [{"id": r.order_id, "agente": r.agente,
+               "instrumento": r.instrumento, "lado": r.lado,
+               "estado": r.state.value, "qtd": str(r.filled_qty),
+               "aberta": r.nao_terminal} for r in coord.orders.values()]
+    experimentos = (experimentos_do_trader(evo.experimentos(),
+                                           evo.resultados_dos_experimentos(),
+                                           agent_id) if evo else [])
+    atribuicao = {k: str(v) for k, v in led.attribution().items()}
+    return retrato_do_trader(
+        agent_id, trader=_agente_para_painel(t, d), instrumento=instrumento,
+        timeframe=timeframe, velas=velas, fechamentos=fechamentos,
+        fonte=feed_kind, aviso_fonte=aviso_fonte, qualidade=qualidade,
+        diario=diario, transacoes=led.export_transactions(), lotes=lotes,
+        ordens=ordens, ciclos=d.get("cycles", []), experimentos=experimentos,
+        atribuicao=atribuicao,
+        moeda=str(getattr(led, "currency", "") or "USDT"),
+        modo=d["orchestrator"].mandate.mode.value)
 
 
 # ------------------------------------------------- escola central + salas
