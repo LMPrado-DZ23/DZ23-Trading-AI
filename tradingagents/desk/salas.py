@@ -17,6 +17,12 @@ Arquitetura definitiva do DZ23: **uma escola, muitas salas**.
   versão e mercados suportados). Sem adaptador, não há sala — nada de
   improviso. IQ Option é registrada como laboratório experimental: métricas
   próprias, modo paper e jamais elegível a operação real.
+- Classes de ativo (E6) são a camada de POLÍTICA de multimercado: moeda,
+  lote, tick, sessão/feriado (fail-closed fora do pregão), liquidação e
+  taxas (ver `mercados.py`). A classe é dimensão NOVA da sala: as chaves
+  atuais continuam valendo, e a passagem para a chave estendida é migração
+  explícita (`migrar_sala`). Classe sem execução homologada não abre sala —
+  política não promete execução.
 - Formar-se (em qualquer contexto) NÃO habilita negociação real. A
   autorização LIVE continua exclusiva do proprietário, pelo fluxo de
   piloto (`piloto.py`), com gates e vigia.
@@ -31,6 +37,7 @@ from typing import TYPE_CHECKING
 from .costs import custo_de_operar, retorno_liquido
 from .escola import Avaliacao, EscolaDeTraders, PerfilDeMercado
 from .learning import Desfecho, desfecho_de_dict, desfecho_para_dict
+from .mercados import MERCADOS, MercadoError, classe_de, mercado_aberto
 from .models import utcnow
 
 if TYPE_CHECKING:                     # pragma: no cover
@@ -41,7 +48,8 @@ class SalaError(RuntimeError):
     """Sala inválida, corretora não homologada ou evidência cruzada."""
 
 
-MERCADOS = ("spot", "futuros", "opcoes_binarias")
+# MERCADOS vive em `mercados.py` (camada de política, E6) e é reexportado
+# aqui para quem já importava deste módulo.
 MODO_PAPER = "paper"
 MODOS_OPERACIONAIS = ("paper", "shadow", "testnet")
 
@@ -119,13 +127,14 @@ _homologar("iq_option", ("opcoes_binarias",), laboratorio=True)
 # ---------------------------------------------------------------- contextos
 @dataclass(frozen=True)
 class ContextoDaSala:
-    """Identidade de uma sala: corretora, conta, mercado e modo. Nunca se
-    misturam salas com identidades diferentes."""
+    """Identidade de uma sala: corretora, conta, mercado, modo e (opcional)
+    classe de ativo. Nunca se misturam salas com identidades diferentes."""
     corretora: str
     conta: str
     mercado: str = "spot"
     modo: str = MODO_PAPER
     payout: Decimal | None = None      # obrigatório em opções binárias
+    classe: str = ""                   # dimensão E6; vazio = sala legada
 
     def __post_init__(self):
         object.__setattr__(self, "corretora",
@@ -135,6 +144,8 @@ class ContextoDaSala:
                            (self.mercado or "").strip().lower())
         modo = getattr(self.modo, "value", self.modo)
         object.__setattr__(self, "modo", str(modo or "").strip().lower())
+        object.__setattr__(self, "classe",
+                           str(self.classe or "").strip().lower())
         if self.payout is not None:
             try:
                 object.__setattr__(self, "payout", Decimal(str(self.payout)))
@@ -143,18 +154,23 @@ class ContextoDaSala:
 
     @property
     def chave(self) -> str:
-        return f"{self.corretora}|{self.conta}|{self.mercado}|{self.modo}"
+        """Chave legada (4 partes) preservada; a classe, quando declarada,
+        entra como quinta parte — a migração é explícita, nunca silenciosa."""
+        base = f"{self.corretora}|{self.conta}|{self.mercado}|{self.modo}"
+        return f"{base}|{self.classe}" if self.classe else base
 
     def como_dict(self) -> dict:
         return {"corretora": self.corretora, "conta": self.conta,
                 "mercado": self.mercado, "modo": self.modo,
-                "payout": str(self.payout) if self.payout is not None else None}
+                "payout": str(self.payout) if self.payout is not None else None,
+                "classe": self.classe}
 
     @classmethod
     def de_dict(cls, doc: dict) -> ContextoDaSala:
         return cls(str(doc.get("corretora", "")), str(doc.get("conta", "")),
                    str(doc.get("mercado", "spot")),
-                   str(doc.get("modo", MODO_PAPER)), doc.get("payout"))
+                   str(doc.get("modo", MODO_PAPER)), doc.get("payout"),
+                   str(doc.get("classe") or ""))
 
 
 @dataclass(frozen=True)
@@ -375,11 +391,25 @@ class Sala:
                 "saldo_realizado": self.saldo_realizado,
                 "custo": custo.detalhe()}
 
+    # -- janela de operação ---------------------------------------------
+    def pode_operar(self, agora: datetime | None = None) -> tuple[bool, str]:
+        """Janela de negociação da sala, segundo a classe declarada.
+
+        Sala sem classe (legado) mantém o comportamento do mercado da
+        corretora — cripto 24/7 não muda. Com classe, fora do pregão é
+        fail-closed; classe desconhecida também fecha.
+        """
+        if not self.contexto.classe:
+            return True, ("sala sem classe declarada — janela do mercado da "
+                          "corretora (cripto 24/7)")
+        return mercado_aberto(self.contexto.classe, agora or utcnow())
+
     # -- retrato --------------------------------------------------------
     def resumo(self) -> dict:
         ad = ADAPTADORES.get(self.contexto.corretora)
         return {
             "chave": self.contexto.chave,
+            "classe": self.contexto.classe or None,
             "contexto": self.contexto.como_dict(),
             "saldo_realizado": str(self.saldo_realizado),
             "taxas_acumuladas": str(self.taxas_acumuladas),
@@ -458,10 +488,32 @@ class RegistroDeSalas:
                             f"(mercado atual: {contexto.mercado})")
         if contexto.payout is not None and contexto.payout <= 0:
             raise SalaError("payout precisa ser positivo")
+        if contexto.classe:
+            try:
+                cl = classe_de(contexto.classe)
+            except MercadoError as exc:
+                raise SalaError(str(exc)) from exc
+            if cl.mercado != contexto.mercado:
+                raise SalaError(
+                    f"classe '{cl.nome}' é do mercado '{cl.mercado}', não "
+                    f"bate com o mercado declarado '{contexto.mercado}'")
+            if not cl.execucao_homologada:
+                raise SalaError(
+                    f"classe '{cl.nome}' não tem execução homologada — "
+                    "registro de política não habilita operar; homologar é "
+                    "decisão explícita do proprietário")
 
     # -- API ------------------------------------------------------------
     def abrir_sala(self, contexto: ContextoDaSala, *,
                    ledger=None) -> Sala:
+        # Chave legada de sala já migrada redireciona para a sala viva —
+        # uma posição financeira tem UM dono, nunca dois registros.
+        doc = self._contextos.get(contexto.chave)
+        if isinstance(doc, dict) and doc.get("migrada_para"):
+            alvo = self._contextos.get(str(doc["migrada_para"]))
+            if isinstance(alvo, dict):
+                return self.abrir_sala(ContextoDaSala.de_dict(alvo),
+                                       ledger=ledger)
         ad = adaptador_de(contexto.corretora)
         self._validar(contexto, ad)
         chave = contexto.chave
@@ -477,12 +529,80 @@ class RegistroDeSalas:
             sala.salvar()
         return sala
 
+    def migrar_sala(self, origem: ContextoDaSala, classe: str, *,
+                    ledger=None) -> Sala:
+        """Migração EXPLÍCITA: sala legada (sem classe) → sala com classe.
+
+        Copia a prova viva (saldo, taxas, desfechos, priors e livro-razão)
+        para a chave nova e marca a antiga como migrada: a chave legada
+        continua resolvendo (redireciona) para a MESMA sala — sem estado
+        duplicado nem resultado em duas contas. Exige posições fechadas:
+        uma posição viva tem um dono só. Rodar duas vezes é recusado.
+        """
+        if origem.classe:
+            raise SalaError("origem já declara classe — a migração parte de "
+                            "uma sala legada sem classe")
+        ad = adaptador_de(origem.corretora)
+        self._validar(origem, ad)
+        doc_legado = self._contextos.get(origem.chave)
+        if not isinstance(doc_legado, dict):
+            raise SalaError(f"sala de origem '{origem.chave}' não existe no "
+                            "catálogo — migração não cria história")
+        if doc_legado.get("migrada_para"):
+            raise SalaError(
+                f"sala '{origem.chave}' já foi migrada para "
+                f"'{doc_legado['migrada_para']}' — migração é um evento, "
+                "não um hábito")
+        try:
+            cl = classe_de(classe)
+        except MercadoError as exc:
+            raise SalaError(str(exc)) from exc
+        if cl.mercado != origem.mercado:
+            raise SalaError(
+                f"classe '{cl.nome}' é do mercado '{cl.mercado}', não bate "
+                f"com o mercado da origem '{origem.mercado}'")
+        if not cl.execucao_homologada:
+            raise SalaError(
+                f"classe '{cl.nome}' não tem execução homologada — migrar "
+                "para classe sem homologação não habilita nada e sujaria o "
+                "histórico")
+        destino = replace(origem, classe=cl.nome)
+        if destino.chave in self._contextos:
+            raise SalaError(f"sala '{destino.chave}' já existe no catálogo")
+        src = self.abrir_sala(origem, ledger=ledger)
+        if src.posicoes:
+            raise SalaError(
+                "migração exige posições fechadas — uma posição viva tem "
+                "um dono só; feche as posições e migre depois")
+        nova = Sala(destino, armazem=self.armazem,
+                    tenant_id=self.tenant_id)
+        nova.saldo_realizado = src.saldo_realizado
+        nova.taxas_acumuladas = src.taxas_acumuladas
+        nova.posicoes = dict(src.posicoes)
+        nova._desfechos = src.desfechos
+        nova.priors_conhecimento = [dict(p) for p in src.priors_conhecimento]
+        if src.ledger is not None:
+            from .ledger import Ledger
+            nova.ledger = Ledger.from_transactions(
+                src.ledger.export_transactions(), src.ledger.currency)
+        nova.salvar()
+        doc_legado["migrada_para"] = destino.chave
+        self._salas.pop(origem.chave, None)
+        self._salas[destino.chave] = nova
+        self._contextos[destino.chave] = destino.como_dict()
+        self._salvar_catalogo()
+        return nova
+
     @property
     def salas(self) -> dict[str, Sala]:
         for chave, doc in list(self._contextos.items()):
+            if isinstance(doc, dict) and doc.get("migrada_para"):
+                continue      # a sala viva está na chave nova (migração)
             if chave not in self._salas:
                 self.abrir_sala(ContextoDaSala.de_dict(doc))
-        return dict(self._salas)
+        return {chave: sala for chave, sala in self._salas.items()
+                if not (isinstance(self._contextos.get(chave), dict)
+                        and self._contextos[chave].get("migrada_para"))}
 
     def relatorio(self) -> list[dict]:
         return [sala.resumo() for _, sala in sorted(self.salas.items())]

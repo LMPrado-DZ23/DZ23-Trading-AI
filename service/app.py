@@ -2784,7 +2784,8 @@ def _contexto_da_sala(body: dict):
         mercado=str(body.get("mercado") or "spot"),
         modo=str(body.get("modo") or "paper"),
         payout=(body.get("payout") if body.get("payout") not in (None, "")
-                else None))
+                else None),
+        classe=str(body.get("classe") or ""))
 
 
 def _sala_por_chave(esc: dict, chave: str):

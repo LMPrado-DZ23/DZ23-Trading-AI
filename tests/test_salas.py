@@ -133,7 +133,7 @@ class TestAdaptadoresEHomologacao:
     def test_adaptador_com_mercado_desconhecido_recusa(self):
         with pytest.raises(SalaError, match="desconhecido"):
             registrar_adaptador(AdaptadorDeCorretora("corretora_teste_y",
-                                                     ("acoes",)))
+                                                     ("cripto_magica",)))
 
     def test_corretora_sem_adaptador_nenhuma_sala(self):
         with pytest.raises(SalaError, match="sem adaptador homologado"):
