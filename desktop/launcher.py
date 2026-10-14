@@ -1,4 +1,4 @@
-"""DZ23 Trading AI — Windows Native Launcher & Local Server Supervisor.
+r"""DZ23 Trading AI — Windows Native Launcher & Local Server Supervisor.
 
 Garantias deste launcher (endurecido no C021):
 
@@ -13,6 +13,16 @@ Garantias deste launcher (endurecido no C021):
 - Logs persistentes em %APPDATA%/DZ23-Trading-AI/logs (rotativos, sem
   credenciais) e traceback completo de qualquer thread que morra — o exe
   --windowed não tem stderr, então o log é o diagnóstico visível.
+
+Contrato com o INSTALADOR (atualização no Windows):
+- Mutex nomeado `Local\DZ23-Trading-AI-Instancia`: existe enquanto uma
+  instância executa — é este o sinal que o instalador lê para saber que o
+  aplicativo está aberto (nunca por nome de processo alheio).
+- `--quit`: pedido de encerramento GRACIOSO para a instância em execução
+  (mesmo caminho do botão "Fechar aplicativo": desliga o uvicorn e sai com
+  exit 0). É o ÚNICO mecanismo que o instalador usa para fechar o app —
+  jamais taskkill, jamais outro programa.
+- `--version`: imprime a versão instalada (fonte: pyproject.toml empacotado).
 """
 
 from __future__ import annotations
@@ -29,6 +39,7 @@ import threading
 import time
 import urllib.request
 import webbrowser
+from collections.abc import Callable
 from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -46,6 +57,92 @@ _CRIACOES_SEM_JANELA = 0x08000000  # CREATE_NO_WINDOW: windowed não pisca conso
 _WINDOWS = os.name == "nt"
 _LOG_CONFIGURADO = False
 _HANDLERS: list[logging.Handler] = []
+
+# Contrato com o instalador (ver docstring). O mutex existe enquanto o
+# backend executa; o evento carrega o pedido de saída gracioso do --quit.
+NOME_MUTEX_INSTANCIA = "Local\\DZ23-Trading-AI-Instancia"
+NOME_EVENTO_SAIDA = "Local\\DZ23-Trading-AI-Sair"
+_SYNCHRONIZE = 0x00100000
+_WAIT_OBJECT_0 = 0x0
+
+_ENCERRAR_SERVIDOR: Callable[[], None] | None = None  # ligado por run_backend
+
+
+def _kernel32():  # type: ignore[no-untyped-def]
+    if not _WINDOWS:
+        return None
+    return ctypes.windll.kernel32
+
+
+def _criar_mutex_instancia():  # type: ignore[no-untyped-def]
+    """Handle do mutex nomeado (mantido aberto enquanto o app executa)."""
+    k32 = _kernel32()
+    if k32 is None:
+        return None
+    try:
+        return k32.CreateMutexW(None, False, NOME_MUTEX_INSTANCIA)
+    except Exception:
+        return None
+
+
+def _sinalizar_saida() -> bool:
+    """Sinaliza o evento de saída (usado pelo processo `--quit`)."""
+    k32 = _kernel32()
+    if k32 is None:
+        return False
+    try:
+        evento = k32.CreateEventW(None, True, False, NOME_EVENTO_SAIDA)
+        if not evento:
+            return False
+        try:
+            return bool(k32.SetEvent(evento))
+        finally:
+            k32.CloseHandle(evento)
+    except Exception:
+        return False
+
+
+def _saida_solicitada() -> bool:
+    """True quando alguém já sinalizou o evento de saída graciosa."""
+    k32 = _kernel32()
+    if k32 is None:
+        return False
+    try:
+        evento = k32.OpenEventW(_SYNCHRONIZE, False, NOME_EVENTO_SAIDA)
+        if not evento:
+            return False
+        try:
+            return k32.WaitForSingleObject(evento, 0) == _WAIT_OBJECT_0
+        finally:
+            k32.CloseHandle(evento)
+    except Exception:
+        return False
+
+
+def _atender_pedido_de_saida() -> int:
+    """Processa `--quit`: pede a saída da instância EM EXECUÇÃO e retorna."""
+    if _sinalizar_saida():
+        logger.info("--quit: pedido de encerramento gracioso enviado à instância viva")
+        return 0
+    logger.info("--quit: nenhuma instância do DZ23 em execução")
+    return 1
+
+
+def _limpar_evento_saida() -> None:
+    """Zera o evento de saída (a instância morreu; o pedido não vale mais)."""
+    k32 = _kernel32()
+    if k32 is None:
+        return
+    try:
+        evento = k32.OpenEventW(_SYNCHRONIZE | 0x0002, False, NOME_EVENTO_SAIDA)  # EVENT_MODIFY_STATE
+        if not evento:
+            return
+        try:
+            k32.ResetEvent(evento)
+        finally:
+            k32.CloseHandle(evento)
+    except Exception:
+        logger.exception("não foi possível limpar o evento de saída")
 
 
 def owner_data_dir() -> Path:
@@ -168,9 +265,15 @@ def run_backend(host: str = "127.0.0.1", port: int = PORTA_PREFERIDA) -> None:
     # encerramento: o endpoint /v1/app/quit liga should_exit e o servidor
     # desliga graciosamente — o leigo não fica preso ao Gerenciador de Tarefas.
     # log_config=None: os logs do uvicorn caem no log persistente do launcher.
+    global _ENCERRAR_SERVIDOR
     config = uvicorn.Config(app, host=host, port=port, log_level="info", log_config=None)
     server = uvicorn.Server(config)
-    set_shutdown_hook(lambda: setattr(server, "should_exit", True))
+
+    def _encerrar_servidor() -> None:
+        server.should_exit = True  # type: ignore[union-attr]
+
+    _ENCERRAR_SERVIDOR = _encerrar_servidor
+    set_shutdown_hook(_encerrar_servidor)
     logger.info("backend: uvicorn.run em http://%s:%d", host, port)
     try:
         server.run()
@@ -368,10 +471,22 @@ def show_startup_failed_dialog(porta: int, caminho_log: Path | None = None) -> N
     _mensagem_box("DZ23 Trading AI — falha ao iniciar", texto)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    from tradingagents.versao import versao_do_pacote
+
     host = "127.0.0.1"
+    argumentos = list(sys.argv[1:] if argv is None else argv)
+
+    if "--version" in argumentos:
+        print(f"DZ23 Trading AI {versao_do_pacote()}")
+        return 0
+    if "--quit" in argumentos:
+        configurar_logs()
+        return _atender_pedido_de_saida()
+
     caminho_log = configurar_logs()
-    logger.info("DZ23 Trading AI — launcher iniciando (log: %s)", caminho_log)
+    versao = versao_do_pacote()
+    logger.info("DZ23 Trading AI %s — launcher iniciando (log: %s)", versao, caminho_log)
     logger.info(
         "execução: frozen=%s; python=%s; exe=%s",
         bool(getattr(sys, "frozen", False)), sys.version.split()[0], sys.executable,
@@ -396,6 +511,13 @@ def main() -> int:
 
     logger.info("iniciando na porta efetiva %s (primeira livre da faixa)", porta)
 
+    # Mutex nomeado = "existe uma instância do DZ23 executando agora". É esse
+    # o sinal lido pelo instalador para pedir o encerramento seguro do PRÓPRIO
+    # app antes de substituir arquivos. Handle guardado até o processo morrer.
+    mutex = _criar_mutex_instancia()
+    if mutex is None and _WINDOWS:
+        logger.warning("mutex de instância não pôde ser criado; instalador pode pedir fechamento manual")
+
     # Dono Único: senha legada em texto puro vira hash Argon2id (a MESMA senha
     # continua valendo) e o texto puro sai do disco. Primeira execução sem
     # senha nenhuma: o assistente no navegador cria — o launcher não deve
@@ -417,9 +539,21 @@ def main() -> int:
 
     try:
         while backend_thread.is_alive():
+            if _saida_solicitada():
+                logger.info("pedido de encerramento gracioso recebido (instalador ou painel)")
+                if _ENCERRAR_SERVIDOR is not None:
+                    _ENCERRAR_SERVIDOR()
+                backend_thread.join(timeout=30)
+                if backend_thread.is_alive():
+                    logger.error("backend não encerrou em 30s após o pedido gracioso")
+                    return 1
+                logger.info("backend encerrado graciosamente; saindo")
+                _limpar_evento_saida()
+                return 0
             time.sleep(1)
     except KeyboardInterrupt:
         logger.info("encerrando o DZ23 Trading AI Desktop...")
+    _limpar_evento_saida()
     return 0
 
 

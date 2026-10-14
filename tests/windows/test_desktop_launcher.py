@@ -56,8 +56,13 @@ class _FakeTime:
 
 
 class _FakeThread:
-    def __init__(self, alive=False, *args, **kwargs):
+    """Thread de mentira com semântica "viva uma vez": nasce viva e morre na
+    consulta seguinte (o loop do main roda uma volta e sai), ou imediatamente
+    no join(). `alive=False` cria uma thread já morta."""
+
+    def __init__(self, alive=True, *args, **kwargs):
         self.vivo = alive
+        self.juntou = False
         self._target = kwargs.get("target")
         self._args = kwargs.get("args", ())
 
@@ -66,7 +71,14 @@ class _FakeThread:
             self._target(*self._args)
 
     def is_alive(self):
-        return self.vivo
+        if self.juntou or not self.vivo:
+            return False
+        self.vivo = False
+        return True
+
+    def join(self, timeout=None):
+        self.juntou = True
+        self.vivo = False
 
 
 @pytest.fixture()
@@ -496,3 +508,111 @@ def test_main_backend_real_morre_e_avisa_com_log(launcher_tmp):
     for handler in launcher._HANDLERS:
         handler.flush()
     assert "falha simulada de import do backend" in log_path().read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Contrato com o instalador: --version, --quit, mutex e saída graciosa
+# ---------------------------------------------------------------------------
+
+def test_run_backend_registra_gancho_global_de_encerramento(launcher_tmp, monkeypatch):
+    # É este gancho que o loop do main() aciona quando o instalador pede a
+    # saída graciosa — precisa desligar o mesmo servidor do /v1/app/quit.
+    monkeypatch.setattr(launcher, "_ENCERRAR_SERVIDOR", None)
+    criados: list[_FakeServer] = []
+
+    def fakeserver(config):
+        criados.append(_FakeServer(config))
+        return criados[-1]
+
+    with patch("uvicorn.Config"), \
+            patch("uvicorn.Server", side_effect=fakeserver), \
+            patch("service.app.set_shutdown_hook"):
+        run_backend(host="127.0.0.1", port=8000)
+
+    assert launcher._ENCERRAR_SERVIDOR is not None
+    launcher._ENCERRAR_SERVIDOR()
+    assert criados[0].should_exit is True
+
+
+def test_main_version_imprime_e_sai_sem_subir_backend(launcher_tmp, capsys):
+    with patch("tradingagents.versao.versao_do_pacote", return_value="9.9.9-teste"), \
+            patch("desktop.launcher.escolher_arranque") as mock_arranque:
+        assert main(["--version"]) == 0
+    assert "9.9.9-teste" in capsys.readouterr().out
+    mock_arranque.assert_not_called()
+
+
+def test_main_quit_delega_para_o_evento_de_saida(launcher_tmp):
+    with patch("desktop.launcher._atender_pedido_de_saida", return_value=0) as mock_quit:
+        assert main(["--quit"]) == 0
+    mock_quit.assert_called_once()
+
+
+def test_main_quit_sem_instancia_retorna_1(launcher_tmp, monkeypatch):
+    # Sem API do Windows (ou sem instância viva), --quit não finge sucesso.
+    monkeypatch.setattr(launcher, "_WINDOWS", False)
+    assert main(["--quit"]) == 1
+
+
+def test_main_cria_mutex_quando_inicia(launcher_tmp):
+    # O mutex nomeado é o sinal lido pelo instalador ("app em execução").
+    infos = [PortaInfo(8000, False, False, None, None)]
+    with patch("desktop.launcher.escolher_arranque", return_value=("iniciar", 8000, infos)), \
+            patch("desktop.launcher.migrate_legacy_owner_password"), \
+            patch("desktop.launcher.run_backend"), \
+            patch("desktop.launcher.esperar_healthz", return_value=True), \
+            patch("desktop.launcher.threading.Thread", _FakeThread), \
+            patch("desktop.launcher._criar_mutex_instancia", return_value=4242) as mock_mutex, \
+            patch("webbrowser.open"):
+        assert main([]) == 0
+    mock_mutex.assert_called_once()
+
+
+def test_main_reuso_nao_cria_mutex(launcher_tmp):
+    infos = [PortaInfo(8003, True, True, None, None)]
+    with patch("desktop.launcher.escolher_arranque", return_value=("reutilizar", 8003, infos)), \
+            patch("desktop.launcher._criar_mutex_instancia") as mock_mutex, \
+            patch("webbrowser.open"):
+        assert main([]) == 0
+    mock_mutex.assert_not_called()
+
+
+def test_main_encerra_graciosamente_quando_instalador_pede(launcher_tmp):
+    # Pedido de saída (evento do --quit): desliga o uvicorn pelo MESMO gancho
+    # do painel, espera a thread, limpa o evento e sai com exit 0.
+    infos = [PortaInfo(8000, False, False, None, None)]
+    chamado = {"encerrar": False, "limpar": 0}
+
+    def encerrar():
+        chamado["encerrar"] = True
+
+    with patch("desktop.launcher.escolher_arranque", return_value=("iniciar", 8000, infos)), \
+            patch("desktop.launcher.migrate_legacy_owner_password"), \
+            patch("desktop.launcher.run_backend"), \
+            patch("desktop.launcher.esperar_healthz", return_value=True), \
+            patch("desktop.launcher.threading.Thread", _FakeThread), \
+            patch("desktop.launcher._criar_mutex_instancia", return_value=1), \
+            patch("desktop.launcher._saida_solicitada", return_value=True), \
+            patch("desktop.launcher._ENCERRAR_SERVIDOR", encerrar), \
+            patch("desktop.launcher._limpar_evento_saida", side_effect=lambda: chamado.__setitem__("limpar", chamado["limpar"] + 1)), \
+            patch("webbrowser.open") as mock_browser:
+        assert main([]) == 0
+    assert chamado["encerrar"] is True
+    assert chamado["limpar"] == 1
+    mock_browser.assert_called_once()  # abriu o painel antes de encerrar
+
+
+def test_main_nao_encerra_sem_pedido(launcher_tmp):
+    # Sem pedido de saída e com a thread viva... o loop seguiria; com thread
+    # encerrada o main sai normalmente sem acionar o gancho de encerramento.
+    infos = [PortaInfo(8000, False, False, None, None)]
+    with patch("desktop.launcher.escolher_arranque", return_value=("iniciar", 8000, infos)), \
+            patch("desktop.launcher.migrate_legacy_owner_password"), \
+            patch("desktop.launcher.run_backend"), \
+            patch("desktop.launcher.esperar_healthz", return_value=True), \
+            patch("desktop.launcher.threading.Thread", _FakeThread), \
+            patch("desktop.launcher._criar_mutex_instancia", return_value=1), \
+            patch("desktop.launcher._ENCERRAR_SERVIDOR") as mock_encerrar, \
+            patch("webbrowser.open"):
+        assert main([]) == 0
+    mock_encerrar.assert_not_called()

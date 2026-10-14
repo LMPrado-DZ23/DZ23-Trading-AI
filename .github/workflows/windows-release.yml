@@ -1,11 +1,15 @@
 name: Windows Release Build
 
+# A versão NUNCA é digitada aqui: vem do pyproject.toml (fonte única) e é
+# injetada no ISCC (/DAppVersion), nos nomes dos arquivos e no Release.
 on:
   push:
     tags:
       - 'v*'
     branches:
       - feat/integracao-mestre-20261012
+      - fix/instalador-atualizacoes-windows
+  workflow_dispatch:
 
 jobs:
   build:
@@ -22,14 +26,25 @@ jobs:
         run: uv sync --extra desk --extra dev
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
+      - name: Read version from pyproject
+        id: versao
+        shell: pwsh
+        run: |
+          $v = uv run python -c "import tomllib,pathlib;print(tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version'])"
+          "versao=$v" >> $env:GITHUB_OUTPUT
       - name: Build Executable Bundle
         run: uv run --with pyinstaller python -m desktop.packaging.build_exe
       - name: Compile Inno Setup Installer
-        run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" desktop/installer/setup.iss'
-      - name: Zip Release Bundle and Calculate Hashes
+        shell: pwsh
         run: |
+          $v = "${{ steps.versao.outputs.versao }}"
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$v" desktop/installer/setup.iss
+      - name: Zip Release Bundle and Calculate Hashes
+        shell: pwsh
+        run: |
+          $v = "${{ steps.versao.outputs.versao }}"
           Compress-Archive -Path dist/DZ23-Trading-AI/* -DestinationPath dist/DZ23-Trading-AI-windows-x64.zip
-          $linhas = foreach ($f in @("dist/DZ23-Trading-AI-Setup-v0.4.0.exe", "dist/DZ23-Trading-AI-windows-x64.zip")) {
+          $linhas = foreach ($f in @("dist/DZ23-Trading-AI-Setup-v$v.exe", "dist/DZ23-Trading-AI-windows-x64.zip")) {
             "$((Get-FileHash $f -Algorithm SHA256).Hash.ToLower())  $(Split-Path $f -Leaf)"
           }
           # Grava com finais de linha LF: `sha256sum -c` no Linux/macOS falha com CRLF.
@@ -39,7 +54,7 @@ jobs:
         with:
           name: dz23-windows-x64
           path: |
-            dist/DZ23-Trading-AI-Setup-v0.4.0.exe
+            dist/DZ23-Trading-AI-Setup-v*.exe
             dist/DZ23-Trading-AI-windows-x64.zip
             dist/SHA256SUMS.txt
           if-no-files-found: error
@@ -60,7 +75,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/DZ23-Trading-AI-Setup-v0.4.0.exe
+            dist/DZ23-Trading-AI-Setup-v*.exe
             dist/DZ23-Trading-AI-windows-x64.zip
             dist/SHA256SUMS.txt
         env:

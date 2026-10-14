@@ -1,0 +1,82 @@
+name: Matriz do Instalador Windows
+
+# Prova o ciclo COMPLETO do instalador/atualizador em Windows isolado
+# (runner virgin): instalacao limpa 0.4.0 -> recusa com app aberto ->
+# atualizacao preservando dados + backup verificado -> reparo -> /SIMULAR ->
+# downgrade recusado/forcado -> rollback -> desinstalar/reinstalar ->
+# instaladores simultaneos. Evidencias sobem como artefato.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/instalador-atualizacoes-windows
+
+jobs:
+  matriz:
+    runs-on: windows-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        run: pip install uv
+      - name: Install locked project (desk + dev extras)
+        run: uv sync --extra desk --extra dev
+      - name: Install PyInstaller no venv do projeto
+        run: uv pip install --python .venv/Scripts/python.exe pyinstaller
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+      - name: Materializar commit congelado (bundle 0.4.0)
+        shell: pwsh
+        run: |
+          # O bundle ANTIGO vem do commit congelado 30b8683 (nao depende de
+          # artefato expirado): e o binario 0.4.0 REAL para o upgrade verdadeiro.
+          git archive --format=zip -o velho.zip 30b8683
+          if ($LASTEXITCODE -ne 0) { throw "git archive 30b8683 falhou" }
+          Expand-Archive -Path velho.zip -DestinationPath velho
+      - name: Construir bundle ANTIGO (0.4.0)
+        shell: pwsh
+        run: |
+          Push-Location velho
+          & "$env:GITHUB_WORKSPACE\.venv\Scripts\python.exe" -m desktop.packaging.build_exe
+          if ($LASTEXITCODE -ne 0) { Pop-Location; throw "build do bundle 0.4.0 falhou" }
+          Pop-Location
+      - name: Compilar instalador ANTIGO (0.4.0)
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" velho\desktop\installer\setup.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC (antigo) falhou" }
+      - name: Read version from pyproject
+        id: versao
+        shell: pwsh
+        run: |
+          $v = & "$env:GITHUB_WORKSPACE\.venv\Scripts\python.exe" -c "import tomllib,pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version'])"
+          if ($LASTEXITCODE -ne 0 -or -not $v) { throw "versao do pyproject nao lida" }
+          "numero=$v" >> $env:GITHUB_OUTPUT
+      - name: Construir bundle NOVO (${{ steps.versao.outputs.numero }})
+        run: .venv/Scripts/python.exe -m desktop.packaging.build_exe
+      - name: Compilar instalador NOVO (${{ steps.versao.outputs.numero }})
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=${{ steps.versao.outputs.numero }}" desktop\installer\setup.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC (novo) falhou" }
+      - name: Rodar matriz do instalador
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\.venv\Scripts\python.exe" scripts\matriz_instalador_win.py `
+            --setup-antigo "velho/dist/DZ23-Trading-AI-Setup-v0.4.0.exe" `
+            --setup-novo "dist/DZ23-Trading-AI-Setup-v${{ steps.versao.outputs.numero }}.exe"
+          exit $LASTEXITCODE
+      - name: Upload evidencias da matriz
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: matriz-instalador-evidencias
+          path: evidencias/
+          if-no-files-found: warn

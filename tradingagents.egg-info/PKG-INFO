@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: tradingagents
-Version: 0.4.0
+Version: 0.5.0
 Summary: TradingAgents: Multi-Agents LLM Financial Trading Framework
 Requires-Python: >=3.10
 Description-Content-Type: text/markdown

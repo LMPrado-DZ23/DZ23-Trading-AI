@@ -820,8 +820,11 @@ async def _json_body(req: Request) -> dict:
 
 @app.get("/healthz")
 def hz():
+    from tradingagents.versao import versao_do_pacote
+
     return {"status": "degraded" if HEALTH["avisos"] else "ok",
             "app": "tradingagents-agency/1",
+            "versao": versao_do_pacote(),
             "armazenamento": HEALTH["armazenamento"],
             "banco": DATABASE_ORIGEM,
             "avisos": HEALTH["avisos"]}

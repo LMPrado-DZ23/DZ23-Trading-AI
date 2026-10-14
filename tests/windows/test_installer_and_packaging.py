@@ -1,7 +1,9 @@
 """
 Auditoria & Homologação de Entrega Windows:
-Valida a estrutura do instalador Inno Setup, o construtor PyInstaller,
-o workflow do GitHub Actions e os fluxos PAPER end-to-end.
+Valida a estrutura do instalador Inno Setup (identidade estável, detecção de
+versão, downgrade bloqueado, encerramento seguro e backup), o construtor
+PyInstaller (versão única), o workflow do GitHub Actions e os fluxos PAPER
+end-to-end.
 """
 
 from pathlib import Path
@@ -11,18 +13,90 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _versao_pyproject() -> str:
+    import re
+
+    texto = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    return re.search(r'^version\s*=\s*"([^"]+)"', texto, re.MULTILINE).group(1)
+
+
 class TestWindowsInstallerAndWorkflow:
     def test_inno_setup_script_structure(self):
         iss_path = ROOT / "desktop" / "installer" / "setup.iss"
         assert iss_path.exists(), "setup.iss não encontrado"
         content = iss_path.read_text(encoding="utf-8")
 
-        assert "AppName=DZ23 Trading AI" in content
+        assert '#define AppName "DZ23 Trading AI"' in content
+        assert "AppName={#AppName}" in content
         assert "DefaultDirName={localappdata}\\DZ23-Trading-AI" in content
         assert "PrivilegesRequired=lowest" in content
-        assert "OutputBaseFilename=DZ23-Trading-AI-Setup-v0.4.0" in content
-        assert "{userdesktop}\\DZ23 Trading AI" in content
-        assert "Filename: \"{app}\\DZ23-Trading-AI.exe\"" in content
+        # Versão vem do build (fonte única: pyproject.toml) — nada pinado à mão.
+        assert "OutputBaseFilename=DZ23-Trading-AI-Setup-v{#AppVersion}" in content
+        assert "AppVersion={#AppVersion}" in content
+        assert "v0.4.0" not in content and "v0.5.0" not in content
+        assert '#define AppExeName "DZ23-Trading-AI.exe"' in content
+        assert "{userdesktop}\\{#AppName}" in content
+        assert "Filename: \"{app}\\{#AppExeName}\"" in content
+
+    def test_inno_setup_identidade_estavel_e_deteccao_de_versao(self):
+        content = (ROOT / "desktop" / "installer" / "setup.iss").read_text(encoding="utf-8")
+
+        # AppId pinado = mesma entrada do Windows que a 0.4.0 já registrou.
+        assert "AppId={#AppIdConst}" in content
+        assert '#define AppIdConst "DZ23 Trading AI"' in content
+        # Chave de registro exata que o dono tem hoje (evidência DESKTOP-AVELL).
+        assert "DZ23 Trading AI_is1" in content
+        # Detecção + cenários (Atualizar / Reparar / Downgrade / Cancelar).
+        assert "function PrepareToInstall" in content
+        assert "VersaoNoRegistro" in content
+        assert "CompararVersoes" in content
+        assert "Cenario := 'ATUALIZACAO'" in content and "Cenario := 'REPARO'" in content
+        assert "RESULTADO=ABORTADO_DOWNGRADE" in content
+        assert "FORCEDOWNGRADE" in content
+
+    def test_inno_setup_encerra_so_o_proprio_app_nunca_terceiros(self):
+        content = (ROOT / "desktop" / "installer" / "setup.iss").read_text(encoding="utf-8")
+
+        # Nunca encerrar via Restart Manager; fechamento só pelo --quit do app.
+        assert "CloseApplications=no" in content
+        assert "RestartApplications=no" in content
+        # taskkill pode aparecer apenas em COMENTÁRIO ("nunca taskkill"): o
+        # que se prova aqui é que nenhuma linha executável o invoca.
+        executavel_iss = "\n".join(
+            linha for linha in content.splitlines() if not linha.strip().startswith(";")
+        ).lower()
+        assert "taskkill" not in executavel_iss
+        script = (ROOT / "desktop" / "installer" / "dz23_processo.ps1").read_text(encoding="utf-8")
+        executavel_ps1 = "\n".join(
+            linha for linha in script.splitlines() if not linha.strip().startswith("#")
+        ).lower()
+        assert "taskkill" not in executavel_ps1
+        assert "--quit" in script
+        assert "DZ23-Trading-AI-Instancia" in script  # mutex do contrato
+        assert "tradingagents-agency" in script  # marcador do /healthz
+
+    def test_inno_setup_backup_verificado_e_dry_run(self):
+        content = (ROOT / "desktop" / "installer" / "setup.iss").read_text(encoding="utf-8")
+        backup = (ROOT / "desktop" / "installer" / "backup_dados.ps1").read_text(encoding="utf-8")
+        rollback = (ROOT / "desktop" / "installer" / "restaurar_backup.ps1").read_text(encoding="utf-8")
+
+        assert "backup_dados.ps1" in content and "dontcopy" in content
+        assert "ABORTADO_BACKUP_FALHOU" in content  # fail-closed: sem backup não instala
+        assert "MANIFEST.sha256" in backup
+        assert "Get-FileHash" in backup  # verificação hash a hash
+        assert "pre-upgrade-" in backup
+        assert "MANIFEST.sha256" in rollback
+        assert "DESTINO_EXISTENTE_SEM_FORCAR" in rollback
+        # Automação: status file + dry-run local sem escrever nada.
+        assert "DZ23STATUS" in content and "SIMULAR" in content
+        assert "RESULTADO=SIMULADO" in content
+
+    def test_versao_unica_do_pyproject_ate_o_healthz(self):
+        from tradingagents.versao import versao_do_pacote
+
+        assert versao_do_pacote() == _versao_pyproject()
+        app = (ROOT / "service" / "app.py").read_text(encoding="utf-8")
+        assert '"versao": versao_do_pacote()' in app
 
     def test_github_release_workflow_has_inno_setup_and_artifacts(self):
         wf_path = ROOT / ".github" / "workflows" / "windows-release.yml"
@@ -37,15 +111,33 @@ class TestWindowsInstallerAndWorkflow:
         assert any("Compile Inno Setup Installer" in n for n in step_names)
         assert any("Upload build artifacts" in n for n in step_names)
 
+        # A versão do build vem do pyproject — nunca digitada em dois lugares.
+        runs = "\n".join(str(s.get("run", "")) for s in build_steps)
+        assert "tomllib" in runs and "toml" in runs
+        assert "/DAppVersion=" in runs or "-DAppVersion=" in runs
+
         # Build de branch sobe artefato para inspeção; Release só em tag v*
         # (publicação exige gatilho humano explícito).
         publish = data["jobs"]["publish-release"]
         assert "refs/tags/v" in publish["if"]
         release_step = next(s for s in publish["steps"] if "Create GitHub Release" in s.get("name", ""))
         files_spec = release_step["with"]["files"]
-        assert "dist/DZ23-Trading-AI-Setup-v0.4.0.exe" in files_spec
+        assert "dist/DZ23-Trading-AI-Setup-v" in files_spec and ".exe" in files_spec
         assert "dist/DZ23-Trading-AI-windows-x64.zip" in files_spec
         assert "dist/SHA256SUMS.txt" in files_spec
+
+    def test_workflow_da_matriz_do_instalador_existe_e_roda_a_matriz(self):
+        wf_path = ROOT / ".github" / "workflows" / "installer-matrix.yml"
+        assert wf_path.exists(), "installer-matrix.yml não encontrado"
+        data = yaml.safe_load(wf_path.read_text(encoding="utf-8"))
+        job = data["jobs"]["matriz"]
+        runs = "\n".join(str(s.get("run", "")) for s in job["steps"])
+        assert "matriz_instalador_win.py" in runs
+        assert "ISCC.exe" in runs
+        # O bundle ANTIGO (0.4.0) é construído do commit congelado — a matriz
+        # prova o upgrade real 0.4.0→novo sem depender de artefato expirado.
+        assert "30b8683" in runs
+        assert job["runs-on"] == "windows-latest"
 
     def test_build_exe_includes_all_modules_and_resources(self):
         from desktop.packaging.build_exe import ROOT as build_root
@@ -55,6 +147,11 @@ class TestWindowsInstallerAndWorkflow:
         assert "--collect-all=service" in build_exe_script
         assert "--collect-all=tradingagents" in build_exe_script
         assert "--hidden-import=uvicorn.logging" in build_exe_script
+        # Versão single-source: recurso de versão do exe + metadado embarcado
+        # (é o metadado que o --version/healthz leem no bundle).
+        assert "--version-file=" in build_exe_script
+        assert "--copy-metadata=tradingagents" in build_exe_script
+        assert "ler_versao_pyproject" in build_exe_script
 
 
 class TestSettingsAndPaperHomologation:

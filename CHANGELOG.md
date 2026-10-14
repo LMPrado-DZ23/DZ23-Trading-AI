@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Breaking changes within the 0.x line are called out explicitly.
 
+## [0.5.0] — 2026-10-14
+
+Windows installer/updater hardening: in-place updates preserve financial data,
+every version change is preceded by a verified backup, and the app is closed
+gracefully — never via taskkill — before any file is replaced.
+
+### Added
+
+- Installer detects the installed version (same registry identity as
+  0.3.x/0.4.0) and presents the right scenario: fresh install, repair,
+  update, or blocked downgrade. Downgrades require `/FORCEDOWNGRADE=1`.
+- Verified backup (SHA256, file by file) of `%APPDATA%\DZ23-Trading-AI`
+  before every version change, plus `restaurar_backup.ps1` for rollback.
+  Uninstall never deletes user data or backups.
+- Launcher installer contract: named instance mutex, graceful shutdown
+  event, and `--quit`/`--version` CLI. The installer closes only the DZ23
+  app (via the same path as the panel's "Fechar aplicativo"), never other
+  programs. `/SIMULAR=1` dry-run reports what it would do and writes nothing.
+- `/healthz` reports the app version; `pyproject.toml` is the single source
+  of truth, propagated to the exe version resource, the installer metadata
+  and the GitHub Release filenames.
+- Silent automation contract: `/VERYSILENT /DZ23STATUS=<file>` writes
+  KEY=VALUE telemetry; refusals exit non-zero with nothing changed.
+- Windows CI matrix (`installer-matrix.yml`) proves the full cycle on a
+  virgin runner, including a real 0.4.0 → new-version upgrade with
+  representative (fictitious) data.
+
 ## [0.4.0] — 2026-08-31
 
 Look-ahead and point-in-time fixes across the data and memory layers, clearer
