@@ -98,4 +98,9 @@ continua `BLOCKED_BY_POLICY`.
   falha é a mesma **AMBIENTAL** do launcher descrita acima (app do dono na
   porta 8000 — PID 13800; reproduz isolada, sem relação com os arquivos do
   E6); CI em runner virgem é o gate real (ADR-004).
+- **Fechamento CI (push `87a14da`):** Windows Release Build run
+  `38546817504` — **success** (artefato `dz23-windows-x64` = bundle do
+  código E6) + Matriz do Instalador run `38546817421` — **success**
+  (`TOTAL: 0 falha(s)`; artefato `matriz-instalador-evidencias`).
+  Nenhum Release publicado (tag segue aguardando autorização do dono).
 - LIVE `BLOCKED_BY_POLICY` o tempo todo. O app do dono NÃO foi tocado.
