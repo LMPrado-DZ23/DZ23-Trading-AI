@@ -7,6 +7,41 @@
 - **Regra:** nenhum gate é declarado PASS sem prova reexecutável. Nenhuma ordem
   real executada. Nada neste trabalho habilita LIVE.
 
+---
+
+## ATUALIZAÇÃO 2026-10-14 — HEAD verificado `30b8683` (pós-Qoder)
+
+O agente Qoder concluiu sua missão. O estado do repositório mudou desde o
+baseline `70b153d` desta auditoria (46 commits novos). Registro honesto:
+
+- **PR #8 (single-owner fail-closed) foi INTEGRADO** à base
+  `feat/integracao-mestre-20261012` (merge em 2026-10-13T18:54:07Z). A trava
+  fixa (`SINGLE_OWNER_ENFORCED = True`, nenhuma flag reabre) é agora o contrato
+  do produto, por decisão arquitetural do dono.
+- **Login do dono com Argon2id presente** (`service/api/owner_credentials.py`,
+  PR #10): a senha do dono deixou de viver em texto puro e passou a hash
+  Argon2id + código de recuperação rotativo. Isso FORTALECE a autenticação
+  (Responsabilidade 7) — mas é hash de SENHA DE LOGIN, não resolve o SEC-1.
+- **A auditoria original (§1–§9 abaixo) cobre apenas o baseline `70b153d`.**
+  Os módulos adicionados depois (motor global de saída `desk/saida.py`,
+  copiloto `desk/piloto.py`, alertas `desk/canais_alerta.py`/`notificacao_viva.py`,
+  escola `desk/escola.py`, maestro `desk/maestro.py`, salas `desk/salas.py`,
+  laboratório quant `tradingagents/quant/*`, modo `desk/modo.py`) **NÃO estavam
+  cobertos** e são auditados na seção **§10 — Auditoria do código novo**.
+
+### Status dos achados P0 no HEAD `30b8683` (reverificado, NÃO resolvidos sem prova)
+
+- **FIN-1 — AINDA PRESENTE (depois CORRIGIDO neste PR).** O docstring do
+  `ccxt_bridge.py` na base final ainda afirmava que o modo LIVE foi "removido"
+  e que "nenhuma configuração pode criar um cliente com endpoints reais" —
+  falso. Correção e testes em §10.
+- **SEC-1 — AINDA PRESENTE (depois CORRIGIDO neste PR).** `save_cfg` na base
+  final seguia gravando as chaves de API em TEXTO CLARO no `config.json`
+  (apenas `chmod 600`). O Argon2id protege só a senha de login, não as chaves
+  armazenadas. Correção (cifragem em repouso + migração) em §10.
+
+---
+
 ## 0. Evidência de base (reexecutável)
 
 ```bash

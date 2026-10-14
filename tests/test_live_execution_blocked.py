@@ -85,6 +85,40 @@ def test_all_live_guards_raise_before_any_network_client_is_built(tmp_path):
         "as travas de live precisam acontecer antes de criar o cliente de rede")
 
 
+class TestEstadoAtualDoProdutoNaoEnviaOrdemReal:
+    """FIN-1: no estado atual do produto, nenhuma rota HTTP chega ao envio de
+    ordem real — o endpoint legado foi removido (410) e a execução é PAPER
+    pelo ExecutionRouter governado."""
+
+    def _app(self, tmp_path, monkeypatch):
+        import importlib
+        monkeypatch.setenv("ACCESS_PASSWORD", "s3nh4")
+        monkeypatch.setenv("DATA_DIR", str(tmp_path))
+        import service.app as m
+        importlib.reload(m)
+        m._FAILS.clear()
+        return m
+
+    def test_legacy_broker_order_route_is_gone(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = self._app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+        r = c.post("/v1/broker/order", headers={"Authorization": "Bearer s3nh4"},
+                   json={"job_id": "x", "symbol": "BTC/USDT", "side": "buy",
+                         "amount": 1})
+        assert r.status_code == 410, "a rota legada de ordem real deve estar removida"
+
+    def test_docstring_no_longer_claims_live_was_removed(self):
+        """A documentação do bridge foi alinhada à implementação: não pode
+        afirmar que LIVE foi 'removido' enquanto o ramo existe."""
+        import inspect
+
+        from tradingagents.brokers import ccxt_bridge
+        doc = inspect.getdoc(ccxt_bridge) or ""
+        assert "removido nesta branch" not in doc
+        assert "BLOCKED_BY_POLICY" in doc
+
+
 class TestGateDeCapitalGuardaTodoEnvio:
     """Em QUALQUER modo, um estado sem marca de transporte seguro é recusado
     antes de qualquer chamada de rede — o gate é incontornável."""

@@ -1,12 +1,20 @@
-"""CCXT bridge — TESTNET-only, fail-closed, decisão do Prado registrada.
+"""CCXT bridge — TESTNET por padrão, LIVE fail-closed, decisão do Prado registrada.
 
 Regras (decisão do Prado, dono do sistema):
 - Corretora selecionável entre a linha DZ23 (Binance, Bybit, OKX, Coinbase,
   Kraken, Gate.io, KuCoin, Mercado Bitcoin, Bitget) via CCXT.
 - MODO TESTNET: padrão; exchange sem testnet real ⇒ recusa (nunca degrada
   silenciosamente para live).
-- MODO LIVE (dinheiro real): removido nesta branch segura; nenhuma configuração
-  pode criar um cliente com endpoints reais.
+- MODO LIVE (dinheiro real): NÃO está removido do código — é uma capacidade
+  PREVISTA, desligada por padrão e protegida por travas fail-closed no
+  construtor (frase EXATA de autorização do dono em LIVE_TRADING_CONFIRM +
+  EXCHANGE_API_KEY/SECRET reais + LIVE_MAX_ORDER_VALUE>0 + LIVE_MAX_DAILY_LOSS>0).
+  Faltando qualquer uma, o construtor levanta BrokerSecurityError ANTES de criar
+  qualquer cliente de rede. No ESTADO ATUAL DO PRODUTO essas variáveis não são
+  definidas e nenhuma rota HTTP chega aqui (o endpoint legado /v1/broker/order
+  responde 410); a execução é PAPER/TESTNET pelo ExecutionRouter governado.
+  LIVE permanece BLOCKED_BY_POLICY até decisão humana nova e explícita.
+  Comprovação em tests/test_live_execution_blocked.py.
 - TODO envio de ordem passa OBRIGATORIAMENTE por assert_secure_for_capital
   (consumidor selado do Gate B) ANTES de qualquer chamada de rede.
 - Idempotência: clientOrderId determinístico derivado do job — retry NUNCA
