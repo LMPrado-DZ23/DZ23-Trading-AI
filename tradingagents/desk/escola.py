@@ -23,6 +23,10 @@ Regras herdadas do Batalhão, adaptadas aos mercados do DZ23:
 - **Formatura é revogável.** Novas evidências contra a estratégia
   rebaixam para `formatura_revogada` de forma automática e auditável, e o
   estado revogado não voltar atrás — só uma versão nova recomeça.
+- **Estabilidade temporal obrigatória.** IC aprovado não basta: as duas
+  metades temporais da prova final precisam ser positivas — resultado
+  concentrado num único período não forma; o caso bloqueado segue
+  coletando (bloqueio é gate, não sentença).
 - **Referências iniciais**: 200 operações na parcela preliminar e 300
   novas na prova final. São piso, não garantia: quem aprova ou reprova é o
   intervalo de confiança, sempre.
@@ -122,6 +126,94 @@ class PerfilDeMercado:
         }
 
 
+def metricas_de_formacao(desfechos, agora: datetime | None = None) -> dict:
+    """Métricas §8 sobre desfechos FECHADOS já líquidos (custos incluídos).
+
+    Mede o que a formação deve exibir — expectativa líquida, fator de
+    lucro, drawdown da curva realizada, retorno ajustado ao risco e risco
+    de cauda (Sharpe/Sortino por operação), estabilidade temporal (metades
+    por ORDEM TEMPORAL, soma ponderada) e dependência de regime. É medição
+    auditável: quem decide formação continua sendo o IC contra o alvo —
+    estas métricas abrem a porta, não assinam o diploma.
+    """
+    desfechos = list(desfechos)
+    if not desfechos:
+        return {"amostras": 0, "expectativa_liquida": 0.0,
+                "fator_de_lucro": None, "max_drawdown": 0.0,
+                "retorno_ajustado_ao_risco": None, "sortino": None,
+                "estabilidade": "indeterminada", "metades": [],
+                "por_regime": {},
+                "unidade": "retorno_liquido",
+                "custos": ("já descontados — o desfecho é o retorno "
+                           "líquido realizado")}
+    agora = agora or datetime.now(timezone.utc)
+    pesos = [d.peso(agora) for d in desfechos]
+    valores = [float(d.retorno) for d in desfechos]
+    sw = sum(pesos)
+    media = sum(v * p for v, p in zip(valores, pesos, strict=True)) / sw
+    var = sum(p * (v - media) ** 2
+              for v, p in zip(valores, pesos, strict=True)) / sw
+    desvio = math.sqrt(var)
+    downside = math.sqrt(sum(p * min(v, 0.0) ** 2
+                             for v, p in zip(valores, pesos, strict=True)) / sw)
+    ganhos = sum(p * v for v, p in zip(valores, pesos, strict=True) if v > 0)
+    perdas = sum(p * -v for v, p in zip(valores, pesos, strict=True) if v < 0)
+
+    # Drawdown da curva ADITIVA realizada, em ordem temporal: o pico inicial
+    # é o capital (1.0) — série toda perdedora fica "submersa" desde o berço.
+    ordenados = sorted(desfechos, key=lambda d: _consciente(d.fechado_em))
+    cum = 0.0
+    pico = 1.0
+    max_dd = 0.0
+    for d in ordenados:
+        cum += float(d.retorno)
+        equity = 1.0 + cum
+        pico = max(pico, equity)
+        max_dd = max(max_dd, (pico - equity) / pico)
+
+    n = len(valores)
+    if n < 2:
+        estabilidade = "indeterminada"
+        metades: list[float] = []
+    else:
+        corte = n // 2
+        pesos_t = [d.peso(agora) for d in ordenados]
+        valores_t = [float(d.retorno) for d in ordenados]
+        primeira = sum(p * v for p, v in
+                       zip(pesos_t[:corte], valores_t[:corte], strict=True))
+        segunda = sum(p * v for p, v in
+                      zip(pesos_t[corte:], valores_t[corte:], strict=True))
+        metades = [primeira, segunda]
+        estabilidade = ("estavel" if primeira > 0 and segunda > 0
+                        else "instavel")
+
+    por_regime: dict[str, dict] = {}
+    for d, p, v in zip(desfechos, pesos, valores, strict=True):
+        item = por_regime.setdefault(
+            str(d.regime), {"amostras": 0, "peso": 0.0, "soma": 0.0})
+        item["amostras"] += 1
+        item["peso"] += p
+        item["soma"] += p * v
+    for item in por_regime.values():
+        item["media"] = (round(item["soma"] / item["peso"], 6)
+                         if item["peso"] else 0.0)
+    return {
+        "amostras": n,
+        "expectativa_liquida": round(media, 6),
+        "fator_de_lucro": (round(ganhos / perdas, 6) if perdas > 0
+                           else None),
+        "max_drawdown": round(max_dd, 6),
+        "retorno_ajustado_ao_risco": (round(media / desvio, 6)
+                                      if desvio > 0 else None),
+        "sortino": (round(media / downside, 6) if downside > 0 else None),
+        "estabilidade": estabilidade,
+        "metades": [round(x, 6) for x in metades],
+        "por_regime": por_regime,
+        "unidade": "retorno_liquido",
+        "custos": "já descontados — o desfecho é o retorno líquido realizado",
+    }
+
+
 @dataclass(frozen=True)
 class Avaliacao:
     """Retrato auditável de um aluno (estratégia × versão) na escola."""
@@ -143,6 +235,11 @@ class Avaliacao:
     formado_em: str | None
     atualizada_em: str
     novas_pos_formada: int = 0
+    fator_de_lucro: float | None = None
+    max_drawdown: float = 0.0
+    retorno_ajustado_ao_risco: float | None = None
+    estabilidade: str = "indeterminada"
+    base_das_metricas: str = "conjunto_completo"
 
     def como_dict(self) -> dict:
         return {
@@ -158,6 +255,11 @@ class Avaliacao:
             "candidatura_em": self.candidatura_em,
             "formado_em": self.formado_em,
             "atualizada_em": self.atualizada_em,
+            "fator_de_lucro": self.fator_de_lucro,
+            "max_drawdown": self.max_drawdown,
+            "retorno_ajustado_ao_risco": self.retorno_ajustado_ao_risco,
+            "estabilidade": self.estabilidade,
+            "base_das_metricas": self.base_das_metricas,
         }
 
 
@@ -289,12 +391,23 @@ class EscolaDeTraders:
                  if _consciente(d.fechado_em) > candidatura_em]
         if len(prova) >= AMOSTRA_PROVA:
             r = perfil.metrica(prova, agora)
-            if r["aprovada"]:
+            metricas = metricas_de_formacao(prova, agora)
+            if r["aprovada"] and metricas["estabilidade"] == "estavel":
                 self._transitar(
                     chave, EstadoDaEscola.FORMADA,
                     f"prova final independente: {len(prova)} operações novas, "
                     f"IC 95% inferior {r['ic_inferior']:.4f} acima do alvo "
-                    f"{r['alvo']:.4f}", agora, formado_em=agora.isoformat())
+                    f"{r['alvo']:.4f}; estabilidade temporal confirmada "
+                    "(duas metades positivas)", agora,
+                    formado_em=agora.isoformat())
+            elif r["aprovada"]:
+                motivo = (
+                    "prova final com IC 95% aprovado, mas estabilidade "
+                    "temporal não confirmada (metades não ambas positivas) — "
+                    "formação BLOQUEADA; a escola segue coletando")
+                if m.get("motivo") != motivo:
+                    self._transitar(chave, EstadoDaEscola.PROVA_FINAL,
+                                    motivo, agora)
             else:
                 self._transitar(
                     chave, EstadoDaEscola.REPROVADA,
@@ -312,7 +425,13 @@ class EscolaDeTraders:
     def _resumo(self, chave: str, estrategia: str, versao: str, m: dict,
                 perfil: PerfilDeMercado, desfechos, agora: datetime,
                 prova) -> Avaliacao:
-        r = perfil.metrica(desfechos, agora)
+        # Na prova final, o número reportado tem de ser o MESMO que decide a
+        # formação (só a prova independente) — nunca o conjunto treino+prova,
+        # que dilui instabilidade e engana quem audita o estado.
+        base = list(prova) if prova else list(desfechos)
+        base_nome = "prova_final" if prova else "conjunto_completo"
+        r = perfil.metrica(base, agora)
+        metricas = metricas_de_formacao(base, agora)
         return Avaliacao(
             chave=chave, estrategia=estrategia, versao=versao or "1",
             estado=EstadoDaEscola(m.get("estado",
@@ -325,7 +444,12 @@ class EscolaDeTraders:
             alvo=r["alvo"], unidade=r["unidade"], aprovada=r["aprovada"],
             candidatura_em=m.get("candidatura_em"),
             formado_em=m.get("formado_em"),
-            atualizada_em=m.get("atualizada_em", agora.isoformat()))
+            atualizada_em=m.get("atualizada_em", agora.isoformat()),
+            fator_de_lucro=metricas["fator_de_lucro"],
+            max_drawdown=metricas["max_drawdown"],
+            retorno_ajustado_ao_risco=metricas["retorno_ajustado_ao_risco"],
+            estabilidade=metricas["estabilidade"],
+            base_das_metricas=base_nome)
 
     # -- consulta -------------------------------------------------------
     def estado_de(self, estrategia: str,
@@ -413,6 +537,7 @@ def comparar_com_controle(desfechos, desfechos_controle,
 
 __all__ = [
     "Avaliacao", "EscolaDeTraders", "EstadoDaEscola", "PerfilDeMercado",
-    "comparar_com_controle", "Z_95", "AMOSTRA_CANDIDATA", "AMOSTRA_PROVA",
-    "AMOSTRA_SEM_VANTAGEM", "AMOSTRA_REVOGACAO",
+    "comparar_com_controle", "metricas_de_formacao", "Z_95",
+    "AMOSTRA_CANDIDATA", "AMOSTRA_PROVA", "AMOSTRA_SEM_VANTAGEM",
+    "AMOSTRA_REVOGACAO",
 ]

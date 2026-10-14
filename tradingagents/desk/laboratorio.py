@@ -88,6 +88,16 @@ EXECUTORES = {
 }
 
 
+def _hash_das_series(series: dict) -> str:
+    """Identificador reprodutível do dado usado na execução (§3): mesmo
+    dado, mesmo hash — o experimento pode ser reexecutado e conferido."""
+    canonico = json.dumps(
+        {k: [float(v) for v in valores]
+         for k, valores in sorted(series.items())},
+        separators=(",", ":"))
+    return hashlib.sha256(canonico.encode("utf-8")).hexdigest()
+
+
 # ----------------------------------------------------------------- modelos
 @dataclass(frozen=True)
 class Hipotese:
@@ -102,6 +112,13 @@ class Hipotese:
     janela_teste_barras: int = 60
     horizonte_barras: int = 12
     exchange: str = "binance"
+    # Registro §3: fonte, tempo, custos, execução e limitações fazem parte da
+    # hipótese CONGELADA — mudar qualquer uma muda a assinatura.
+    fonte_dados: str = ""
+    timeframe: str = "1h"
+    custos: str = ""
+    modelo_de_execucao: str = "close_a_close"
+    limitacoes: str = ""
     registrada_em: str = ""
 
     @property
@@ -118,6 +135,11 @@ class Hipotese:
             "janela_teste_barras": self.janela_teste_barras,
             "horizonte_barras": self.horizonte_barras,
             "exchange": self.exchange,
+            "fonte_dados": self.fonte_dados,
+            "timeframe": self.timeframe,
+            "custos": self.custos,
+            "modelo_de_execucao": self.modelo_de_execucao,
+            "limitacoes": self.limitacoes,
         }
         canonico = json.dumps(corpo, sort_keys=True, separators=(",", ":"),
                               ensure_ascii=False)
@@ -140,6 +162,8 @@ class ResultadoDaHipotese:
     aprovada: bool
     executada_em: str
     motivo: str
+    hash_das_series: str = ""
+    custos_aplicados: str = ""
 
     @property
     def aviso(self) -> str:
@@ -223,6 +247,7 @@ class Laboratorio:
         trades_e: list[float] = []
         trades_c: list[float] = []
         amostras_treino = 0
+        custos_txt: list[str] = []
         for instrumento in hipotese.instrumentos:
             closes = [float(c) for c in (series.get(instrumento) or [])]
             n = len(closes)
@@ -239,6 +264,7 @@ class Laboratorio:
                                      len(bruto_e))
             custo = float(custo_de_operar(instrumento, hipotese.exchange,
                                           VALOR_REFERENCIA).ida_e_volta)
+            custos_txt.append(f"{instrumento}:{custo:.8f}")
             trades_e += [b - custo for b in bruto_e]
             trades_c += [b - custo for b in bruto_c]
 
@@ -278,7 +304,9 @@ class Laboratorio:
             amostras_treino=amostras_treino, operacoes_estrategia=ne,
             operacoes_controle=nc, media_estrategia=round(me, 6),
             media_controle=round(mc, 6), p_valor=round(p, 8),
-            aprovada=aprovada, executada_em=agora.isoformat(), motivo=motivo)
+            aprovada=aprovada, executada_em=agora.isoformat(), motivo=motivo,
+            hash_das_series=_hash_das_series(series),
+            custos_aplicados=";".join(custos_txt))
         registro = asdict(resultado)
         registro["aviso"] = resultado.aviso
         registro["forcada"] = bool(assinatura in self._resultados and forcar)
@@ -308,6 +336,11 @@ class Laboratorio:
                 "assinatura": assinatura, "id": reg.get("id"),
                 "titulo": reg.get("titulo"), "familia": reg.get("familia"),
                 "tipo_de_regra": reg.get("tipo_de_regra"),
+                "fonte_dados": reg.get("fonte_dados", ""),
+                "timeframe": reg.get("timeframe", ""),
+                "custos": reg.get("custos", ""),
+                "modelo_de_execucao": reg.get("modelo_de_execucao", ""),
+                "limitacoes": reg.get("limitacoes", ""),
                 "registrada_em": reg.get("registrada_em"),
                 "executada": assinatura in self._resultados,
                 "resultado": self._resultados.get(assinatura),
