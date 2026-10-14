@@ -1,0 +1,3 @@
+PASS — C1: instalador 0.4.0 conclui (exit 0) — exit=0
+PASS — C3: atualizacao conclui (exit 0) — exit=0
+TOTAL: 0 falha(s)

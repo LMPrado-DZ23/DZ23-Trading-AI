@@ -1,0 +1,18 @@
+{
+  "exit": 0,
+  "chaves": {
+    "INSTALADOR": "DZ23 Trading AI",
+    "VERSAO_NOVA": "0.5.0",
+    "VERSAO_INSTALADA": "",
+    "SILENCIOSO": "1",
+    "APP_RODANDO": "0",
+    "APP_MUTEX": "0",
+    "CENARIO": "INSTALACAO_NOVA",
+    "VERSAO_FINAL": "0.5.0"
+  },
+  "resultados": [
+    "PROSSEGUINDO",
+    "OK"
+  ],
+  "resultado_final": "OK"
+}

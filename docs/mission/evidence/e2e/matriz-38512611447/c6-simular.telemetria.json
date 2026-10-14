@@ -1,0 +1,17 @@
+{
+  "exit": 7,
+  "chaves": {
+    "INSTALADOR": "DZ23 Trading AI",
+    "VERSAO_NOVA": "0.5.0",
+    "VERSAO_INSTALADA": "0.5.0",
+    "SILENCIOSO": "1",
+    "APP_RODANDO": "1",
+    "APP_MUTEX": "1",
+    "APP_PORTA": "8000",
+    "CENARIO": "REPARO"
+  },
+  "resultados": [
+    "SIMULADO"
+  ],
+  "resultado_final": "SIMULADO"
+}

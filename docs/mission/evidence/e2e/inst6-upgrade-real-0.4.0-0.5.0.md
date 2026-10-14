@@ -1,0 +1,11 @@
+# INST-6 — Upgrade REAL 0.4.0 -> 0.5.0 em Windows isolado (FECHADO)
+
+- **Run CI:** GitHub Actions `Matriz do Instalador Windows` **#38512611447** (push de `486a60b`; 2026-10-14T04:40:33Z -> 04:51:10Z; **conclusion=success**).
+- **Ambiente:** runner `windows-latest` VIRGEM (sem instalacao previa); bundle ANTIGO 0.4.0 REAL compilado do commit congelado `30b8683` (git archive + PyInstaller + ISCC); bundle NOVO 0.5.0 do commit do run. A instalacao do dono NAO foi tocada.
+- **Veredito do harness:** **`TOTAL: 0 falha(s)`** — 100% dos checks C1–C9b PASS (a unica falha historica, `C8: desinstalador removido`, agora PASS).
+- **C1 (instalacao limpa 0.4.0):** instalador exit 0; exe + unins000 presentes; registro na identidade historica; app 0.4.0 sobe, `/healthz` 200, painel `/app` 200; dados ficticios semeados (sqlite+json+csv); notepad + ouvinte 8010 (terceiros) intactos.
+- **C2 (upgrade com app aberto RECUSADO):** exit 7; `ABORTADO_APP_ABERTO_ANTIGO`; app continua vivo; exe/registro/dados intactos; nenhum backup criado.
+- **C3 (upgrade REAL 0.4.0->0.5.0):** app 0.4.0 fechado graciosamente pelo painel (`--quit`, porta liberada) -> atualizacao conclui exit 0, `cenario ATUALIZACAO`; **backup verificado** `pre-upgrade-0.4.0-para-0.5.0-20261014-044647` (MANIFEST.sha256, `BACKUP=OK`); **DADOS preservados byte a byte pos-upgrade (divergentes=[])**; registro + metadados do exe na 0.5.0; `healthz versao=0.5.0`; terceiros intactos.
+- **Cobertura complementar do mesmo run:** C4 (`--quit` gracioso), C5 (reparo com app rodando — fechado so o DZ23), C6 (`/SIMULAR` sem efeitos), C7 (downgrade recusado / forcado com backup), C7b (rollback byte-identico; backup corrompido recusado), C8 (desinstalacao preserva dados), C9/C9b (reinstalacao; instaladores simultaneos — mutex, exatamente um conclui). LIMPEZA final: ambiente devolvido ao estado virgem.
+- **Evidencias:** artefato CI `matriz-instalador-evidencias` do run (logs completos por cenario) + copia curada em `docs/mission/evidence/e2e/matriz-38512611447/` (`resumo-harness.txt` com TODOS os PASS e o TOTAL; status/telemetria por cenario; log do backup C3).
+- **Ressalvas declaradas:** execucao em runner Windows virgem do GitHub — nao na maquina do dono; instalacao do dono intocada. LIVE `BLOCKED_BY_POLICY` o tempo todo.

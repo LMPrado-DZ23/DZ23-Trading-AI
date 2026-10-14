@@ -1,0 +1,16 @@
+{
+  "exit": 7,
+  "chaves": {
+    "INSTALADOR": "DZ23 Trading AI",
+    "VERSAO_NOVA": "0.5.0",
+    "VERSAO_INSTALADA": "9.9.9",
+    "SILENCIOSO": "1",
+    "APP_RODANDO": "0",
+    "APP_MUTEX": "0",
+    "CENARIO": "DOWNGRADE"
+  },
+  "resultados": [
+    "ABORTADO_DOWNGRADE"
+  ],
+  "resultado_final": "ABORTADO_DOWNGRADE"
+}

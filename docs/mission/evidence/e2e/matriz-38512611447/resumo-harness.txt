@@ -1,0 +1,123 @@
+PASS — C1: instalador 0.4.0 conclui (exit 0) — exit=0
+PASS — C1: exe instalado existe
+PASS — C1: desinstalador presente (unins000.exe)
+PASS — C1: registro usa a identidade historica (mesma chave do dono) — {'display_name': 'DZ23 Trading AI version 0.4.0', 'display_version': '0.4.0', 'install_location': 'C:\\Users\\runneradmin\\AppData\\Local\\DZ23-Trading-AI\\', 'uninstall_string': '"C:\\Users\\runneradmin\\AppData\\Local\\DZ23-Trading-AI\\unins000.exe"', 'publisher': ''}
+PASS — C1: terceiro (notepad) aberto
+PASS — C1: ouvinte de terceiro na porta 8010
+PASS — C1: app 0.4.0 inicia e responde no /healthz — base=http://127.0.0.1:8000
+PASS — C1: painel /app responde 200 no app antigo
+PASS — C1: /v1/auth/status responde no app antigo
+PASS — C1: healthz antigo NAO tem o campo versao (contrato novo ainda nao existe)
+PASS — C1: dados ficticios semeados (sqlite + json + csv)
+PASS — C2: app 0.4.0 segue saudavel antes do teste
+PASS — C2: atualizacao com app antigo aberto e RECUSADA (exit nao-zero) — exit=7
+PASS — C2: instalador detectou o app rodando — {'INSTALADOR': 'DZ23 Trading AI', 'VERSAO_NOVA': '0.5.0', 'VERSAO_INSTALADA': '0.4.0', 'SILENCIOSO': '1', 'APP_RODANDO': '1', 'APP_MUTEX': '0', 'APP_PORTA': '8000', 'CENARIO': 'ATUALIZACAO'}
+PASS — C2: resultado ABORTADO_APP_ABERTO_ANTIGO — ABORTADO_APP_ABERTO_ANTIGO
+PASS — C2: cenario era ATUALIZACAO — ATUALIZACAO
+PASS — C2: app 0.4.0 continua rodando (nada o encerrou)
+PASS — C2: exe antigo intacto (nao foi substituido)
+PASS — C2: notepad (terceiro) intacto
+PASS — C2: ouvinte de terceiro na 8010 intacto
+PASS — C2: dados intactos
+PASS — C2: registro ainda na versao antiga
+PASS — C2: nenhum backup criado (nada foi alterado)
+PASS — C3: app antigo aceita fechamento pelo painel (/v1/app/quit 200) — HTTP 200
+PASS — C3: app 0.4.0 encerrou sozinho (exit 0, sem taskkill) — exit=0
+PASS — C3: porta liberada apos o fechamento
+PASS — C3: atualizacao conclui (exit 0) — exit=0
+PASS — C3: cenario ATUALIZACAO — ATUALIZACAO
+PASS — C3: versao instalada detectada = 0.4.0 — 0.4.0
+PASS — C3: resultado final OK — OK
+PASS — C3: backup verificado criado (BACKUP=OK) — OK
+PASS — C3: pasta de backup nomeada com as duas versoes — ['pre-upgrade-0.4.0-para-0.5.0-20261014-044647']
+PASS — C3: backup tem MANIFEST.sha256 e backup.json(ok=true)
+PASS — C3: backup cobre os dados ficticios (manifest com >0 linhas)
+PASS — C3: DADOS preservados byte a byte apos a atualizacao (fora logs) — divergentes=[]
+PASS — C3: registro agora na versao nova — {'display_name': 'DZ23 Trading AI versão 0.5.0', 'display_version': '0.5.0', 'install_location': 'C:\\Users\\runneradmin\\AppData\\Local\\DZ23-Trading-AI\\', 'uninstall_string': '"C:\\Users\\runneradmin\\AppData\\Local\\DZ23-Trading-AI\\unins000.exe"', 'publisher': 'DZ23'}
+PASS — C3: exe substituido pela versao nova
+PASS — C3: metadados do exe = versao nova — 0.5.0|0.5.0|DZ23
+PASS — C3: notepad (terceiro) intacto apos a atualizacao
+PASS — C3: ouvinte de terceiro na 8010 intacto
+PASS — C4: pre-condicao — nenhuma instancia previa (faixa livre)
+PASS — C4: --quit SEM instancia rodando retorna 1 (nada para fechar)
+PASS — C4: app novo inicia — base=http://127.0.0.1:8000
+PASS — C4: /healthz reporta a versao nova — versao=0.5.0
+PASS — C4: /healthz traz armazenamento e banco — ['app', 'armazenamento', 'avisos', 'banco', 'status', 'versao']
+PASS — C4: painel /app responde 200
+PASS — C4: /v1/auth/status responde
+PASS — C4: --version no exe empacotado retorna 0
+PASS — C4: --quit sinaliza a instancia e retorna 0
+PASS — C4: app encerrou graciosamente pelo --quit (exit 0) — exit=0
+PASS — C4: porta liberada apos o --quit
+PASS — C5: pre-condicao — nenhuma instancia previa (faixa livre)
+PASS — C5: app novo aberto antes do reparo
+PASS — C5: reparo conclui (exit 0) — exit=0
+PASS — C5: cenario REPARO — REPARO
+PASS — C5: app estava rodando e foi detectado — {'INSTALADOR': 'DZ23 Trading AI', 'VERSAO_NOVA': '0.5.0', 'VERSAO_INSTALADA': '0.5.0', 'SILENCIOSO': '1', 'APP_RODANDO': '1', 'APP_MUTEX': '1', 'APP_PORTA': '8000', 'CENARIO': 'REPARO', 'APP_FECHADO': 'GRACIOSO', 'VERSAO_FINAL': '0.5.0'}
+PASS — C5: app novo fechado de forma GRACIOSA (somente o DZ23) — GRACIOSO
+PASS — C5: resultado final OK
+PASS — C5: nao sobra instancia do app (porta liberada)
+PASS — C5: sem backup novo (mesma versao nao gera backup)
+PASS — C5: dados intactos
+PASS — C5: notepad (terceiro) intacto
+PASS — C5: registro continua na versao nova
+PASS — C5: processo original do app terminou (o instalador fechou so o DZ23) — wait=0
+PASS — C6: pre-condicao — nenhuma instancia previa (faixa livre)
+PASS — C6: app aberto antes da simulacao
+PASS — C6: /SIMULAR=1 aborta de proposito (exit nao-zero) — exit=7
+PASS — C6: resultado SIMULADO — SIMULADO
+PASS — C6: a simulacao viu o app rodando — {'INSTALADOR': 'DZ23 Trading AI', 'VERSAO_NOVA': '0.5.0', 'VERSAO_INSTALADA': '0.5.0', 'SILENCIOSO': '1', 'APP_RODANDO': '1', 'APP_MUTEX': '1', 'APP_PORTA': '8000', 'CENARIO': 'REPARO'}
+PASS — C6: app continua VIVO apos a simulacao (nada o fechou)
+PASS — C6: exe intacto
+PASS — C6: registro intacto
+PASS — C6: dados intactos
+PASS — C6: nenhum backup criado
+PASS — C6: versao ainda a nova
+PASS — C6: --quit encerra o app apos a simulacao
+PASS — C6: app saiu graciosamente (exit 0) — exit=0
+PASS — C7: forjar versao 9.9.9 no registro (simula downgrade real)
+PASS — C7: downgrade RECUSADO sem confirmacao (exit nao-zero) — exit=7
+PASS — C7: resultado ABORTADO_DOWNGRADE — ABORTADO_DOWNGRADE
+PASS — C7: cenario DOWNGRADE — DOWNGRADE
+PASS — C7: exe intacto apos a recusa
+PASS — C7: dados intactos apos a recusa
+PASS — C7: registro ainda forjado (nada foi alterado)
+PASS — C7: nenhum backup criado na recusa
+PASS — C7: /FORCEDOWNGRADE=1 permite o downgrade (exit 0) — exit=0
+PASS — C7: resultado OK no downgrade forcado
+PASS — C7: backup criado ANTES do downgrade forcado — OK
+PASS — C7: pasta de backup registra 9.9.9->0.5.0 — ['pre-upgrade-9.9.9-para-0.5.0-20261014-044908']
+PASS — C7: dados intactos apos o downgrade forcado
+PASS — C7: registro volta a versao do instalador
+PASS — C7: metadados do exe = versao nova
+PASS — C7b: existe backup para testar o rollback — C:\Users\runneradmin\AppData\Roaming\DZ23-Trading-AI-backups\pre-upgrade-9.9.9-para-0.5.0-20261014-044908
+PASS — C7b: restauracao de destino existente e recusada sem -Forcar — {'MOTIVO': 'DESTINO_EXISTENTE_SEM_FORCAR'}
+PASS — C7b: rollback restaura com -Forcar (RESULTADO=OK) — {'chaves': {'ARQUIVOS': '7', 'DESTINO': 'D:\\a\\DZ23-Trading-AI\\DZ23-Trading-AI\\evidencias\\matriz-instalador-20261014-044537\\rollback-scratch'}, 'resultados': ['OK'], 'resultado_final': 'OK'}
+PASS — C7b: conteudo restaurado byte-identico ao backup
+PASS — C7b: backup corrompido e recusado (BACKUP_CORROMPIDO/FALTANDO) — BACKUP_CORROMPIDO:agency.db
+PASS — C8: pre-condicao — nenhuma instancia previa (faixa livre)
+PASS — C8: desinstalador conclui (exit 0) — exit=0
+PASS — C8: programa removido do disco — C:\Users\runneradmin\AppData\Local\DZ23-Trading-AI\DZ23-Trading-AI.exe
+PASS — C8: desinstalador removido
+PASS — C8: registro removido
+PASS — C8: DADOS FINANCEIROS preservados (%APPDATA% intacto)
+PASS — C8: backups preservados
+PASS — C9: pre-condicao — nenhuma instancia previa (faixa livre)
+PASS — C9: reinstalacao conclui (exit 0) — exit=0
+PASS — C9: cenario INSTALACAO_NOVA (registro estava vazio) — INSTALACAO_NOVA
+PASS — C9: resultado OK
+PASS — C9: dados preservados apos reinstalar
+PASS — C9: backups preservados
+PASS — C9: registro de volta na versao nova
+PASS — C9: app volta a funcionar apos reinstalar
+PASS — C9: healthz segue reportando a versao nova
+PASS — C9: --quit encerra a instancia reinstalada
+PASS — C9: saida graciosa apos reinstalar
+PASS — C9b: exatamente um instalador conclui (mutex bloqueia o outro) — exit_a=0 exit_b=1
+PASS — C9b: quem concluiu terminou OK — OK
+PASS — C9b: registro consistente na versao nova
+PASS — C9b: dados intactos
+PASS — C9b: instancia segue removida (sem app rodando)
+PASS — C9b: app volta a subir apos os instaladores simultaneos
+PASS — C9b: --quit encerra
+PASS — LIMPEZA: ambiente devolvido ao estado virgem (registro removido)
