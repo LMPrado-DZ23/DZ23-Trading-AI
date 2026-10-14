@@ -200,6 +200,11 @@ ALLOWED_KEYS = [
     "LIVE_MAX_ORDER_VALUE", "LIVE_MAX_DAILY_LOSS",
     "LIVE_TRADING_CONFIRM",
     "ALERTA_TELEGRAM_TOKEN", "ALERTA_TELEGRAM_CHAT", "ALERTA_WEBHOOK_URL",
+    "ALERTA_TELEGRAM_WEBHOOK_SECRET", "ALERTA_DISCORD_WEBHOOK",
+    "ALERTA_WHATSAPP_TOKEN", "ALERTA_WHATSAPP_PHONE", "ALERTA_WHATSAPP_DESTINO",
+    "ALERTA_WINDOWS", "ALERTA_WEBPUSH", "ALERTA_VAPID_PUBLICA",
+    "EMAIL_SMTP_HOST", "EMAIL_SMTP_PORT", "EMAIL_SMTP_USER", "EMAIL_SMTP_PASS",
+    "EMAIL_SMTP_FROM", "EMAIL_SMTP_TO",
     "TRANSPARENCIA_PUBLICA", "TRANSPARENCIA_NOME",
 ]
 # Segredo é declarado, NÃO inferido pelo sufixo do nome. A heurística
@@ -212,6 +217,8 @@ SEGREDOS_DECLARADOS = {
     "OPENAI_COMPATIBLE_API_KEY", "FRED_API_KEY", "ALPHA_VANTAGE_API_KEY",
     "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET",
     "ALERTA_TELEGRAM_TOKEN", "ALERTA_TELEGRAM_CHAT", "ALERTA_WEBHOOK_URL",
+    "ALERTA_TELEGRAM_WEBHOOK_SECRET", "ALERTA_DISCORD_WEBHOOK",
+    "ALERTA_WHATSAPP_TOKEN", "EMAIL_SMTP_PASS",
     "LIVE_TRADING_CONFIRM",
 }
 # Rede de segurança: qualquer chave futura com cara de credencial também
@@ -1784,6 +1791,105 @@ def oauth_callback(provider: str, code: str = "", state: str = ""):
 # produto, não detalhe. Modo PAPER; esta superfície não liga capital real.
 _DESKS: dict[str, dict] = {}
 
+# Centro Inteligente de Alertas ⑤: fila durável por inquilino. Só o
+# despachante grava; o teste injeta transportes por aqui para nunca tocar
+# a internet de verdade.
+_FILAS_ALERTAS: dict = {}
+_TESTE_CANAL_TRANSPORTES: dict = {}
+
+
+def _nova_fila_alertas(tenant_id: str, armazem=None):
+    from tradingagents.desk.notificacao_viva import FilaDeAlertas
+    if armazem is None:
+        armazem = (_DESKS.get(tenant_id) or {}).get("armazem")
+    doc = armazem.carregar(tenant_id, "alertas") if armazem else None
+    return FilaDeAlertas.from_dict(doc)
+
+
+def _fila_alertas(tenant_id: str):
+    fila = _FILAS_ALERTAS.get(tenant_id)
+    if fila is None:
+        fila = _nova_fila_alertas(tenant_id)
+        _FILAS_ALERTAS[tenant_id] = fila
+    return fila
+
+
+def _persistir_fila_alertas(tenant_id: str) -> None:
+    fila = _FILAS_ALERTAS.get(tenant_id)
+    armazem = (_DESKS.get(tenant_id) or {}).get("armazem")
+    if fila is None or armazem is None:
+        return
+    try:
+        armazem.salvar(tenant_id, "alertas", fila.to_dict())
+    except Exception:
+        # A fila em memória segue viva; a próxima gravação tenta de novo.
+        LOGGER.warning("não foi possível persistir a fila de alertas")
+
+
+def _matriz_alertas(tenant_id: str):
+    from tradingagents.desk.notificacao_viva import MatrizDeRoteamento
+    armazem = (_DESKS.get(tenant_id) or {}).get("armazem")
+    doc = armazem.carregar(tenant_id, "alertas_matriz") if armazem else None
+    return MatrizDeRoteamento.from_dict(doc)
+
+
+def _despachar_alertas(tenant_id: str) -> dict:
+    """Tenta entregar o que está pendente, respeitando backoff e rate limit."""
+    from tradingagents.desk.canais_alerta import construir_canais
+    from tradingagents.desk.notificacao_viva import Despachante
+    fila = _fila_alertas(tenant_id)
+    canais = construir_canais(
+        load_cfg(tenant_id),
+        transportes=_TESTE_CANAL_TRANSPORTES.get(tenant_id))
+    despachante = Despachante(fila, canais, matriz=_matriz_alertas(tenant_id))
+    resultado = despachante.despachar()
+    _persistir_fila_alertas(tenant_id)
+    return resultado
+
+
+def _enfileirar_estado_da_mesa(tenant_id: str, alerta) -> None:
+    _fila_alertas(tenant_id).enfileirar(
+        tipo=alerta.codigo, severidade=alerta.severidade, titulo=alerta.titulo,
+        detalhe=alerta.detalhe, acao=alerta.acao, fonte="mesa",
+        dedupe_key=f"mesa:{alerta.codigo}")
+
+
+def _alertas_do_ciclo(tenant_id: str, out: dict) -> None:
+    """E2.5: saídas executadas e entradas confirmadas viram alerta."""
+    from datetime import timedelta as _td
+
+    from tradingagents.desk.models import utcnow
+    fila = _fila_alertas(tenant_id)
+    for enc in out.get("encerradas", []) or []:
+        if enc.get("estado") != "filled":
+            continue
+        motivo = str(enc.get("motivo") or enc.get("reason_code") or "")
+        code = str(enc.get("reason_code") or "")
+        tipo = "stop_atingido" if "STOP" in code.upper() else "saida_executada"
+        fila.enfileirar(
+            tipo=tipo, severidade="atencao",
+            titulo=f"Saída executada: {enc.get('instrumento', '?')}",
+            detalhe=(f"quantidade {enc.get('quantidade', '?')} a "
+                     f"{enc.get('preco', '?')}" + (f" — {motivo}" if motivo else "")),
+            acao="Confira a posição na aba Mesa de Agentes.",
+            fonte=str(enc.get("fonte") or "mesa"), preco=str(enc.get("preco") or ""),
+            dedupe_key=f"saida:{enc.get('ordem') or enc.get('instrumento')}",
+            dados={"instrumento": enc.get("instrumento", ""),
+                   "agente": enc.get("agente", ""),
+                   "reason_code": code},
+            validade=utcnow() + _td(hours=12))
+    for o in out.get("ordens", []) or []:
+        if o.get("estado") != "filled":
+            continue
+        fila.enfileirar(
+            tipo="confirmacao_entrada", severidade="informativo",
+            titulo=f"Entrada confirmada: {o.get('ordem', '')}",
+            detalhe="A ordem de compra executou na corretora.",
+            acao="A posição já aparece no gerente de saída global.",
+            fonte="mesa", dedupe_key=f"entrada:{o.get('ordem')}",
+            validade=utcnow() + _td(hours=12))
+
+
 
 def _desk_boot(tenant_id: str) -> dict:
     from decimal import Decimal
@@ -2021,6 +2127,11 @@ def _desk_boot(tenant_id: str) -> dict:
     restauracao_livro = orch.restaurar_livro(
         armazem.carregar(tenant_id, "livro"), ledger=coord.ledger)
 
+    # Centro Inteligente de Alertas ⑤: a fila durável é carregada agora; o
+    # que ficou pendente no processo anterior volta a ser tentado (ciclo ou
+    # rota) — alerta não morre junto com o processo.
+    _FILAS_ALERTAS[tenant_id] = _nova_fila_alertas(tenant_id, armazem)
+
     # Modo da mesa e posse exclusiva de execução (#29, portabilidade): o
     # dono decide o que a mesa faz; quem segura a posse é quem submete ordem.
     modo = ModoDaMesa(armazem, tenant_id)
@@ -2046,8 +2157,9 @@ def _desk_boot(tenant_id: str) -> dict:
 
     def _record(out):
         _persistir_oms()
-        # A cada ciclo, avalia e envia alertas — é o que acorda o dono sem
-        # ele precisar abrir o painel.
+        # A cada ciclo, avalia e ENTREGA alertas pela fila durável — é o que
+        # acorda o dono sem ele precisar abrir o painel. A entrega tem
+        # dedupe, backoff e rate limit; falha não derruba o ciclo.
         try:
             from tradingagents.desk.alerts import avaliar_estado
             coord_, led_, sched_ = desk["coordinator"], desk["ledger"], desk["scheduler"]
@@ -2059,11 +2171,13 @@ def _desk_boot(tenant_id: str) -> dict:
                 limite_perda=getattr(corretora_, "max_daily_loss", Decimal("0")),
                 mesa_deveria_rodar=True, mesa_rodando=True,
                 erros_do_ciclo=sched_.state.errors if sched_ else 0)
-            if alertas:
-                resultado = _notificador(tenant_id).enviar(alertas)
-                if resultado.get("falhas"):
-                    METRICS.inc("alerts.delivery_failed", len(resultado["falhas"]))
-                    LOGGER.warning("alert delivery failed: %s", len(resultado["falhas"]))
+            for alerta in alertas:
+                _enfileirar_estado_da_mesa(tenant_id, alerta)
+            _alertas_do_ciclo(tenant_id, out)
+            resultado = _despachar_alertas(tenant_id)
+            if resultado.get("falhas"):
+                METRICS.inc("alerts.delivery_failed", len(resultado["falhas"]))
+                LOGGER.warning("alert delivery failed: %s", len(resultado["falhas"]))
         except Exception as exc:
             METRICS.inc("alerts.delivery_callback_failed")
             LOGGER.exception("alert callback failed: %s", type(exc).__name__)
@@ -3151,25 +3265,185 @@ def listar_alertas(request: Request, _=Depends(auth)):
     """O que exigiria sua atenção AGORA, e o histórico do que já avisou."""
     tid = request_tenant(request)
     d = _desk_of(request)
-    notificador = _notificador(tid)
     alertas = _estado_para_alertas(d)
+    fila = _fila_alertas(tid)
+    from tradingagents.desk.canais_alerta import construir_canais
+    canais = construir_canais(load_cfg(tid),
+                              transportes=_TESTE_CANAL_TRANSPORTES.get(tid))
+    historico = [{"em": a.criado_em, "codigo": a.tipo,
+                  "severidade": a.severidade, "titulo": a.titulo,
+                  "detalhe": a.detalhe, "acao": a.acao, "estado": a.estado,
+                  "vencido": a.vencido()}
+                 for a in sorted(fila.alertas, key=lambda x: x.criado_em,
+                                 reverse=True)[:20]]
     return {"ativos": [{"codigo": a.codigo, "severidade": a.severidade,
                         "titulo": a.titulo, "detalhe": a.detalhe, "acao": a.acao}
                        for a in alertas],
-            "canal_configurado": notificador.configurado,
-            "historico": notificador.historico[-20:],
-            "como_configurar": ("Em Configuração: ALERTA_TELEGRAM_TOKEN e "
-                                "ALERTA_TELEGRAM_CHAT, ou ALERTA_WEBHOOK_URL")}
+            # "canal configurado" = canal EXTERNO com credencial. O painel e
+            # o toast do Windows não contam: existem sem configuração.
+            "canal_configurado": any(c.configurado()
+                                     and c.nome not in ("painel", "windows")
+                                     for c in canais),
+            "historico": historico,
+            "como_configurar": ("Em Configuração → Notificações: Telegram, "
+                                "Windows, painel na caixa de entrada, Discord "
+                                "e WhatsApp (opcionais)")}
 
 
 @app.post("/v1/alertas/verificar")
 def disparar_alertas(request: Request, _=Depends(auth)):
-    """Avalia e ENVIA o que houver. O worker chama isto a cada ciclo."""
+    """Avalia, enfileira (com dedupe) e entrega o que estiver pendente."""
     tid = request_tenant(request)
     d = _desk_of(request)
     alertas = _estado_para_alertas(d)
-    resultado = _notificador(tid).enviar(alertas)
-    return {"avaliados": len(alertas), **resultado}
+    for alerta in alertas:
+        _enfileirar_estado_da_mesa(tid, alerta)
+    resultado = _despachar_alertas(tid)
+    return {"avaliados": len(alertas),
+            "enviados": [e["id"] for e in resultado.get("entregues", [])],
+            "falhas": [f["id"] for f in resultado.get("falhas", [])],
+            "adiados": resultado.get("adiados", []),
+            "expirados": resultado.get("expirados", 0)}
+
+
+# ================================================ CENTRO DE NOTIFICAÇÕES ⑤
+# O dono liga, testa e vê o status de cada canal SEM terminal. Segredos
+# nunca aparecem: as respostas dizem apenas configurado/não configurado.
+@app.get("/v1/notificacoes/canais")
+def canais_de_notificacao(request: Request, _=Depends(auth)):
+    tid = request_tenant(request)
+    from tradingagents.desk.canais_alerta import construir_canais
+    canais = construir_canais(load_cfg(tid),
+                              transportes=_TESTE_CANAL_TRANSPORTES.get(tid))
+    d = _DESKS.get(tid) or {}
+    ultimos = d.get("testes_canal") or {}
+    return {"canais": [{"nome": c.nome, "prioridade": c.prioridade,
+                        "configurado": c.configurado(),
+                        "disponivel": c.disponivel(),
+                        "detalhe": c.detalhe(),
+                        "ultimo_teste": ultimos.get(c.nome, "")}
+                       for c in canais],
+            "aviso": ("sem nenhum canal externo configurado o alerta fica "
+                      "na Caixa de entrada do painel — nunca se perde, mas "
+                      "só aparece quando você abre o painel")}
+
+
+@app.post("/v1/notificacoes/testar")
+async def testar_canal_de_notificacao(req: Request, _=Depends(auth)):
+    """Teste de entrega REAL do canal escolhido — com evidência (latência,
+    resultado). Não marca como funcionando só porque aceitou chamada."""
+    tid = request_tenant(req)
+    body = await _json_body(req)
+    nome = str(body.get("canal") or "").strip()
+    from tradingagents.desk.canais_alerta import construir_canais
+    from tradingagents.desk.models import utcnow
+    canais = {c.nome: c for c in construir_canais(
+        load_cfg(tid), transportes=_TESTE_CANAL_TRANSPORTES.get(tid))}
+    canal = canais.get(nome)
+    if canal is None:
+        raise HTTPException(400, "canal desconhecido — opções: "
+                                 + ", ".join(canais))
+    if not canal.configurado():
+        raise HTTPException(400, f"canal {nome} ainda não configurado — "
+                                 f"{canal.detalhe()}")
+    if nome == "email":
+        resultado = canal.enviar_relatorio(
+            "Teste do canal de e-mail (relatórios)",
+            "Mensagem de teste do Centro de Alertas. Alertas NUNCA vão por "
+            "e-mail; este canal serve apenas a relatórios.")
+    else:
+        from datetime import timedelta
+
+        from tradingagents.desk.notificacao_viva import AlertaVivo
+        teste = AlertaVivo(
+            tipo="teste_de_canal", severidade="informativo",
+            titulo=f"Teste do canal {nome}",
+            detalhe="Mensagem de teste do Centro de Alertas",
+            acao="Nada a fazer — é apenas um teste",
+            fonte="painel", validade=utcnow() + timedelta(minutes=10))
+        try:
+            resultado = canal.enviar(teste)
+        except Exception as exc:
+            resultado = {"ok": False,
+                         "erro": f"{type(exc).__name__}: {exc}"[:160]}
+    d = _DESKS.get(tid)
+    if d is not None:
+        d.setdefault("testes_canal", {})[nome] = utcnow().isoformat()
+    if not resultado.get("ok"):
+        METRICS.inc("notif.teste_falhou")
+        raise HTTPException(502, "entrega falhou: "
+                                 + str(resultado.get("erro") or "sem detalhe"))
+    return {"ok": True, "canal": nome,
+            "detalhe": resultado.get("detalhe", ""),
+            "latencia_ms": resultado.get("latencia_ms", 0),
+            "em": utcnow().isoformat(),
+            "aviso": ("teste de entrega confirmado — o canal está de pé "
+                      "para os alertas reais")}
+
+
+@app.get("/v1/notificacoes/inbox")
+def inbox_de_notificacoes(request: Request, _=Depends(auth)):
+    tid = request_tenant(request)
+    _desk_of(request)
+    fila = _fila_alertas(tid)
+    caixa = fila.inbox()
+    caixa["fila"] = len(fila.pendentes())
+    # Auditoria recente de tentativas — o dono vê o que foi tentado e falhou.
+    tentativas = [t for a in fila.alertas for t in a.tentativas]
+    tentativas.sort(key=lambda t: t.get("em", ""), reverse=True)
+    caixa["auditoria"] = tentativas[:8]
+    caixa["como_configurar"] = "Configuração → Notificações"
+    return caixa
+
+
+@app.post("/v1/notificacoes/{alerta_id}/ack")
+def ack_de_notificacao(alerta_id: str, request: Request, _=Depends(auth)):
+    tid = request_tenant(request)
+    fila = _fila_alertas(tid)
+    alerta = fila.marcar_lido(alerta_id)
+    if alerta is None:
+        raise HTTPException(404, "alerta não encontrado")
+    _persistir_fila_alertas(tid)
+    return {"ok": True, "id": alerta.id, "lido_em": alerta.lido_em}
+
+
+@app.get("/v1/notificacoes/matriz")
+def ler_matriz_de_notificacao(request: Request, _=Depends(auth)):
+    tid = request_tenant(request)
+    _desk_of(request)
+    return _matriz_alertas(tid).to_dict()
+
+
+@app.put("/v1/notificacoes/matriz")
+async def salvar_matriz_de_notificacao(req: Request, _=Depends(auth)):
+    """Roteamento por trader/estratégia/corretora/ativo/severidade."""
+    from tradingagents.desk.notificacao_viva import MatrizDeRoteamento
+    tid = request_tenant(req)
+    d = _desk_of(req)
+    body = await _json_body(req)
+    matriz = MatrizDeRoteamento(body.get("regras") or [])
+    d["armazem"].salvar(tid, "alertas_matriz", {"regras": matriz.regras})
+    return {"ok": True, **matriz.to_dict()}
+
+
+@app.post("/v1/telegram/webhook")
+async def webhook_telegram(req: Request):
+    """Callbacks de botão do Telegram. Segredo do webhook autentica a
+    chamada (fail-closed sem segredo configurado). Botão NÃO opera na
+    corretora: só abre detalhes, registra leitura ou intenção."""
+    tid = request_tenant(req)
+    cfg = load_cfg(tid)
+    segredo = str(cfg.get("ALERTA_TELEGRAM_WEBHOOK_SECRET") or "").strip()
+    recebido = req.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    if not segredo or not hmac.compare_digest(recebido, segredo):
+        raise HTTPException(
+            401, "webhook sem segredo válido — configure "
+                 "ALERTA_TELEGRAM_WEBHOOK_SECRET e use-o no setWebhook")
+    body = await _json_body(req)
+    from tradingagents.desk.notificacao_viva import processar_callback_telegram
+    resultado = processar_callback_telegram(body, _fila_alertas(tid))
+    _persistir_fila_alertas(tid)
+    return resultado
 
 
 # ======================================================= TRANSPARÊNCIA ⑦
