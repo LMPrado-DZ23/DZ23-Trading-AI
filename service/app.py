@@ -2084,6 +2084,13 @@ def _desk_boot(tenant_id: str) -> dict:
                               diretorio=DATA / "desks")
     memoria = MemoriaDeDesempenho(DATA / "desks" / tenant_id / "aprendizado.json",
                                   armazem=armazem, tenant_id=tenant_id)
+    # Evolução autônoma (E5): diário auditável por trader + experimentos
+    # champion/challenger. Promoção automática só em PAPER; bloqueio por
+    # deterioração entra no vigia (abaixo). Nunca altera execução/limites.
+    from tradingagents.desk.evolucao import EvolucaoAutonoma
+    evolucao = EvolucaoAutonoma(DATA / "desks" / tenant_id / "evolucao.json",
+                                armazem=armazem, tenant_id=tenant_id,
+                                memoria=memoria)
     exchange_cfg = (cfg.get("TRADINGAGENTS_EXCHANGE") or "binance").lower()
     # Trader de controle entra SÓ por opção explícita do dono
     # (TRADINGAGENTS_DESK_CONTROLE=1): é o piso estatístico de comparação,
@@ -2235,7 +2242,13 @@ def _desk_boot(tenant_id: str) -> dict:
         try:
             sup = SupervisorDePiloto(armazem, tenant_id=tenant_id)
             viva = EscolaCentral(armazem=armazem, tenant_id=tenant_id)
-            return sup.bloqueios(central=viva)
+            bloqueados = sup.bloqueios(central=viva)
+            # Evolução (E5): trader suspenso por deterioração bloqueia novas
+            # entradas — o motivo do piloto vence quando os dois apontam.
+            evo_viva = EvolucaoAutonoma(armazem=armazem, tenant_id=tenant_id)
+            for agent_id, motivo in evo_viva.bloqueios().items():
+                bloqueados.setdefault(agent_id, motivo)
+            return bloqueados
         except Exception as exc:
             _avisos_vigia.append(f"{type(exc).__name__}: {exc}"[:160])
             del _avisos_vigia[:-10]
@@ -2247,7 +2260,8 @@ def _desk_boot(tenant_id: str) -> dict:
                             memoria=memoria, exchange=exchange_cfg,
                             analista=analista, vigia=_vigia_pilotos,
                             sala=sala_da_mesa,
-                            saidas_em_curso=coord.tem_saida_em_curso)
+                            saidas_em_curso=coord.tem_saida_em_curso,
+                            evolucao=evolucao)
 
     feed_kind = (cfg.get("TRADINGAGENTS_DESK_FEED") or "fixture").strip().lower()
     if feed_kind == "real":

@@ -95,7 +95,7 @@ class DeskOrchestrator:
                  risk: RiskEngine | None = None, positions_provider=None,
                  memoria=None, exchange: str = "binance", analista=None,
                  supervisor=None, conselheiro=None, vigia=None, sala=None,
-                 saidas_em_curso=None):
+                 saidas_em_curso=None, evolucao=None):
         self.mandate = mandate
         self.traders = list(traders)
         self.worker_id = worker_id
@@ -135,6 +135,11 @@ class DeskOrchestrator:
         # pelo risco; a sala é registro, não a corretora.
         self.sala = sala
         self.avisos_sala: list[str] = []
+        # Evolução autônoma (E5): diário auditável por trader. Alimentado na
+        # MESMA fonte do aprendizado (posição FECHADA) — falha vira aviso, a
+        # evolução observa a execução, nunca a governa.
+        self.evolucao = evolucao
+        self.avisos_de_evolucao: list[str] = []
 
         if supervisor is not None:
             self.supervisor = supervisor
@@ -398,7 +403,7 @@ class DeskOrchestrator:
             trader = next((t for t in self.traders
                            if t.spec.agent_id == pos.agent_id), None)
             leitura = getattr(trader, "ultima_leitura", None)
-            self.memoria.registrar(Desfecho(
+            desfecho = Desfecho(
                 estrategia=getattr(trader, "strategy", pos.agent_id),
                 regime=(leitura.regime.value if leitura else "indefinido"),
                 instrumento=instrument, retorno=retorno,
@@ -407,7 +412,18 @@ class DeskOrchestrator:
                 exchange=getattr(self, "exchange", "binance"),
                 versao=str(getattr(trader, "versao", "1")),
                 agente=pos.agent_id,
-                horizonte=str(getattr(trader, "timeframe", "1h"))))
+                horizonte=str(getattr(trader, "timeframe", "1h")))
+            self.memoria.registrar(desfecho)
+            if self.evolucao is not None:
+                try:
+                    self.evolucao.registrar_operacao(
+                        desfecho, decisao=f"encerrou {instrument} a {preco_saida}",
+                        custo=custo.ida_e_volta)
+                except Exception as exc:
+                    self.avisos_de_evolucao.append(
+                        f"diário da evolução não registrou {instrument}: "
+                        f"{type(exc).__name__}: {exc}"[:200])
+                    del self.avisos_de_evolucao[:-10]
         if pos is not None and preco_saida is not None and self.sala is not None:
             try:
                 self.sala.registrar_saida(instrument, preco_saida)
