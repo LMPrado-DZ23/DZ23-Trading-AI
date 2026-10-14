@@ -35,8 +35,27 @@ function Encerrar([int]$Codigo) {
   exit $Codigo
 }
 
+# SHA256 via .NET puro: Get-FileHash vive em Microsoft.PowerShell.Utility e
+# pode nao autocarregar no ambiente filho do instalador (evidencia CI c3:
+# "Get-FileHash is not recognized"). O tipo abaixo e do runtime .NET e
+# resolve sem modulo algum.
 function Hash-Sha256([string]$Caminho) {
-  return (Get-FileHash -LiteralPath $Caminho -Algorithm SHA256).Hash.ToLowerInvariant()
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  $fluxo = [System.IO.File]::OpenRead($Caminho)
+  try {
+    $bytes = $sha.ComputeHash($fluxo)
+  } finally {
+    $fluxo.Dispose()
+    $sha.Dispose()
+  }
+  return ([System.BitConverter]::ToString($bytes)).Replace('-', '').ToLowerInvariant()
+}
+
+# Escapa um valor para JSON sem depender de ConvertTo-Json (nao provado no
+# ambiente filho do instalador).
+function Json-Esc([string]$Texto) {
+  if ([string]::IsNullOrEmpty($Texto)) { return '' }
+  return $Texto.Replace('\', '\\').Replace('"', '\"').Replace("`r", '\r').Replace("`n", '\n')
 }
 
 # O log do instalador fica AO LADO dos backups — inclusive em FALHA. A
@@ -101,24 +120,37 @@ try {
   [System.IO.File]::WriteAllLines((Join-Path $destino 'MANIFEST.sha256'), $linhasManifest,
     (New-Object System.Text.UTF8Encoding($false)))
 
-  $resumo = [ordered]@{
-    ok         = $true
-    de         = $De
-    para       = $Para
-    criado_em  = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-    origem     = $origemFull
-    destino    = $destino
-    arquivos   = $arquivos.Count
-    bytes      = $totalBytes
-    manifest   = 'MANIFEST.sha256'
-  }
-  [System.IO.File]::WriteAllText((Join-Path $destino 'backup.json'),
-    ($resumo | ConvertTo-Json -Depth 3), (New-Object System.Text.UTF8Encoding($false)))
+  # JSON montado com .NET (ConvertTo-Json nao foi provado no ambiente filho
+  # do instalador — mesma familia do Get-FileHash que falhou no CI).
+  $criadoEm = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+  $json = '{' +
+    '"ok": true,' +
+    '"de": "' + (Json-Esc $De) + '",' +
+    '"para": "' + (Json-Esc $Para) + '",' +
+    '"criado_em": "' + $criadoEm + '",' +
+    '"origem": "' + (Json-Esc $origemFull) + '",' +
+    '"destino": "' + (Json-Esc $destino) + '",' +
+    '"arquivos": ' + $arquivos.Count + ',' +
+    '"bytes": ' + $totalBytes + ',' +
+    '"manifest": "MANIFEST.sha256"}'
+  [System.IO.File]::WriteAllText((Join-Path $destino 'backup.json'), $json,
+    (New-Object System.Text.UTF8Encoding($false)))
 
-  # Poda: mantem os $Manter backups mais recentes (somente pre-upgrade-*).
-  $antigos = Get-ChildItem -LiteralPath $DestinoBase -Directory -Filter 'pre-upgrade-*' |
-    Sort-Object Name -Descending | Select-Object -Skip $Manter
-  foreach ($a in $antigos) { Remove-Item -LiteralPath $a.FullName -Recurse -Force }
+  # Poda com .NET puro (somente pre-upgrade-*): mantem os $Manter mais
+  # RECENTES pela data do diretorio — ordenar por nome nao serve porque o
+  # prefixo pre-upgrade-<de>- domina a comparacao quando o "de" muda.
+  $dirs = [System.IO.Directory]::GetDirectories($DestinoBase, 'pre-upgrade-*')
+  if ($dirs.Count -gt $Manter) {
+    $ticks = New-Object 'long[]' $dirs.Count
+    for ($i = 0; $i -lt $dirs.Count; $i++) {
+      $ticks[$i] = [System.IO.Directory]::GetLastWriteTimeUtc($dirs[$i]).Ticks
+    }
+    [Array]::Sort($ticks, $dirs)  # ordena os dois arrays juntos (mais antigo 1o)
+    $podar = $dirs.Count - $Manter
+    for ($i = 0; $i -lt $podar; $i++) {
+      try { [System.IO.Directory]::Delete($dirs[$i], $true) } catch { }
+    }
+  }
 
   Add-Linha 'RESULTADO=OK'
   Add-Linha ('DESTINO=' + $destino)
@@ -133,9 +165,9 @@ try {
 } catch {
   Add-Linha 'RESULTADO=FALHOU'
   Add-Linha ('MOTIVO=' + $_.Exception.Message)
-  if ($destino -and (Test-Path -LiteralPath $destino)) {
+  if ($destino -and [System.IO.Directory]::Exists($destino)) {
     # Backup incompleto nao pode parecer valido.
-    Remove-Item -LiteralPath $destino -Recurse -Force -ErrorAction SilentlyContinue
+    try { [System.IO.Directory]::Delete($destino, $true) } catch { }
   }
   Gravar-LogNoDestino 'FALHA' | Out-Null
   Encerrar 2

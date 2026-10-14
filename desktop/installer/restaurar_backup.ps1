@@ -30,30 +30,52 @@ function Encerrar([int]$Codigo) {
   exit $Codigo
 }
 
+# SHA256 via .NET puro: Get-FileHash vive em Microsoft.PowerShell.Utility e
+# pode nao autocarregar no ambiente filho do instalador (evidencia CI c3:
+# "Get-FileHash is not recognized"). O tipo abaixo e do runtime .NET e
+# resolve sem modulo algum.
 function Hash-Sha256([string]$Caminho) {
-  return (Get-FileHash -LiteralPath $Caminho -Algorithm SHA256).Hash.ToLowerInvariant()
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  $fluxo = [System.IO.File]::OpenRead($Caminho)
+  try {
+    $bytes = $sha.ComputeHash($fluxo)
+  } finally {
+    $fluxo.Dispose()
+    $sha.Dispose()
+  }
+  return ([System.BitConverter]::ToString($bytes)).Replace('-', '').ToLowerInvariant()
 }
 
 try {
-  $manifesto = Join-Path $Backup 'MANIFEST.sha256'
-  $raizCopia = Join-Path $Backup 'DZ23-Trading-AI'
-  if (-not (Test-Path -LiteralPath $manifesto) -or -not (Test-Path -LiteralPath $raizCopia)) {
+  # Tudo com .NET puro: Get-Content/Where-Object/Get-ChildItem/Split-Path/
+  # Copy-Item nao foram provados no ambiente dos instaladores (mesma familia
+  # do Get-FileHash que falhou no CI da matriz).
+  $manifesto = [System.IO.Path]::Combine($Backup, 'MANIFEST.sha256')
+  $raizCopia = [System.IO.Path]::Combine($Backup, 'DZ23-Trading-AI')
+  if (-not [System.IO.File]::Exists($manifesto) -or
+      -not [System.IO.Directory]::Exists($raizCopia)) {
     Add-Linha 'RESULTADO=FALHOU'
     Add-Linha 'MOTIVO=BACKUP_INCOMPLETO'
     Encerrar 2
   }
 
-  if ((Test-Path -LiteralPath $Destino) -and -not $Forcar) {
-    $conteudo = Get-ChildItem -LiteralPath $Destino -Force -ErrorAction SilentlyContinue
-    if ($conteudo) {
+  if ([System.IO.Directory]::Exists($Destino) -and -not $Forcar) {
+    $temConteudo = $false
+    try {
+      $temConteudo = @([System.IO.Directory]::EnumerateFileSystemEntries($Destino)).Count -gt 0
+    } catch { $temConteudo = $false }
+    if ($temConteudo) {
       Add-Linha 'RESULTADO=FALHOU'
       Add-Linha 'MOTIVO=DESTINO_EXISTENTE_SEM_FORCAR'
       Encerrar 2
     }
   }
 
-  $entradas = Get-Content -LiteralPath $manifesto | Where-Object { $_ -match '^\S+ \*' }
-  if (-not $entradas) {
+  $entradas = New-Object System.Collections.Generic.List[string]
+  foreach ($l in [System.IO.File]::ReadAllLines($manifesto)) {
+    if ($l -match '^\S+ \*') { $entradas.Add($l) | Out-Null }
+  }
+  if ($entradas.Count -eq 0) {
     Add-Linha 'RESULTADO=FALHOU'
     Add-Linha 'MOTIVO=MANIFEST_VAZIO'
     Encerrar 2
@@ -64,8 +86,8 @@ try {
     $partes = $linha -split ' \*', 2
     $esperado = $partes[0].ToLowerInvariant()
     $rel = $partes[1]
-    $caminho = Join-Path $raizCopia ($rel.Replace('/', '\'))
-    if (-not (Test-Path -LiteralPath $caminho)) {
+    $caminho = [System.IO.Path]::Combine($raizCopia, $rel.Replace('/', '\'))
+    if (-not [System.IO.File]::Exists($caminho)) {
       Add-Linha 'RESULTADO=FALHOU'
       Add-Linha ('MOTIVO=BACKUP_FALTANDO:' + $rel)
       Encerrar 2
@@ -78,16 +100,16 @@ try {
   }
 
   # 2) Restaura e confere o destino contra o manifest.
-  New-Item -ItemType Directory -Path $Destino -Force | Out-Null
+  [System.IO.Directory]::CreateDirectory($Destino) | Out-Null
   $restaurados = 0
   foreach ($linha in $entradas) {
     $partes = $linha -split ' \*', 2
     $esperado = $partes[0].ToLowerInvariant()
     $rel = $partes[1]
-    $origem = Join-Path $raizCopia ($rel.Replace('/', '\'))
-    $alvo = Join-Path $Destino ($rel.Replace('/', '\'))
-    New-Item -ItemType Directory -Path (Split-Path -Parent $alvo) -Force | Out-Null
-    Copy-Item -LiteralPath $origem -Destination $alvo -Force
+    $origem = [System.IO.Path]::Combine($raizCopia, $rel.Replace('/', '\'))
+    $alvo = [System.IO.Path]::Combine($Destino, $rel.Replace('/', '\'))
+    [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($alvo)) | Out-Null
+    [System.IO.File]::Copy($origem, $alvo, $true)
     if ((Hash-Sha256 $alvo) -ne $esperado) {
       Add-Linha 'RESULTADO=FALHOU'
       Add-Linha ('MOTIVO=RESTAURACAO_DIVERGENTE:' + $rel)

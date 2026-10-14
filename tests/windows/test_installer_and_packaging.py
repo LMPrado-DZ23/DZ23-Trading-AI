@@ -83,9 +83,22 @@ class TestWindowsInstallerAndWorkflow:
         assert "backup_dados.ps1" in content and "dontcopy" in content
         assert "ABORTADO_BACKUP_FALHOU" in content  # fail-closed: sem backup não instala
         assert "MANIFEST.sha256" in backup
-        assert "Get-FileHash" in backup  # verificação hash a hash
+        # Hash a hash SEM depender de cmdlet de módulo (Get-FileHash falhou no
+        # ambiente filho do instalador em CI — evidência c3): .NET SHA256 puro.
+        # Comentários explicativos podem NOMEAR o cmdlet; o que se prova é que
+        # nenhuma linha EXECUTÁVEL o invoca.
+        executavel_backup = "\n".join(
+            linha for linha in backup.splitlines() if not linha.strip().startswith("#")
+        )
+        executavel_rollback = "\n".join(
+            linha for linha in rollback.splitlines() if not linha.strip().startswith("#")
+        )
+        assert "Get-FileHash" not in executavel_backup
+        assert "[System.Security.Cryptography.SHA256]::Create()" in executavel_backup
         assert "pre-upgrade-" in backup
         assert "MANIFEST.sha256" in rollback
+        assert "Get-FileHash" not in executavel_rollback
+        assert "[System.Security.Cryptography.SHA256]::Create()" in executavel_rollback
         assert "DESTINO_EXISTENTE_SEM_FORCAR" in rollback
         # Automação: status file + dry-run local sem escrever nada.
         assert "DZ23STATUS" in content and "SIMULAR" in content
