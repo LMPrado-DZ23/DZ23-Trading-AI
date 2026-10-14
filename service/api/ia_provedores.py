@@ -248,7 +248,9 @@ def consultar_ia(cfg: dict, prompt: str, *,
             continue
         tentativas.append({"provedor": candidato["painel"], "estado": "ok",
                            "detalhe": ""})
-        return texto, {"provedor": candidato["painel"], "tokens": uso,
+        return texto, {"provedor": candidato["painel"],
+                       "modelo": candidato["modelo"],
+                       "tokens": uso,
                        "tentativas": tentativas}
     resumo = "; ".join(
         f"{t['provedor']}: {t['estado']} ({t['detalhe']})" for t in tentativas)

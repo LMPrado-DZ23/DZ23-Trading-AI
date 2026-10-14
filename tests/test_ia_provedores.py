@@ -569,3 +569,146 @@ class TestRemoverCredenciais:
         _, c, h = self._app(tmp_path, monkeypatch)
         r = c.post("/v1/config", headers=h, json={"remover": ["QUALQUER_COISA"]})
         assert r.status_code == 400  # nada pedido de verdade
+
+
+class TestPrecos:
+    def test_preco_conhecido_e_prefixo_mais_longo(self):
+        from tradingagents.llm_clients import precos
+
+        assert precos.preco("groq", "llama-3.1-8b-instant") == (0.05, 0.08)
+        # versionado casa com o prefixo MAIS longo — não com o curto
+        assert precos.preco("openai", "gpt-4o-mini-2024-07-18") == (0.15, 0.60)
+        assert precos.preco("google", "gemini-2.0-flash-lite-001") == (0.075, 0.30)
+
+    def test_gratuito_e_diferente_de_desconhecido(self):
+        from tradingagents.llm_clients import precos
+
+        assert precos.preco("ollama", "qualquer") == (0.0, 0.0)
+        assert precos.preco(
+            "openrouter", "meta-llama/llama-3.3-70b-instruct:free") == (0.0, 0.0)
+        assert precos.preco("openai_compatible", "meu-modelo") is None
+        assert precos.preco("naoexiste", "qualquer") is None
+        assert precos.preco("openai", "gpt-999-inexistente") is None
+
+    def test_custo_estimado_matematica_e_none_sem_preco(self):
+        from tradingagents.llm_clients import precos
+
+        assert precos.custo_estimado(
+            "openai", "gpt-4o-mini", 1_000_000, 0) == pytest.approx(0.15)
+        assert precos.custo_estimado(
+            "groq", "llama-3.1-8b-instant", 0, 1_000_000) == pytest.approx(0.08)
+        assert precos.custo_estimado("openai_compatible", "x", 10, 10) is None
+
+    def test_referencia_datada(self):
+        from tradingagents.llm_clients import precos
+
+        assert len(precos.REFERENCIA) == 7 and precos.REFERENCIA[4] == "-"
+
+
+class TestRegistroDeUso:
+    def _reg(self, tmp_path):
+        from service.api.ia_uso import RegistroDeUso
+
+        return RegistroDeUso(tmp_path / "ia-uso.json")
+
+    def test_conta_chamada_tokens_e_custo(self, tmp_path):
+        r = self._reg(tmp_path)
+        r.registrar("t1", {"provedor": "groq", "modelo": "llama-3.1-8b-instant",
+                           "tokens": {"entrada": 1000, "saida": 500}})
+        resumo = r.resumo("t1")
+        assert resumo["total"]["chamadas"] == 1
+        assert resumo["total"]["tokens_entrada"] == 1000
+        assert resumo["total"]["tokens_saida"] == 500
+        # (1000*0.05 + 500*0.08)/1e6 = 0.00009 USD
+        assert resumo["total"]["custo_estimado_usd"] == pytest.approx(0.00009)
+        assert resumo["por_provedor"]["groq"]["chamadas"] == 1
+        assert resumo["custo_parcial"] is False
+        assert resumo["orcamento"]["definido"] is False
+        assert "informativo" in resumo["orcamento"]["nota"]
+
+    def test_sem_tokens_e_sem_preco_contam_honestamente(self, tmp_path):
+        r = self._reg(tmp_path)
+        r.registrar("t1", {"provedor": "groq",
+                           "modelo": "llama-3.1-8b-instant", "tokens": None})
+        r.registrar("t1", {"provedor": "openai_compatible", "modelo": "meu",
+                           "tokens": {"entrada": 10, "saida": 10}})
+        resumo = r.resumo("t1")
+        assert resumo["total"]["chamadas"] == 2
+        assert resumo["total"]["chamadas_sem_uso"] == 1
+        assert resumo["total"]["chamadas_sem_preco"] == 1
+        assert resumo["custo_parcial"] is True
+        assert resumo["total"]["custo_estimado_usd"] == 0.0
+
+    def test_persiste_e_rele_do_disco(self, tmp_path):
+        self._reg(tmp_path).registrar(
+            "t1", {"provedor": "groq", "modelo": "llama-3.1-8b-instant",
+                   "tokens": {"entrada": 1, "saida": 1}})
+        assert self._reg(tmp_path).resumo("t1")["total"]["chamadas"] == 1
+
+    def test_orcamento_fracao_e_restante(self, tmp_path):
+        r = self._reg(tmp_path)
+        r.registrar("t1", {"provedor": "openai", "modelo": "gpt-4o-mini",
+                           "tokens": {"entrada": 1_000_000, "saida": 0}})
+        resumo = r.resumo("t1", orcamento_usd=0.30)
+        assert resumo["orcamento"]["usado_usd"] == pytest.approx(0.15)
+        assert resumo["orcamento"]["restante_usd"] == pytest.approx(0.15)
+        assert resumo["orcamento"]["fracao"] == pytest.approx(0.5)
+
+
+class TestRotaUso:
+    def _app(self, tmp_path, monkeypatch):
+        _limpar_ambiente_ia(monkeypatch)
+        monkeypatch.setenv("ACCESS_PASSWORD", "s3nh4")
+        monkeypatch.setenv("DATA_DIR", str(tmp_path))
+        import importlib
+
+        import service.app as m
+        importlib.reload(m)
+        m._FAILS.clear()
+        m._DESKS.clear()
+        from fastapi.testclient import TestClient
+        return m, TestClient(m.app), {"Authorization": "Bearer s3nh4"}
+
+    def test_uso_sem_auth_recusa(self, tmp_path, monkeypatch):
+        _, c, _ = self._app(tmp_path, monkeypatch)
+        assert c.get("/v1/ai/uso").status_code == 401
+
+    def test_uso_zerado_sem_orcamento(self, tmp_path, monkeypatch):
+        _, c, h = self._app(tmp_path, monkeypatch)
+        d = c.get("/v1/ai/uso", headers=h).json()
+        assert d["total"]["chamadas"] == 0
+        assert d["orcamento"]["definido"] is False
+        assert d["moeda"] == "USD" and d["referencia_precos"]
+
+    def test_uso_mostra_o_que_o_app_registrou(self, tmp_path, monkeypatch):
+        m, c, h = self._app(tmp_path, monkeypatch)
+        m.IA_USO.registrar("legacy", {
+            "provedor": "groq", "modelo": "llama-3.1-8b-instant",
+            "tokens": {"entrada": 2000, "saida": 1000}})
+        d = c.get("/v1/ai/uso", headers=h).json()
+        assert d["total"]["chamadas"] == 1
+        assert d["total"]["tokens_entrada"] == 2000
+        assert d["total"]["custo_estimado_usd"] == pytest.approx(0.00018)
+
+    def test_orcamento_configurado_aceita_virgula(self, tmp_path, monkeypatch):
+        _, c, h = self._app(tmp_path, monkeypatch)
+        r = c.post("/v1/config", headers=h, json={
+            "vars": {"TRADINGAGENTS_IA_ORCAMENTO_USD": "5,00"}})
+        assert r.status_code == 200
+        d = c.get("/v1/ai/uso", headers=h).json()
+        assert d["orcamento"]["definido"] is True
+        assert d["orcamento"]["usd"] == pytest.approx(5.0)
+
+    def test_orcamento_invalido_avisa_sem_mentir(self, tmp_path, monkeypatch):
+        _, c, h = self._app(tmp_path, monkeypatch)
+        c.post("/v1/config", headers=h, json={
+            "vars": {"TRADINGAGENTS_IA_ORCAMENTO_USD": "abc"}})
+        d = c.get("/v1/ai/uso", headers=h).json()
+        assert d["orcamento"]["definido"] is False
+        assert "inválido" in d["orcamento"]["aviso"]
+
+    def test_os_dois_caminhos_de_consulta_registram_uso(self):
+        fonte = (RAIZ / "service" / "app.py").read_text(encoding="utf-8")
+        assert fonte.count("IA_USO.registrar(") == 2, (
+            "os DOIS caminhos de consulta (IA de contexto e revisor do "
+            "diário) precisam registrar consumo — um deles perdeu o registro")

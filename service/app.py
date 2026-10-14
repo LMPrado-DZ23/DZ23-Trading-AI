@@ -25,6 +25,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from service.api import diagnostics, security_center, segredos_em_repouso
+from service.api.ia_uso import RegistroDeUso
 from service.api.owner_credentials import CredenciaisDoDono, erro_de_senha
 from tradingagents.agency import AgencyTask, build_llm_handler
 from tradingagents.agency.store import AgencyTaskStore
@@ -149,6 +150,9 @@ PAPER_ADAPTER = PaperAdapter(state_path=DATA / "paper-state.json")
 SHADOW_ADAPTER = ShadowAdapter(state_path=DATA / "shadow-state.json")
 KILL_SWITCH = KillSwitch(DATA / "kill-switch.json")
 METRICS = MetricsRegistry()
+# V8 §6: consumo de IA por inquilino (chamadas, tokens, custo estimado).
+# Informativo — jamais desativa verificação de contexto nem gate algum.
+IA_USO = RegistroDeUso(DATA / "ia-uso.json")
 
 
 def remote_reconciliation_snapshot() -> dict:
@@ -1121,6 +1125,26 @@ def ai_listar_modelos(request: Request, provedor: str = "", _=Depends(auth)):
     from service.api.ia_provedores import descobrir_modelos
 
     return descobrir_modelos(load_cfg(request_tenant(request)), provedor)
+
+
+@app.get("/v1/ai/uso")
+def ai_uso(request: Request, _=Depends(auth)):
+    """Consumo de IA do inquilino: chamadas, tokens reportados, custo
+    estimado (tabela de referência) e estado do orçamento — INFORMATIVO,
+    nunca um gate. Valores sem preço de referência ficam explícitos."""
+    tenant_id = request_tenant(request)
+    cfg = load_cfg(tenant_id)
+    bruto = str(cfg.get("TRADINGAGENTS_IA_ORCAMENTO_USD") or "").strip()
+    orcamento, aviso = None, ""
+    if bruto:
+        try:
+            orcamento = float(bruto.replace(",", "."))
+            if orcamento <= 0:
+                orcamento, aviso = None, "orçamento precisa ser maior que zero"
+        except ValueError:
+            aviso = "orçamento inválido (use números, ex.: 5.00)"
+    return IA_USO.resumo(tenant_id, orcamento_usd=orcamento,
+                         aviso_orcamento=aviso)
 
 @app.post("/v1/jobs")
 async def new_job(req: Request, _=Depends(auth)):
@@ -2253,7 +2277,9 @@ def _revisor_de_ia(tenant_id: str, cfg: dict):
             "preço, alvo ou ordem nova e não invente dados que não estão "
             "nos fatos.\n"
             f"Fatos: {json.dumps(fatos, ensure_ascii=False)}")
-        texto, _meta = consultar_ia(cfg, prompt)
+        texto, meta = consultar_ia(cfg, prompt)
+        with contextlib.suppress(Exception):
+            IA_USO.registrar(tenant_id, meta)
         return texto
 
     return revisar
@@ -2388,6 +2414,9 @@ def _desk_boot(tenant_id: str) -> dict:
                 texto, meta = consultar_ia(cfg, prompt)
                 ok = True
                 provedor_registrado = meta.get("provedor") or provedor_registrado
+                # V8 §6: consumo/custo estimado por inquilino (informativo).
+                with contextlib.suppress(Exception):
+                    IA_USO.registrar(tenant_id, meta)
                 return texto
             finally:
                 # Painel (item 7): latência e saúde do provedor externo.
