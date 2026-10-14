@@ -20,6 +20,7 @@ PAGINAS = [
     ("config", "Configuração"),
     ("analysis", "Análises"),
     ("mesa", "Mesa de Agentes"),
+    ("manual", "Minhas Operações"),
     ("floor", "Trading Floor"),
     ("risk", "Risco"),
     ("overview", "Visão geral"),
@@ -263,3 +264,70 @@ def test_login_responsivo_sem_corte_nem_rolagem_horizontal(page, live_server, ev
         )
 
         page.screenshot(path=str(evidence_dir / f"07-login-{largura}x{altura}.png"))
+
+
+def test_minhas_operacoes_copiloto_manual_ponta_a_ponta(page, live_server, owner_password, evidence_dir):
+    # E4: o dono registra o que JÁ executou na corretora dele; o copiloto
+    # acompanha, calcula e alerta. Nada nesta página executa ordem — e o
+    # preço executado é obrigatório (cotação de tela nunca substitui).
+    entrar_como_dono(page, live_server, owner_password)
+
+    page.locator('[data-page="manual"]').first.click()
+    expect(page.locator("#page-manual")).to_have_class(re.compile(r"\bactive\b"))
+    # Regressão pinada: a página precisa viver na coluna de conteúdo
+    # (main.content), nunca na faixa da sidebar — um </div> sobrando na
+    # Configuração já jogou páginas inteiras para trás da sidebar.
+    caixa = page.locator("#page-manual").bounding_box()
+    assert caixa and caixa["x"] >= 245, f"#page-manual fora da coluna de conteúdo: {caixa}"
+    assert page.evaluate("!!document.querySelector('#page-manual').closest('main.content')")
+    expect(page.locator("#pageTitle")).to_have_text("Minhas Operações")
+    expect(page.locator("#page-manual")).to_contain_text("ele nunca opera por você")
+    expect(page.locator("#manualModo")).to_contain_text(re.compile(r"LIGADO|DESLIGADO"))
+
+    ligado_no_inicio = "LIGADO" in page.locator("#manualModo").inner_text()
+
+    # 1) Registra a posição que o dono JÁ executou na corretora dele
+    page.fill("#manInstr", "PETR4")
+    page.select_option("#manDir", "compra")
+    page.fill("#manQtd", "100")
+    page.fill("#manPreco", "38.50")
+    page.fill("#manStop", "37.00")
+    page.fill("#manAlvos", "40.00, 41.50")
+    page.fill("#manTese", "rompimento com volume; sai se perder o suporte")
+    page.get_by_role("button", name="Registrar posição").click()
+    expect(page.locator("#toast")).to_contain_text(re.compile(r"registrada|já existia"), timeout=10000)
+
+    card = page.locator("#manualLista .job", has_text="PETR4").first
+    # O domínio normaliza o lado para a convenção de trader (LONG/SHORT).
+    expect(card).to_contain_text(re.compile(r"COMPRA|LONG"), timeout=10000)
+
+    # 2) Liga o copiloto: a mesa autônoma para; o copiloto só acompanha
+    page.get_by_role("button", name="Ligar copiloto").click()
+    expect(page.locator("#manualModo")).to_contain_text("LIGADO", timeout=10000)
+
+    # 3) Detalhes: política com o stop declarado, formulário de execução,
+    #    diário e alertas do copiloto
+    card.get_by_role("button", name="Detalhes").click()
+    detalhe = page.locator("#manualDetalhe")
+    expect(detalhe).to_contain_text("Política de monitoramento", timeout=10000)
+    expect(detalhe).to_contain_text("37.00")
+    expect(detalhe).to_contain_text("Registrar o que você executou")
+    expect(page.locator("#manualAlertas")).to_be_visible()
+    page.screenshot(path=str(evidence_dir / "08-minhas-operacoes.png"))
+
+    # 4) Sem preço executado a execução NÃO é registrada
+    page.select_option("#manEvTipo", "reducao")
+    page.fill("#manEvQtd", "50")
+    page.get_by_role("button", name="Registrar execução").click()
+    expect(page.locator("#toast")).to_contain_text("obrigatório", timeout=5000)
+
+    # 5) Com o preço real, a execução entra no diário da posição
+    page.fill("#manEvPreco", "39.25")
+    page.get_by_role("button", name="Registrar execução").click()
+    expect(page.locator("#toast")).to_contain_text(re.compile(r"Execução registrada|já existia"), timeout=10000)
+    expect(page.locator("#manualDetalhe")).to_contain_text("reducao", timeout=10000)
+
+    # 6) Devolve o modo ao estado inicial (não contamina os outros testes)
+    if not ligado_no_inicio:
+        page.get_by_role("button", name="Desligar", exact=True).click()
+        expect(page.locator("#manualModo")).to_contain_text("DESLIGADO", timeout=10000)
