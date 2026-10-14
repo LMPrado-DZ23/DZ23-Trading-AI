@@ -45,6 +45,8 @@ item 07 — mesmo sistema de fila durável, prova encadeada intencional (nota no
 | Bundle do artefato CI — **artefato final** (RC §19 + V8.1 §4/§6) | job `aceite-bundle` (ver §5) | **13/13** — 75,63 s (run `38599535042`, commit `d131226`) | 2026-10-14 |
 | Bundle do artefato CI — **artefato de congelamento** (lote final de docs) | job `aceite-bundle` (ver §5) | **13/13** — 29,19 s (run `38602691878`, commit `3a8f362`) | 2026-10-14 |
 | Bundle do artefato CI — **re-homologação do instrumento endurecido** (task #107; dreno de toast nos itens 07/13) | job `aceite-bundle` (ver §5) | **13/13** — 37,14 s (run `38607540029`, commit `f41e150`) | 2026-10-14 |
+| Bundle do artefato CI — **selo docs-only `b5f27bf`** (re-selo da task #107; produto idêntico a `f41e150`) | job `aceite-bundle` (ver §5) | **13/13** — 57,76 s (run `38609409946`, commit `b5f27bf`) | 2026-10-14 |
+| Bundle do artefato CI — **aceite pós-auditoria rodada-8** (tasks #108–#111; timeouts LLM + escapamento no produto) | job `aceite-bundle` (ver §5) | **13/13** — 43,16 s (run `38616157472`, commit `929ebd4`) | 2026-10-14 |
 
 ## 3. Defeitos REAIS encontrados pela matriz e corrigidos (RED→GREEN)
 
@@ -130,3 +132,22 @@ mesa QUENTE (monitor já com tick), e as 4 corridas completas de e2e seguidas fi
   congelamento:** o conteúdo de PRODUTO não mudou (correção test-only), mas o instrumento de aceite sim —
   a citação vigente do aceite no bundle passa a ser `38607540029`; o run `38602691878` permanece como prova
   histórica do estado anterior.
+- **Selo docs-only `b5f27bf` (registrado em 2026-10-14; re-selo da task #107):** o push `b5f27bf` registrou
+  o incidente do toast e a re-homologação do instrumento (nenhum arquivo de código/produto mudou desde
+  `f41e150`) — Release Build `38609409946` (`build` SUCCESS; `aceite-bundle` **13 passed em 57,76 s**;
+  `publish-release` skipped) e Matriz do Instalador `38609409745` (`TOTAL: 0 falha(s)`). Prova de que o
+  instrumento endurecido da task #107 segue verde em push docs-only.
+- **Re-citação pós-auditoria rodada-8 — nova citação vigente (registrado em 2026-10-14; tasks #108–#111):**
+  a auditoria do dono ("auditar corrigir e melhorar") mudou o PRODUTO — timeouts HTTP finitos nos 4
+  caminhos LLM construíveis (openai-family/azure/anthropic/google) + escapamento do painel
+  (`operacaoReal`/`renderEvents`); evidência completa em `aud-r8-timeouts-llm-e-escaping.md`. Nos termos
+  do §4 (mudança de produto reabre o ciclo), a re-homologação local fechou verde (suíte `3015 passed /
+  6 skipped / 71 subtests` + e2e 26/26) e o CI do push `929ebd4` fechou verde: Release Build
+  `38616157472` — `build` SUCCESS, `aceite-bundle` SUCCESS (**13 passed in 43.16s**, a matriz TD-5
+  completa rodando no bundle do artefato produzido COM as correções) e `publish-release` skipped; a
+  Matriz do Instalador `38616157674` também fechou VERDE (`TOTAL: 0 falha(s)`). O artefato
+  `aceite-td5-bundle-evidencias` foi baixado e recopiado para `docs/mission/evidence/v8-td5-exe/`
+  (10 arquivos atualizados: `launcher.log`, `pytest-aceite-bundle.txt` e 8 capturas). **Efeito no
+  congelamento:** o produto mudou — a citação vigente do aceite no bundle passa a ser `38616157472`;
+  os runs `38607540029` (instrumento endurecido) e `38609409946` (selo docs-only) permanecem como
+  provas históricas; `38602691878` segue como prova do artefato de congelamento anterior.

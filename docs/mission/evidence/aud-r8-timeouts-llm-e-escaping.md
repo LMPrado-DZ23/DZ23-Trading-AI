@@ -96,9 +96,21 @@ desviavam:
    consciente, não acidental.
 4. **Reabertura do ciclo de aceite:** esta é mudança de PRODUTO (4
    clientes + painel) — o congelamento do selo `f41e150` fica revogado para
-   efeito de citação; a re-homologação local está feita (tabela acima), e
-   CI do push + re-citação do artefato de aceite foram registrados na
-   sequência desta rodada (mesmo padrão das tasks #105/#107).
+   efeito de citação; a re-homologação local está feita (tabela acima) e
+   **o ciclo foi re-fechado no CI** — ver seção "CI do push" adiante
+   (runs `38616157472`/`38616157674`; na mesma rodada, o selo docs-only
+   `b5f27bf` também fechou verde: `38609409946`/`38609409745`).
+
+## CI do push (2026-10-14)
+
+| Evidência | Resultado |
+|---|---|
+| Release Build `38616157472` (push de `929ebd4`) | `build` SUCCESS (18:33→18:38 UTC); `aceite-bundle` SUCCESS — **13 passed in 43.16s** + `TOTAL: 0 falha(s)` do harness (18:38→18:40 UTC); `publish-release` skipped (sem tag) |
+| Matriz do Instalador `38616157674` (mesmo push) | SUCCESS — `TOTAL: 0 falha(s)` |
+| Selo docs-only `b5f27bf` (task #107) | Release `38609409946` — `aceite-bundle` **13 passed in 57.76s**; Matriz `38609409745` — `TOTAL: 0 falha(s)` |
+| Artefato `aceite-td5-bundle-evidencias` de `38616157472` | baixado e recopiado para `docs/mission/evidence/v8-td5-exe/` — **10 arquivos atualizados** (`launcher.log`, `pytest-aceite-bundle.txt`, 8 capturas); launcher log confirma exe `0.5.0` e healthz na 1ª tentativa |
+
+O aceite rodou no bundle produzido **com as correções desta rodada** (o job `aceite-bundle` usa o ZIP `dz23-windows-x64` do próprio run) — a matriz TD-5 completa (12 dashboards + fluxo do iniciante em 10 passos) passou sem `skip`. **Nova citação vigente do aceite no bundle: `38616157472`** (registrada em `v8-td5-aceite.md` §2/§5); `38607540029` permanece como prova histórica do instrumento endurecido pré-rodada-8.
 
 ## Arquivos
 

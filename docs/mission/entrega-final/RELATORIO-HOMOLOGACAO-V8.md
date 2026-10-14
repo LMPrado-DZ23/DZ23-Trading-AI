@@ -33,7 +33,8 @@ Justificativa (nenhum percentual inventado):
 | Runtime de build | GitHub Actions `windows-latest`, workflow `Windows Release`; ZIP `dz23-windows-x64` + Setup Inno + `SHA256SUMS.txt` |
 | Artefato de referência da homologação G3 (fase anterior) | run `38450504893` (item 12 de `WINDOWS-RELEASE-EVIDENCE.md`) |
 | Artefato do aceite TD-5 (matriz de dashboard/UX) | run `38596224361`, commit `b3e9dae` — 13/13 no bundle (`v8-td5-aceite.md` §5) |
-| Artefato final desta fase (decisão do ciclo + índices de risco) | run do commit final de 2026-10-14 — registrado em `docs/mission/evidence/v8-td5-aceite.md` §5 |
+| Artefato final desta fase (decisão do ciclo + índices de risco) | run `38599535042`, commit `d131226` — 13/13 em 75,63 s (`v8-td5-aceite.md` §2/§5) |
+| Artefato da re-citação pós-auditoria rodada-8 (tasks #108–#111 — timeouts LLM + escapamento) | run `38616157472`, commit `929ebd4` — 13/13 em 43,16 s; Matriz `38616157674` (`TOTAL: 0 falha(s)`) |
 | Matriz do instalador (8 cenários + C1–C8 etc.) | run `38512611447` — `TOTAL: 0 falha(s)` (INST-5/6) |
 | Upgrade real 0.4.0→0.5.0 | mesmo run — backup verificado + dados byte a byte + healthz 0.5.0 (INST-6) |
 | Publicação (tag/Release) | **Não realizada** — aguarda autorização explícita do proprietário (sem tag criada) |
@@ -47,7 +48,7 @@ checksums vivem dentro do próprio artefato do CI (reprodutível a partir do com
 | :--- | :--- | :--- | :--- |
 | Unit + integrado (local) | suíte completa `uv run pytest -q` | **3015 passed / 6 skipped / 71 subtests** (exit 0, 296,34 s) — **+24 testes desde o TD-4** (23 da fase final: decisão do ciclo + índices de risco; 1 do §17/#106: guias do produto real) **+13 da auditoria rodada-8** (10 de timeouts LLM + 3 de escapamento do painel) | `v8-td5-aceite.md` §2; `aud-r8-timeouts-llm-e-escaping.md` |
 | E2E navegador real (local) | `uv run --with playwright pytest tests/e2e -q` | **26/26** (13 de painel + 13 de aceite TD-5), 4 corridas seguidas + 2 da auditoria rodada-8 (41,06 s e 41,78 s) | `v8-td5-aceite.md` §2; `aud-r8-timeouts-llm-e-escaping.md` |
-| E2E bundle Windows (CI, runner virgem) | job `aceite-bundle` sobre o ZIP do artefato | **13/13** em 37,79 s (harness original), **13/13** em 75,63 s (**artefato final da fase**) e **13/13** em 37,14 s (**re-homologação pós-endurecimento do instrumento**) — 12 dashboards + fluxo do iniciante em 10 passos | runs `38596224361`, `38599535042` e `38607540029`; `docs/mission/evidence/v8-td5-exe/` (20 arquivos) |
+| E2E bundle Windows (CI, runner virgem) | job `aceite-bundle` sobre o ZIP do artefato | **13/13** em 37,79 s (harness original), **13/13** em 75,63 s (**artefato final da fase**), **13/13** em 37,14 s (**re-homologação pós-endurecimento do instrumento**), **13/13** em 57,76 s (**selo docs-only `b5f27bf`**) e **13/13** em 43,16 s (**artefato pós-auditoria rodada-8 — citação vigente**) — 12 dashboards + fluxo do iniciante em 10 passos | runs `38596224361`, `38599535042`, `38607540029`, `38609409946` e `38616157472`; `docs/mission/evidence/v8-td5-exe/` (20 arquivos) |
 | Instalador Windows (matriz CI) | cenários C1–C8 + extensões (≈143 verificações) | `TOTAL: 0 falha(s)` | run `38512611447`; `e2e/matriz-38512611447/` |
 | Portão premium/identidade no bundle | itens 17–19, 21 | **24/24**, **27/27**, **27/27** | C018/C021 (`WINDOWS-RELEASE-EVIDENCE.md`) |
 | Matriz de inicialização no bundle | 6 cenários (incl. intruso na porta, WM_CLOSE) | **24/24** | C021 |
