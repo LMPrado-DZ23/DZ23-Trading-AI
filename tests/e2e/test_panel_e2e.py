@@ -17,6 +17,7 @@ sync_api = pytest.importorskip(
 expect = sync_api.expect
 
 PAGINAS = [
+    ("inicio", "Início"),
     ("config", "Configuração"),
     ("analysis", "Análises"),
     ("mesa", "Mesa de Agentes"),
@@ -36,8 +37,18 @@ def entrar_como_dono(page, base_url: str, senha: str) -> None:
     expect(page.locator("#app")).to_be_visible(timeout=15000)
 
 
+def modo_avancado(page) -> None:
+    page.select_option("#uiModo", "avancado")
+
+
+def ver_overview(page) -> None:
+    page.locator('[data-page="overview"]').first.click()
+    expect(page.locator("#page-overview")).to_have_class(re.compile(r"\bactive\b"))
+
+
 def test_dono_entra_e_visao_geral_paper(page, live_server, owner_password, evidence_dir):
     entrar_como_dono(page, live_server, owner_password)
+    ver_overview(page)
 
     expect(page.locator("#roleBadge")).to_have_text("ADMIN")
     expect(page.locator("#userEmail")).not_to_have_text("—")
@@ -62,6 +73,7 @@ def test_dono_entra_mesmo_demorando_no_portao(page, live_server, owner_password)
     page.wait_for_timeout(16000)  # > 5 ciclos de polling anônimo do painel
 
     entrar_como_dono(page, live_server, owner_password)
+    ver_overview(page)
     expect(page.locator("#appStatus")).to_have_text("READY", timeout=15000)
 
 
@@ -74,6 +86,7 @@ def test_menu_completo_formularios_e_sem_erro_5xx(page, live_server, owner_passw
 
     page.on("response", registrar)
     entrar_como_dono(page, live_server, owner_password)
+    modo_avancado(page)
 
     for pagina, titulo in PAGINAS:
         page.locator(f'[data-page="{pagina}"]').first.click()
@@ -96,6 +109,7 @@ def test_menu_completo_formularios_e_sem_erro_5xx(page, live_server, owner_passw
 
 def test_mesa_camada_quant_mostra_governanca(page, live_server, owner_password, evidence_dir):
     entrar_como_dono(page, live_server, owner_password)
+    modo_avancado(page)
 
     page.locator('[data-page="mesa"]').first.click()
     page.get_by_role("button", name="Camada quant/IA").click()
@@ -107,6 +121,7 @@ def test_mesa_camada_quant_mostra_governanca(page, live_server, owner_password, 
 
 def test_floor_embutido_same_origin(page, live_server, owner_password, evidence_dir):
     entrar_como_dono(page, live_server, owner_password)
+    modo_avancado(page)
 
     page.locator('[data-page="floor"]').first.click()
     iframe = page.locator("iframe.floor-frame")
@@ -187,6 +202,7 @@ def test_primeira_execucao_assistente_cria_senha_e_codigo(page, setup_server, ev
     page.check("#codigoConfirmado")
     page.get_by_role("button", name="Abrir o painel").click()
     expect(page.locator("#app")).to_be_visible(timeout=15000)
+    ver_overview(page)
     expect(page.locator("#appStatus")).to_have_text("READY", timeout=15000)
 
     # Recuperação: sem sessão, "Esqueci minha senha" + código troca a senha.
@@ -228,7 +244,8 @@ def test_login_mobile_390x844(mobile_page, live_server, owner_password, evidence
     page.fill("#loginPassword", owner_password)
     page.get_by_role("button", name="Entrar", exact=True).click()
     expect(page.locator("#app")).to_be_visible(timeout=15000)
-    expect(page.locator("#appStatus")).to_have_text("READY", timeout=15000)
+    expect(page.locator("#pageTitle")).to_have_text("Início")
+    expect(page.locator("#page-inicio")).to_contain_text("3 · PLAY", timeout=15000)
     page.screenshot(path=str(evidence_dir / "05-painel-mobile.png"))
 
 
@@ -271,6 +288,7 @@ def test_pwa_service_worker_ativo_e_estado_honesto(page, live_server, owner_pass
     # o Service Worker se registra, o card mostra o estado REAL do push e o
     # botão Instalar jamais aparece sem o navegador oferecer a capacidade.
     entrar_como_dono(page, live_server, owner_password)
+    modo_avancado(page)
     page.locator('[data-page="config"]').first.click()
     expect(page.locator("#page-config")).to_have_class(re.compile(r"\bactive\b"))
 
@@ -314,7 +332,11 @@ def test_minhas_operacoes_copiloto_manual_ponta_a_ponta(page, live_server, owner
     expect(page.locator("#page-manual")).to_contain_text("ele nunca opera por você")
     expect(page.locator("#manualModo")).to_contain_text(re.compile(r"LIGADO|DESLIGADO"))
 
-    ligado_no_inicio = "LIGADO" in page.locator("#manualModo").inner_text()
+    # Regressão: "LIGADO" é substring de "DESLIGADO" — a detecção precisa
+    # ler o <b> exato, senão o desligar de limpeza nunca acontece e o
+    # copiloto contamina os testes seguintes (409 no PLAY da mesa).
+    expect(page.locator("#manualModo b")).to_have_text(re.compile(r"^(LIGADO|DESLIGADO)$"))
+    ligado_no_inicio = page.locator("#manualModo b").inner_text() == "LIGADO"
 
     # 1) Registra a posição que o dono JÁ executou na corretora dele
     page.fill("#manInstr", "PETR4")
@@ -361,3 +383,42 @@ def test_minhas_operacoes_copiloto_manual_ponta_a_ponta(page, live_server, owner
     if not ligado_no_inicio:
         page.get_by_role("button", name="Desligar", exact=True).click()
         expect(page.locator("#manualModo")).to_contain_text("DESLIGADO", timeout=10000)
+
+
+def test_modo_simples_assistente_conectar_modo_play(page, live_server, owner_password, evidence_dir):
+    # SS-5 (diretriz definitiva de UX): o dono entra direto no assistente
+    # Início; PLAY/PAUSAR usam a MESMA rota da mesa; o Avançado mostra todas
+    # as páginas e o Simples volta a mostrar três — nada é removido.
+    entrar_como_dono(page, live_server, owner_password)
+
+    expect(page.locator("#pageTitle")).to_have_text("Início")
+    pagina = page.locator("#page-inicio")
+    expect(pagina).to_contain_text("1 · CONECTAR")
+    expect(pagina).to_contain_text("2 · MODO")
+    expect(pagina).to_contain_text("3 · PLAY")
+    expect(pagina).to_contain_text("COPILOTO DE SINAIS")
+    expect(pagina).to_contain_text("nunca envia ordens")
+    expect(page.locator("#iniModoReal")).to_be_disabled()
+    expect(page.locator("#sideNav button")).to_have_count(3)
+    page.screenshot(path=str(evidence_dir / "09-inicio-assistente.png"))
+
+    # PLAY liga a mesa de verdade (mesma rota do painel avançado)
+    page.locator("#btnInicioPlay").click()
+    expect(page.locator("#toast")).to_contain_text("LIGADA", timeout=15000)
+    expect(page.locator("#iniMesaEstado")).to_contain_text("RODANDO", timeout=15000)
+
+    # PAUSAR devolve o estado real — e o teste deixa a mesa parada
+    page.locator("#btnInicioParar").click()
+    expect(page.locator("#iniMesaEstado")).to_contain_text("PARADA", timeout=15000)
+
+    # Avançado mostra TODAS as páginas; o Simples continua acessível
+    modo_avancado(page)
+    expect(page.locator("#sideNav button")).to_have_count(len(PAGINAS))
+    page.locator('[data-page="risk"]').first.click()
+    expect(page.locator("#pageTitle")).to_have_text("Risco")
+    page.select_option("#uiModo", "simples")
+    expect(page.locator("#pageTitle")).to_have_text("Início")
+    expect(page.locator("#sideNav button")).to_have_count(3)
+
+    # A escolha é preferência do aparelho (localStorage), nunca do servidor
+    assert page.evaluate("localStorage.getItem('dz23_ui_modo')") == "simples"
