@@ -1,0 +1,16 @@
+== DZ23 Trading AI — homologação do --quit (INST-5, launcher de fonte) ==
+executável: C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\DZ23-Trading-AI\.venv\Scripts\python.exe
+raiz: C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\DZ23-Trading-AI
+[PASS] faixa 8000–8010 livre antes de começar — ocupadas=[]
+APPDATA temporário (dados do dono intocados): C:\Users\DZ23\AppData\Local\Temp\dz23-quit-homolog-58guvxq_
+instância iniciada (pid=39032); aguardando healthz…
+[PASS] instância escolheu porta da faixa e está escutando — porta=8000
+[PASS] healthz real respondeu 200 — corpo={"status":"ok","app":"tradingagents-agency/1","versao":"0.5.0","armazenamento":"sqlite","banco":"banco local do volume (
+[PASS] --quit COM instância viva retorna 0 — exit=0; out=
+[PASS] instância encerrou sozinha e graciosamente (exit 0) — exit=0; em 1.8s
+[PASS] encerramento rápido (pedido persistiu e o poll o viu) — 1.8s
+[PASS] log registra o pedido de encerramento gracioso
+[PASS] log confirma backend encerrado graciosamente
+[PASS] segundo --quit (sem instância) retorna 1 — exit=1
+[PASS] porta liberada após o encerramento
+RESULTADO=OK

@@ -563,6 +563,7 @@ def test_main_cria_mutex_quando_inicia(launcher_tmp):
             patch("desktop.launcher.esperar_healthz", return_value=True), \
             patch("desktop.launcher.threading.Thread", _FakeThread), \
             patch("desktop.launcher._criar_mutex_instancia", return_value=4242) as mock_mutex, \
+            patch("desktop.launcher._criar_evento_saida", return_value=777), \
             patch("webbrowser.open"):
         assert main([]) == 0
     mock_mutex.assert_called_once()
@@ -592,6 +593,7 @@ def test_main_encerra_graciosamente_quando_instalador_pede(launcher_tmp):
             patch("desktop.launcher.esperar_healthz", return_value=True), \
             patch("desktop.launcher.threading.Thread", _FakeThread), \
             patch("desktop.launcher._criar_mutex_instancia", return_value=1), \
+            patch("desktop.launcher._criar_evento_saida", return_value=1), \
             patch("desktop.launcher._saida_solicitada", return_value=True), \
             patch("desktop.launcher._ENCERRAR_SERVIDOR", encerrar), \
             patch("desktop.launcher._limpar_evento_saida", side_effect=lambda: chamado.__setitem__("limpar", chamado["limpar"] + 1)), \
@@ -612,7 +614,119 @@ def test_main_nao_encerra_sem_pedido(launcher_tmp):
             patch("desktop.launcher.esperar_healthz", return_value=True), \
             patch("desktop.launcher.threading.Thread", _FakeThread), \
             patch("desktop.launcher._criar_mutex_instancia", return_value=1), \
+            patch("desktop.launcher._criar_evento_saida", return_value=1), \
             patch("desktop.launcher._ENCERRAR_SERVIDOR") as mock_encerrar, \
             patch("webbrowser.open"):
         assert main([]) == 0
     mock_encerrar.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# INST-5 (causa-raiz da matriz do instalador): o `--quit` precisa (1) saber
+# que não há instância (mutex ausente → 1, sem criar evento órfão) e (2) o
+# evento de saída precisa EXISTIR e ser segurado pela instância viva — sem o
+# handle, o objeto nomeado morre junto com o processo `--quit` e o pedido se
+# perde (foi assim que C4–C9 da matriz encadearam 25 falhas).
+# ---------------------------------------------------------------------------
+
+class _K32FalsoQuit:
+    """Kernel32 de mentira: só o que o --quit toca."""
+
+    def __init__(self, *, mutex_existe: bool):
+        self.mutex_existe = mutex_existe
+        self.eventos_criados = 0
+        self.sinalizados = 0
+
+    def OpenMutexW(self, acesso, herdar, nome):
+        return 123 if self.mutex_existe else 0
+
+    def CloseHandle(self, handle):
+        return True
+
+    def CreateEventW(self, atributos, manual, inicial, nome):
+        self.eventos_criados += 1
+        return 999
+
+    def SetEvent(self, handle):
+        self.sinalizados += 1
+        return True
+
+
+def test_quit_sem_instancia_viva_retorna_1_e_nao_cria_evento(monkeypatch):
+    # Sem mutex (nada rodando), o contrato é 1 — e o evento nem é tocado:
+    # criá-lo aqui produzia o objeto órfão do defeito original.
+    k32 = _K32FalsoQuit(mutex_existe=False)
+    monkeypatch.setattr(launcher, "_kernel32", lambda: k32)
+    monkeypatch.setattr(launcher, "_WINDOWS", True)
+    assert launcher._atender_pedido_de_saida() == 1
+    assert k32.eventos_criados == 0
+    assert k32.sinalizados == 0
+
+
+def test_quit_com_instancia_viva_sinaliza_e_retorna_0(monkeypatch):
+    k32 = _K32FalsoQuit(mutex_existe=True)
+    monkeypatch.setattr(launcher, "_kernel32", lambda: k32)
+    monkeypatch.setattr(launcher, "_WINDOWS", True)
+    assert launcher._atender_pedido_de_saida() == 0
+    assert k32.eventos_criados == 1
+    assert k32.sinalizados == 1
+
+
+def test_main_instancia_cria_e_segura_o_evento_de_saida(launcher_tmp):
+    # A instância viva PRECISA criar o evento (e manter o handle até sair):
+    # é o que faz o pedido do --quit persistir entre processos.
+    infos = [PortaInfo(8000, False, False, None, None)]
+    with patch("desktop.launcher.escolher_arranque", return_value=("iniciar", 8000, infos)), \
+            patch("desktop.launcher.migrate_legacy_owner_password"), \
+            patch("desktop.launcher.run_backend"), \
+            patch("desktop.launcher.esperar_healthz", return_value=True), \
+            patch("desktop.launcher.threading.Thread", _FakeThread), \
+            patch("desktop.launcher._criar_mutex_instancia", return_value=4242), \
+            patch("desktop.launcher._criar_evento_saida", return_value=777) as mock_evento, \
+            patch("webbrowser.open"):
+        assert main([]) == 0
+    mock_evento.assert_called_once()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="objetos nomeados do Windows")
+def test_quit_real_sem_instancia_retorna_1_e_nao_deixa_evento_orfao(monkeypatch):
+    # Prova no kernel REAL: sem instância, --quit devolve 1 e nenhum evento
+    # fica para trás. Nomes únicos deixam o teste hermético (não enxerga a
+    # instalação real do dono).
+    import uuid
+
+    sufixo = uuid.uuid4().hex
+    monkeypatch.setattr(launcher, "NOME_MUTEX_INSTANCIA", f"Local\\DZ23-Test-{sufixo}")
+    monkeypatch.setattr(launcher, "NOME_EVENTO_SAIDA", f"Local\\DZ23-Test-{sufixo}")
+    monkeypatch.setattr(launcher, "_WINDOWS", True)
+
+    assert launcher._instancia_viva() is False
+    assert launcher._atender_pedido_de_saida() == 1
+    assert launcher._saida_solicitada() is False
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="objetos nomeados do Windows")
+def test_evento_de_saida_persiste_enquanto_a_instancia_segura_o_handle(monkeypatch):
+    # Prova no kernel REAL da semântica que causou o defeito: o objeto
+    # nomeado só existe enquanto ALGUÉM segura um handle. Com a instância
+    # segurando (como o main faz), o --quit sinaliza e o pedido PERSISTE.
+    import ctypes
+    import uuid
+
+    sufixo = uuid.uuid4().hex
+    monkeypatch.setattr(launcher, "NOME_MUTEX_INSTANCIA", f"Local\\DZ23-TestMutex-{sufixo}")
+    monkeypatch.setattr(launcher, "NOME_EVENTO_SAIDA", f"Local\\DZ23-TestEvento-{sufixo}")
+    monkeypatch.setattr(launcher, "_WINDOWS", True)
+
+    k32 = ctypes.windll.kernel32
+    mutex = k32.CreateMutexW(None, False, launcher.NOME_MUTEX_INSTANCIA)
+    evento = launcher._criar_evento_saida()  # a instância segura o handle
+    assert mutex and evento
+    try:
+        assert launcher._instancia_viva() is True
+        assert launcher._saida_solicitada() is False
+        assert launcher._atender_pedido_de_saida() == 0
+        assert launcher._saida_solicitada() is True  # o pedido PERSISTIU
+    finally:
+        k32.CloseHandle(evento)
+        k32.CloseHandle(mutex)

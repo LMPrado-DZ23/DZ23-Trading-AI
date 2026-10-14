@@ -260,6 +260,23 @@ def encerra_dz23_limpeza(p: subprocess.Popen | None = None) -> None:
         time.sleep(0.5)
 
 
+def precondicao_sem_instancia_viva(rotulo: str) -> bool:
+    """Antes de abrir o app do cenario, exige a faixa livre.
+
+    Com uma instancia anterior ainda viva, um segundo lancamento reutilizaria
+    a porta e sairia 0 na hora — as checagens de --quit e encerramento
+    passariam SEM testar nada (falso-verde). Limpa o straggler e falha o
+    cenario com motivo explicito.
+    """
+    if faixa_dz23_livre():
+        checa(f"{rotulo}: pre-condicao — nenhuma instancia previa (faixa livre)", True)
+        return True
+    checa(f"{rotulo}: pre-condicao — nenhuma instancia previa (faixa livre)", False,
+          "instancia de cenario anterior ainda viva; resultado nao seria confiavel")
+    encerra_dz23_limpeza()
+    return False
+
+
 # ---------------------------------------------------------------------------
 # registro do Windows (mesma chave que a instalacao 0.4.0 do dono usa)
 # ---------------------------------------------------------------------------
@@ -647,6 +664,8 @@ def c4_app_novo_funcional(versao_nova: str) -> None:
         checa("C4: pre-condicao — versao nova instalada (C3 concluiu)", False,
               f"registro={reg.get('display_version')!r}")
         return
+    if not precondicao_sem_instancia_viva("C4"):
+        return
     checa("C4: --quit SEM instancia rodando retorna 1 (nada para fechar)",
           cli_quit() == 1)
     p = inicia_app()
@@ -670,6 +689,8 @@ def c4_app_novo_funcional(versao_nova: str) -> None:
 
 
 def c5_reparo_com_app_novo_aberto(setup_novo: Path, versao_nova: str) -> None:
+    if not precondicao_sem_instancia_viva("C5"):
+        return
     p = inicia_app()
     base, _ = base_dz23(120)
     checa("C5: app novo aberto antes do reparo", base is not None)
@@ -699,6 +720,8 @@ def c5_reparo_com_app_novo_aberto(setup_novo: Path, versao_nova: str) -> None:
 
 
 def c6_simular_sem_mudancas(setup_novo: Path, versao_nova: str) -> None:
+    if not precondicao_sem_instancia_viva("C6"):
+        return
     p = inicia_app()
     base, _ = base_dz23(120)
     checa("C6: app aberto antes da simulacao", base is not None)
@@ -813,6 +836,8 @@ def c7b_rollback() -> None:
 
 
 def c8_desinstalar_preserva_dados(versao_nova: str) -> None:
+    if not precondicao_sem_instancia_viva("C8"):
+        return
     snap = manifesto(DIR_DADOS)
     backups_antes = lista_backups()
 
@@ -830,6 +855,8 @@ def c8_desinstalar_preserva_dados(versao_nova: str) -> None:
 
 
 def c9_reinstalar_mantem_dados(setup_novo: Path, versao_nova: str) -> None:
+    if not precondicao_sem_instancia_viva("C9"):
+        return
     snap = manifesto(DIR_DADOS)
     backups_antes = lista_backups()
 

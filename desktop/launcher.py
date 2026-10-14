@@ -86,6 +86,40 @@ def _criar_mutex_instancia():  # type: ignore[no-untyped-def]
         return None
 
 
+def _criar_evento_saida():  # type: ignore[no-untyped-def]
+    """Handle do evento de saída — criado E SEGURADO pela instância viva.
+
+    O objeto nomeado do Windows só existe enquanto alguém segura um handle.
+    Sem este handle na instância, o CreateEventW do processo `--quit` criava
+    um objeto que morria junto com ele e o pedido nunca chegava ao loop.
+    """
+    k32 = _kernel32()
+    if k32 is None:
+        return None
+    try:
+        evento = k32.CreateEventW(None, True, False, NOME_EVENTO_SAIDA)
+        if evento:
+            k32.ResetEvent(evento)
+        return evento
+    except Exception:
+        return None
+
+
+def _instancia_viva() -> bool:
+    """True quando o mutex de instância existe (há um DZ23 em execução)."""
+    k32 = _kernel32()
+    if k32 is None:
+        return False
+    try:
+        mutex = k32.OpenMutexW(_SYNCHRONIZE, False, NOME_MUTEX_INSTANCIA)
+        if not mutex:
+            return False
+        k32.CloseHandle(mutex)
+        return True
+    except Exception:
+        return False
+
+
 def _sinalizar_saida() -> bool:
     """Sinaliza o evento de saída (usado pelo processo `--quit`)."""
     k32 = _kernel32()
@@ -121,11 +155,18 @@ def _saida_solicitada() -> bool:
 
 
 def _atender_pedido_de_saida() -> int:
-    """Processa `--quit`: pede a saída da instância EM EXECUÇÃO e retorna."""
+    """Processa `--quit`: pede a saída da instância EM EXECUÇÃO e retorna.
+
+    Sem instância viva (mutex ausente) devolve 1 — sinalizar um evento
+    ainda não criado criaria um objeto órfão que ninguém escuta.
+    """
+    if not _instancia_viva():
+        logger.info("--quit: nenhuma instância do DZ23 em execução")
+        return 1
     if _sinalizar_saida():
         logger.info("--quit: pedido de encerramento gracioso enviado à instância viva")
         return 0
-    logger.info("--quit: nenhuma instância do DZ23 em execução")
+    logger.info("--quit: instância viva, mas o evento de saída não pôde ser sinalizado")
     return 1
 
 
@@ -529,6 +570,12 @@ def main(argv: list[str] | None = None) -> int:
     mutex = _criar_mutex_instancia()
     if mutex is None and _WINDOWS:
         logger.warning("mutex de instância não pôde ser criado; instalador pode pedir fechamento manual")
+
+    # Evento do --quit: a instância o cria E o segura enquanto executa. É o
+    # handle vivo que faz o pedido de encerramento PERSISTIR até o loop lê-lo.
+    evento_saida = _criar_evento_saida()
+    if evento_saida is None and _WINDOWS:
+        logger.warning("evento de saída não pôde ser criado; --quit pode não encerrar esta instância")
 
     # Dono Único: senha legada em texto puro vira hash Argon2id (a MESMA senha
     # continua valendo) e o texto puro sai do disco. Primeira execução sem
