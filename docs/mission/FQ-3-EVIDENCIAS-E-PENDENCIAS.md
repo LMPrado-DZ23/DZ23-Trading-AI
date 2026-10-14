@@ -34,7 +34,7 @@
 
 ## 4. CI (gates de empacotamento — o produto não mudou de dependências)
 
-- Pushes `44c4ad7` / `a882297` / `1955bfe` disparam **Windows Release Build** (build + aceite-bundle 17/17 + `publish-release` skipped sem tag) e **Matriz do Instalador Windows** (8 cenários). Runs: `44c4ad7` → Release `38646344922` **✓** + Matriz `38646345073`; `a882297` → Release `38646664030` **✓** + Matriz `38646664034`; `1955bfe` → Release `38646831650` + Matriz `38646831452`; **este push** dispara os mesmos dois gates. **Resultado final citado após verde** (prática da casa — ex.: `fefd16f`) — nenhum resultado é presumido; as Matrizes e os runs deste push fecham depois desta edição.
+- Pushes `44c4ad7` / `a882297` / `1955bfe` / `e76b904` disparam **Windows Release Build** (build + aceite-bundle 17/17 + `publish-release` skipped sem tag) e **Matriz do Instalador Windows** (8 cenários) — **TODOS VERDES**: `44c4ad7` → Release `38646344922` ✓ + Matriz `38646345073` ✓; `a882297` → Release `38646664030` ✓ + Matriz `38646664034` ✓; `1955bfe` → Release `38646831650` ✓ + Matriz `38646831452` ✓; `e76b904` (este pacote) → Release `38647617264` ✓ + Matriz `38647617313` ✓.
 - Nenhum arquivo de dependência tocado pelo FQ (prova: `git diff 175dc0f..44c4ad7 -- pyproject.toml requirements.txt setup.py` = vazio) — o instalador permanece no conjunto de dependências de antes; os gates Windows confirmam isso de ponta a ponta.
 
 ## 5. Pacote do PR revisável (§13 — "Não fazer merge automático")
