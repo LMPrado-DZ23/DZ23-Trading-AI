@@ -426,6 +426,10 @@ async function loadRisk(){const [h,s]=await Promise.all([api('/v1/execution/heal
 async function engageKillSwitch(){const reason=$('killReason').value.trim();if(!reason)return toast('Informe o motivo do bloqueio','warn');const r=await api('/v1/execution/kill-switch',{method:'POST',body:JSON.stringify({action:'engage',reason})});toast(r.ok?'KillSwitch acionado':r.data.detail||'Falha',r.ok?'ok':'bad');loadRisk()}
 async function loadChecklist(){const r=await api('/v1/primeiros-passos');if(!r.ok)return;const d=r.data;
 $('checklist').innerHTML='<div class="muted" style="margin-bottom:6px">'+d.concluidos+' de '+d.total+' concluídos</div>'+d.itens.map(i=>`<div class="metric-line"><span>${i.pronto?'✔':'○'} ${escapeHtml(i.passo)}</span>${i.pronto?'<b class="ok">pronto</b>':'<small class="muted">'+escapeHtml(i.acao)+'</small>'}</div>`).join('')}
+function omsLatTxt(o){if(!o)return '';const l=o.latencias_ms||{};const hh=v=>v?String(v).slice(11,19):'';
+const partes=[['criada',hh(o.criada_em)],['enviada',hh(o.enviada_em)],['aceita',hh(o.reconhecida_em)],['1º fill',hh(o.primeiro_fill_em)],['fim',hh(o.terminal_em)]].filter(x=>x[1]).map(x=>x[0]+' '+x[1]).join(' → ');
+const ms=[['envio→aceite',l.envio_ate_aceite],['aceite→execução',l.aceite_ate_execucao],['envio→execução',l.envio_ate_execucao]].filter(x=>x[1]!=null).map(x=>x[0]+' '+x[1]+' ms').join(' · ');
+return [partes,ms].filter(Boolean).join(' — ')}
 async function deskLoad(){const r=await api('/v1/desk/status');if(!r.ok){$('deskOut').innerHTML='<div class="muted">'+escapeHtml(r.data.detail||'mesa indisponível')+'</div>';return}
 const d=r.data,c=d.contabilidade,a=d.agendador;
 $('deskOut').innerHTML=`<div class="metric-line"><span>Mesa autônoma</span><b class="${a.rodando?'ok':''}">${a.rodando?'RODANDO':'PARADA'} · ${a.ciclos} ciclos · ${a.erros} erros</b></div>
@@ -433,7 +437,7 @@ $('deskOut').innerHTML=`<div class="metric-line"><span>Mesa autônoma</span><b c
 <div class="metric-line"><span>Risco</span><b>reservado ${escapeHtml(d.risk.reservado)} · disponível ${escapeHtml(d.risk.disponivel)}</b></div>
 <div class="metric-line"><span>Contabilidade</span><b class="${c.balanceado?'ok':'bad'}">patrimônio ${escapeHtml(c.patrimonio)} · ${c.balanceado?'balanceada':'DESBALANCEADA'}</b></div>
 <h3 style="margin-top:14px">Traders (10 perfis)</h3><div class="table-wrap"><table class="table"><thead><tr><th>Agente</th><th>Estratégia</th><th>Estado</th><th>Modelo IA</th><th>Operações</th><th>Último motivo de não operar</th><th>Ações</th></tr></thead><tbody>${d.agents.map(x=>`<tr><td>${escapeHtml(x.id)}<br><small class="muted">${escapeHtml(x.tier||'')}</small></td><td>${escapeHtml(x.strategy)}</td><td><span class="pill">${escapeHtml(x.stage_label||x.stage)}</span></td><td><small>${escapeHtml(x.modelo_ia||'—')}</small></td><td>${escapeHtml(String((x.evidencia||{}).operacoes??0))}${((x.evidencia||{}).maduro)?'':' <small class="muted">(imatura)</small>'}</td><td><small>${escapeHtml(x.ultimo_no_trade||'—')}</small></td><td>${deskAcoes(x)}</td></tr>`).join('')||'<tr><td colspan="7" class="muted">entradas pausadas</td></tr>'}</tbody></table></div>
-<h3 style="margin-top:14px">Ordens</h3><div class="table-wrap"><table class="table"><thead><tr><th>Ordem</th><th>Instrumento</th><th>Estado</th><th>Qtd</th><th>Preço</th></tr></thead><tbody>${d.orders.map(o=>`<tr><td>${escapeHtml(o.id)}</td><td>${escapeHtml(o.instrumento)}</td><td>${escapeHtml(o.estado)}</td><td>${escapeHtml(o.qtd)}</td><td>${escapeHtml(o.preco)}</td></tr>`).join('')||'<tr><td colspan="5" class="muted">nenhuma ordem</td></tr>'}</tbody></table></div>
+<h3 style="margin-top:14px">Ordens</h3><div class="table-wrap"><table class="table"><thead><tr><th>Ordem</th><th>Instrumento</th><th>Estado</th><th>Qtd</th><th>Preço</th><th>Trilha (UTC)</th></tr></thead><tbody>${d.orders.map(o=>`<tr><td>${escapeHtml(o.id)}</td><td>${escapeHtml(o.instrumento)}</td><td>${escapeHtml(o.estado)}</td><td>${escapeHtml(o.qtd)}</td><td>${escapeHtml(o.preco)}</td><td><small title="carimbos UTC do OMS — vazio quando desconhecido (ex.: ordem restaurada de registro antigo)">${escapeHtml(omsLatTxt(o)||'—')}</small></td></tr>`).join('')||'<tr><td colspan="6" class="muted">nenhuma ordem</td></tr>'}</tbody></table></div>
 <h3 style="margin-top:14px">Posições (gerente de saída global)</h3>${(d.livro_restauracao&&(d.livro_restauracao.avisos||[]).length)?`<div class="warn">${escapeHtml((d.livro_restauracao.avisos||[]).join(' · '))}</div>`:''}<div class="table-wrap"><table class="table"><thead><tr><th>Instrumento</th><th>Dono</th><th>Qtd</th><th>Entrada</th><th>Stop</th><th>Alvo</th><th>Líquido agora</th><th>Trailing / Parcial</th><th>Horizonte</th><th>Velas</th><th>Política</th></tr></thead><tbody>${(d.posicoes||[]).map(p=>{const pct=v=>(v===''||v==null)?'—':((Number(v)*100).toFixed(2)+'%');return `<tr><td>${escapeHtml(p.instrumento)}</td><td><small>${escapeHtml(p.agente)}</small></td><td>${escapeHtml(p.quantidade)}<br><small class="muted">abriu ${escapeHtml(p.quantidade_entrada)}</small></td><td>${escapeHtml(p.preco_entrada)}</td><td>${p.stop?escapeHtml(p.stop)+' <small class="muted">('+pct(p.stop_pct)+')</small>':'—'}</td><td>${p.alvo?escapeHtml(p.alvo)+' <small class="muted">('+pct(p.alvo_pct)+')</small>':'—'}</td><td class="${(p.lucro_liquido_pct||'').startsWith('-')?'bad':'ok'}">${escapeHtml(p.lucro_liquido_pct||'—')}<br><small class="muted">bruto ${escapeHtml(p.lucro_bruto_pct||'—')} · último ${escapeHtml(p.ultimo_preco||'—')}</small></td><td>${p.trailing_pct?pct(p.trailing_pct)+' <small class="muted">do topo '+escapeHtml(p.high_water||'—')+'</small>':'—'}${p.parcial_no_alvo?'<br><small class="muted">parcial '+pct(p.parcial_no_alvo)+' no alvo'+(p.parcial_tomada?' (tomada)':'')+'</small>':''}</td><td>${escapeHtml(p.horizonte||'—')}</td><td>${escapeHtml(String(p.velas_na_posicao??''))}</td><td><small>${escapeHtml(p.politica||'—')}</small></td></tr>`}).join('')||'<tr><td colspan="11" class="muted">nenhuma posição aberta</td></tr>'}</tbody></table></div>
 <h3 style="margin-top:14px">Ciclos</h3>${(d.ciclos||[]).slice().reverse().map(x=>`<div class="event"><b>${escapeHtml(x.resumo)}</b><small>${escapeHtml(x.origem)}</small>${(x.abstencoes||[]).length?'<small>sem operar: '+escapeHtml(x.abstencoes.join(' | '))+'</small>':''}</div>`).join('')||'<div class="muted">nenhum ciclo</div>'}`}
 async function deskCycle(){const r=await api('/v1/desk/cycle',{method:'POST'});if(!r.ok)return toast(r.data.detail||'falhou','bad');const enc=r.data.encerradas||[];if(enc.length)$('deskMsg').innerHTML=enc.map(e=>`<div class="event"><b>Saída ${escapeHtml(e.instrumento||'?')}: ${escapeHtml(e.estado||'')}</b><small>${escapeHtml(e.reason_code||'')} — ${escapeHtml(e.motivo||'')}</small></div>`).join('');toast(r.data.resumo,'ok');deskLoad()}
@@ -479,15 +483,37 @@ const grafico=graficoMercadoEscolha(m,mq);
 const graficoPort=graficoPortfolioEscolha(p.curva||[]);
 const ind=m.indicadores||{};const ult=a=>{a=a||[];for(let i=a.length-1;i>=0;i--)if(a[i]!=null)return a[i];return null};
 const niveis=(m.suportes||[]).map(v=>'S '+escapeHtml(String(v))).concat((m.resistencias||[]).map(v=>'R '+escapeHtml(String(v)))).join(' · ')||'—';
-const marcaChips=mq.length?mq.map(k=>`<span class="pill" title="${escapeHtml(k.motivo||'')}">${escapeHtml(k.tipo)}${k.preco!=null?' @ '+escapeHtml(String(k.preco)):''} · ${escapeHtml(String(k.t||'').slice(0,16))}</span>`).join(' '):'<span class="muted">sem marcações ainda</span>';
+const chipTitulo=k=>[k.motivo||'',k.taxa!=null?('taxa por execução '+k.taxa+(k.moeda_taxa?' '+k.moeda_taxa:'')):(k.nota_taxa||'')].filter(Boolean).join(' · ');
+const marcaChips=mq.length?mq.map(k=>`<span class="pill" title="${escapeHtml(chipTitulo(k))}">${escapeHtml(k.tipo)}${k.preco!=null?' @ '+escapeHtml(String(k.preco)):''} · ${escapeHtml(String(k.t||'').slice(0,16))}</span>`).join(' '):'<span class="muted">sem marcações ainda</span>';
 const expo=(p.exposicao||{}).posicoes||[];
 const expoRows=expo.length?expo.map(x=>`<tr><td>${escapeHtml(x.instrumento)}</td><td>${escapeHtml(x.quantidade)}</td><td>${escapeHtml(x.custo)}</td></tr>`).join(''):'<tr><td colspan="3" class="muted">nenhuma posição viva deste trader</td></tr>';
 const ordens=p.ordens_abertas||[];
-const ordensLinhas=ordens.length?ordens.map(o=>`<div class="event"><b>${escapeHtml(String(o.id||o.order_id||'—'))}</b><small>${escapeHtml(String(o.instrumento||''))} · ${escapeHtml(String(o.estado||''))} · qtd ${escapeHtml(String(o.qtd||''))}</small></div>`).join(''):'<div class="muted">nenhuma ordem aberta deste trader</div>';
+const latTxt=o=>omsLatTxt(o);
+const ordensLinhas=ordens.length?ordens.map(o=>{const lat=latTxt(o);return `<div class="event"><b>${escapeHtml(String(o.id||o.order_id||'—'))}</b><small>${escapeHtml(String(o.instrumento||''))} · ${escapeHtml(String(o.estado||''))} · qtd ${escapeHtml(String(o.qtd||''))}</small>${lat?`<small title="carimbos UTC do OMS — vazio quando desconhecido (ex.: ordem restaurada de registro antigo)">${escapeHtml(lat)}</small>`:''}</div>`}).join(''):'<div class="muted">nenhuma ordem aberta deste trader</div>';
 const champ=d.champion_challenger||[];
 const rz=p.risco||{};const nz=v=>v!=null?num(v):'—';
 const riscoHTML=ml('Volatilidade (por operação)',nz(rz.volatilidade))+ml('Sharpe (por operação, não anualizado)',nz(rz.sharpe))+ml('Sortino (por operação, não anualizado)',nz(rz.sortino))+(rz.motivo?`<div class="muted"><small>${escapeHtml(rz.motivo)}</small></div>`:'');
 const expHTML=champ.length?champ.map(e=>{const ver=e.resultado?('veredito: '+escapeHtml(JSON.stringify(e.resultado).slice(0,180))):'pendente — sem veredito (não é aprovado por omissão)';return `<div class="event"><b>${escapeHtml(String(e.titulo||e.id||''))}</b><small>champion ${escapeHtml(JSON.stringify(e.champion||{}).slice(0,90))} · challenger ${escapeHtml(JSON.stringify(e.challenger||{}).slice(0,90))}</small><small>${ver}</small></div>`}).join(''):'<div class="muted">nenhum experimento pré-registrado deste trader</div>';
+const lv=d.livro||null;const lvn=v=>v==null?'—':escapeHtml(String(v));
+const lvHTML=!lv?'<div class="muted"><small>Livro de ofertas (L2): não informado por esta sala.</small></div>'
+:ml('Livro (L2) — '+escapeHtml(String(lv.estado||'')),lv.bid!=null?('bid '+lvn(lv.bid)+' · ask '+lvn(lv.ask)+' · spread '+lvn(lv.spread_bps)+' bps · desequilíbrio '+lvn(lv.imbalance)+' · prof. bid/ask '+lvn(lv.profundidade_bid)+'/'+lvn(lv.profundidade_ask)+' · nível(is) '+lvn(lv.niveis_usados)+' · idade '+lvn(lv.idade_s)+' s'):'sem números')
++(lv.motivo?`<div class="${['vencida','inconsistente','indisponivel'].includes(String(lv.estado))?'warn':'muted'}"><small>${escapeHtml(String(lv.motivo))}</small></div>`:'')
++`<div class="muted"><small>Leitura pública e somente-leitura do livro de ofertas — nunca habilita ordem; leitura mais velha que a validade não alimenta decisão.</small></div>`;
+const ultimoPreco=(m.fechamentos&&m.fechamentos.length)?m.fechamentos[m.fechamentos.length-1]:((m.velas&&m.velas.length)?m.velas[m.velas.length-1].c:null);
+const entradaTxt=[escapeHtml(String(m.instrumento||'')),escapeHtml(String(m.timeframe||'')),'fonte '+escapeHtml(String(m.fonte||'')),'qualidade '+escapeHtml(String(m.qualidade||'')),ultimoPreco!=null?('último fechamento '+escapeHtml(String(ultimoPreco))):'sem fechamento', 'SMA rápida '+(ult(ind.sma_rapida)!=null?escapeHtml(String(ult(ind.sma_rapida))):'—'), 'SMA lenta '+(ult(ind.sma_lenta)!=null?escapeHtml(String(ult(ind.sma_lenta))):'—'), 'RSI '+(ult(ind.rsi)!=null?Number(ult(ind.rsi)).toFixed(1):'—')].join(' · ');
+const ultimaM=mq.length?mq[mq.length-1]:null;
+const motivoTrilha=!ultimaM?'sem marcação ainda — nenhuma execução, abstenção ou veto registrado':((ultimaM.tipo==='compra'||ultimaM.tipo==='venda')
+?('operou — '+escapeHtml(String(ultimaM.tipo))+(ultimaM.preco!=null?' @ '+escapeHtml(String(ultimaM.preco)):'')+(ultimaM.taxa!=null?(' · taxa '+escapeHtml(String(ultimaM.taxa))+(ultimaM.moeda_taxa?' '+escapeHtml(String(ultimaM.moeda_taxa)):'')):(ultimaM.nota_taxa?(' · '+escapeHtml(String(ultimaM.nota_taxa))):'')))
+:('esperou — '+escapeHtml(String(ultimaM.tipo))+': '+escapeHtml(String(ultimaM.motivo||''))));
+const ultExecTaxa=(()=>{for(let i=mq.length-1;i>=0;i--){const k=mq[i];if(k.tipo==='compra'||k.tipo==='venda')return k}return null})();
+const custosTrilha=(ultExecTaxa?(ultExecTaxa.taxa!=null?(' · última execução: taxa '+escapeHtml(String(ultExecTaxa.taxa))+(ultExecTaxa.moeda_taxa?' '+escapeHtml(String(ultExecTaxa.moeda_taxa)):'')):(' · última execução: '+escapeHtml(String(ultExecTaxa.nota_taxa||'taxa não informada')))):'');
+const trilhaHTML=`<h3 style="margin-top:14px">Trilha da decisão</h3>`
++`<div class="event"><b>1 · Dados de entrada</b><small>${entradaTxt}</small></div>`
++`<div class="event"><b>2 · Motivo de operar ou esperar</b><small>${motivoTrilha}</small></div>`
++`<div class="event"><b>3 · Maestro</b><div id="salaTrilhaMaestro" class="muted"><small>consultando a rota existente do Painel Global…</small></div></div>`
++`<div class="event"><b>4 · Risco</b><small>drawdown ${pct(p.drawdown)} · volatilidade ${nz(rz.volatilidade)} · sharpe ${nz(rz.sharpe)} — detalhe abaixo</small></div>`
++`<div class="event"><b>5 · Custos</b><small>custos acumulados (diário) ${num(p.custos_total)}${custosTrilha}</small></div>`
++`<div class="muted"><small>Trilha montada do MESMO payload da sala + rota existente do Maestro (/v1/maestro/painel) — nenhum sistema paralelo; sem dado, a falta é declarada.</small></div>`;
 box.innerHTML=ml('Modo',escapeHtml(String(d.modo||'').toUpperCase())+' · moeda '+escapeHtml(String(d.moeda||'—'))+' · LIVE bloqueado')
 +(m.aviso?`<div class="warn">${escapeHtml(m.aviso)}</div>`:'')
 +`<h3 style="margin-top:10px">Mercado — ${escapeHtml(String(m.instrumento||''))} ${escapeHtml(String(m.timeframe||''))}</h3>`
@@ -495,6 +521,8 @@ box.innerHTML=ml('Modo',escapeHtml(String(d.modo||'').toUpperCase())+' · moeda 
 +ml('Indicadores','SMA rápida '+(ult(ind.sma_rapida)!=null?escapeHtml(String(ult(ind.sma_rapida))):'—')+' · SMA lenta '+(ult(ind.sma_lenta)!=null?escapeHtml(String(ult(ind.sma_lenta))):'—')+' · RSI '+(ult(ind.rsi)!=null?Number(ult(ind.rsi)).toFixed(1):'—'))
 +ml('Suportes / Resistências',niveis)+`<div class="muted"><small>${escapeHtml(m.nota_sr||'')}</small></div>`
 +`<div style="margin-top:6px">${marcaChips}</div><div class="muted"><small>${escapeHtml(m.nota_marcacoes||'')}</small></div>`
++lvHTML
++trilhaHTML
 +`<h3 style="margin-top:14px">Portfólio do trader</h3>`+graficoPort
 +ml('Operações fechadas',p.operacoes+' · acertos '+p.acertos+' · hit rate '+pct(p.taxa_acerto))
 +ml('Expectativa por operação',pct(p.expectativa))
@@ -513,7 +541,13 @@ box.innerHTML=ml('Modo',escapeHtml(String(d.modo||'').toUpperCase())+' · moeda 
 +`<div class="actions"><button class="btn secondary" onclick="salaLeituraIA()">Pedir leitura à IA</button></div>`
 +`<div id="salaLeituraIAOut" class="muted"><small>A IA lê as séries estruturadas do gráfico (fechamentos/velas, indicadores, níveis, marcações, curva) — nunca uma imagem e nunca para mandar ordem; não é promessa de lucro nem previsão exata de preços. Sem provedor configurado, nada é enviado.</small></div>`
 +(d.avisos||[]).map(a=>`<div class="warn"><small>${escapeHtml(a)}</small></div>`).join('');
-lcDesenhar(m,mq,p.curva||[]);}
+lcDesenhar(m,mq,p.curva||[]);salaTrilhaMaestro(id);}
+async function salaTrilhaMaestro(id){const box=$('salaTrilhaMaestro');if(!box)return;
+const r=await api('/v1/maestro/painel');
+if(!r.ok){box.innerHTML='<small>Maestro indisponível agora ('+escapeHtml(String(r.status))+') — o elo fica declarado em falta; nada foi inventado.</small>';return}
+const o=((r.data||{}).oportunidades||{}).por_trader||{};const m2=o[id];
+if(!m2){box.innerHTML='<small>sem veto/abstenção deste trader no ciclo atual do Maestro — nada a reportar.</small>';return}
+box.innerHTML='<small>vetos '+Number(m2.vetos||0)+' · abstenções '+Number(m2.abstencoes||0)+(m2.ultimo_motivo?' — última razão: '+escapeHtml(String(m2.ultimo_motivo)):'')+' (rota existente do Painel Global do Maestro)</small>';}
 function svgLinhaMercado(closes,m,marc){const cs=(closes||[]).map(Number).filter(Number.isFinite);
 if(cs.length<2)return '<div class="muted">série insuficiente para desenhar — '+escapeHtml((m||{}).aviso||'')+'</div>';
 const W=920,H=230,P=26;const mn=Math.min(...cs),mx=Math.max(...cs),rng=(mx-mn)||1;

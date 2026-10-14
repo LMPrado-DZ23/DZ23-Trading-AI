@@ -34,12 +34,14 @@ class PublicMarketFeed:
     """Velas públicas via CCXT (sem chaves). Um objeto por exchange."""
 
     def __init__(self, exchange_id: str = "binance", *, client=None,
-                 cache_seconds: int = 30):
+                 cache_seconds: int = 30, book_cache_seconds: int = 10):
         self.exchange_id = exchange_id
         self._client = client
         self._cache: dict[tuple, tuple[float, list]] = {}
+        self._cache_livro: dict[tuple, tuple[float, datetime, dict]] = {}
         self._lock = threading.Lock()
         self.cache_seconds = cache_seconds
+        self.book_cache_seconds = book_cache_seconds
 
     @property
     def client(self):
@@ -100,6 +102,71 @@ class PublicMarketFeed:
         if not snap.closes:
             raise MarketDataError(f"sem preço para {instrument}")
         return snap.last
+
+    def leitura_de_livro(self, instrument: str, *, limit: int = 50,
+                         niveis: int = 10, max_idade_s: int = 15,
+                         agora: datetime | None = None) -> "LeituraDeLivro":
+        """Livro L2 PÚBLICO e SEM escrita — mesma regra do resto do feed.
+
+        Corretora sem `fetchOrderBook` nativo (flag True no ccxt;
+        'emulated' não vale) ⇒ `nao_suportado` sem tocar a rede. Falha de
+        rede: sem leitura anterior ⇒ `indisponivel`; com leitura anterior
+        ⇒ `vencida` (números ficam, motivo aponta a falha). Cache curto
+        por (exchange, instrumento, limit)."""
+        from dataclasses import replace
+
+        from .microestrutura import LeituraDeLivro, analisar_livro
+
+        agora = agora or datetime.now(timezone.utc)
+        try:
+            cliente = self.client
+        except MarketDataError as exc:
+            return LeituraDeLivro(instrumento=instrument, exchange=self.exchange_id,
+                                  estado="indisponivel",
+                                  motivo=f"fonte indisponível: {exc}",
+                                  obtido_em=agora.isoformat())
+        has = getattr(cliente, "has", None)
+        if isinstance(has, dict) and has.get("fetchOrderBook") is not True:
+            return LeituraDeLivro(
+                instrumento=instrument, exchange=self.exchange_id,
+                estado="nao_suportado",
+                motivo=(f"corretora sem fetchOrderBook nativo (capability="
+                        f"{has.get('fetchOrderBook')!r}) — sem leitura de "
+                        "livro"), obtido_em=agora.isoformat())
+        if not callable(getattr(cliente, "fetch_order_book", None)):
+            return LeituraDeLivro(
+                instrumento=instrument, exchange=self.exchange_id,
+                estado="nao_suportado",
+                motivo="cliente sem fetch_order_book — sem leitura de livro",
+                obtido_em=agora.isoformat())
+        key = (self.exchange_id, instrument, limit)
+        with self._lock:
+            hit = self._cache_livro.get(key)
+        if hit and time.monotonic() - hit[0] < self.book_cache_seconds:
+            return analisar_livro(self.exchange_id, instrument, hit[2],
+                                  agora=agora, max_idade_s=max_idade_s,
+                                  niveis=niveis, obtido_em=hit[1])
+        try:
+            bruto = cliente.fetch_order_book(instrument, limit)
+        except Exception as exc:
+            if hit is not None:
+                ultima = analisar_livro(self.exchange_id, instrument, hit[2],
+                                        agora=agora, max_idade_s=max_idade_s,
+                                        niveis=niveis, obtido_em=hit[1])
+                if ultima.estado in ("disponivel", "vencida"):
+                    return replace(ultima, estado="vencida", motivo=(
+                        f"fonte indisponível ({type(exc).__name__}) — última "
+                        f"leitura há {ultima.idade_s} s"))
+            return LeituraDeLivro(
+                instrumento=instrument, exchange=self.exchange_id,
+                estado="indisponivel",
+                motivo=f"{type(exc).__name__}: falha de rede na leitura",
+                obtido_em=agora.isoformat())
+        with self._lock:
+            self._cache_livro[key] = (time.monotonic(), agora, bruto)
+        return analisar_livro(self.exchange_id, instrument, bruto,
+                              agora=agora, max_idade_s=max_idade_s,
+                              niveis=niveis)
 
 
 class MarketFeedProviders:

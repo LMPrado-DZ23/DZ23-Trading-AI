@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
+from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 
@@ -105,6 +106,38 @@ class OrderRecord:
     external_id: str | None = None
     external_client_id: str = ""
     note: str = ""
+    # TRILHA TEMPORAL (MO-2-C): carimbos ISO-8601 UTC por estágio —
+    # criada → enviada → reconhecida → primeiro fill → terminal. Vazio =
+    # desconhecido (registro antigo); nunca se inventa carimbo retroativo.
+    criada_em: str = ""
+    enviada_em: str = ""
+    reconhecida_em: str = ""
+    primeiro_fill_em: str = ""
+    terminal_em: str = ""
+    atualizada_em: str = ""
+
+    def carimbar_criacao(self) -> None:
+        """Ordem NOVA: criação e atualização acontecem agora.
+
+        Chamado só pelo construtor do envio — restauração NÃO carimba
+        criação (registro antigo fica honestamente sem carimbo)."""
+        agora = utcnow().isoformat()
+        if not self.criada_em:
+            self.criada_em = agora
+        self.atualizada_em = agora
+
+    def carimbar_transicao(self, novo: OrderState) -> None:
+        """Transição de estado CARIMBADA — a trilha temporal da ordem."""
+        agora = utcnow().isoformat()
+        self.state = novo
+        self.atualizada_em = agora
+        if novo is OrderState.ACKNOWLEDGED and not self.reconhecida_em:
+            self.reconhecida_em = agora
+        if (novo in (OrderState.PARTIALLY_FILLED, OrderState.FILLED)
+                and not self.primeiro_fill_em):
+            self.primeiro_fill_em = agora
+        if novo in TERMINAL and not self.terminal_em:
+            self.terminal_em = agora
 
     @property
     def open(self) -> bool:
@@ -174,6 +207,25 @@ class OrderRecord:
         if self.intent is not None:
             return self.intent.provenance
         return getattr(self, "provenance", None)
+
+
+def latencias_ms(rec: OrderRecord) -> dict:
+    """Latência por estágio (ms) a partir dos carimbos da ordem.
+
+    Estágio sem carimbo devolve None — nunca estimativa inventada."""
+    def _ms(antes: str, depois: str) -> int | None:
+        if not antes or not depois:
+            return None
+        try:
+            delta = datetime.fromisoformat(depois) - datetime.fromisoformat(antes)
+        except ValueError:
+            return None
+        return max(0, int(delta.total_seconds() * 1000))
+
+    return {"criacao_ate_envio": _ms(rec.criada_em, rec.enviada_em),
+            "envio_ate_aceite": _ms(rec.enviada_em, rec.reconhecida_em),
+            "aceite_ate_execucao": _ms(rec.reconhecida_em, rec.primeiro_fill_em),
+            "envio_ate_execucao": _ms(rec.enviada_em, rec.primeiro_fill_em)}
 
 
 class PaperBroker:
@@ -522,7 +574,7 @@ class ExecutionCoordinator:
                     f"({remota.get('motivo', 'sem motivo')}) — reserva mantida")
                 return
             if resultado == "CONFIRMED_NOT_FOUND":
-                rec.state = OrderState.REJECTED
+                rec.carimbar_transicao(OrderState.REJECTED)
                 rec.note = "reconciliada: corretora CONFIRMA que não existe"
                 self._liberar_reserva_de(rec)
                 self.oms_version += 1
@@ -545,12 +597,12 @@ class ExecutionCoordinator:
                                       or rec.external_client_id)
             self._aplicar_fills_remotos(rec, remota, relatorio, consultar_fills)
         elif estado == "absent":
-            rec.state = OrderState.CANCELLED
+            rec.carimbar_transicao(OrderState.CANCELLED)
             rec.note = "reconciliada: ausente na corretora"
             self._liberar_reserva_de(rec)
             self.oms_version += 1
         elif estado in ("canceled", "cancelled", "rejected", "expired"):
-            rec.state = OrderState.REJECTED
+            rec.carimbar_transicao(OrderState.REJECTED)
             rec.note = f"reconciliada: {estado} na corretora"
             self._liberar_reserva_de(rec)
             self.oms_version += 1
@@ -764,8 +816,8 @@ class ExecutionCoordinator:
                              / rec.filled_qty)
         rec.fees = rec.fees + taxa_na_cotacao
         alvo = rec.quantidade
-        rec.state = (OrderState.FILLED if alvo and rec.filled_qty >= alvo
-                     else OrderState.PARTIALLY_FILLED)
+        rec.carimbar_transicao(OrderState.FILLED if alvo and rec.filled_qty >= alvo
+                               else OrderState.PARTIALLY_FILLED)
         self.oms_version += 1
         return True
 
@@ -951,7 +1003,8 @@ class ExecutionCoordinator:
                 self.ledger.reserve(dura, ref=rec.order_id,
                                     reservation_id=ei.reservation_id)
 
-        # 5. ENVIO
+        # 5. ENVIO — carimbo do momento em que o comando sai (MO-2-C)
+        rec.enviada_em = rec.enviada_em or utcnow().isoformat()
         try:
             resultado = self.broker.submit(
                 coid, ei.instrument, ei.side.value, ei.quantity,
@@ -968,7 +1021,7 @@ class ExecutionCoordinator:
                      "recebida pela corretora")
             return rec
         except Exception as exc:
-            rec.state = OrderState.REJECTED
+            rec.carimbar_transicao(OrderState.REJECTED)
             rec.note = f"{type(exc).__name__}: {exc}"[:200]
             if ei.kind is Kind.ENTRY:
                 self.liberar_reserva_restante(
@@ -984,7 +1037,7 @@ class ExecutionCoordinator:
         # execuções usam, não o id interno da mesa (FIN-3).
         rec.external_client_id = (resultado.get("external_client_id")
                                   or rec.external_client_id)
-        rec.state = OrderState.ACKNOWLEDGED
+        rec.carimbar_transicao(OrderState.ACKNOWLEDGED)
         self.oms_version += 1
         # 7. FILLS individualizados: ACK não é execução
         for fill in self._fills_da_resposta(resultado):
@@ -1212,7 +1265,11 @@ class ExecutionCoordinator:
                          fees: Decimal = Decimal("0"), external_id: str = "",
                          external_client_id: str = "",
                          note: str = "", seen_fills=None,
-                         execution_intent=None) -> OrderRecord:
+                         execution_intent=None,
+                         criada_em: str = "", enviada_em: str = "",
+                         reconhecida_em: str = "", primeiro_fill_em: str = "",
+                         terminal_em: str = "",
+                         atualizada_em: str = "") -> OrderRecord:
         """ÚNICO construtor de OrderRecord — usado pelo envio e pelo restore.
 
         Dois construtores independentes é como campos passam a existir num
@@ -1230,6 +1287,12 @@ class ExecutionCoordinator:
         rec.external_client_id = external_client_id
         rec.fingerprint = fingerprint
         rec.note = note
+        rec.criada_em = criada_em
+        rec.enviada_em = enviada_em
+        rec.reconhecida_em = reconhecida_em
+        rec.primeiro_fill_em = primeiro_fill_em
+        rec.terminal_em = terminal_em
+        rec.atualizada_em = atualizada_em
         rec.seen_fills = set(seen_fills or ())
         rec.instrument = instrument
         rec.side = side
@@ -1250,6 +1313,7 @@ class ExecutionCoordinator:
             agent_id=ei.agent_id, reservation_id=ei.reservation_id,
             provenance=ei.provenance, cost_basis_ref=ei.cost_basis_ref,
             execution_intent=ei)
+        rec.carimbar_criacao()          # ordem NOVA: criada agora (MO-2-C)
         self.orders[rec.order_id] = rec
         self._by_key[coid] = rec.order_id
         self.oms_version += 1
@@ -1337,7 +1401,7 @@ class ExecutionCoordinator:
         rec = self.orders[order_id]
         if rec.state in TERMINAL:
             return rec
-        rec.state = OrderState.CANCEL_PENDING   # pedido ≠ confirmado
+        rec.carimbar_transicao(OrderState.CANCEL_PENDING)  # pedido ≠ confirmado
         return rec
 
     def confirm_cancel(self, order_id: str) -> OrderRecord:
@@ -1350,7 +1414,7 @@ class ExecutionCoordinator:
         rec = self.orders[order_id]
         if rec.state is not OrderState.CANCEL_PENDING:
             return rec
-        rec.state = OrderState.CANCELLED
+        rec.carimbar_transicao(OrderState.CANCELLED)
         self._liberar_reserva_de(rec)
         self.oms_version += 1
         return rec
@@ -1385,7 +1449,7 @@ class ExecutionCoordinator:
         anterior existe na corretora. Aqui as quatro consequências andam
         juntas: estado, portão, versão do OMS e invalidação do relatório.
         """
-        rec.state = OrderState.UNKNOWN_RECONCILIATION_REQUIRED
+        rec.carimbar_transicao(OrderState.UNKNOWN_RECONCILIATION_REQUIRED)
         rec.note = motivo[:200]
         self.oms_version += 1
         self.exigir_reconciliacao(motivo)
@@ -1494,7 +1558,16 @@ class ExecutionCoordinator:
                 # Sem isto, uma saída cujo custo não está no livro perderia a
                 # referência no reinício: prejuízo de 10 viraria "lucro" do
                 # valor inteiro da venda.
-                "custo_referencia": str(getattr(r, "cost_basis_ref", "") or "")}
+                "custo_referencia": str(getattr(r, "cost_basis_ref", "") or ""),
+                # Carimbos do OMS (MO-2-C): a trilha temporal sobrevive ao
+                # reinício; documento antigo sem eles reidrata com "" (nunca
+                # inventa carimbo retroativo).
+                "criada_em": getattr(r, "criada_em", ""),
+                "enviada_em": getattr(r, "enviada_em", ""),
+                "reconhecida_em": getattr(r, "reconhecida_em", ""),
+                "primeiro_fill_em": getattr(r, "primeiro_fill_em", ""),
+                "terminal_em": getattr(r, "terminal_em", ""),
+                "atualizada_em": getattr(r, "atualizada_em", "")}
 
     def restaurar_estado(self, doc: dict | None) -> dict:
         """REIDRATA o estado financeiro e diz o que ficou pendente.
@@ -1661,7 +1734,13 @@ class ExecutionCoordinator:
             external_id=od.get("external_id", ""),
             external_client_id=od.get("external_client_id", ""),
             note=od.get("nota", ""),
-            seen_fills=od.get("fills_vistos") or [])
+            seen_fills=od.get("fills_vistos") or [],
+            criada_em=od.get("criada_em", ""),
+            enviada_em=od.get("enviada_em", ""),
+            reconhecida_em=od.get("reconhecida_em", ""),
+            primeiro_fill_em=od.get("primeiro_fill_em", ""),
+            terminal_em=od.get("terminal_em", ""),
+            atualizada_em=od.get("atualizada_em", ""))
 
     def pending_reconciliation(self) -> list[OrderRecord]:
         return [r for r in self.orders.values() if r.needs_reconciliation]

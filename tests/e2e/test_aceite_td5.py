@@ -174,6 +174,17 @@ def test_aceite_td5_03_sala_do_trader_com_grafico(page, mesa_url, senha, evidenc
         "sala sem gráfico renderizado (canvas do Lightweight Charts)"
     )
     expect(sala).to_contain_text("LIVE permanece bloqueado")
+    # MO-2-B: trilha da decisão (dados → motivo → Maestro → risco → custos)
+    # e o elo do Maestro vindo da ROTA EXISTENTE do Painel Global.
+    expect(saida).to_contain_text("Trilha da decisão")
+    expect(saida).to_contain_text("Dados de entrada")
+    expect(saida).to_contain_text("Motivo de operar ou esperar")
+    expect(saida).to_contain_text("Custos")
+    maestro = page.locator("#salaTrilhaMaestro")
+    expect(maestro).not_to_contain_text("consultando a rota existente",
+                                        timeout=20000)
+    expect(maestro).to_contain_text(
+        re.compile(r"vetos|sem veto|indisponível"))
 
     page.screenshot(path=str(evidence_dir / "td5-03-sala-trader.png"))
     page.get_by_role("button", name="Fechar", exact=True).click()

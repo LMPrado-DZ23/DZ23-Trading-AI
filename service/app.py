@@ -2918,6 +2918,7 @@ def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
     except Exception as exc:
         raise HTTPException(503, f"mesa indisponível: {type(exc).__name__}: {exc}"[:300]) from exc
     orch, led, coord = d["orchestrator"], d["ledger"], d["coordinator"]
+    from tradingagents.desk.execution import latencias_ms
     return {
         "mandate": {"account": orch.mandate.account, "mode": orch.mandate.mode.value,
                     "capital": str(orch.mandate.capital),
@@ -2926,9 +2927,17 @@ def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
         "risk": {"reservado": str(orch.risk.reserved_total),
                  "disponivel": str(orch.risk.available),
                  "instrumentos_abertos": sorted(orch.risk.open_instruments())},
+        # MO-2-C: carimbos UTC por estágio do OMS ("" = desconhecido, ex.:
+        # ordem restaurada de documento antigo) + latências derivadas.
         "orders": [{"id": r.order_id, "instrumento": r.instrumento,
                     "estado": r.state.value, "qtd": str(r.filled_qty),
-                    "preco": str(r.avg_price), "nota": r.note}
+                    "preco": str(r.avg_price), "nota": r.note,
+                    "criada_em": r.criada_em, "enviada_em": r.enviada_em,
+                    "reconhecida_em": r.reconhecida_em,
+                    "primeiro_fill_em": r.primeiro_fill_em,
+                    "terminal_em": r.terminal_em,
+                    "atualizada_em": r.atualizada_em,
+                    "latencias_ms": latencias_ms(r)}
                    for r in coord.orders.values()],
         "pendencias_reconciliacao": [r.order_id for r in coord.pending_reconciliation()],
         "contabilidade": {"saldos": {k: str(v) for k, v in led.balances().items()},
@@ -3204,6 +3213,9 @@ def _retrato_da_sala(agent_id: str, request: Request, instrumento: str,
             velas = None                    # cai para a linha dos fechamentos
         aviso_fonte = ("mercado real (leitura pública, somente leitura) — "
                        + qualidade)
+        # MO-2-A: livro L2 público da MESMA corretora — leitura pura, com
+        # estado honesto (indisponivel/vencida/nao_suportado) e validade.
+        livro = feed.leitura_de_livro(instrumento).para_dict()
     else:
         snaps = [s for s in d["snaps_fn"]() if s.instrument == instrumento]
         if snaps:
@@ -3213,15 +3225,29 @@ def _retrato_da_sala(agent_id: str, request: Request, instrumento: str,
         aviso_fonte = ("dados de FIXTURE (rotulados) — provam a mesa, não o "
                        "mercado; o gráfico mostra os fechamentos, sem OHLCV "
                        "inventado")
+        livro = {"estado": "nao_aplicavel",
+                 "motivo": "modo dados de treino (fixture) — sem livro de "
+                           "ofertas",
+                 "somente_leitura": True}
 
     led, coord = d["ledger"], d["coordinator"]
     evo = d.get("evolucao")
     diario = evo.diario(agent_id) if evo else []
     lotes = [lote for inst in universo for lote in led.position_lots(inst)]
+    from tradingagents.desk.execution import latencias_ms
     ordens = [{"id": r.order_id, "agente": r.agente,
                "instrumento": r.instrumento, "lado": r.lado,
                "estado": r.state.value, "qtd": str(r.filled_qty),
-               "aberta": r.nao_terminal} for r in coord.orders.values()]
+               "aberta": r.nao_terminal,
+               # MO-2-C: trilha temporal do OMS — carimbo real por estágio
+               # ("" = desconhecido, ex.: ordem restaurada de doc antigo)
+               "criada_em": r.criada_em, "enviada_em": r.enviada_em,
+               "reconhecida_em": r.reconhecida_em,
+               "primeiro_fill_em": r.primeiro_fill_em,
+               "terminal_em": r.terminal_em,
+               "atualizada_em": r.atualizada_em,
+               "latencias_ms": latencias_ms(r)}
+              for r in coord.orders.values()]
     experimentos = (experimentos_do_trader(evo.experimentos(),
                                            evo.resultados_dos_experimentos(),
                                            agent_id) if evo else [])
@@ -3234,7 +3260,7 @@ def _retrato_da_sala(agent_id: str, request: Request, instrumento: str,
         ordens=ordens, ciclos=d.get("cycles", []), experimentos=experimentos,
         atribuicao=atribuicao,
         moeda=str(getattr(led, "currency", "") or "USDT"),
-        modo=d["orchestrator"].mandate.mode.value)
+        modo=d["orchestrator"].mandate.mode.value, livro=livro)
 
 
 @app.get("/v1/desk/traders/{agent_id}/sala")

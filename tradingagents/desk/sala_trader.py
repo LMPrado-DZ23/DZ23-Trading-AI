@@ -258,7 +258,10 @@ def marcacoes_de_execucao(transacoes: Sequence[dict], agent_id: str) -> list[dic
     """Execuções REAIS deste trader, direto dos lançamentos do livro.
 
     Sem preço nos lançamentos quando a aritmética não fecha: `preco=None`
-    com o dado cru preservado — melhor declarar que derivar errado."""
+    com o dado cru preservado — melhor declarar que derivar errado.
+    Taxa REAL por execução (MO-2-B) vem da própria entry `FEES:<moeda>` do
+    lançamento; sem essa entry — ou com moedas misturadas, que somar seria
+    mentira — a ausência é declarada em `nota_taxa`, nunca inventada."""
     saida = []
     for tx in transacoes or []:
         kind = str(tx.get("kind", ""))
@@ -282,10 +285,28 @@ def marcacoes_de_execucao(transacoes: Sequence[dict], agent_id: str) -> list[dic
                                  ("CASH:", "FEES:"))), Decimal("0"))
                 if bruto > 0:
                     preco = round(float(bruto / qtd), 8)
+        contas_taxa = sorted({str(e.get("account", "")) for e in entradas
+                              if str(e.get("account", "")).startswith("FEES:")})
+        if len(contas_taxa) == 1:
+            conta = contas_taxa[0]
+            soma = sum((_d(e.get("amount")) for e in entradas
+                        if str(e.get("account", "")) == conta), Decimal("0"))
+            taxa, moeda_taxa, nota_taxa = (_str_d(soma),
+                                           conta.split(":", 1)[1], "")
+        elif len(contas_taxa) > 1:
+            taxa, moeda_taxa = None, ""
+            nota_taxa = ("taxas em moedas diferentes (" + ", ".join(
+                c.split(":", 1)[1] for c in contas_taxa) + ")"
+                " — soma recusada")
+        else:
+            taxa, moeda_taxa = None, ""
+            nota_taxa = "sem lançamento de taxa no livro para esta execução"
         saida.append({"t": str(tx.get("at", "")),
                       "tipo": "compra" if kind == "fill_buy" else "venda",
                       "instrumento": str(tx.get("instrument", "")),
-                      "quantidade": _str_d(qtd), "preco": preco})
+                      "quantidade": _str_d(qtd), "preco": preco,
+                      "taxa": taxa, "moeda_taxa": moeda_taxa,
+                      "nota_taxa": nota_taxa})
     return sorted(saida, key=lambda x: x["t"])
 
 
@@ -448,7 +469,8 @@ def retrato_do_trader(agent_id: str, *, trader: dict, instrumento: str,
                       diario: Sequence[dict], transacoes: Sequence[dict],
                       lotes: Sequence[dict], ordens: Sequence[dict],
                       ciclos: Sequence[dict], experimentos: Sequence[dict],
-                      atribuicao: dict, moeda: str, modo: str) -> dict:
+                      atribuicao: dict, moeda: str, modo: str,
+                      livro: dict | None = None) -> dict:
     """Montagem da sala de UM trader. `velas` (OHLCV real) vira gráfico de
     candles; sem OHLCV (fixture), o gráfico é a linha dos FECHAMENTOS
     rotulados — jamais candles inventados."""
@@ -470,8 +492,9 @@ def retrato_do_trader(agent_id: str, *, trader: dict, instrumento: str,
         "nota_sr": sr["nota"],
         "marcacoes": marcacoes,
         "nota_marcacoes": ("execuções reais vêm do livro-razão; abstenções e "
-                           "vetos vêm dos ciclos — o motivo aparece ao "
-                           "passar o mouse"),
+                           "vetos vêm dos ciclos — o motivo e a taxa por "
+                           "execução (lançamentos FEES do livro) aparecem "
+                           "ao passar o mouse"),
     }
     met = metricas_portfolio(diario)
     bruto = _d((atribuicao or {}).get(agent_id, "0"))
@@ -487,6 +510,7 @@ def retrato_do_trader(agent_id: str, *, trader: dict, instrumento: str,
     }
     return {"trader": trader, "modo": modo, "moeda": moeda,
             "mercado": mercado, "portfolio": portfolio,
+            "livro": dict(livro) if livro else None,
             "champion_challenger": [dict(e) for e in (experimentos or [])],
             "avisos": [
                 f"Modo {str(modo).upper()} — resultados de execução simulada "
