@@ -307,8 +307,12 @@ def run_backend(host: str = "127.0.0.1", port: int = PORTA_PREFERIDA) -> None:
     # encerramento: o endpoint /v1/app/quit liga should_exit e o servidor
     # desliga graciosamente — o leigo não fica preso ao Gerenciador de Tarefas.
     # log_config=None: os logs do uvicorn caem no log persistente do launcher.
+    # timeout_graceful_shutdown: sem teto, UMA conexão pendente (browser
+    # fechando em cima do quit) segurava a saída para sempre — incidente CI
+    # 2026-10-14 (run 38628831582: quit 200 e processo vivo >40s).
     global _ENCERRAR_SERVIDOR
-    config = uvicorn.Config(app, host=host, port=port, log_level="info", log_config=None)
+    config = uvicorn.Config(app, host=host, port=port, log_level="info",
+                            log_config=None, timeout_graceful_shutdown=10)
     server = uvicorn.Server(config)
 
     def _encerrar_servidor() -> None:

@@ -123,6 +123,19 @@ def test_desktop_launcher_loopback_configuration(launcher_tmp):
         mock_hook.assert_called_once()  # C009: gancho de encerramento ligado
 
 
+def test_run_backend_limita_o_encerramento_gracioso(launcher_tmp):
+    # Incidente CI 2026-10-14 (run 38628831582): /v1/app/quit respondeu 200,
+    # mas o uvicorn sem teto ficou esperando conexão pendente — o processo
+    # seguiu vivo >40s e "Fechar aplicativo" nunca terminaria sozinho.
+    # O teto do encerramento gracioso é o que torna a saída LIMITADA.
+    with patch("uvicorn.Config") as mock_cfg, \
+            patch("uvicorn.Server"), \
+            patch("service.app.set_shutdown_hook"):
+        run_backend(host="127.0.0.1", port=8124)
+    segundos = mock_cfg.call_args.kwargs.get("timeout_graceful_shutdown")
+    assert isinstance(segundos, int) and 0 < segundos <= 30
+
+
 def test_quit_endpoint_stops_the_launcher_server(launcher_tmp):
     # C009: o gancho registrado pelo launcher precisa ser capaz de parar o
     # servidor de verdade — é o que o botão "Fechar aplicativo" dispara.
