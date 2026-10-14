@@ -3,22 +3,26 @@ platform win32 -- Python 3.12.10, pytest-9.1.1, pluggy-1.6.0 -- D:\a\DZ23-Tradin
 rootdir: D:\a\DZ23-Trading-AI\DZ23-Trading-AI
 configfile: pyproject.toml
 plugins: anyio-4.15.1, langsmith-0.14.0
-collecting ... collected 13 items
+collecting ... collected 17 items
 
-tests/e2e/test_aceite_td5.py::test_aceite_td5_01_inicio_assistente_conectar_modo_play PASSED [  7%]
-tests/e2e/test_aceite_td5.py::test_aceite_td5_02_painel_global_maestro PASSED [ 15%]
-tests/e2e/test_aceite_td5.py::test_aceite_td5_03_sala_do_trader_com_grafico PASSED [ 23%]
-tests/e2e/test_aceite_td5.py::test_aceite_td5_04_analise_do_copiloto PASSED [ 30%]
-tests/e2e/test_aceite_td5.py::test_aceite_td5_05_botao_acompanhar_visivel_com_prefill PASSED [ 38%]
-tests/e2e/test_aceite_td5.py::test_aceite_td5_06_registro_posicao_e_diario PASSED [ 46%]
-tests/e2e/test_aceite_td5.py::test_aceite_td5_07_monitor_alerta_de_stop_objetivo PASSED [ 53%]
-tests/e2e/test_aceite_td5.py::test_aceite_td5_08_centro_de_alertas PASSED [ 61%]
-tests/e2e/test_aceite_td5.py::test_aceite_td5_09_config_ia_provedores_modelos_consumo PASSED [ 69%]
-tests/e2e/test_aceite_td5.py::test_aceite_td5_10_mesa_dez_traders PASSED [ 76%]
-tests/e2e/test_aceite_td5.py::test_aceite_td5_11_pwa_instalacao_e_push_ui PASSED [ 84%]
-tests/e2e/test_aceite_td5.py::test_aceite_td5_12_responsivo_mobile_sem_corte PASSED [ 92%]
-tests/e2e/test_aceite_td5.py::test_aceite_td5_13_fluxo_iniciante_dez_passos PASSED [100%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_01_inicio_assistente_conectar_modo_play PASSED [  5%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_02_painel_global_maestro PASSED [ 11%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_03_sala_do_trader_com_grafico PASSED [ 17%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_04_analise_do_copiloto PASSED [ 23%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_05_botao_acompanhar_visivel_com_prefill PASSED [ 29%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_06_registro_posicao_e_diario PASSED [ 35%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_07_monitor_alerta_de_stop_objetivo PASSED [ 41%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_08_centro_de_alertas PASSED [ 47%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_09_config_ia_provedores_modelos_consumo PASSED [ 52%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_10_mesa_dez_traders PASSED [ 58%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_11_pwa_instalacao_e_push_ui PASSED [ 64%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_12_responsivo_mobile_sem_corte PASSED [ 70%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_13_fluxo_iniciante_dez_passos PASSED [ 76%]
+tests/e2e/test_fm6_app_isolado.py::test_fm6_01_modo_avancado_todas_as_paginas PASSED [ 82%]
+tests/e2e/test_fm6_app_isolado.py::test_fm6_02_corretoras_catalogo_capacidades_reconciliacao PASSED [ 88%]
+tests/e2e/test_fm6_app_isolado.py::test_fm6_03_escola_central_no_painel PASSED [ 94%]
+tests/e2e/test_fm6_app_isolado.py::test_fm6_04_dashboard_lc_mercado_e_portfolio PASSED [100%]
 
-============================= 13 passed in 43.16s =============================
+======================== 17 passed in 88.85s (0:01:28) ========================
 
 --- stderr ---
