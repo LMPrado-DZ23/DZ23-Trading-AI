@@ -490,9 +490,15 @@ def test_main_falha_da_pre_checagem_vira_log_e_aviso(launcher_tmp):
     assert "netstat sumiu" in log_path().read_text(encoding="utf-8")
 
 
-def test_main_backend_real_morre_e_avisa_com_log(launcher_tmp):
+def test_main_backend_real_morre_e_avisa_com_log(launcher_tmp, monkeypatch):
     # Falha de backend de verdade: a thread morre, o excepthook grava o
     # traceback no log e o main devolve 1 SEM abrir o navegador.
+    # Probe de saúde isolado: o cenário mockado (porta 8000 declarada LIVRE
+    # e ainda respondendo /healthz) é impossível em produção — sem o mock, a
+    # instância REAL do dono na 8000 responderia e o teste viraria refém do
+    # estado da estação. O loop real de esperar_healthz continua exercido.
+    monkeypatch.setattr(launcher, "_healthz_payload", lambda *a, **k: None)
+
     def backend_que_morre(host, port):
         raise RuntimeError("falha simulada de import do backend")
 
