@@ -287,6 +287,9 @@ def test_aceite_td5_07_monitor_alerta_de_stop_objetivo(page, mesa_url, senha, ev
     expect(page.locator("#toast")).to_contain_text(re.compile(r"registrada|já existia"), timeout=10000)
 
     page.get_by_role("button", name="Verificar agora").click()
+    # Dreno determinístico: a resposta do health chega depois e, se tardia,
+    # sobrescreve o toast seguinte ("Marcar lido") — flake real de CI em 2026-10-14.
+    expect(page.locator("#toast")).to_contain_text("Monitor verificado", timeout=15000)
 
     card = page.locator("#manualLista .job", has_text="BTC/USDT").first
     card.get_by_role("button", name="Detalhes").click()
@@ -493,6 +496,9 @@ def test_aceite_td5_13_fluxo_iniciante_dez_passos(page, mesa_url, senha, evidenc
         page.get_by_role("button", name="Ligar copiloto").click()
         expect(page.locator("#manualModo")).to_contain_text("LIGADO", timeout=10000)
     page.get_by_role("button", name="Verificar agora").click()
+    # Mesmo dreno do item 07: o health tardio sobrescrevia "Execução
+    # registrada." no passo 8 (flake real, run CI 38604619895).
+    expect(page.locator("#toast")).to_contain_text("Monitor verificado", timeout=15000)
     card = page.locator("#manualLista .job", has_text="160.25").first
     card.get_by_role("button", name="Detalhes").click()
     expect(page.locator("#manualAlertas")).to_contain_text("Stop atingido", timeout=20000)
