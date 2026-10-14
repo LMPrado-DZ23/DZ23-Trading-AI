@@ -19,6 +19,6 @@ tests/e2e/test_aceite_td5.py::test_aceite_td5_11_pwa_instalacao_e_push_ui PASSED
 tests/e2e/test_aceite_td5.py::test_aceite_td5_12_responsivo_mobile_sem_corte PASSED [ 92%]
 tests/e2e/test_aceite_td5.py::test_aceite_td5_13_fluxo_iniciante_dez_passos PASSED [100%]
 
-============================= 13 passed in 29.19s =============================
+============================= 13 passed in 37.14s =============================
 
 --- stderr ---

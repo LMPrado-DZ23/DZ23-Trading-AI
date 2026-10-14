@@ -47,7 +47,7 @@ checksums vivem dentro do próprio artefato do CI (reprodutível a partir do com
 | :--- | :--- | :--- | :--- |
 | Unit + integrado (local) | suíte completa `uv run pytest -q` | **3002 passed / 6 skipped / 71 subtests** (exit 0, 297,25 s) — **+24 testes desde o TD-4** (23 da fase final: decisão do ciclo + índices de risco; 1 do §17/#106: guias do produto real) | `v8-td5-aceite.md` §2; placar do artefato final no §5 |
 | E2E navegador real (local) | `uv run --with playwright pytest tests/e2e -q` | **26/26** (13 de painel + 13 de aceite TD-5), 4 corridas seguidas | `v8-td5-aceite.md` §2 |
-| E2E bundle Windows (CI, runner virgem) | job `aceite-bundle` sobre o ZIP do artefato | **13/13** em 37,79 s (harness original) e **13/13** em 75,63 s (**artefato final da fase**) — 12 dashboards + fluxo do iniciante em 10 passos | runs `38596224361` e `38599535042`; `docs/mission/evidence/v8-td5-exe/` (20 arquivos) |
+| E2E bundle Windows (CI, runner virgem) | job `aceite-bundle` sobre o ZIP do artefato | **13/13** em 37,79 s (harness original), **13/13** em 75,63 s (**artefato final da fase**) e **13/13** em 37,14 s (**re-homologação pós-endurecimento do instrumento**) — 12 dashboards + fluxo do iniciante em 10 passos | runs `38596224361`, `38599535042` e `38607540029`; `docs/mission/evidence/v8-td5-exe/` (20 arquivos) |
 | Instalador Windows (matriz CI) | cenários C1–C8 + extensões (≈143 verificações) | `TOTAL: 0 falha(s)` | run `38512611447`; `e2e/matriz-38512611447/` |
 | Portão premium/identidade no bundle | itens 17–19, 21 | **24/24**, **27/27**, **27/27** | C018/C021 (`WINDOWS-RELEASE-EVIDENCE.md`) |
 | Matriz de inicialização no bundle | 6 cenários (incl. intruso na porta, WM_CLOSE) | **24/24** | C021 |
@@ -88,6 +88,7 @@ carga; não reproduzida em 4 corridas seguidas; **não foi skipada nem removida*
 | `8e369f1` | gitleaks acusou fixture sintética (entropia 3,5069 > 3,5) | Fixture com alta entropia | Corrigido **sem allowlist** |
 | CI aceite-bundle (1º run) | `coletados=0` mudo no runner | venv do runner sem `pytest` (só base + playwright) + stderr oculto | Job sincroniza `--extra desk --extra dev` + diagnóstico de coleta (`b3e9dae`) |
 | E5 (local) | 1 falha ambiental: `test_desktop_launcher` encontrou o app instalado DO DONO na porta 8000 | Estação do dono não é ambiente isolado | Provado por curl/netstat; CI em runner virgem verde; launcher isolado da porta (74c319d) |
+| CI aceite-bundle (selo `b5c80d5`, run `38604619895`) | 1ª tentativa **12/13**: o passo 8 do fluxo do iniciante não via o toast "Execução registrada." | Resposta tardia de `manualHealth()` ("Monitor verificado.", do passo 7) sobrescrevia o toast seguinte no `#toast` único (last-write-wins); o evento foi registrado no servidor (reducao 0.25 @ 161.10) | Dreno determinístico após "Verificar agora" nos itens 07/13 (`f41e150` — test-only, sem afrouxar assert); rerun da própria run **13/13 em 32,21 s**; re-homologado no CI `38607540029` (**13/13 em 37,14 s**) |
 
 ## 6. Riscos residuais (V8.1 §13.10)
 

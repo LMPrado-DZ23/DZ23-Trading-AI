@@ -3,7 +3,8 @@
 - **Missão:** V8 §4 ("executar E2E no bundle Windows instalado"), §16 (matriz requisito→implementação→teste→evidência;
   eliminar falhas reproduzíveis; nada de skip para ocultar falha), §18 e V8.1 §13; tasks #94/#99/#100/#101.
 - **Branch:** `fix/instalador-atualizacoes-windows` — `ac2a1bc` (matriz + 2 fixes responsivos), `63a4622`
-  (job de aceite no bundle do artefato CI) e `b3e9dae` (venv do runner com extras + diagnóstico de coleta).
+  (job de aceite no bundle do artefato CI), `b3e9dae` (venv do runner com extras + diagnóstico de coleta) e
+  `f41e150` (dreno determinístico do toast de health nos itens 07/13 — fim do flake do run `38604619895`).
 - **Data:** 2026-10-14.
 - **Suíte:** `tests/e2e/test_aceite_td5.py` (13 testes, Playwright + navegador real). O MESMO arquivo roda em
   dois alvos: instância local (uvicorn + DATA_DIR temporário, padrão) e alvo externo via `DZ23_E2E_BASE_URL`
@@ -43,6 +44,7 @@ item 07 — mesmo sistema de fila durável, prova encadeada intencional (nota no
 | Bundle do artefato CI (runner Windows virgem) | job `aceite-bundle` (ver §5) | **13/13** — 37,79 s (run `38596224361`, commit `b3e9dae`) | 2026-10-14 |
 | Bundle do artefato CI — **artefato final** (RC §19 + V8.1 §4/§6) | job `aceite-bundle` (ver §5) | **13/13** — 75,63 s (run `38599535042`, commit `d131226`) | 2026-10-14 |
 | Bundle do artefato CI — **artefato de congelamento** (lote final de docs) | job `aceite-bundle` (ver §5) | **13/13** — 29,19 s (run `38602691878`, commit `3a8f362`) | 2026-10-14 |
+| Bundle do artefato CI — **re-homologação do instrumento endurecido** (task #107; dreno de toast nos itens 07/13) | job `aceite-bundle` (ver §5) | **13/13** — 37,14 s (run `38607540029`, commit `f41e150`) | 2026-10-14 |
 
 ## 3. Defeitos REAIS encontrados pela matriz e corrigidos (RED→GREEN)
 
@@ -66,6 +68,15 @@ mesa QUENTE (monitor já com tick), e as 4 corridas completas de e2e seguidas fi
 - **1 corrida transiente não reproduzida:** numa única passagem da suíte completa sob carga, 2 testes falharam
   por timeout de aquecimento (`test_aceite_td5_07` e `test_panel_e2e::test_modo_simples`); as 4 corridas
   seguintes ficaram 26/26. Registrada aqui — **não foi skipada nem removida**; o valor pinado do fixture não mudou.
+- **Flake REAL do instrumento no CI do selo — causa-raiz encontrada e corrigida (task #107):** na 1ª tentativa
+  do `aceite-bundle` do run `38604619895` (commit `b5c80d5`) o placar foi **12/13**: o passo 8 do fluxo do
+  iniciante (registrar a saída parcial) não encontrou "Execução registrada." no toast. Causa-raiz provada pelo
+  log do Playwright: a resposta tardia de `manualHealth()` — disparada pelo clique "Verificar agora" do passo 7
+  — sobrescrevia o toast seguinte no elemento `#toast` único do painel (last-write-wins); o evento em si foi
+  registrado no servidor (Eventos(1): reducao 0.25 @ 161.10). O rerun da mesma run ficou **13/13 em 32,21 s**.
+  Correção **test-only** (`f41e150`): após cada "Verificar agora" (itens 07 e 13) o teste consome
+  deterministicamente o toast "Monitor verificado." antes de prosseguir — nenhum assert foi afrouxado e nenhum
+  teste foi skipado. Re-homologação do instrumento endurecido: 1×26/26 + 3×13/13 locais; no CI, ver §5.
 - **Dados de fixture provam a fiação, não o mercado:** os números vivos (158.5 etc.) vêm da fonte rotulada
   "fixture"; com fonte real conectada o mesmo caminho é exercitado, mas isso é homologação de conector (G5).
 - LIVE segue `BLOCKED_BY_POLICY`; nenhuma tag/Release criada.
@@ -108,3 +119,14 @@ mesa QUENTE (monitor já com tick), e as 4 corridas completas de e2e seguidas fi
   conteúdo está CONGELADO**: o push do selo é docs-only (esta linha + changelog §17 expandido +
   correção de referência no ledger em `TRADING-CHECKPOINTS.md`) e não engendra novo artefato de conteúdo;
   qualquer mudança de código/produto futura invalida este congelamento e exige nova re-citação.
+- **Re-homologação do instrumento endurecido — novo selo vigente (registrado em 2026-10-14; task #107):** o
+  flake real do run `38604619895` (12/13 — ver §4; toast de health sobrescrevia "Execução registrada.") foi
+  corrigido por dreno determinístico nos itens 07/13 (`f41e150`, test-only, sem afrouxar nenhum assert).
+  Re-homologação verde: Release Build `38607540029` (push de `f41e150`) — `build` SUCCESS, `aceite-bundle`
+  SUCCESS (**13 passed in 37.14s**) e `publish-release` skipped; a Matriz do Instalador `38607540276` também
+  fechou VERDE (`TOTAL: 0 falha(s)`). O artefato
+  `aceite-td5-bundle-evidencias` foi baixado e recopiado para `docs/mission/evidence/v8-td5-exe/` (16 arquivos
+  atualizados). **Efeito no
+  congelamento:** o conteúdo de PRODUTO não mudou (correção test-only), mas o instrumento de aceite sim —
+  a citação vigente do aceite no bundle passa a ser `38607540029`; o run `38602691878` permanece como prova
+  histórica do estado anterior.
