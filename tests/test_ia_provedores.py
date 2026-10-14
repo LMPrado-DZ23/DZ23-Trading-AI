@@ -24,6 +24,18 @@ import pytest
 RAIZ = Path(__file__).resolve().parents[1]
 
 
+def _limpar_ambiente_ia(monkeypatch):
+    """Hermeticidade: a máquina do dono pode ter chaves REAIS no ambiente
+    do sistema (ele as usa de verdade). Teste NUNCA deve tocar a rede do
+    dono por acidente nem ver credencial real: remove as env vars de IA do
+    processo de teste (restauradas no fim pelo monkeypatch)."""
+    from service.api.ia_provedores import CATALOGO
+
+    for p in CATALOGO:
+        if p["chave_env"]:
+            monkeypatch.delenv(p["chave_env"], raising=False)
+
+
 class _RespostaFalsa:
     """Imita o AIMessage do LangChain (content + usage_metadata)."""
 
@@ -235,3 +247,325 @@ class TestConsultarIa:
             self._cfg(), "p", criar_cliente=lambda **kw: _ClienteFalso(texto="só texto"))
         assert texto == "só texto"
         assert meta["tokens"] is None
+
+
+class TestSondagemDeProvedores:
+    """Teste de autenticação/descoberta com transporte falso: nada de rede,
+    mas o caminho real (headers, URL, classificação de erro) é exercitado."""
+
+    def _cfg(self, **kw):
+        base = {"TRADINGAGENTS_LLM_PROVIDER": "groq", "GROQ_API_KEY": "k-groq"}
+        base.update(kw)
+        return base
+
+    def _transport(self, handler):
+        import httpx
+
+        return httpx.MockTransport(handler)
+
+    def test_sem_chave_nao_sai_rede(self):
+        from service.api import ia_provedores
+
+        def handler(_req):
+            raise AssertionError("sondagem não pode tocar a rede sem chave")
+
+        r = ia_provedores.testar_provedor(
+            {"TRADINGAGENTS_LLM_PROVIDER": "groq"}, "groq",
+            transport=self._transport(handler))
+        assert r["ok"] is False and r["estado"] == "sem_chave"
+        assert "k-groq" not in str(r)
+
+    def test_ok_captura_latencia_e_limites(self):
+        from service.api import ia_provedores
+
+        visto = {}
+
+        def handler(req):
+            visto["url"] = str(req.url)
+            visto["auth"] = req.headers.get("authorization")
+            import httpx
+
+            return httpx.Response(
+                200, json={"data": [{"id": f"m{i}"} for i in range(20)]},
+                headers={"x-ratelimit-remaining-requests": "9",
+                         "retry-after": "3"})
+
+        r = ia_provedores.testar_provedor(self._cfg(), "groq",
+                                          transport=self._transport(handler))
+        assert r["ok"] is True and r["estado"] == "ok"
+        assert r["total_modelos"] == 20
+        assert len(r["modelos"]) <= 12          # amostra, não despejo
+        assert r["limites"]["x-ratelimit-remaining-requests"] == "9"
+        assert r["limites"]["retry-after"] == "3"
+        assert r["latencia_ms"] >= 0
+        assert visto["url"] == "https://api.groq.com/openai/v1/models"
+        assert visto["auth"] == "Bearer k-groq"
+        assert "k-groq" not in str(r)           # resposta nunca ecoa a chave
+
+    def test_401_vira_chave_rejeitada(self):
+        from service.api import ia_provedores
+
+        r = ia_provedores.testar_provedor(
+            self._cfg(), "groq",
+            transport=self._transport(lambda _req: __import__("httpx").Response(
+                401, json={"error": {"message": "Invalid API Key k-groq"}})))
+        assert r["ok"] is False and r["estado"] == "chave_rejeitada"
+        assert r["status"] == 401
+
+    def test_429_traz_limites_e_nao_vaza_corpo(self):
+        import httpx
+
+        from service.api import ia_provedores
+
+        r = ia_provedores.testar_provedor(
+            self._cfg(), "groq",
+            transport=self._transport(lambda _req: httpx.Response(
+                429, text="quota exceeded for key k-groq",
+                headers={"retry-after": "60"})))
+        assert r["estado"] == "limite_de_taxa"
+        assert r["limites"]["retry-after"] == "60"
+        assert "k-groq" not in str(r)
+
+    def test_tempo_esgotado(self):
+        import httpx
+
+        from service.api import ia_provedores
+
+        def handler(req):
+            raise httpx.ConnectTimeout("estourou", request=req)
+
+        r = ia_provedores.testar_provedor(self._cfg(), "groq",
+                                          transport=self._transport(handler))
+        assert r["ok"] is False and r["estado"] == "tempo_esgotado"
+        assert "k-groq" not in str(r)
+
+    def test_anthropic_usa_headers_proprios(self):
+        from service.api import ia_provedores
+
+        visto = {}
+
+        def handler(req):
+            visto["url"] = str(req.url)
+            visto["x-api-key"] = req.headers.get("x-api-key")
+            visto["versao"] = req.headers.get("anthropic-version")
+            import httpx
+
+            return httpx.Response(200, json={"data": [{"id": "claude-3-5-haiku-latest"}]})
+
+        r = ia_provedores.descobrir_modelos(
+            {"TRADINGAGENTS_LLM_PROVIDER": "anthropic",
+             "ANTHROPIC_API_KEY": "k-ant"}, "anthropic",
+            transport=self._transport(handler))
+        assert r["fonte"] == "api" and r["modelos"] == ["claude-3-5-haiku-latest"]
+        assert visto["url"] == "https://api.anthropic.com/v1/models"
+        assert visto["x-api-key"] == "k-ant"
+        assert visto["versao"]
+        assert "k-ant" not in str(r)
+
+    def test_google_usa_v1beta_e_tira_prefixo(self):
+        from service.api import ia_provedores
+
+        visto = {}
+
+        def handler(req):
+            visto["url"] = str(req.url)
+            import httpx
+
+            return httpx.Response(200, json={"models": [
+                {"name": "models/gemini-2.0-flash"},
+                {"name": "models/gemini-2.5-pro"}]})
+
+        r = ia_provedores.descobrir_modelos(
+            {"TRADINGAGENTS_LLM_PROVIDER": "google",
+             "GOOGLE_API_KEY": "k-goog"}, "google",
+            transport=self._transport(handler))
+        assert r["modelos"] == ["gemini-2.0-flash", "gemini-2.5-pro"]
+        assert visto["url"] == "https://generativelanguage.googleapis.com/v1beta/models"
+
+    def test_descobrir_sem_chave_cai_no_catalogo_com_fonte_honesta(self):
+        from service.api import ia_provedores
+
+        r = ia_provedores.descobrir_modelos(
+            {"TRADINGAGENTS_LLM_PROVIDER": "mistral"}, "mistral")
+        assert r["ok"] is False and r["fonte"] == "catalogo"
+        assert r["estado"] == "sem_chave"
+        assert r["modelos"] == ["mistral-small-latest"]
+
+    def test_resposta_ilegivel_nao_finge_descoberta(self):
+        import httpx
+
+        from service.api import ia_provedores
+
+        r = ia_provedores.descobrir_modelos(
+            self._cfg(), "groq",
+            transport=self._transport(lambda _req: httpx.Response(200, text="<html>")))
+        assert r["ok"] is False and r["fonte"] == "catalogo"
+        assert r["estado"] == "resposta_ilegivel"
+        assert r["modelos"] == ["llama-3.1-8b-instant"]
+
+    def test_endereco_nao_confiavel_e_recusado_antes_da_rede(self):
+        from service.api import ia_provedores
+
+        def handler(_req):
+            raise AssertionError("trava anti-SSRF deveria barrar antes da rede")
+
+        r = ia_provedores.testar_provedor(
+            {"TRADINGAGENTS_LLM_PROVIDER": "openai_compatible",
+             "TRADINGAGENTS_BACKEND_URL": "http://relay.exemplo.com/v1",
+             "OPENAI_COMPATIBLE_API_KEY": "k-relay"}, "openai_compatible",
+            transport=self._transport(handler))
+        assert r["ok"] is False and r["estado"] == "endereco_recusado"
+        assert "k-relay" not in str(r)
+
+
+class TestRotasProvedores:
+    """Rotas /v1/ai/* no app real: catálogo, teste de autenticação e
+    descoberta de modelos — autenticadas e SEM nunca devolver a chave."""
+
+    def _app(self, tmp_path, monkeypatch):
+        _limpar_ambiente_ia(monkeypatch)
+        monkeypatch.setenv("ACCESS_PASSWORD", "s3nh4")
+        monkeypatch.setenv("DATA_DIR", str(tmp_path))
+        import importlib
+
+        import service.app as m
+        importlib.reload(m)
+        m._FAILS.clear()
+        m._DESKS.clear()
+        from fastapi.testclient import TestClient
+        return m, TestClient(m.app), {"Authorization": "Bearer s3nh4"}
+
+    def test_rotas_sem_auth_recusam(self, tmp_path, monkeypatch):
+        _, c, _ = self._app(tmp_path, monkeypatch)
+        assert c.get("/v1/ai/provedores").status_code == 401
+        assert c.post("/v1/ai/testar", json={"provedor": "groq"}).status_code == 401
+        assert c.get("/v1/ai/modelos").status_code == 401
+
+    def test_lista_traz_os_nove_e_estado_das_chaves(self, tmp_path, monkeypatch):
+        _, c, h = self._app(tmp_path, monkeypatch)
+        r = c.post("/v1/config", headers=h, json={"vars": {
+            "GROQ_API_KEY": "k-groq-secreto",
+            "TRADINGAGENTS_LLM_PROVIDER": "groq",
+            "TRADINGAGENTS_LLM_FALLBACK": "mistral, openrouter"}})
+        assert r.status_code == 200, r.text
+
+        r = c.get("/v1/ai/provedores", headers=h)
+        assert r.status_code == 200
+        d = r.json()
+        por_id = {p["id"]: p for p in d["provedores"]}
+        for exigido in ("openai", "anthropic", "google", "deepseek",
+                        "groq", "mistral", "openrouter", "ollama",
+                        "openai_compatible"):
+            assert exigido in por_id
+        assert por_id["groq"]["tem_chave"] is True
+        assert por_id["mistral"]["tem_chave"] is False
+        assert por_id["ollama"]["tem_chave"] is None  # não tem chave, por desenho
+        assert d["principal"] == "groq"
+        assert d["fallback"] == "mistral, openrouter"
+        assert "k-groq-secreto" not in r.text  # credencial nunca sai
+
+    def test_testar_sem_chave_e_honesto_sem_rede(self, tmp_path, monkeypatch):
+        _, c, h = self._app(tmp_path, monkeypatch)
+        r = c.post("/v1/ai/testar", headers=h, json={"provedor": "groq"})
+        assert r.status_code == 200
+        d = r.json()
+        assert d["ok"] is False and d["estado"] == "sem_chave"
+        assert "GROQ_API_KEY" in d["detalhe"]
+
+    def test_testar_com_provedor_desconhecido(self, tmp_path, monkeypatch):
+        _, c, h = self._app(tmp_path, monkeypatch)
+        r = c.post("/v1/ai/testar", headers=h, json={"provedor": "meu-provedor"})
+        assert r.json()["estado"] == "desconhecido"
+
+    def test_testar_usa_a_sonda_real(self, tmp_path, monkeypatch):
+        _, c, h = self._app(tmp_path, monkeypatch)
+        c.post("/v1/config", headers=h, json={"vars": {"GROQ_API_KEY": "k-groq"}})
+        import service.api.ia_provedores as iap
+
+        def sonda(cfg, entrada, *, transport=None):
+            assert cfg.get("GROQ_API_KEY") == "k-groq"  # sonda recebe a config
+            return {"ok": True, "estado": "ok", "latencia_ms": 12.5,
+                    "limites": {"retry-after": "1"}, "modelos": ["m1", "m2"]}
+
+        monkeypatch.setattr(iap, "_sondar", sonda)
+        r = c.post("/v1/ai/testar", headers=h, json={"provedor": "groq"})
+        d = r.json()
+        assert d["ok"] is True and d["provedor"] == "groq"
+        assert d["total_modelos"] == 2 and d["latencia_ms"] == 12.5
+        assert "k-groq" not in r.text
+
+    def test_modelos_com_chave_usa_descoberta_real(self, tmp_path, monkeypatch):
+        _, c, h = self._app(tmp_path, monkeypatch)
+        c.post("/v1/config", headers=h, json={"vars": {"GROQ_API_KEY": "k-groq"}})
+        import service.api.ia_provedores as iap
+
+        monkeypatch.setattr(iap, "_sondar", lambda cfg, entrada, *, transport=None: {
+            "ok": True, "estado": "ok", "latencia_ms": 8.0,
+            "limites": {}, "modelos": ["llama-3.3-70b-versatile",
+                                       "llama-3.1-8b-instant"]})
+        r = c.get("/v1/ai/modelos", headers=h, params={"provedor": "groq"})
+        d = r.json()
+        assert d["fonte"] == "api"
+        assert d["modelos"] == ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+        assert "k-groq" not in r.text
+
+    def test_modelos_sem_chave_com_fonte_catalogo(self, tmp_path, monkeypatch):
+        _, c, h = self._app(tmp_path, monkeypatch)
+        r = c.get("/v1/ai/modelos", headers=h, params={"provedor": "groq"})
+        d = r.json()
+        assert d["fonte"] == "catalogo" and d["estado"] == "sem_chave"
+        assert d["modelos"] == ["llama-3.1-8b-instant"]
+
+
+class TestRemoverCredenciais:
+    """V8 §6: 'registrar E REMOVER'. Antes o Salvar só aceitava campo
+    não-vazio — chave errada ficava presa para sempre."""
+
+    def _app(self, tmp_path, monkeypatch):
+        _limpar_ambiente_ia(monkeypatch)
+        monkeypatch.setenv("ACCESS_PASSWORD", "s3nh4")
+        monkeypatch.setenv("DATA_DIR", str(tmp_path))
+        import importlib
+
+        import service.app as m
+        importlib.reload(m)
+        m._FAILS.clear()
+        m._DESKS.clear()
+        from fastapi.testclient import TestClient
+        return m, TestClient(m.app), {"Authorization": "Bearer s3nh4"}
+
+    def test_remover_apaga_a_chave_salva(self, tmp_path, monkeypatch):
+        _, c, h = self._app(tmp_path, monkeypatch)
+        c.post("/v1/config", headers=h, json={"vars": {"GROQ_API_KEY": "k-groq"}})
+        assert c.get("/v1/config", headers=h).json()["config"]["GROQ_API_KEY"]["set"]
+
+        r = c.post("/v1/config", headers=h, json={"remover": ["GROQ_API_KEY"]})
+        assert r.status_code == 200
+        d = r.json()
+        assert d["removidos"] == ["GROQ_API_KEY"]
+        assert d["ainda_no_ambiente"] == []
+        assert not c.get("/v1/config", headers=h).json()["config"]["GROQ_API_KEY"]["set"]
+
+    def test_remover_com_ambiente_avisa_que_ainda_vem_do_sistema(
+            self, tmp_path, monkeypatch):
+        _, c, h = self._app(tmp_path, monkeypatch)
+        monkeypatch.setenv("GROQ_API_KEY", "k-do-ambiente")
+        r = c.post("/v1/config", headers=h, json={"remover": ["GROQ_API_KEY"]})
+        d = r.json()
+        assert d["removidos"] == []
+        assert d["ainda_no_ambiente"] == ["GROQ_API_KEY"]
+        # E a chave do ambiente NUNCA aparece no corpo.
+        assert "k-do-ambiente" not in r.text
+
+    def test_remover_sozinho_nao_da_400_e_vazio_da_400(self, tmp_path, monkeypatch):
+        _, c, h = self._app(tmp_path, monkeypatch)
+        r = c.post("/v1/config", headers=h, json={"remover": ["GROQ_API_KEY"]})
+        assert r.status_code == 200
+        assert c.post("/v1/config", headers=h, json={}).status_code == 400
+        assert c.post("/v1/config", headers=h,
+                      json={"vars": {"GROQ_API_KEY": "  "}}).status_code == 400
+
+    def test_remover_chave_de_fora_da_lista_e_ignorada(self, tmp_path, monkeypatch):
+        _, c, h = self._app(tmp_path, monkeypatch)
+        r = c.post("/v1/config", headers=h, json={"remover": ["QUALQUER_COISA"]})
+        assert r.status_code == 400  # nada pedido de verdade

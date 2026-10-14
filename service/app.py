@@ -189,6 +189,7 @@ ALLOWED_KEYS = [
     "TRADINGAGENTS_LLM_PROVIDER", "TRADINGAGENTS_BACKEND_URL", "TRADINGAGENTS_DEEP_THINK_LLM",
     "TRADINGAGENTS_QUICK_THINK_LLM", "TRADINGAGENTS_OUTPUT_LANGUAGE",
     "TRADINGAGENTS_MAX_DEBATE_ROUNDS", "TRADINGAGENTS_MAX_RISK_ROUNDS",
+    "TRADINGAGENTS_LLM_FALLBACK", "TRADINGAGENTS_IA_ORCAMENTO_USD",
     "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY",
     "GOOGLE_API_KEY", "GROQ_API_KEY", "MISTRAL_API_KEY",
     "OPENROUTER_API_KEY", "OPENAI_COMPATIBLE_API_KEY",
@@ -1038,9 +1039,27 @@ async def set_cfg(req: Request, _=Depends(auth)):
             if atual != novo:
                 changed.append(k)
             cfg[k] = novo
-    if not saved:
+    # V8 §6: remover credencial/valor passou a ser possível. Antes o painel
+    # só sabia SALVAR campo não-vazio — uma chave errada ficava presa para
+    # sempre. A remoção tira do arquivo; se o ambiente do sistema ainda
+    # fornecer o valor, a resposta diz isso (honestidade > botão mentiroso).
+    pedidos = [k for k in (body.get("remover") or [])
+               if isinstance(k, str) and k in ALLOWED_KEYS]
+    for k in pedidos:
+        if str(cfg.get(k) or "").strip():
+            changed.append(k)
+        cfg.pop(k, None)
+    if not saved and not pedidos:
         raise HTTPException(400, "nada para salvar")
     save_cfg(cfg, tenant_id)
+    removidos, ainda_no_ambiente = [], []
+    if pedidos:
+        efeito = load_cfg(tenant_id)  # relê: ambiente + arquivo já sem a chave
+        for k in pedidos:
+            if str(efeito.get(k) or "").strip():
+                ainda_no_ambiente.append(k)
+            else:
+                removidos.append(k)
     # Configuração que muda a mesa (corretora, feed, capital, limites) exige
     # reconstrução — senão o cliente salva e nada acontece até reiniciar.
     # Só quando o valor REALMENTE mudou: o painel reenvia o formulário
@@ -1050,7 +1069,58 @@ async def set_cfg(req: Request, _=Depends(auth)):
            k in ("TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE")
            for k in changed):
         _desk_reset(tenant_id)
-    return {"saved": saved}
+    return {"saved": saved, "removidos": removidos,
+            "ainda_no_ambiente": ainda_no_ambiente}
+
+
+def _ai_provedores_payload(tenant_id: str) -> dict:
+    """Catálogo + estado da configuração de IA — NUNCA devolve credencial."""
+    from service.api.ia_provedores import CATALOGO
+
+    cfg = load_cfg(tenant_id)
+    provedores = []
+    for p in CATALOGO:
+        chave_env = p["chave_env"]
+        provedores.append({
+            "id": p["id"], "nome": p["nome"], "chave_env": chave_env,
+            "tem_chave": (bool(str(cfg.get(chave_env) or "").strip())
+                          if chave_env else None),
+            "url_padrao": p["url_padrao"],
+            "exige_url": p.get("exige_url", False),
+            "descoberta": p["descoberta"],
+            "gratuito": p.get("gratuito", False),
+        })
+    return {
+        "provedores": provedores,
+        "principal": str(cfg.get("TRADINGAGENTS_LLM_PROVIDER") or ""),
+        "fallback": str(cfg.get("TRADINGAGENTS_LLM_FALLBACK") or ""),
+        "modelo_profundo": str(cfg.get("TRADINGAGENTS_DEEP_THINK_LLM") or ""),
+        "modelo_rapido": str(cfg.get("TRADINGAGENTS_QUICK_THINK_LLM") or ""),
+        "ultima_consulta": _IA_CONTEXTO.get(tenant_id),
+    }
+
+
+@app.get("/v1/ai/provedores")
+def ai_listar_provedores(request: Request, _=Depends(auth)):
+    return _ai_provedores_payload(request_tenant(request))
+
+
+@app.post("/v1/ai/testar")
+async def ai_testar_provedor(req: Request, _=Depends(auth)):
+    """Testa autenticação do provedor de verdade (endpoint de modelos). Sem
+    chave salva não há saída de rede — o teste não 'passa' sem credencial."""
+    body = await _json_body(req)
+    from service.api.ia_provedores import testar_provedor
+
+    return testar_provedor(load_cfg(request_tenant(req)),
+                           str(body.get("provedor") or ""))
+
+
+@app.get("/v1/ai/modelos")
+def ai_listar_modelos(request: Request, provedor: str = "", _=Depends(auth)):
+    from service.api.ia_provedores import descobrir_modelos
+
+    return descobrir_modelos(load_cfg(request_tenant(request)), provedor)
 
 @app.post("/v1/jobs")
 async def new_job(req: Request, _=Depends(auth)):
