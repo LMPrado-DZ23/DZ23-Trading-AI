@@ -204,6 +204,20 @@
 
    **Notas de execução (harness, não defeito do app):** o cenário C2 falhou na 1ª execução (r1) por defeito do harness — o ouvinte-sonda nunca chamava `accept()`; 4 sondagens enchiam o backlog do `listen()` e as seguintes estouravam o timeout de 0,5 s ("segue vivo" falso-negativo). Causa-raiz provada em isolamento, sem DZ23 (`c021-c2-saturacao-repro.log`: sonda antiga 4 OK → 8 TimeoutError; corrigida 12/12 OK). Correção em `scripts/matriz_inicializacao_win.py` (thread daemon que drena e recusa conexões). O launcher nunca mata terceiros: `desktop/launcher.py` não possui nenhuma syscall de encerramento (grep `taskkill|terminate|\.kill|psutil|os\.kill` → zero ocorrências).
 
+20. **PAINEL AUTENTICADO — ESCOLA CENTRAL E MESA NO BUNDLE — item 21** (mesmo artefato de `f26f1ed`, run `38489060888`) — **27/27 PASS** (`HARNESS_EXIT=0`), log `docs/mission/evidence/e2e/c021-item21-painel-f26f1ed-r3.log`, capturas `c021-item21-mesa-bundle.png` / `c021-item21-escola-bundle.png`:
+
+   | # | Verificação | Resultado | Evidência |
+   |---|-----------|-----------|-----------|
+   | 1 | Instância descartável sobe | **PASS** | healthz em 23,1 s; assistente (`setup_required=true`) cria a senha do dono — APPDATA temporário, o DATA_DIR real não é tocado |
+   | 2 | Login do dono pelo portão do painel | **PASS** | senha do assistente → painel abre com `ADMIN`, estado `READY`, identidade preenchida |
+   | 3 | As 6 páginas do painel | **PASS** | Visão geral, Configuração, Análises, Mesa de Agentes, Trading Floor e Risco — ativas, com título correto |
+   | 4 | Mesa de Agentes | **PASS** | livro com **10 traders**: **3 homologado** ("aprovado (paper)") / **7 experimental** ("experimental (paper)") |
+   | 5 | Ciclo real pelo botão | **PASS** | "Rodar um ciclo": ciclos 0 → 1 · *"20 propostas, 2 admitidas, 2 entradas, 0 saídas, 0 vetos"* · patrimônio 999,80 balanceado |
+   | 6 | Escola Central (autenticada) | **PASS** | contextos de certificação; **sala isolada `binance|paper-legacy|spot|paper`** (chave corretora\|conta\|mercado\|modo); pilotos com *"a autorização é ato exclusivo do proprietário"* |
+   | 7 | Zero 5xx e encerramento | **PASS** | nenhuma resposta 5xx no fluxo autenticado; `POST /v1/app/quit` 200 → launcher **exit 0 sozinho**, porta liberada |
+
+   **Notas de execução (harness, não defeito do app):** as execuções r1 e r2 falharam por defeitos do próprio harness — (a) comparação case-sensitive contra o `inner_text()` de `h3` com `text-transform: uppercase` (o painel renderiza "TRADERS (10 PERFIS)"/"ESCOLA CENTRAL"; o diagnóstico da camada navegador capturou o DOM real — zero pageerrors, zero requestfailed, zero 5xx — e confirmou mesa/Escola corretas); (b) regex de chave de sala com `\w+`, que não cobria o hífen de `paper-legacy`. Corrigidos em `scripts/homolog_painel_bundle.py` (comparação em caixa baixa; chave validada por partes).
+
 ## Ainda NÃO comprovado (pendências de homologação)
 
 - [x] Instalação limpa em Windows 10/11 x64 real com o artefato gerado pelo CI — ciclo completo no artefato C008 (item 10).
@@ -218,6 +232,7 @@
 - [x] Porta ocupada por OUTRO processo (não-DZ23) — **C010**: sonda TCP real + espera da 1ª instância em boot + diálogo nativo de "porta ocupada"/"falha ao iniciar" (antes: falha silenciosa com navegador aberto numa página inexistente). Provado em dev com listener real (`PORTBUSY_LIVE_C010=PASS`) e **re-provado no BUNDLE FINAL — item 12, passo 6** (diálogo nativo encontrado, WM_CLOSE, exit 0 limpo, navegador não abriu).
 - [x] **Identidade visual e portão premium do dono único no artefato FINAL (item 18)** — re-homologação `27/27 PASS` no bundle de `f26f1ed` (run `38489060888`).
 - [x] **Matriz de inicialização completa no bundle instalado (item 19)** — `24/24 PASS`: estação limpa, fallback sem tocar o vizinho, instância única, faixa ocupada com diálogo nativo, reinício e ciclo limpo com assistente+quit — no artefato de `f26f1ed`.
+- [x] **Escola Central e mesa autenticadas no painel do bundle final (item 21)** — `27/27 PASS` no mesmo artefato de `f26f1ed`: assistente → login → 6 páginas → 10 traders (3 homologado / 7 experimental) → ciclo real pelo botão (*20 propostas, 2 entradas*) → Escola Central com sala isolada `binance|paper-legacy|spot|paper` e autorização de piloto exclusiva do proprietário → zero 5xx → quit gracioso (launcher exit 0 sozinho).
 - [ ] Sleep/wake, offline/reconexão e recuperação de crash — não exercitados (fora do alcance desta estação sem suspender a máquina do dono).
 - [ ] Assinatura de código: somente com certificado autorizado (não há certificado disponível) — `BLOCKED_BY_EXTERNAL_DEPENDENCY`.
 
@@ -233,4 +248,6 @@
 
 8. Artefato pós-C020+C021 (`f26f1ed`, run Windows `38489060888`): **item 18 — identidade/portão premium re-homologado (`27/27 PASS`)** e **item 19 — matriz de inicialização completa (`24/24 PASS`)** no bundle instalado. A matriz provou: estação limpa, fallback sem tocar o vizinho, instância única, faixa ocupada com diálogo nativo, reinício e ciclo limpo com assistente+quit (launcher exit 0 sozinho). App deixado **instalado** (estado de entrega), LIVE `BLOCKED_BY_POLICY`, nada publicado.
 
-*Última atualização: 2026-10-14 — itens 18–19 homologados no artefato de `f26f1ed` (run `38489060888`): portão premium/identidade 27/27 e matriz de inicialização 24/24 no bundle instalado.*
+9. Mesmo artefato de `f26f1ed` (run `38489060888`): **item 21 — escola/mesa autenticada no painel do bundle** (`27/27 PASS`, `c021-item21-painel-f26f1ed-r3.log`): assistente descartável → login pelo portão → 6 páginas → mesa com 10 traders (3 homologado / 7 experimental) → ciclo real pelo botão (*20 propostas, 2 admitidas, 2 entradas*, ciclos 0→1) → Escola Central com a sala isolada `binance|paper-legacy|spot|paper` e pilotos com autorização exclusiva do proprietário → zero 5xx → `POST /v1/app/quit` → launcher exit 0 sozinho. App deixado **instalado** (estado de entrega), LIVE `BLOCKED_BY_POLICY`, nada publicado.
+
+*Última atualização: 2026-10-14 — itens 18, 19 e 21 homologados no artefato de `f26f1ed` (run `38489060888`): portão premium/identidade 27/27, matriz de inicialização 24/24 e escola/mesa autenticada no painel 27/27 no bundle instalado.*
