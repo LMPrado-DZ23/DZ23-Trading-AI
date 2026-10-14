@@ -78,8 +78,9 @@ Abra `http://localhost:8080/app`. Na primeira execução o painel mostra o
 assistente: crie a senha do dono ali mesmo e guarde o código de recuperação
 exibido uma única vez.
 
-No Windows instalado, use o instalador dos releases — ele não exige Python
-no computador e preserva os dados em atualizações. Passo a passo em
+No Windows, use o instalador próprio (gerado pelo pipeline de release; a
+publicação oficial aguarda aprovação do proprietário) — ele não exige
+Python no computador e preserva os dados em atualizações. Passo a passo em
 [COMECE-AQUI.md](COMECE-AQUI.md).
 
 ## Open source

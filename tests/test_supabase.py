@@ -14,7 +14,9 @@ from tradingagents.infra.supabase import (
     resolve_database_url,
 )
 
-REF = "camhdvnrddwxwfmpvsdf"
+# ref sintética: formato válido (20 minúsculas), deliberadamente não real —
+# identificador de projeto real nunca vira exemplo versionado
+REF = "refdeteste0000000000"
 
 
 class TestDsn:

@@ -1,74 +1,64 @@
-# INSTALAR — DZ23 Trading Agency
+# INSTALAR — DZ23 Trading AI
 
-Guia único para colocar o sistema no ar e começar a vender. ~15 minutos.
+Guia de instalação do produto real: **um dono por instalação**, sem SaaS,
+sem cobrança. Três caminhos — Windows (principal), a partir do código
+(desenvolvimento) e servidor (opcional, acesso remoto).
 
-## 1. Banco de dados (Supabase, recomendado)
-1. Abra seu projeto no dashboard do Supabase.
-2. **Settings → Database → Database password** — copie (ou redefina) a senha.
-3. Guarde também o **project ref** (aparece na URL do dashboard).
+## 1. Windows (recomendado — sem Python no computador)
 
-Não precisa criar tabela nenhuma: o sistema cria o que precisa ao subir.
+O instalador é gerado pelo pipeline deste repositório (workflow
+**Windows Release Build** → artefato `dz23-windows-x64`, com
+`DZ23-TradingAI-Setup-<versão>.exe` e `SHA256SUMS`). A publicação de Release
+oficial aguarda aprovação do proprietário; até lá, use o artefato do CI e
+**confira o SHA-256** antes de executar.
 
-## 2. Deploy (Coolify)
-**New Resource → Dockerfile**, repositório `tradingagents-dz23`, branch
-`unificacao`. Volume: **`/data`**. Variáveis:
+1. Execute o Setup (duplo clique). Ele não exige Python no computador.
+2. Na primeira abertura, o **assistente do dono** cria a sua senha e mostra
+   o **código de recuperação** — guarde-o: é exibido uma única vez.
+3. O painel abre no navegador em `http://localhost:8000` (porta ocupada →
+   o launcher usa a próxima livre, faixa 8000–8010). Para encerrar o
+   aplicativo use o botão **Fechar aplicativo** (encerramento gracioso).
+4. Seus dados ficam em `%APPDATA%\DZ23-Trading-AI` (configuração, estado da
+   mesa, logs). Nada vive no diretório de instalação.
 
-```
-ACCESS_PASSWORD=<senha forte de 20+ caracteres>
-MULTI_TENANT_ENABLED=true
-TENANT_TOKEN_SIGNING_KEY=<32+ caracteres aleatórios: openssl rand -hex 32>
-SIGNUP_ENABLED=true
+**Atualizar:** rode o Setup da versão nova — ele detecta a instalação e
+oferece Atualizar/Reparar. Antes de trocar de versão é criado um **backup
+verificado** em `%APPDATA%\DZ23-Trading-AI-backups`; se o backup falhar, a
+instalação é abortada para proteger seus dados. Downgrade só com
+`/FORCEDOWNGRADE=1` (também com backup verificado antes).
 
-SUPABASE_PROJECT_REF=<ref do projeto>
-SUPABASE_DB_PASSWORD=<senha do banco>
+## 2. A partir do código (desenvolvimento)
 
-WOOVI_TOKEN=<token da API Woovi>
-WOOVI_WEBHOOK_PUBLIC_KEY=<chave pública do webhook, formato PEM ou base64>
-
-DESK_INTERVAL_SECONDS=300
-```
-
-Opcional (login social):
-```
-GOOGLE_CLIENT_ID= / GOOGLE_CLIENT_SECRET= / GOOGLE_REDIRECT_URI=https://dz23trading.com.br/v1/auth/oauth/google/callback
-MICROSOFT_CLIENT_ID= / MICROSOFT_CLIENT_SECRET= / MICROSOFT_REDIRECT_URI=https://dz23trading.com.br/v1/auth/oauth/microsoft/callback
-```
-> As URLs de redirecionamento precisam ser cadastradas **iguais** no Google
-> Cloud e no Azure, senão o provedor recusa o login.
-
-Deploy. Se algo estiver errado, o serviço **sobe mesmo assim** e explica o
-problema em `/healthz` e no painel — ele nunca morre calado.
-
-## 3. Webhook de pagamento (Woovi)
-No painel da Woovi, cadastre:
-
-```
-https://dz23trading.com.br/v1/webhooks/woovi
+```bash
+uv sync --locked --extra desk --extra dev
+uv run uvicorn service.app:app --port 8080
 ```
 
-Evento: cobrança concluída. O sistema **só** ativa plano com webhook
-assinado — corpo adulterado ou assinatura ausente são recusados.
+Abra `http://localhost:8080/app`: o mesmo assistente de primeira execução
+aparece no primeiro acesso.
 
-## 4. Conferir se subiu
-- `https://dz23trading.com.br/healthz` → `status: ok`, `banco: Supabase ...`
-- `https://dz23trading.com.br/` → tela de login com o botão **Criar conta**
-- Logado como admin: **Administração → banco** (`/v1/admin/database`)
+## 3. Servidor (opcional — acesso remoto)
 
-## 5. Primeira venda
-1. O cliente abre o site e clica **Criar conta** → 7 dias grátis.
-2. Configura a IA (Groq é grátis) e roda a primeira análise.
-3. Em **Plano e pagamento**, escolhe Starter (R$ 99) ou Pro (R$ 249) e paga
-   por PIX (QR Code ou copia-e-cola).
-4. A Woovi confirma → o plano ativa sozinho. Assinatura vencida bloqueia a
-   mesa, mas **nunca** a página de pagamento.
+Para navegar do celular ou de outra máquina, rode em Docker
+(`Dockerfile`/`docker-compose.yml` deste repositório) numa VM Linux — passo
+a passo em **DEPLOY.md**. A mudança PC → Oracle Cloud ARM64 tem roteiro no
+**RUNBOOK.md**; a homologação no Oracle ainda **não** foi realizada (nada é
+declarado homologado sem evidência registrada).
 
-## 6. Operação
-- **RUNBOOK.md** — incidentes, backup e restauração.
-- **COMECE-AQUI.md** — guia do usuário final.
-- Backup: aba Mesa de Agentes → **Gerar backup** (vai para `/data/backups`).
+## 4. Recuperação e operação
+
+- **RUNBOOK.md** — incidentes, backup/restauração, troca de servidor,
+  senha bloqueada, chave vazada.
+- **COMECE-AQUI.md** — guia do usuário final (primeiros passos, mesa de
+  agentes, copiloto manual).
+- Esqueceu a senha? Use o **código de recuperação** do assistente de
+  primeira execução; sem ele, restaure pelo backup.
 
 ## Limites honestos
-- A mesa opera em **PAPER** e testnet. Dinheiro real está desligado por
-  invariante da plataforma (`LIVE_TRADING=false`).
-- Resultado de teste não é promessa de lucro; nada aqui é recomendação de
-  investimento.
+
+- A mesa opera em **PAPER** (simulado) e **TESTNET** (dinheiro fictício da
+  exchange). **LIVE (dinheiro real) está bloqueado por construção**
+  (fail-closed) e não é ativável pela interface.
+- Software experimental de pesquisa e engenharia: nada aqui é recomendação
+  de investimento, não garante lucro e pode causar perdas. Resultado de
+  teste não é promessa de resultado real.
