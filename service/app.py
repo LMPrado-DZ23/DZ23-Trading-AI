@@ -2174,10 +2174,8 @@ def _revisor_de_ia(tenant_id: str, cfg: dict):
         return None
 
     def revisar(fatos: dict) -> str:
-        from tradingagents.default_config import DEFAULT_CONFIG
-        from tradingagents.llm_clients.factory import create_llm_client
-        llm_conf, llm_env = resolve_llm(cfg)
-        conf = {**DEFAULT_CONFIG, **llm_conf}
+        from service.api.ia_provedores import consultar_ia
+
         prompt = (
             "Você revisa o diário de uma operação MANUAL já executada pelo "
             "dono na corretora dele. Comente os fatos abaixo em português, "
@@ -2185,21 +2183,8 @@ def _revisor_de_ia(tenant_id: str, cfg: dict):
             "preço, alvo ou ordem nova e não invente dados que não estão "
             "nos fatos.\n"
             f"Fatos: {json.dumps(fatos, ensure_ascii=False)}")
-        with _lock:
-            anterior = {k: os.environ.get(k) for k in llm_env}
-            os.environ.update(llm_env)
-            try:
-                cliente = create_llm_client(conf.get("llm_provider"), conf)
-                resposta = (cliente.complete(prompt)
-                            if hasattr(cliente, "complete")
-                            else str(cliente.invoke(prompt)))
-                return str(resposta)
-            finally:
-                for k, antes in anterior.items():
-                    if antes is None:
-                        os.environ.pop(k, None)
-                    else:
-                        os.environ[k] = antes
+        texto, _meta = consultar_ia(cfg, prompt)
+        return texto
 
     return revisar
 
@@ -2315,58 +2300,31 @@ def _desk_boot(tenant_id: str) -> dict:
         from tradingagents.desk.context import AnalistaDeContexto
 
         def _consultar(prompt: str) -> str:
-            """Consulta o provedor do INQUILINO.
+            """Consulta o provedor do INQUILINO (núcleo: ia_provedores).
 
-            A versão anterior escrevia a credencial em os.environ sem trava:
-            duas mesas de inquilinos diferentes rodam em threads próprias, e
-            a janela entre escrever e restaurar permitia o inquilino A usar a
-            chave do B — ou a chave de um sobrar no processo.
-
-            O ambiente do processo deixou de ser o transporte da credencial:
-            ela vai explicitamente para o cliente. O lock só permanece para o
-            caso em que a biblioteca ainda exija variável de ambiente, e
-            nesse caminho a janela fica fechada de ponta a ponta.
+            O ambiente do processo NÃO é o transporte da credencial: ela vai
+            explícita para o cliente, com janela de env curta sob lock —
+            fechada assim que o cliente existe. Duas mesas de inquilinos
+            diferentes nunca se cruzam. Registra latência e o provedor que
+            DE FATO respondeu (com fallback configurado, pode não ser o
+            principal).
             """
-            from tradingagents.default_config import DEFAULT_CONFIG
-            from tradingagents.llm_clients.factory import create_llm_client
-            llm_conf, llm_env = resolve_llm(cfg)
-            conf = {**DEFAULT_CONFIG, **llm_conf}
-            import inspect
-            aceita_credencial = "api_key" in inspect.signature(
-                create_llm_client).parameters
+            from service.api.ia_provedores import consultar_ia
+
             inicio = time.perf_counter()
             ok = False
+            provedor_registrado = cfg.get("TRADINGAGENTS_LLM_PROVIDER")
             try:
-                if aceita_credencial:
-                    chave = next((v for v in llm_env.values() if v), "")
-                    cliente = create_llm_client(conf.get("llm_provider"), conf,
-                                                api_key=chave)
-                    resposta = (cliente.complete(prompt)
-                                if hasattr(cliente, "complete")
-                                else str(cliente.invoke(prompt)))
-                else:
-                    with _lock:                  # janela fechada: um por vez
-                        anterior = {k: os.environ.get(k) for k in llm_env}
-                        os.environ.update(llm_env)
-                        try:
-                            cliente = create_llm_client(conf.get("llm_provider"), conf)
-                            resposta = (cliente.complete(prompt)
-                                        if hasattr(cliente, "complete")
-                                        else str(cliente.invoke(prompt)))
-                        finally:
-                            for k, antes in anterior.items():
-                                if antes is None:
-                                    os.environ.pop(k, None)
-                                else:
-                                    os.environ[k] = antes
+                texto, meta = consultar_ia(cfg, prompt)
                 ok = True
-                return resposta
+                provedor_registrado = meta.get("provedor") or provedor_registrado
+                return texto
             finally:
                 # Painel (item 7): latência e saúde do provedor externo.
-                # Registra o nome CONFIGURADO (openrouter, groq, gemini): é o
-                # que o dono escolheu na tela, não o adaptador interno.
-                _registrar_ia_contexto(tenant_id,
-                                       cfg.get("TRADINGAGENTS_LLM_PROVIDER"),
+                # Registra o nome que o dono escolheu na tela (openrouter,
+                # groq, gemini) — ou o fallback que assumiu quando o
+                # principal falhou.
+                _registrar_ia_contexto(tenant_id, provedor_registrado,
                                        (time.perf_counter() - inicio) * 1000.0,
                                        ok)
 
