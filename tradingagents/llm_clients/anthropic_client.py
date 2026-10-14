@@ -4,12 +4,19 @@ from typing import Any
 from langchain_anthropic import ChatAnthropic
 
 from .base_client import BaseLLMClient, normalize_content
+from .transport import LLM_HTTP_TIMEOUT
 from .validators import validate_model
 
 _PASSTHROUGH_KWARGS = (
     "timeout", "max_retries", "api_key", "max_tokens", "temperature",
     "callbacks", "http_client", "http_async_client", "effort",
 )
+
+# Rodada-8 (auditoria): sem timeout explícito, ``default_request_timeout``
+# fica None e o SDK o carimba em cada requisição — nenhum limite. Segundos,
+# derivados de transport.LLM_HTTP_TIMEOUT (fonte única); o pydantic da
+# ChatAnthropic aceita apenas float (um httpx.Timeout seria rejeitado).
+_TIMEOUT_SEGUNDOS = float(LLM_HTTP_TIMEOUT.read)
 
 # Anthropic's extended-thinking ``effort`` parameter is accepted by Opus 4.5+,
 # Sonnet 4.6+, and the Claude 5 family (Sonnet 5, Fable 5). Sonnet 4.5 and any
@@ -63,6 +70,10 @@ class AnthropicClient(BaseLLMClient):
 
         if self.base_url:
             llm_kwargs["base_url"] = self.base_url
+
+        # Rodada-8 (auditoria): timeout finito por requisição. O passthrough
+        # do usuário (abaixo) prevalece.
+        llm_kwargs.setdefault("timeout", _TIMEOUT_SEGUNDOS)
 
         for key in _PASSTHROUGH_KWARGS:
             if key not in self.kwargs:

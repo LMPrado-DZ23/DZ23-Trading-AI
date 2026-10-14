@@ -49,6 +49,7 @@ class AzureOpenAIClient(BaseLLMClient):
         validate_backend_url("azure", azure_endpoint)
 
         from .transport import (
+            LLM_HTTP_TIMEOUT,
             build_hardened_async_http_client,
             build_hardened_http_client,
         )
@@ -63,6 +64,11 @@ class AzureOpenAIClient(BaseLLMClient):
             "http_client": build_hardened_http_client(),
             "http_async_client": build_hardened_async_http_client(),
         }
+
+        # Rodada-8 (auditoria): timeout finito por requisição — a langchain
+        # passa timeout=None ao SDK, que o carimba em cada chamada e anula o
+        # default do httpx.Client. Passthrough do usuário (abaixo) prevalece.
+        llm_kwargs.setdefault("timeout", LLM_HTTP_TIMEOUT)
 
         for key in _PASSTHROUGH_KWARGS:
             if key in self.kwargs:

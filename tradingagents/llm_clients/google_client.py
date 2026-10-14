@@ -3,7 +3,14 @@ from typing import Any
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from .base_client import BaseLLMClient, normalize_content
+from .transport import LLM_HTTP_TIMEOUT
 from .validators import validate_model
+
+# Rodada-8 (auditoria): ``self.timeout`` None vira ``http_options.timeout``
+# None — nenhum limite por requisição. Segundos, derivados de
+# transport.LLM_HTTP_TIMEOUT (fonte única); o modelo o converte para ms em
+# cada chamada (``int(timeout * 1000)``, chat_models.py).
+_TIMEOUT_SEGUNDOS = float(LLM_HTTP_TIMEOUT.read)
 
 
 class NormalizedChatGoogleGenerativeAI(ChatGoogleGenerativeAI):
@@ -30,6 +37,10 @@ class GoogleClient(BaseLLMClient):
 
         if self.base_url:
             llm_kwargs["base_url"] = self.base_url
+
+        # Rodada-8 (auditoria): timeout finito por requisição. O passthrough
+        # do usuário (abaixo) prevalece.
+        llm_kwargs.setdefault("timeout", _TIMEOUT_SEGUNDOS)
 
         for key in ("timeout", "max_retries", "temperature", "max_output_tokens",
                     "callbacks", "http_client", "http_async_client"):

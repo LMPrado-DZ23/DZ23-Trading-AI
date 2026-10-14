@@ -12,6 +12,7 @@ from .backend_policy import validate_backend_url
 from .base_client import BaseLLMClient, normalize_content
 from .capabilities import get_capabilities
 from .transport import (
+    LLM_HTTP_TIMEOUT,
     build_hardened_async_http_client,
     build_hardened_http_client,
 )
@@ -355,6 +356,13 @@ class OpenAIClient(BaseLLMClient):
                 llm_kwargs["use_responses_api"] = True
         elif self.base_url:
             llm_kwargs["base_url"] = self.base_url
+
+        # Rodada-8 (auditoria): timeout finito por requisição. A langchain
+        # passa ``timeout=None`` explicitamente ao SDK OpenAI, que o carimba
+        # em cada chamada — sem isto, todos os timeouts ficam desabilitados
+        # (o default do httpx.Client fornecido é ignorado). O passthrough do
+        # usuário (abaixo) prevalece.
+        llm_kwargs.setdefault("timeout", LLM_HTTP_TIMEOUT)
 
         # Forward user-provided kwargs
         for key in _PASSTHROUGH_KWARGS:

@@ -22,18 +22,33 @@ assumed.
 
 import httpx
 
+# Rodada 8 (auditoria pós-V8): timeout EXPLÍCITO e finito. O SDK OpenAI
+# carimba ``self.timeout`` em toda requisição; a langchain-openai passa
+# ``timeout=None`` explicitamente ao SDK, que o trata como valor dado e o
+# propaga por requisição — anulando o default do httpx.Client. Sem um valor
+# aqui, connect/read/write/pool ficam None: uma conexão travada pendura a
+# chamada sem limite. Ver tests/test_llm_transport_timeouts.py.
+LLM_HTTP_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
+
 
 def build_hardened_http_client() -> httpx.Client:
-    """Sync httpx client: no redirects, no ambient proxy/CA (rodada 6).
+    """Sync httpx client: no redirects, no ambient proxy/CA (rodada 6),
+    finite explicit timeout (rodada 8).
 
     ``trust_env=False`` — HTTP(S)_PROXY, ALL_PROXY, SSL_CERT_FILE and
     NO_PROXY from the environment are IGNORED: an ambient proxy would be an
     unvalidated man-in-the-middle outside the backend policy. Corporate
     proxy/CA support must arrive as explicit, validated configuration
-    recorded in run provenance — not inherited from the environment."""
-    return httpx.Client(follow_redirects=False, trust_env=False)
+    recorded in run provenance — not inherited from the environment.
+
+    ``timeout=LLM_HTTP_TIMEOUT`` — see the constant above."""
+    return httpx.Client(
+        follow_redirects=False, trust_env=False, timeout=LLM_HTTP_TIMEOUT
+    )
 
 
 def build_hardened_async_http_client() -> httpx.AsyncClient:
     """Async variant of build_hardened_http_client (same posture)."""
-    return httpx.AsyncClient(follow_redirects=False, trust_env=False)
+    return httpx.AsyncClient(
+        follow_redirects=False, trust_env=False, timeout=LLM_HTTP_TIMEOUT
+    )
