@@ -1893,6 +1893,131 @@ def _alertas_do_ciclo(tenant_id: str, out: dict) -> None:
             validade=utcnow() + _td(hours=12))
 
 
+# Copiloto Manual (E3): modo PRÓPRIO do inquilino — não é estado da mesa.
+# Read-only estrutural perante corretoras: este bloco não importa broker,
+# não chama create_order/cancel_order e nenhuma rota daqui executa ordem.
+_COPILOTOS: dict = {}
+
+
+def _armazem_do_tenant(tenant_id: str):
+    d = _DESKS.get(tenant_id) or {}
+    armazem = d.get("armazem")
+    if armazem is not None:
+        return armazem
+    from tradingagents.desk.storage import ArmazemDeEstado
+    return ArmazemDeEstado(os.environ.get("DATABASE_URL"),
+                           diretorio=DATA / "desks")
+
+
+def _copiloto(tenant_id: str, armazem=None):
+    from tradingagents.desk.manual import CopilotoManual
+    cop = _COPILOTOS.get(tenant_id)
+    if cop is None:
+        armazem = armazem or _armazem_do_tenant(tenant_id)
+        doc = armazem.carregar(tenant_id, "manual")
+        cop = CopilotoManual.from_dict(doc)
+        _COPILOTOS[tenant_id] = cop
+    return cop
+
+
+def _persistir_copiloto(tenant_id: str) -> None:
+    cop = _COPILOTOS.get(tenant_id)
+    if cop is None:
+        return
+    try:
+        _armazem_do_tenant(tenant_id).salvar(tenant_id, "manual", cop.to_dict())
+    except Exception:
+        # O estado em memória segue vivo; a próxima gravação tenta de novo.
+        LOGGER.warning("não foi possível persistir o copiloto manual")
+
+
+def _tique_do_copiloto(tenant_id: str, cop, snaps_fn=None) -> dict:
+    """Um tique do monitor manual com o MESMO feed da mesa.
+
+    Read-only estrutural: compara preço com a política e ALERTA pela fila
+    durável (E2). Nunca executa ordem, nunca fecha posição — alvo atingido
+    vira alerta, não encerramento.
+    """
+    if snaps_fn is None:
+        snaps_fn = (_DESKS.get(tenant_id) or {}).get("snaps_fn")
+    if snaps_fn is None:
+        return {}
+    from tradingagents.desk.manual import QuoteManual
+    from tradingagents.desk.models import utcnow
+    try:
+        snaps = snaps_fn()
+    except Exception as exc:
+        LOGGER.warning("copiloto manual: feed indisponível (%s)",
+                       type(exc).__name__)
+        return {}
+    recebido = utcnow()
+    quotes = {s.instrument: QuoteManual(
+        preco=s.last, cutoff=s.cutoff, recebido_em=recebido, fonte=s.source,
+        timeframe=s.timeframe, quality=s.quality) for s in snaps if s.closes}
+    fila = _fila_alertas(tenant_id)
+    resumo = cop.avaliar_posicoes(quotes,
+                                  enfileirar=lambda **kw: fila.enfileirar(**kw))
+    _persistir_copiloto(tenant_id)
+    if resumo.get("alertas"):
+        _persistir_fila_alertas(tenant_id)
+        with contextlib.suppress(Exception):
+            _despachar_alertas(tenant_id)
+    return resumo
+
+
+def _copiloto_para_painel(cop) -> dict:
+    abertas = cop.posicoes_abertas()
+    return {"ativo": cop.ativo,
+            "total_abertas": len(abertas),
+            "posicoes_abertas": [p.para_painel() for p in abertas],
+            "avisos": (["modo copiloto ligado: a mesa autônoma não executa "
+                        "ordens enquanto ele acompanha"] if cop.ativo else []),
+            "como_usar": ("Registre aqui o que você JÁ executou na sua "
+                          "corretora. O copiloto acompanha, calcula e alerta "
+                          "— ele nunca opera por você."),
+            "monitor": cop.saude_do_monitor()}
+
+
+def _revisor_de_ia(tenant_id: str, cfg: dict):
+    """Revisor do diário manual: usa a credencial já configurada pelo dono.
+
+    Devolve None sem provedor — sem IA o diário continua vivo (a revisão é
+    opcional por desenho). O texto da IA comenta os FATOS; ela nunca recebe
+    permissão de inventar preço, alvo ou ordem.
+    """
+    if not cfg.get("TRADINGAGENTS_LLM_PROVIDER"):
+        return None
+
+    def revisar(fatos: dict) -> str:
+        from tradingagents.default_config import DEFAULT_CONFIG
+        from tradingagents.llm_clients.factory import create_llm_client
+        llm_conf, llm_env = resolve_llm(cfg)
+        conf = {**DEFAULT_CONFIG, **llm_conf}
+        prompt = (
+            "Você revisa o diário de uma operação MANUAL já executada pelo "
+            "dono na corretora dele. Comente os fatos abaixo em português, "
+            "com objetividade: risco, gestão e disciplina. NUNCA sugira "
+            "preço, alvo ou ordem nova e não invente dados que não estão "
+            "nos fatos.\n"
+            f"Fatos: {json.dumps(fatos, ensure_ascii=False)}")
+        with _lock:
+            anterior = {k: os.environ.get(k) for k in llm_env}
+            os.environ.update(llm_env)
+            try:
+                cliente = create_llm_client(conf.get("llm_provider"), conf)
+                resposta = (cliente.complete(prompt)
+                            if hasattr(cliente, "complete")
+                            else str(cliente.invoke(prompt)))
+                return str(resposta)
+            finally:
+                for k, antes in anterior.items():
+                    if antes is None:
+                        os.environ.pop(k, None)
+                    else:
+                        os.environ[k] = antes
+
+    return revisar
+
 
 def _desk_boot(tenant_id: str) -> dict:
     from decimal import Decimal
@@ -2140,6 +2265,10 @@ def _desk_boot(tenant_id: str) -> dict:
     modo = ModoDaMesa(armazem, tenant_id)
     posse = PosseDeExecucao(armazem, tenant_id)
 
+    # Copiloto Manual (E3): estado próprio do inquilino, carregado do mesmo
+    # armazém. Ligado, a mesa só observa — quem opera é o dono.
+    copiloto = _copiloto(tenant_id, armazem)
+
     desk = {"orchestrator": orch, "ledger": coord.ledger, "coordinator": coord,
             "memoria": memoria, "armazem": armazem, "recuperacao": recuperacao,
             "livro_restauracao": restauracao_livro,
@@ -2149,7 +2278,8 @@ def _desk_boot(tenant_id: str) -> dict:
             "sala_motivo": sala_motivo, "avisos_vigia": _avisos_vigia,
             "scheduler": None, "estagios_antes": estagios_antes,
             "persistir_estagios": _persistir_estagios,
-            "ia_modelo": cfg.get("TRADINGAGENTS_LLM_PROVIDER") or ""}
+            "ia_modelo": cfg.get("TRADINGAGENTS_LLM_PROVIDER") or "",
+            "manual": copiloto, "snaps_fn": snaps_fn}
 
     def _persistir_oms():
         try:
@@ -2194,23 +2324,41 @@ def _desk_boot(tenant_id: str) -> dict:
                                "ordens": out.get("ordens", [])})
         del desk["cycles"][:-30]
 
+    def _guarda_operacao():
+        """Porteiro do laço + batimento do copiloto manual.
+
+        O ciclo em observação NÃO chama on_cycle (não grava estado da mesa),
+        então o tique do monitor manual vive aqui — uma vez por volta do
+        laço, em qualquer desfecho da guarda. Falha do tique nunca derruba
+        o laço nem muda o desfecho da guarda.
+        """
+        acao, motivo = _guarda_do_laco(modo, posse, copiloto=copiloto)
+        if copiloto.ativo or copiloto.posicoes_abertas():
+            with contextlib.suppress(Exception):
+                _tique_do_copiloto(tenant_id, copiloto, snaps_fn)
+        return acao, motivo
+
     desk["scheduler"] = DeskScheduler(
         orch, coord, snapshot_provider=snaps_fn, price_provider=prices_fn,
         state_path=data_dir / "state.json", on_cycle=_record,
         armazem=armazem, tenant_id=tenant_id,
         interval_seconds=int(os.environ.get("DESK_INTERVAL_SECONDS", "300")),
-        guarda_operacao=lambda: _guarda_do_laco(modo, posse))
+        guarda_operacao=_guarda_operacao)
     return desk
 
 
-def _guarda_do_laco(modo, posse) -> tuple[str, str]:
+def _guarda_do_laco(modo, posse, copiloto=None) -> tuple[str, str]:
     """Porteiro fail-closed de cada ciclo autônomo (modo + posse).
 
     observador: analisa sem executar; pausada/bloqueada: nada roda; ativa:
     só executa com a posse — se outro processo (Oracle) a segura, este fica
     em silêncio até o vencimento. Guarda quebrado NÃO libera: falha = bloquear.
+    Copiloto Manual ligado: a mesa autônoma NÃO executa — só observa; quem
+    opera é o dono, e o copiloto acompanha o que ele declarou.
     """
     try:
+        if copiloto is not None and getattr(copiloto, "ativo", False):
+            return "observar", ""
         estado = modo.estado
         if estado is EstadoDaMesa.OBSERVADOR:
             return "observar", ""
@@ -2230,7 +2378,14 @@ def _guarda_do_pedido(d: dict) -> None:
     """Antes de executar sob demanda: modo ativo E posse livre/desta máquina.
 
     Observador passa daqui sem tocar na posse (quem só olha não trava a
-    execução de quem opera); quem submete ordem, assume a posse exclusiva."""
+    execução de quem opera); quem submete ordem, assume a posse exclusiva.
+    Copiloto Manual ligado bloqueia: no modo do dono, a mesa não opera."""
+    cop = d.get("manual")
+    if cop is not None and getattr(cop, "ativo", False):
+        raise HTTPException(
+            409, "modo Copiloto Manual ligado — a mesa autônoma não executa "
+                 "ordens enquanto o copiloto acompanha suas operações "
+                 "manuais (desligue o modo para devolver a mesa ao normal)")
     estado = d["modo"].estado
     if estado is EstadoDaMesa.OBSERVADOR:
         return                       # a rota decide o ciclo de observação
@@ -3447,6 +3602,245 @@ async def webhook_telegram(req: Request):
     resultado = processar_callback_telegram(body, _fila_alertas(tid))
     _persistir_fila_alertas(tid)
     return resultado
+
+
+# ============================================ COPILOTO MANUAL ⑤ (E3, leitura)
+# O dono registra o que JÁ executou na corretora dele; o copiloto acompanha,
+# calcula e ALERTA. Nenhum endpoint deste bloco executa ordem — a ausência
+# de broker no grafo é garantida por teste estrutural (AST) em manual.py.
+
+def _manual_http(exc: Exception) -> HTTPException:
+    from tradingagents.desk.manual import ConflitoDeVersao, PosicaoNaoEncontrada
+    if isinstance(exc, PosicaoNaoEncontrada):
+        return HTTPException(404, str(exc))
+    if isinstance(exc, ConflitoDeVersao):
+        return HTTPException(409, str(exc))
+    return HTTPException(422, str(exc))
+
+
+@app.get("/v1/manual/modo")
+def manual_modo_obter(request: Request, _=Depends(auth)):
+    tid = request_tenant(request)
+    return _copiloto_para_painel(_copiloto(tid))
+
+
+@app.put("/v1/manual/modo")
+async def manual_modo_definir(req: Request, _=Depends(auth)):
+    """Liga/desliga o Copiloto Manual. Ligado = a mesa autônoma não executa;
+    o copiloto apenas acompanha e alerta. Desligar devolve a mesa ao normal."""
+    tid = request_tenant(req)
+    body = await _json_body(req)
+    ativo = body.get("ativo")
+    if not isinstance(ativo, bool):
+        raise HTTPException(422, 'informe {"ativo": true|false} — booleano')
+    cop = _copiloto(tid)
+    anterior = cop.definir_ativo(ativo)
+    _persistir_copiloto(tid)
+    return {"ok": True, "anterior": anterior, **_copiloto_para_painel(cop)}
+
+
+@app.post("/v1/manual/positions")
+async def manual_criar_posicao(req: Request, _=Depends(auth)):
+    """Registra uma posição que o dono JÁ abriu na corretora dele."""
+    tid = request_tenant(req)
+    body = await _json_body(req)
+    cop = _copiloto(tid)
+    try:
+        pos, aplicado = cop.criar_posicao(
+            instrumento=body.get("instrumento", ""),
+            direcao=body.get("direcao", ""),
+            quantidade=body.get("quantidade"),
+            preco_entrada=body.get("preco_entrada"),
+            entrada_em=body.get("entrada_em"),
+            origem_preco=str(body.get("origem_preco") or "declarado"),
+            tese=body.get("tese") or "",
+            stop=body.get("stop"), alvos=body.get("alvos") or (),
+            invalidacao=body.get("invalidacao"),
+            expira_em=body.get("expira_em"),
+            trailing_pct=body.get("trailing_pct"),
+            intervalo_s=body.get("intervalo_s"),
+            custos_entrada=body.get("custos_entrada") or 0,
+            idempotency_key=str(body.get("idempotency_key") or ""))
+    except ValueError as exc:
+        raise _manual_http(exc) from None
+    _persistir_copiloto(tid)
+    return {"ok": True, "criada": aplicado, "posicao": pos.para_painel()}
+
+
+@app.get("/v1/manual/positions")
+def manual_listar_posicoes(request: Request, estado: str = "",
+                           _=Depends(auth)):
+    tid = request_tenant(request)
+    cop = _copiloto(tid)
+    if cop.ativo:
+        # Tique preguiçoso: painel aberto também movimenta o monitor —
+        # throttled por posição (intervalo_s), nunca com forcar.
+        with contextlib.suppress(Exception):
+            _tique_do_copiloto(tid, cop)
+    itens = cop.listar(estado or None)
+    return {"ativo": cop.ativo,
+            "posicoes": [p.para_painel() for p in itens],
+            "resumo": {"total": len(itens),
+                       "abertas": len(cop.posicoes_abertas()),
+                       "monitor": cop.saude_do_monitor()},
+            "como_usar": _copiloto_para_painel(cop)["como_usar"]}
+
+
+@app.get("/v1/manual/positions/{posicao_id}")
+def manual_obter_posicao(posicao_id: str, request: Request, _=Depends(auth)):
+    tid = request_tenant(request)
+    cop = _copiloto(tid)
+    try:
+        pos = cop.obter(posicao_id)
+    except ValueError as exc:
+        raise _manual_http(exc) from None
+    return {"posicao": pos.para_painel(),
+            "eventos": [e.doc() for e in pos.eventos],
+            "historico_politica": pos.historico_politica[-10:],
+            "snapshots": pos.snapshots[-5:],
+            "revisoes": cop.revisoes(posicao_id)[-5:]}
+
+
+@app.post("/v1/manual/positions/{posicao_id}/events")
+async def manual_registrar_evento(posicao_id: str, req: Request,
+                                  _=Depends(auth)):
+    """Registra o que o dono EXECUTOU (preço executado é obrigatório —
+    cotação de tela nunca substitui). Idempotente por idempotency_key."""
+    tid = request_tenant(req)
+    body = await _json_body(req)
+    cop = _copiloto(tid)
+    try:
+        evento, aplicado = cop.registrar_evento(
+            posicao_id, tipo=body.get("tipo", ""),
+            quantidade=body.get("quantidade"), preco=body.get("preco"),
+            custos=body.get("custos") or 0,
+            fonte=str(body.get("fonte") or "declarado"),
+            motivo=body.get("motivo") or "", em=body.get("em"),
+            idempotency_key=str(body.get("idempotency_key") or ""),
+            expected_version=body.get("expected_version"))
+        pos = cop.obter(posicao_id)
+    except ValueError as exc:
+        raise _manual_http(exc) from None
+    _persistir_copiloto(tid)
+    return {"ok": True, "aplicado": aplicado, "evento": evento.doc(),
+            "posicao": pos.para_painel()}
+
+
+@app.put("/v1/manual/positions/{posicao_id}/monitoring-policy")
+async def manual_definir_politica(posicao_id: str, req: Request,
+                                  _=Depends(auth)):
+    from tradingagents.desk.manual import PoliticaManual
+    tid = request_tenant(req)
+    body = await _json_body(req)
+    cop = _copiloto(tid)
+    try:
+        politica = PoliticaManual.from_doc({
+            "stop": body.get("stop"), "alvos": body.get("alvos") or [],
+            "invalidacao": body.get("invalidacao"),
+            "expira_em": body.get("expira_em"),
+            "trailing_pct": body.get("trailing_pct"),
+            "intervalo_s": body.get("intervalo_s") or 120})
+        pos = cop.definir_politica(posicao_id, politica,
+                                   expected_version=body.get("expected_version"))
+    except ValueError as exc:
+        raise _manual_http(exc) from None
+    _persistir_copiloto(tid)
+    return {"ok": True, "posicao": pos.para_painel()}
+
+
+@app.post("/v1/manual/positions/{posicao_id}/pause")
+async def manual_pausar(posicao_id: str, req: Request, _=Depends(auth)):
+    tid = request_tenant(req)
+    body = await _json_body(req)
+    cop = _copiloto(tid)
+    try:
+        pos = cop.pausar(posicao_id, motivo=str(body.get("motivo") or ""))
+    except ValueError as exc:
+        raise _manual_http(exc) from None
+    _persistir_copiloto(tid)
+    return {"ok": True, "posicao": pos.para_painel()}
+
+
+@app.post("/v1/manual/positions/{posicao_id}/resume")
+def manual_retomar(posicao_id: str, request: Request, _=Depends(auth)):
+    tid = request_tenant(request)
+    cop = _copiloto(tid)
+    try:
+        pos = cop.retomar(posicao_id)
+    except ValueError as exc:
+        raise _manual_http(exc) from None
+    _persistir_copiloto(tid)
+    return {"ok": True, "posicao": pos.para_painel()}
+
+
+@app.post("/v1/manual/positions/{posicao_id}/revisao")
+async def manual_revisao(posicao_id: str, req: Request, _=Depends(auth)):
+    """Revisão de diário: a IA do inquilino comenta os FATOS; sem provedor
+    configurado a entrada é registrada sem revisão (nunca inventa preço)."""
+    tid = request_tenant(req)
+    body = await _json_body(req)
+    cop = _copiloto(tid)
+    try:
+        cop.obter(posicao_id)
+    except ValueError as exc:
+        raise _manual_http(exc) from None
+    revisor = _revisor_de_ia(tid, load_cfg(tid))
+    entrada = cop.registrar_revisao(
+        posicao_id, revisor=revisor, observacao=body.get("observacao") or "")
+    _persistir_copiloto(tid)
+    return {"ok": True, "entrada": entrada, "ia_configurada": revisor is not None}
+
+
+@app.get("/v1/manual/positions/{posicao_id}/alerts")
+def manual_alertas_da_posicao(posicao_id: str, request: Request,
+                              _=Depends(auth)):
+    tid = request_tenant(request)
+    cop = _copiloto(tid)
+    try:
+        cop.obter(posicao_id)
+    except ValueError as exc:
+        raise _manual_http(exc) from None
+    fila = _fila_alertas(tid)
+    itens = [a for a in fila.alertas
+             if str((a.dados or {}).get("posicao_id") or "") == posicao_id
+             or a.dedupe_key.startswith(f"manual:{posicao_id}:")]
+    itens.sort(key=lambda a: a.criado_em, reverse=True)
+    return {"posicao_id": posicao_id, "total": len(itens),
+            "alertas": [{"id": a.id, "tipo": a.tipo,
+                         "severidade": a.severidade, "titulo": a.titulo,
+                         "detalhe": a.detalhe, "acao": a.acao,
+                         "estado": a.estado, "ocorrencias": a.ocorrencias,
+                         "criado_em": a.criado_em, "lido_em": a.lido_em,
+                         "vencido": a.vencido()} for a in itens[:50]]}
+
+
+@app.post("/v1/manual/alerts/{alerta_id}/ack")
+def manual_ack(alerta_id: str, request: Request, _=Depends(auth)):
+    """Marca um alerta do copiloto como lido — só alertas DESTE modo."""
+    tid = request_tenant(request)
+    fila = _fila_alertas(tid)
+    alerta = next((a for a in fila.alertas if a.id == alerta_id), None)
+    if alerta is None or alerta.fonte != "copiloto_manual":
+        raise HTTPException(404, "alerta manual não encontrado")
+    alerta = fila.marcar_lido(alerta_id)
+    _persistir_fila_alertas(tid)
+    return {"ok": True, "id": alerta.id, "lido_em": alerta.lido_em}
+
+
+@app.get("/v1/manual/monitor/health")
+def manual_monitor_health(request: Request, _=Depends(auth)):
+    tid = request_tenant(request)
+    cop = _copiloto(tid)
+    if cop.ativo:
+        with contextlib.suppress(Exception):
+            _tique_do_copiloto(tid, cop)
+    d = _DESKS.get(tid) or {}
+    return {"monitor": cop.saude_do_monitor(),
+            "mesa": {"modo": (d["modo"].resumo() if d.get("modo") else None),
+                     "observando_por_copiloto": cop.ativo},
+            "fonte_de_dados": d.get("feed_kind", ""),
+            "aviso": ("o copiloto NUNCA executa ordem: ele acompanha, "
+                      "calcula e alerta; quem opera é você")}
 
 
 # ======================================================= TRANSPARÊNCIA ⑦
