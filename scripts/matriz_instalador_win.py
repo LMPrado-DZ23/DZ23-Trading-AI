@@ -843,11 +843,18 @@ def c8_desinstalar_preserva_dados(versao_nova: str) -> None:
 
     codigo = roda_uninstall()
     checa("C8: desinstalador conclui (exit 0)", codigo == 0, f"exit={codigo}")
+    # O Inno remove o proprio unins000.exe ao final da 2a fase, alguns
+    # milissegundos DEPOIS do processo original sair — o MESMO orcamento de
+    # 90s dos demais efeitos assincronos cobre essa janela; se o arquivo
+    # persistir de verdade, a checagem abaixo continua falhando.
     limite = time.time() + 90
-    while time.time() < limite and (EXE_APP.exists() or le_registro() is not None):
+    unins = DIR_APP / "unins000.exe"
+    while time.time() < limite and (
+        EXE_APP.exists() or le_registro() is not None or unins.exists()
+    ):
         time.sleep(1.0)
     checa("C8: programa removido do disco", not EXE_APP.exists(), str(EXE_APP))
-    checa("C8: desinstalador removido", not (DIR_APP / "unins000.exe").exists())
+    checa("C8: desinstalador removido", not unins.exists())
     checa("C8: registro removido", le_registro() is None)
     checa("C8: DADOS FINANCEIROS preservados (%APPDATA% intacto)",
           DIR_DADOS.exists() and compara_manifestos(snap, manifesto(DIR_DADOS)) == [])
