@@ -283,19 +283,22 @@ class CanalWhatsApp(CanalBase):
 
 
 class CanalWebPush(CanalBase):
-    """Estrutura pronta para o servidor na Oracle (VAPID) — feature-flag.
-    Não finge funcionar: sem chaves configuradas, ``configurado()=False`` e
-    o painel explica o que falta. Assinaturas ficam persistidas no Armazem."""
+    """Web Push real (VAPID) do PWA. Sem chaves configuradas o painel explica
+    o que falta — nunca finge entrega. Assinaturas ficam persistidas no
+    config do inquilino (cifradas em repouso, SEC-1); o entregador faz o
+    fan-out com poda de inscrições expiradas (404/410)."""
 
     nome = "webpush"
     prioridade = 6
 
     def __init__(self, habilitado: bool = False, vapid_publica: str = "",
-                 assinaturas: list | None = None, transporte=None):
+                 assinaturas: list | None = None, transporte=None,
+                 entregador=None):
         self.habilitado = habilitado
         self.vapid_publica = (vapid_publica or "").strip()
         self.assinaturas = list(assinaturas or [])
         self._transporte = transporte
+        self._entregador = entregador
 
     def configurado(self) -> bool:
         return bool(self.habilitado and self.vapid_publica
@@ -303,8 +306,8 @@ class CanalWebPush(CanalBase):
 
     def detalhe(self) -> str:
         if not self.habilitado:
-            return ("estrutura pronta — ligue ALERTA_WEBPUSH=true quando o "
-                    "servidor público (Oracle) tiver as chaves VAPID")
+            return ("estrutura pronta — gere as chaves VAPID e inscreva o "
+                    "celular em Configuração → Aplicativo")
         if not self.vapid_publica:
             return "falta a chave pública VAPID"
         if not self.assinaturas:
@@ -315,9 +318,11 @@ class CanalWebPush(CanalBase):
         if self._transporte is not None:
             self._transporte(alerta)
             return {"ok": True, "detalhe": "transporte de teste"}
+        if self._entregador is not None:
+            return self._entregador.enviar(alerta, agora=agora)
         return {"ok": False,
                 "erro": ("envio Web Push exige o servidor com as chaves "
-                         "VAPID do Oracle")}
+                         "VAPID e o extra [push] instalado (RUNBOOK.md)")}
 
 
 class CanalEmail(CanalBase):
@@ -375,7 +380,8 @@ class CanalEmail(CanalBase):
 
 
 def construir_canais(cfg: dict, *, transportes: dict | None = None,
-                     assinaturas_webpush: list | None = None) -> list[CanalBase]:
+                     assinaturas_webpush: list | None = None,
+                     entregador_webpush=None) -> list[CanalBase]:
     """Monta os canais na ordem de prioridade (1 Telegram … 7 e-mail)."""
     cfg = cfg or {}
     transportes = transportes or {}
@@ -397,7 +403,8 @@ def construir_canais(cfg: dict, *, transportes: dict | None = None,
         CanalWebPush(habilitado=_ligado(cfg, "ALERTA_WEBPUSH", False),
                      vapid_publica=cfg.get("ALERTA_VAPID_PUBLICA", ""),
                      assinaturas=assinaturas_webpush,
-                     transporte=transportes.get("webpush")),
+                     transporte=transportes.get("webpush"),
+                     entregador=entregador_webpush),
         CanalEmail(cfg.get("EMAIL_SMTP_HOST", ""), cfg.get("EMAIL_SMTP_PORT", ""),
                    cfg.get("EMAIL_SMTP_USER", ""), cfg.get("EMAIL_SMTP_PASS", ""),
                    cfg.get("EMAIL_SMTP_FROM", ""), cfg.get("EMAIL_SMTP_TO", "")),

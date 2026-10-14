@@ -42,6 +42,10 @@ ruff>=0.15
 pytest>=8.0
 pytest-subtests>=0.13
 argon2-cffi>=23.1.0
+pywebpush>=2.0.3
 
 [dev:python_version < "3.11"]
 tomli>=2.0.1
+
+[push]
+pywebpush>=2.0.3

@@ -177,7 +177,9 @@ class TestFilaNucleo:
         f = fila()
         a, _ = enfileirar(f, validade=em(m=5), agora=em())
         Despachante(f, [CanalFalso()]).despachar(agora=em(s=1))
-        assert a.estado == "entregue" and "VENCIDO" not in a.texto()
+        # Relógio FALSO também na leitura: sem `agora`, texto() cairia no
+        # relógio real e este teste viraria uma bomba-relógio na BASE fixa.
+        assert a.estado == "entregue" and "VENCIDO" not in a.texto(agora=em(s=1))
 
     def test_reinicio_restaura_estados_e_retoma_pendentes(self):
         f = fila(backoff_base_s=30)
@@ -374,7 +376,7 @@ class TestCanais:
     def test_webpush_sem_flag_nao_finge_funcionar(self):
         from tradingagents.desk.canais_alerta import CanalWebPush
         c = CanalWebPush(habilitado=False)
-        assert c.configurado() is False and "Oracle" in c.detalhe()
+        assert c.configurado() is False and "VAPID" in c.detalhe()
 
 
 class TestNoServico:

@@ -18,6 +18,7 @@ service/personal_market_integrity.py
 service/api/diagnostics.py
 service/api/owner_credentials.py
 service/api/security_center.py
+service/api/segredos_em_repouso.py
 service/static/floor.html
 service/static/index.html
 service/static/manifest.webmanifest
@@ -47,6 +48,10 @@ tests/test_anthropic_effort.py
 tests/test_api_key_env.py
 tests/test_ativo_descoberto.py
 tests/test_auditoria_blockers.py
+tests/test_auditoria_fin1_live_desk_seal.py
+tests/test_auditoria_fin2_gates_financeiros.py
+tests/test_auditoria_fin3_resposta_perdida.py
+tests/test_auditoria_sec1_segredos_em_repouso.py
 tests/test_bedrock_provider.py
 tests/test_billing_woovi.py
 tests/test_broker_ccxt.py
@@ -98,6 +103,7 @@ tests/test_entrada_simetrica.py
 tests/test_env_overrides.py
 tests/test_escrita_atomica.py
 tests/test_event_bus_persistence.py
+tests/test_evolucao_autonoma.py
 tests/test_execution_router.py
 tests/test_fee_component_id.py
 tests/test_fee_componentes.py
@@ -136,6 +142,7 @@ tests/test_modelo_capital.py
 tests/test_modo_da_mesa.py
 tests/test_motor_de_saida_global.py
 tests/test_mt5_workers.py
+tests/test_multimercado.py
 tests/test_news_analyst_prompt.py
 tests/test_news_lookahead.py
 tests/test_no_data_handling.py
@@ -310,6 +317,7 @@ tradingagents/desk/context.py
 tradingagents/desk/costs.py
 tradingagents/desk/escola.py
 tradingagents/desk/evaluation.py
+tradingagents/desk/evolucao.py
 tradingagents/desk/execution.py
 tradingagents/desk/identity.py
 tradingagents/desk/intents.py
@@ -320,6 +328,7 @@ tradingagents/desk/ledger.py
 tradingagents/desk/maestro.py
 tradingagents/desk/manual.py
 tradingagents/desk/market.py
+tradingagents/desk/mercados.py
 tradingagents/desk/models.py
 tradingagents/desk/modo.py
 tradingagents/desk/notificacao_viva.py

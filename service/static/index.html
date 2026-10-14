@@ -89,6 +89,18 @@
       <div class="card span-6"><h3>Notificações — canais</h3><div id="notifCanais"><div class="muted">Carregando...</div></div><div class="form-grid"><div><label>Telegram — token do bot <span id="s_ALERTA_TELEGRAM_TOKEN" class="config-status"></span></label><input class="input" id="ALERTA_TELEGRAM_TOKEN" type="password"></div><div><label>Telegram — chat id <span id="s_ALERTA_TELEGRAM_CHAT" class="config-status"></span></label><input class="input" id="ALERTA_TELEGRAM_CHAT"></div><div><label>Telegram — segredo do webhook <span id="s_ALERTA_TELEGRAM_WEBHOOK_SECRET" class="config-status"></span></label><input class="input" id="ALERTA_TELEGRAM_WEBHOOK_SECRET" type="password"></div><div><label>Webhook genérico (opcional) <span id="s_ALERTA_WEBHOOK_URL" class="config-status"></span></label><input class="input" id="ALERTA_WEBHOOK_URL" type="password"></div><div><label>Discord — webhook <span id="s_ALERTA_DISCORD_WEBHOOK" class="config-status"></span></label><input class="input" id="ALERTA_DISCORD_WEBHOOK" type="password"></div><div><label>Windows — toast nativo</label><select id="ALERTA_WINDOWS"><option value="true">Ativo</option><option value="false">Desligado</option></select></div><div><label>WhatsApp — token (opcional) <span id="s_ALERTA_WHATSAPP_TOKEN" class="config-status"></span></label><input class="input" id="ALERTA_WHATSAPP_TOKEN" type="password"></div><div><label>WhatsApp — phone id</label><input class="input" id="ALERTA_WHATSAPP_PHONE"></div><div><label>WhatsApp — destino</label><input class="input" id="ALERTA_WHATSAPP_DESTINO"></div><div><label>Web Push — estrutura <select id="ALERTA_WEBPUSH"><option value="false">Desligado</option><option value="true">Ligado</option></select></label></div><div><label>SMTP — servidor <span id="s_EMAIL_SMTP_HOST" class="config-status"></span></label><input class="input" id="EMAIL_SMTP_HOST"></div><div><label>SMTP — porta</label><input class="input" id="EMAIL_SMTP_PORT" placeholder="587"></div><div><label>SMTP — usuário</label><input class="input" id="EMAIL_SMTP_USER"></div><div><label>SMTP — senha <span id="s_EMAIL_SMTP_PASS" class="config-status"></span></label><input class="input" id="EMAIL_SMTP_PASS" type="password"></div><div><label>SMTP — de</label><input class="input" id="EMAIL_SMTP_FROM"></div><div><label>SMTP — para (relatórios)</label><input class="input" id="EMAIL_SMTP_TO"></div></div><p class="muted">Telegram é o canal principal; toast do Windows e Caixa de entrada do painel funcionam sem configuração. Discord/WhatsApp/Web Push são opcionais. E-mail é EXCLUSIVO de relatórios — alertas nunca vão por e-mail. Cada canal tem botão <b>Testar</b> que envia uma mensagem real e mostra a latência.</p></div>
       <div class="card span-6"><h3>Caixa de entrada</h3><p class="muted">O que exigiria sua atenção, com estado de leitura. Alerta vencido aparece marcado — nunca como oportunidade atual.</p><div id="notifInbox"><div class="muted">Carregando...</div></div><div class="actions"><button class="btn secondary" onclick="notifLoad()">Atualizar</button></div></div>
       <div class="card span-12"><h3>Matriz de roteamento</h3><textarea class="input mono" id="notifMatriz" rows="5" placeholder='[{"escopo":{"ativo":"BTC/USDT"},"canais":["telegram","painel"]}]'></textarea><div class="actions"><button class="btn primary" onclick="notifMatrizSalvar()">Salvar matriz</button></div><p class="muted">Sem regras, todos os alertas vão para os canais padrão. Escopos aceitos: trader, estrategia, corretora, ativo, severidade_min; canais: telegram, windows, discord, whatsapp, webpush, painel.</p></div>
+      <div class="card span-12"><h3>Aplicativo e Notificações Push (celular)</h3>
+        <div id="pwaEstado" class="muted">Carregando...</div>
+        <div class="actions">
+          <button class="btn secondary hide" id="btnPwaInstalar" onclick="pwaInstalar()">Instalar aplicativo</button>
+          <button class="btn secondary" id="btnPwaAtivar" onclick="pwaAtivar()">Ativar notificações neste aparelho</button>
+          <button class="btn secondary" onclick="pwaTestar()">Testar push</button>
+          <button class="btn secondary" onclick="pwaGerarChaves()">Gerar chaves VAPID</button>
+          <button class="btn secondary" onclick="pwaLoad()">Atualizar</button>
+        </div>
+        <div id="pwaDicas" class="muted"></div>
+        <div id="pwaDispositivos"></div>
+        <p class="muted">O aplicativo instalado no celular recebe os MESMOS alertas desta tela (fila durável do Centro de Alertas — não é um segundo sistema). Android/desktop: use o botão Instalar quando ele aparecer. iPhone: <b>Compartilhar → Adicionar à Tela de Início</b> e abra por lá — aba comum do Safari não recebe push. O toque na notificação abre esta área autenticada; nenhum dado financeiro vai na URL.</p></div>
     </div></section>
     <section id="page-analysis" class="page"><div class="page-head"><div><h2>Análises</h2><p>Dispare e acompanhe pesquisas multiagente isoladas por tenant.</p></div><button class="btn secondary" onclick="loadJobs()">Atualizar</button></div><div class="grid"><div class="card span-4"><h3>Nova análise</h3><div class="field"><label>Ativo</label><input class="input" id="ticker" placeholder="NVDA ou BTC-USD"></div><div class="field"><label>Data</label><input class="input" id="tradeDate" type="date"></div><button class="btn primary full" onclick="submitJob()">Iniciar análise</button></div><div class="card span-8"><h3>Fila e resultados</h3><div id="jobs"><div class="muted">Nenhuma análise.</div></div></div></div></section>
     <section id="page-mesa" class="page"><div class="page-head"><div><h2>Mesa de Agentes</h2><p>Traders com estratégias distintas operam em ciclos: propõem, disputam capital, o risco veta, a execução acompanha e a contabilidade registra. Modo PAPER.</p></div><button class="btn secondary" onclick="deskLoad()">Atualizar</button></div>
@@ -211,12 +223,12 @@ async function carregarEstadoOperacional(){
 
 async function boot(){renderNav();$('tradeDate').value=new Date(Date.now()-864e5).toISOString().slice(0,10);carregarEstadoDoPortao();let status=null;try{const r=await fetch('/v1/auth/status');if(r.ok)status=await r.json()}catch(e){}if(!status){showAuth('Não foi possível falar com o servidor local. Tente novamente em instantes.');return}if(status.multi_tenant===false){ownerMode=true;$('quitAppBtn').classList.remove('hide')}else{showAuth('Este aplicativo roda em modo Dono Único — use o instalador do Windows.')}if(status.setup_required){mostrarSetup();return}if(token()){const me=await api('/v1/auth/me');if(me.ok)return enterApp(me.data)}showAuth()}
 async function login(){const senha=$('loginPassword').value;if(!senha)return msgAuth('Informe a senha do dono.');await comCarregando($('btnEntrar'),'Entrando…',async()=>{let r;try{r=await fetch('/v1/auth/me',{headers:{'Authorization':'Bearer '+senha}})}catch{r=null}if(!r)return msgAuth('Não foi possível falar com o servidor local. Tente novamente.');if(r.status===409)return mostrarSetup();if(r.status===401)return msgAuth('Senha incorreta. Confira e tente de novo — maiúsculas e acentos contam.');if(r.status===429){const d=await r.json().catch(()=>({}));return msgAuth(d.detail||'Muitas tentativas. Aguarde alguns minutos.','warn')}if(!r.ok)return msgAuth('Falha ao entrar (código '+r.status+').');sessionStorage.setItem('dz23_token',senha);const me=await api('/v1/auth/me');if(me.ok){$('loginPassword').value='';return enterApp(me.data)}msgAuth('Falha ao carregar a sessão. Tente novamente.')})}
-function enterApp(me){carregarEstadoOperacional();principal=me;$('authGate').classList.add('hide');$('app').classList.remove('hide');$('userEmail').textContent=me.email;$('tenantId').textContent=me.tenant_id;$('roleBadge').textContent=me.role.toUpperCase();showPage('overview')}
+function enterApp(me){pwaRegistrarSW();carregarEstadoOperacional();principal=me;$('authGate').classList.add('hide');$('app').classList.remove('hide');$('userEmail').textContent=me.email;$('tenantId').textContent=me.tenant_id;$('roleBadge').textContent=me.role.toUpperCase();showPage('overview')}
 async function logout(){await api('/v1/auth/logout',{method:'POST'});sessionStorage.removeItem('dz23_token');location.reload()}
 async function quitApp(){if(!confirm('Encerrar o aplicativo DZ23? O servidor local será desligado; depois você pode fechar esta aba.'))return;const r=await fetch('/v1/app/quit',{method:'POST',headers:{'Authorization':'Bearer '+token()}});if(!r.ok){const d=await r.json().catch(()=>({}));return toast(d.detail||'Falha ao encerrar','bad')}document.body.innerHTML='<main style="padding:48px;font-family:system-ui,sans-serif"><h1>DZ23 Trading AI encerrado</h1><p>O servidor local foi desligado. Você já pode fechar esta aba do navegador.</p></main>'}
 async function refreshOverview(){const [ready,agency,jobs,events]=await Promise.all([fetch('/readyz').then(r=>r.json()).catch(()=>({status:'offline'})),api('/v1/agency/health'),api('/v1/jobs/health'),api('/v1/agency/events')]);$('appStatus').textContent=ready.status.toUpperCase();$('appStatus').className=ready.status==='ready'?'ok':'warn';$('appDetail').textContent='API e execução';$('jobBackend').textContent=(jobs.data.backend||'—').toUpperCase();$('agentCount').textContent=agency.data.agents??'—';loadChecklist();$('healthList').innerHTML=[['API',ready.status],['Job ledger',jobs.data.status],['Agência',agency.data.status||'ready'],['Live trading','blocked']].map(([k,v])=>`<div class="metric-line"><span>${k}</span><b><i class="status-dot ${['ready','ok'].includes(v)?'good':v==='blocked'?'fail':''}"></i>${String(v).toUpperCase()}</b></div>`).join('');renderEvents(events.data.events||[],'overviewEvents')}
 function renderEvents(events,target){$(target).innerHTML=events.slice(-12).reverse().map(e=>`<div class="event"><b>${e.event_type}</b><small>${e.event?.aggregate_id||'agency'} · seq ${e.sequence}</small></div>`).join('')||'<div class="muted">Nenhum evento.</div>'}
-async function loadConfig(){const r=await api('/v1/config');if(!r.ok)return toast(r.data.detail||'Falha ao carregar','bad');for(const k of CFG_KEYS){const el=$(k),s=$('s_'+k),v=r.data.config?.[k];if(!el||!v)continue;if(v.value&&el.type!=='password')el.value=v.value;if(s)s.textContent=v.set?'CONFIGURADA'+(v.hint?' '+v.hint:''):'NÃO CONFIGURADA';if(v.set&&el.type==='password')el.placeholder='Configurada — preencha apenas para trocar'};deskModoLoad();notifLoad()}
+async function loadConfig(){const r=await api('/v1/config');if(!r.ok)return toast(r.data.detail||'Falha ao carregar','bad');for(const k of CFG_KEYS){const el=$(k),s=$('s_'+k),v=r.data.config?.[k];if(!el||!v)continue;if(v.value&&el.type!=='password')el.value=v.value;if(s)s.textContent=v.set?'CONFIGURADA'+(v.hint?' '+v.hint:''):'NÃO CONFIGURADA';if(v.set&&el.type==='password')el.placeholder='Configurada — preencha apenas para trocar'};deskModoLoad();notifLoad();pwaLoad()}
 async function saveConfig(){const vars={};for(const k of CFG_KEYS){const el=$(k);if(el&&el.value.trim())vars[k]=el.value.trim()}if(!Object.keys(vars).length)return toast('Nada para salvar','warn');const r=await api('/v1/config',{method:'POST',body:JSON.stringify({vars})});if(!r.ok)return toast(r.data.detail||'Falha ao salvar','bad');document.querySelectorAll('#page-config input[type=password]').forEach(e=>e.value='');toast('Configurações salvas no tenant');loadConfig()}
 async function notifLoad(){const[c,i,m]=await Promise.all([api('/v1/notificacoes/canais'),api('/v1/notificacoes/inbox'),api('/v1/notificacoes/matriz')]);
 if(c.ok)$('notifCanais').innerHTML=c.data.canais.map(x=>`<div class="metric-line"><span>${escapeHtml(x.nome)} ${x.configurado?'<b class="ok">configurado</b>':'<small class="muted">'+escapeHtml(x.detalhe||'não configurado')+'</small>'}</span><span>${x.ultimo_teste?'<small class="muted">testado '+escapeHtml(String(x.ultimo_teste).slice(0,16))+'</small> ':''}<button class="btn secondary" onclick="notifTestar('${x.nome}')">Testar</button></span></div>`).join('');
@@ -317,5 +329,72 @@ async function manualAlertas(id){const r=await api('/v1/manual/positions/'+encod
 async function manualAckIdx(j){const a=manualAlertasCache[j];if(!a)return;const r=await api('/v1/manual/alerts/'+encodeURIComponent(a.id)+'/ack',{method:'POST',body:'{}'});if(!r.ok)return toast(r.data.detail||'Falha ao marcar como lido','bad');toast('Alerta marcado como lido.');if(manualSel)manualAlertas(manualSel)}
 async function manualHealth(){const r=await api('/v1/manual/monitor/health');if(!r.ok)return toast(r.data.detail||'Falha ao consultar o monitor','bad');$('manualMonitor').innerHTML=manLines(r.data.monitor||{});toast('Monitor verificado.')}
 function manualFecharDetalhe(){manualSel=null;manualVer=null;$('manualDetalheCard').classList.add('hide')}
+let pwaPrompt=null;
+window.addEventListener('beforeinstallprompt',evento=>{evento.preventDefault();pwaPrompt=evento;const b=$('btnPwaInstalar');if(b)b.classList.remove('hide')});
+function pwaB64u(valor){const b64=(valor+'='.repeat((4-valor.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/');const cru=atob(b64);return Uint8Array.from(cru,c=>c.charCodeAt(0))}
+function pwaRegistrarSW(){if(!('serviceWorker' in navigator)||!window.isSecureContext)return Promise.resolve(null);return navigator.serviceWorker.register('/sw.js',{updateViaCache:'none'}).catch(()=>null)}
+async function pwaInstalar(){if(!pwaPrompt)return;await pwaPrompt.prompt();pwaPrompt=null;const b=$('btnPwaInstalar');if(b)b.classList.add('hide')}
+function pwaPermissaoTexto(){if(!('Notification' in window))return 'sem suporte a notificações do navegador';return {granted:'ativada',denied:'bloqueada pelo navegador',default:'ainda não pedida'}[Notification.permission]||String(Notification.permission)}
+async function pwaLoad(){
+  const linhas=[];
+  const seguro=!!window.isSecureContext,temSW='serviceWorker' in navigator,temPush='PushManager' in window&&'Notification' in window;
+  if(!seguro)linhas.push('<b class="warn">endereço inseguro</b> — push e instalação exigem HTTPS ou localhost; neste endereço o navegador não permite');
+  else if(!temSW)linhas.push('<b class="warn">navegador sem Service Worker</b> — atualize o navegador para instalar o aplicativo');
+  else{const reg=await pwaRegistrarSW();const ativa=reg?await navigator.serviceWorker.getRegistration('/'):null;linhas.push(ativa?'aplicativo (Service Worker) ativo':'Service Worker indisponível agora')}
+  if(temPush)linhas.push('permissão de notificação: <b>'+pwaPermissaoTexto()+'</b>');
+  const iOS=/iPhone|iPad|iPod/.test(navigator.userAgent),standalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+  const dicas=[];
+  if(iOS&&!standalone)dicas.push('iPhone: toque em <b>Compartilhar → Adicionar à Tela de Início</b> e abra o app por lá — no Safari em aba comum o push não é entregue.');
+  if(iOS&&standalone)dicas.push('Aplicativo aberto da Tela de Início — modo ideal para receber push no iPhone.');
+  const r=await api('/v1/push/estado');
+  if(r.ok){
+    const d=r.data||{};
+    linhas.push(d.pywebpush?'servidor com Web Push instalado':'<b class="warn">servidor sem o extra [push]</b> — o envio fica honestamente desligado');
+    linhas.push(d.vapid_publica?'chaves VAPID geradas':'<b class="warn">sem chaves VAPID</b> — gere para ativar');
+    linhas.push(String(d.total??0)+' aparelho(s) inscrito(s) de '+String(d.limite??0)+(d.habilitado?'':' · canal desligado nas configurações'));
+    $('pwaDispositivos').innerHTML=(d.dispositivos||[]).length?'<div class="muted">Aparelhos inscritos:</div>'+d.dispositivos.map(x=>'<div class="metric-line"><span>'+escapeHtml(x.rotulo||'aparelho')+' <small class="muted">'+escapeHtml(x.id)+'</small></span><span><small class="muted">'+(x.ultimo_ok?'último envio '+escapeHtml(String(x.ultimo_ok).slice(0,16)):x.ultimo_erro?'falha: '+escapeHtml(x.ultimo_erro):'sem envios ainda')+'</small> <button class="btn secondary" onclick="pwaCancelar(\''+escapeHtml(x.id)+'\')">Remover</button></span></div>').join(''):'<div class="muted">Nenhum aparelho inscrito ainda.</div>'
+  }
+  $('pwaEstado').innerHTML=linhas.join(' · ');
+  $('pwaDicas').innerHTML=dicas.join('<br>');
+  const b=$('btnPwaAtivar');if(b)b.disabled=!(seguro&&temSW&&temPush);
+}
+async function pwaAtivar(){
+  if(!window.isSecureContext)return toast('Push exige HTTPS ou localhost — abra o painel no endereço seguro do servidor.','warn');
+  if(!('serviceWorker' in navigator)||!('PushManager' in window))return toast('Este navegador não suporta notificações push.','warn');
+  const reg=await pwaRegistrarSW();if(!reg)return toast('Falha ao registrar o aplicativo (Service Worker).','bad');
+  if(await Notification.requestPermission()!=='granted')return toast('Permissão bloqueada — libere as notificações deste site nas configurações do navegador.','warn');
+  const r=await api('/v1/push/estado');if(!r.ok)return toast(r.data.detail||'Falha ao ler o estado do push','bad');
+  if(!r.data.vapid_publica)return toast('Gere as chaves VAPID primeiro e tente de novo.','warn');
+  let assinatura;
+  try{assinatura=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:pwaB64u(r.data.vapid_publica)})}
+  catch(erro){return toast('O navegador recusou a inscrição: '+(erro&&erro.message||erro),'bad')}
+  const json=assinatura.toJSON();
+  const rotulo=(/iPhone|iPad|iPod/.test(navigator.userAgent)?'iPhone/iPad':/Android/.test(navigator.userAgent)?'Android':'Computador')+' — '+new Date().toLocaleDateString('pt-BR');
+  const salvo=await api('/v1/push/assinar',{method:'POST',body:JSON.stringify({endpoint:json.endpoint,keys:{p256dh:json.keys.p256dh,auth:json.keys.auth},rotulo})});
+  if(!salvo.ok)return toast(salvo.data.detail||'Falha ao inscrever o aparelho','bad');
+  toast('Aparelho inscrito. Toque em Testar push para confirmar que a notificação CHEGA.','ok');
+  pwaLoad();
+}
+async function pwaTestar(){await notifTestar('webpush')}
+async function pwaGerarChaves(){
+  const r=await api('/v1/push/vapid/gerar',{method:'POST',body:JSON.stringify({})});
+  if(r.status===409){
+    if(!confirm('Já existem chaves VAPID. Trocá-las invalida TODOS os aparelhos já inscritos (será preciso inscrevê-los de novo). Substituir?'))return;
+    const r2=await api('/v1/push/vapid/gerar',{method:'POST',body:JSON.stringify({forcar:true})});
+    if(!r2.ok)return toast(r2.data.detail||'Falha ao gerar as chaves','bad');
+    toast('Chaves novas geradas — inscreva os aparelhos de novo.','warn');
+    return pwaLoad();
+  }
+  if(!r.ok)return toast(r.data.detail||'Falha ao gerar as chaves','bad');
+  toast('Chaves VAPID geradas. Agora toque em Ativar notificações neste aparelho.','ok');
+  pwaLoad();
+}
+async function pwaCancelar(id){
+  if(!confirm('Remover este aparelho das notificações?'))return;
+  const r=await api('/v1/push/cancelar',{method:'POST',body:JSON.stringify({id})});
+  if(!r.ok)return toast(r.data.detail||'Falha ao remover o aparelho','bad');
+  toast('Aparelho removido.','ok');
+  pwaLoad();
+}
 function escapeHtml(value){return String(value??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}boot();
 </script></body></html>

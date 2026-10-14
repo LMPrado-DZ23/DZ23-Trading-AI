@@ -236,7 +236,7 @@ def test_login_responsivo_sem_corte_nem_rolagem_horizontal(page, live_server, ev
     # O portão precisa caber inteiro nas larguras reais de uso (desktop,
     # notebook, tablet e celular estreito): nada de campo/botão/erro cortado
     # e nada de rolagem horizontal acidental.
-    tamanhos = [(1920, 1080), (1366, 768), (768, 1024), (390, 844), (360, 640)]
+    tamanhos = [(1920, 1080), (1366, 768), (768, 1024), (390, 844), (360, 640), (320, 568)]
     for largura, altura in tamanhos:
         page.set_viewport_size({"width": largura, "height": altura})
         page.goto(f"{live_server}/app")
@@ -264,6 +264,36 @@ def test_login_responsivo_sem_corte_nem_rolagem_horizontal(page, live_server, ev
         )
 
         page.screenshot(path=str(evidence_dir / f"07-login-{largura}x{altura}.png"))
+
+
+def test_pwa_service_worker_ativo_e_estado_honesto(page, live_server, owner_password, evidence_dir):
+    # O PWA é o painel EXISTENTE instalável: em localhost (contexto seguro)
+    # o Service Worker se registra, o card mostra o estado REAL do push e o
+    # botão Instalar jamais aparece sem o navegador oferecer a capacidade.
+    entrar_como_dono(page, live_server, owner_password)
+    page.locator('[data-page="config"]').first.click()
+    expect(page.locator("#page-config")).to_have_class(re.compile(r"\bactive\b"))
+
+    resposta = page.request.get(f"{live_server}/sw.js")
+    assert resposta.status == 200
+    assert resposta.headers.get("service-worker-allowed") == "/"
+
+    # O painel registra o SW sozinho ao entrar (updateViaCache none).
+    page.wait_for_function(
+        "navigator.serviceWorker.getRegistration('/').then(r => !!r)",
+        timeout=15000)
+
+    expect(page.locator("#page-config")).to_contain_text("Aplicativo e Notificações Push")
+    estado = page.locator("#pwaEstado")
+    expect(estado).to_contain_text("VAPID", timeout=15000)
+    expect(estado).to_contain_text("aparelho(s) inscrito(s)")
+    expect(estado).to_contain_text("permissão de notificação:")
+    # Honestidade do servidor: ou tem o extra [push], ou diz que não tem.
+    expect(estado).to_contain_text(re.compile(r"servidor (com Web Push instalado|sem o extra \[push\])"))
+    # Em localhost a capacidade existe: o botão de ativar fica habilitado.
+    expect(page.locator("#btnPwaAtivar")).to_be_enabled()
+
+    page.screenshot(path=str(evidence_dir / "08-pwa-config.png"))
 
 
 def test_minhas_operacoes_copiloto_manual_ponta_a_ponta(page, live_server, owner_password, evidence_dir):

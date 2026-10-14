@@ -46,6 +46,8 @@ dev = [
     "pytest-subtests>=0.13",
     # Hash de senha do dono (Argon2id) nos testes de autenticação.
     "argon2-cffi>=23.1.0",
+    # Web Push (VAPID) nos testes do canal — cripto REAL, envio monkeypatched.
+    "pywebpush>=2.0.3",
     # Leitura de TOML nos testes: stdlib `tomllib` só a partir do 3.11.
     "tomli>=2.0.1; python_version < '3.11'",
 ]
@@ -63,6 +65,15 @@ desk = [
     "ccxt>=4.5.0",
     # Senha do dono guardada como hash Argon2id (nunca em texto puro).
     "argon2-cffi>=23.1.0",
+]
+# Web Push real (VAPID) do servidor 24/7 com HTTPS — Oracle (RUNBOOK.md).
+# Fora do `desk` de propósito: o bundle Windows congelado não precisa dele
+# (o push serve ao celular apontando para o servidor público), e um extra
+# separado mantém o exe inalterado. Import é LAZY: sem o pacote o canal
+# reporta o estado honesto e nada quebra.
+#   pip install "tradingagents[push]"
+push = [
+    "pywebpush>=2.0.3",
 ]
 
 [project.scripts]

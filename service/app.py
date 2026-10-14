@@ -204,6 +204,7 @@ ALLOWED_KEYS = [
     "ALERTA_TELEGRAM_WEBHOOK_SECRET", "ALERTA_DISCORD_WEBHOOK",
     "ALERTA_WHATSAPP_TOKEN", "ALERTA_WHATSAPP_PHONE", "ALERTA_WHATSAPP_DESTINO",
     "ALERTA_WINDOWS", "ALERTA_WEBPUSH", "ALERTA_VAPID_PUBLICA",
+    "ALERTA_VAPID_PRIVADA", "PUSH_ASSINATURAS",
     "EMAIL_SMTP_HOST", "EMAIL_SMTP_PORT", "EMAIL_SMTP_USER", "EMAIL_SMTP_PASS",
     "EMAIL_SMTP_FROM", "EMAIL_SMTP_TO",
     "TRANSPARENCIA_PUBLICA", "TRANSPARENCIA_NOME",
@@ -220,6 +221,9 @@ SEGREDOS_DECLARADOS = {
     "ALERTA_TELEGRAM_TOKEN", "ALERTA_TELEGRAM_CHAT", "ALERTA_WEBHOOK_URL",
     "ALERTA_TELEGRAM_WEBHOOK_SECRET", "ALERTA_DISCORD_WEBHOOK",
     "ALERTA_WHATSAPP_TOKEN", "EMAIL_SMTP_PASS",
+    # Chave privada VAPID e assinaturas push (endpoint carrega capacidade):
+    # passam pela cifragem em repouso do SEC-1 como qualquer segredo.
+    "ALERTA_VAPID_PRIVADA", "PUSH_ASSINATURAS",
     "LIVE_TRADING_CONFIRM",
 }
 # Rede de segurança: qualquer chave futura com cara de credencial também
@@ -957,6 +961,43 @@ def manifest():
     """Manifesto PWA: o painel instalável herda a identidade DZ23."""
     return FileResponse(STATIC / "manifest.webmanifest",
                         media_type="application/manifest+json")
+
+
+@app.get("/sw.js", include_in_schema=False)
+def service_worker():
+    """Service Worker do PWA. Escopo raiz exige o header abaixo; o arquivo
+    versiona o cache e NUNCA guarda página autenticada nem dado de /v1."""
+    return FileResponse(STATIC / "sw.js", media_type="application/javascript",
+                        headers={"Cache-Control": "no-cache",
+                                 "Service-Worker-Allowed": "/"})
+
+
+# CSP/anti-cache do painel: o app instalado (PWA) roda em contexto seguro;
+# respostas autenticadas não podem ficar em cache de proxy/navegador.
+# O Floor é embutido same-origin no painel (X-Frame-Options SAMEORIGIN):
+# frame-ancestors 'self' lá mantém o iframe vivo e ainda barra sites externos.
+_CSP_BASE = ("default-src 'self'; script-src 'self' 'unsafe-inline'; "
+             "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+             "font-src 'self' data:; connect-src 'self'; "
+             "base-uri 'self'; form-action 'self'; frame-ancestors ")
+_CSP_PAINEL = _CSP_BASE + "'none'"
+_CSP_FLOOR = _CSP_BASE + "'self'"
+
+
+@app.middleware("http")
+async def cabecalhos_de_seguranca(request, call_next):
+    resposta = await call_next(request)
+    caminho = request.url.path
+    if caminho.startswith("/v1") or caminho in ("/app", "/app/"):
+        resposta.headers.setdefault("Cache-Control", "no-store")
+    if resposta.headers.get("content-type", "").startswith("text/html"):
+        resposta.headers.setdefault(
+            "Content-Security-Policy",
+            _CSP_FLOOR if caminho == "/floor" else _CSP_PAINEL,
+        )
+    resposta.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resposta.headers.setdefault("Referrer-Policy", "same-origin")
+    return resposta
 
 @app.get("/v1/config")
 def get_cfg(request: Request, _=Depends(auth)):
@@ -1920,14 +1961,43 @@ def _matriz_alertas(tenant_id: str):
     return MatrizDeRoteamento.from_dict(doc)
 
 
+def _push_do_tenant(tenant_id: str):
+    """Assinaturas push do dono + entregador VAPID pronto para uso.
+
+    Multi-dispositivo (PWA): cada aparelho tem sua assinatura; o envio usa a
+    chave VAPID privada do tenant. Assinatura expirada (404/410 do push
+    service) é podada da configuração — nunca silenciosamente reutilizada.
+    """
+    from tradingagents.desk import push_web
+    cfg = load_cfg(tenant_id)
+    assinaturas = push_web.carregar_assinaturas(cfg)
+
+    def podar(expiradas):
+        ids = {a.identificador() for a in expiradas}
+        atual = load_cfg(tenant_id)
+        restantes = [a for a in push_web.carregar_assinaturas(atual)
+                     if a.identificador() not in ids]
+        save_cfg(push_web.salvar_assinaturas(atual, restantes), tenant_id)
+
+    entregador = push_web.EntregadorPush(
+        assinaturas,
+        vapid_privada=cfg.get("ALERTA_VAPID_PRIVADA", ""),
+        vapid_publica=cfg.get("ALERTA_VAPID_PUBLICA", ""),
+        podar=podar)
+    return assinaturas, entregador
+
+
 def _despachar_alertas(tenant_id: str) -> dict:
     """Tenta entregar o que está pendente, respeitando backoff e rate limit."""
     from tradingagents.desk.canais_alerta import construir_canais
     from tradingagents.desk.notificacao_viva import Despachante
     fila = _fila_alertas(tenant_id)
+    assinaturas, entregador = _push_do_tenant(tenant_id)
     canais = construir_canais(
         load_cfg(tenant_id),
-        transportes=_TESTE_CANAL_TRANSPORTES.get(tenant_id))
+        transportes=_TESTE_CANAL_TRANSPORTES.get(tenant_id),
+        assinaturas_webpush=assinaturas,
+        entregador_webpush=entregador)
     despachante = Despachante(fila, canais, matriz=_matriz_alertas(tenant_id))
     resultado = despachante.despachar()
     _persistir_fila_alertas(tenant_id)
@@ -3575,8 +3645,10 @@ def listar_alertas(request: Request, _=Depends(auth)):
     alertas = _estado_para_alertas(d)
     fila = _fila_alertas(tid)
     from tradingagents.desk.canais_alerta import construir_canais
+    assinaturas, _entregador = _push_do_tenant(tid)
     canais = construir_canais(load_cfg(tid),
-                              transportes=_TESTE_CANAL_TRANSPORTES.get(tid))
+                              transportes=_TESTE_CANAL_TRANSPORTES.get(tid),
+                              assinaturas_webpush=assinaturas)
     historico = [{"em": a.criado_em, "codigo": a.tipo,
                   "severidade": a.severidade, "titulo": a.titulo,
                   "detalhe": a.detalhe, "acao": a.acao, "estado": a.estado,
@@ -3620,8 +3692,10 @@ def disparar_alertas(request: Request, _=Depends(auth)):
 def canais_de_notificacao(request: Request, _=Depends(auth)):
     tid = request_tenant(request)
     from tradingagents.desk.canais_alerta import construir_canais
+    assinaturas, _entregador = _push_do_tenant(tid)
     canais = construir_canais(load_cfg(tid),
-                              transportes=_TESTE_CANAL_TRANSPORTES.get(tid))
+                              transportes=_TESTE_CANAL_TRANSPORTES.get(tid),
+                              assinaturas_webpush=assinaturas)
     d = _DESKS.get(tid) or {}
     ultimos = d.get("testes_canal") or {}
     return {"canais": [{"nome": c.nome, "prioridade": c.prioridade,
@@ -3644,8 +3718,10 @@ async def testar_canal_de_notificacao(req: Request, _=Depends(auth)):
     nome = str(body.get("canal") or "").strip()
     from tradingagents.desk.canais_alerta import construir_canais
     from tradingagents.desk.models import utcnow
+    assinaturas, entregador = _push_do_tenant(tid)
     canais = {c.nome: c for c in construir_canais(
-        load_cfg(tid), transportes=_TESTE_CANAL_TRANSPORTES.get(tid))}
+        load_cfg(tid), transportes=_TESTE_CANAL_TRANSPORTES.get(tid),
+        assinaturas_webpush=assinaturas, entregador_webpush=entregador)}
     canal = canais.get(nome)
     if canal is None:
         raise HTTPException(400, "canal desconhecido — opções: "
@@ -3731,6 +3807,107 @@ async def salvar_matriz_de_notificacao(req: Request, _=Depends(auth)):
     matriz = MatrizDeRoteamento(body.get("regras") or [])
     d["armazem"].salvar(tid, "alertas_matriz", {"regras": matriz.regras})
     return {"ok": True, **matriz.to_dict()}
+
+
+# ===================================================== PWA + PUSH (celular)
+# O painel instalado no celular recebe os MESMOS alertas do Centro (nunca
+# um segundo sistema). Chaves VAPID e inscrições ficam no config do dono
+# (cifradas em repouso, SEC-1); estas rotas NUNCA ecoam a chave privada
+# nem o endpoint das inscrições.
+@app.get("/v1/push/estado")
+def push_estado(request: Request, _=Depends(auth)):
+    from tradingagents.desk import push_web
+    tid = request_tenant(request)
+    estado = push_web.estado_publico(load_cfg(tid))
+    estado["como_usar"] = (
+        "1) gere as chaves VAPID; 2) no celular, toque em Ativar "
+        "notificações e aceite o pedido do navegador; 3) confirme em "
+        "Testar canal. No iPhone o push só funciona com o app na Tela de "
+        "Início (aba comum do Safari não entrega).")
+    return estado
+
+
+@app.post("/v1/push/vapid/gerar")
+async def push_vapid_gerar(req: Request, _=Depends(auth)):
+    """Gera o par VAPID. Sem `forcar`, não sobrescreve chaves existentes —
+    trocar a chave invalida TODAS as inscrições já feitas."""
+    from tradingagents.desk import push_web
+    tid = request_tenant(req)
+    body = await _json_body(req)
+    cfg = load_cfg(tid)
+    if str(cfg.get(push_web.CHAVE_VAPID_PRIVADA) or "").strip() and not body.get("forcar"):
+        raise HTTPException(409, "já existem chaves VAPID — trocá-las "
+                                 "invalida a inscrição dos aparelhos; "
+                                 "repita com forcar=true para substituir")
+    try:
+        par = push_web.gerar_chaves_vapid()
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    cfg[push_web.CHAVE_VAPID_PUBLICA] = par["publica"]
+    cfg[push_web.CHAVE_VAPID_PRIVADA] = par["privada_pem"]
+    cfg["ALERTA_WEBPUSH"] = "true"
+    if body.get("forcar"):
+        cfg[push_web.CHAVE_ASSINATURAS] = "[]"
+    save_cfg(cfg, tid)
+    return {"ok": True, "publica": par["publica"],
+            "assinaturas_zeradas": bool(body.get("forcar"))}
+
+
+@app.post("/v1/push/assinar")
+async def push_assinar(req: Request, _=Depends(auth)):
+    """Registra a inscrição do navegador desta instalação do PWA."""
+    from tradingagents.desk import push_web
+    from tradingagents.desk.models import utcnow
+    tid = request_tenant(req)
+    body = await _json_body(req)
+    cfg = load_cfg(tid)
+    if not str(cfg.get(push_web.CHAVE_VAPID_PUBLICA) or "").strip():
+        raise HTTPException(409, "gere as chaves VAPID antes de inscrever "
+                                 "um aparelho")
+    nova = push_web.AssinaturaPush.from_dict(body or {})
+    motivo = nova.validar()
+    if motivo:
+        raise HTTPException(400, motivo)
+    assinaturas = push_web.carregar_assinaturas(cfg)
+    alvo = nova.identificador()
+    existente = next((a for a in assinaturas
+                      if a.identificador() == alvo), None)
+    if existente is None:
+        if len(assinaturas) >= push_web.LIMITE_DISPOSITIVOS:
+            raise HTTPException(409, f"limite de {push_web.LIMITE_DISPOSITIVOS} "
+                                     "aparelhos atingido — cancele um antes "
+                                     "de inscrever outro")
+        nova.criado_em = utcnow().isoformat(timespec="seconds")
+        assinaturas.append(nova)
+    else:
+        # Reassinar o MESMO aparelho é rotina (o navegador troca as chaves):
+        # preserva o histórico e atualiza as chaves.
+        existente.p256dh, existente.auth = nova.p256dh, nova.auth
+        if nova.rotulo:
+            existente.rotulo = nova.rotulo
+    push_web.salvar_assinaturas(cfg, assinaturas)
+    save_cfg(cfg, tid)
+    return {"ok": True, "id": alvo, "total": len(assinaturas),
+            "aviso": ("mande um teste para confirmar que o push CHEGA "
+                      "(Testar canal) — inscrição sozinha não prova entrega")}
+
+
+@app.post("/v1/push/cancelar")
+async def push_cancelar(req: Request, _=Depends(auth)):
+    """Remove a inscrição de um aparelho pelo id curto mostrado no painel."""
+    from tradingagents.desk import push_web
+    tid = request_tenant(req)
+    body = await _json_body(req)
+    alvo = str(body.get("id") or "").strip()
+    if not alvo:
+        raise HTTPException(422, "informe o id do aparelho")
+    cfg = load_cfg(tid)
+    assinaturas = push_web.carregar_assinaturas(cfg)
+    restantes = [a for a in assinaturas if a.identificador() != alvo]
+    if len(restantes) == len(assinaturas):
+        raise HTTPException(404, "aparelho não encontrado")
+    save_cfg(push_web.salvar_assinaturas(cfg, restantes), tid)
+    return {"ok": True, "removidos": 1, "total": len(restantes)}
 
 
 @app.post("/v1/telegram/webhook")
