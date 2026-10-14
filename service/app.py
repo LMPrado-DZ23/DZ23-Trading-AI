@@ -4604,6 +4604,68 @@ def manual_monitor_health(request: Request, _=Depends(auth)):
                       "calcula e alerta; quem opera é você")}
 
 
+@app.get("/v1/manual/sinais")
+def manual_sinais(request: Request, _=Depends(auth), instrumento: str = "",
+                  timeframe: str = "1h"):
+    """Análise determinística do mercado para o Copiloto Manual (TD-4).
+
+    Read-only por desenho: NÃO cria nem cancela ordens, NÃO boota a mesa,
+    NÃO chama IA. Lê a MESMA fonte do monitor (fixture rotulado ou mercado
+    real somente-leitura) e devolve oportunidade, riscos, custos, horizonte
+    e invalidação — ou o motivo declarado de cada peça que falta."""
+    from tradingagents.desk.copiloto_sinais import analisar_mercado
+    from tradingagents.desk.market import (
+        TIMEFRAME_SECONDS,
+        MarketFeedProviders,
+        PublicMarketFeed,
+    )
+    instrumento = (instrumento or "").strip()
+    if not instrumento:
+        raise HTTPException(
+            422, "informe o instrumento — ex.: &instrumento=BTC/USDT")
+    if timeframe not in TIMEFRAME_SECONDS:
+        raise HTTPException(422, "timeframe deve ser um de: "
+                            + ", ".join(sorted(TIMEFRAME_SECONDS)))
+    tid = request_tenant(request)
+    d = _DESKS.get(tid) or {}
+    feed_kind = d.get("feed_kind", "fixture")
+    fechamentos: list[str] = []
+    preco_atual = None
+    qualidade = feed_kind
+    if feed_kind == "real":
+        cfg = load_cfg(tid)
+        try:
+            feed = PublicMarketFeed(cfg.get("TRADINGAGENTS_EXCHANGE")
+                                    or "binance")
+            snap = MarketFeedProviders(feed, [instrumento],
+                                       timeframe=timeframe,
+                                       limit=240).snapshots()[0]
+            qualidade = snap.quality
+            fechamentos = [str(c) for c in snap.closes]
+        except Exception as exc:                # fonte fora: motivo honesto
+            qualidade = f"indisponível ({type(exc).__name__})"
+        aviso_fonte = ("mercado real (leitura pública, somente leitura) — "
+                       + qualidade)
+    else:
+        snaps = []
+        snaps_fn = d.get("snaps_fn")
+        if snaps_fn is not None:
+            with contextlib.suppress(Exception):
+                snaps = [s for s in snaps_fn() if s.instrument == instrumento]
+        if snaps:
+            fechamentos = [str(c) for c in snaps[0].closes]
+            qualidade = snaps[0].quality
+        aviso_fonte = ("dados de FIXTURE (rotulados) — provam a mesa, não "
+                       "o mercado; a análise mostra o que existe, sem número "
+                       "inventado")
+    if fechamentos:
+        preco_atual = fechamentos[-1]
+    return analisar_mercado(
+        instrumento=instrumento, timeframe=timeframe,
+        fechamentos=fechamentos, fonte=feed_kind, qualidade=qualidade,
+        aviso_fonte=aviso_fonte, preco_atual=preco_atual)
+
+
 # ======================================================= TRANSPARÊNCIA ⑦
 @app.get("/publico/{tenant_id}")
 def pagina_publica(tenant_id: str):

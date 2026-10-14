@@ -346,7 +346,8 @@ def test_minhas_operacoes_copiloto_manual_ponta_a_ponta(page, live_server, owner
     page.fill("#manStop", "37.00")
     page.fill("#manAlvos", "40.00, 41.50")
     page.fill("#manTese", "rompimento com volume; sai se perder o suporte")
-    page.get_by_role("button", name="Registrar posição").click()
+    # TD-4 (§4): o botão de registro agora se chama "Acompanhar esta operação"
+    page.get_by_role("button", name="Acompanhar esta operação").click()
     expect(page.locator("#toast")).to_contain_text(re.compile(r"registrada|já existia"), timeout=10000)
 
     card = page.locator("#manualLista .job", has_text="PETR4").first
