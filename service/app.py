@@ -2717,11 +2717,13 @@ def _desk_boot(tenant_id: str) -> dict:
             # O alerta não derruba o ciclo, mas a falha permanece observável.
         desk["cycles"].append({"em": _now().isoformat(), "origem": feed_kind,
                                "resumo": out.get("resumo", ""),
+                               "propostas": len(out.get("propostas") or []),
                                "vetos": out.get("vetos", []),
                                "abstencoes": out.get("abstencoes", []),
                                "erros": out.get("erros", []),
                                "descartados": out.get("descartados", []),
-                               "ordens": out.get("ordens", [])})
+                               "ordens": out.get("ordens", []),
+                               "encerradas": out.get("encerradas", [])})
         del desk["cycles"][:-30]
 
     def _guarda_operacao():
@@ -2873,6 +2875,41 @@ def _agente_para_painel(t, d: dict) -> dict:
     }
 
 
+def _decisao_da_mesa(d) -> dict:
+    """Decisão do ciclo (V8.1 §4) publicada no painel.
+
+    Determinística e sem I/O de mercado; o kill switch (parada de
+    emergência) barra ANTES, com 423 — quando esta função roda, a mesa
+    já passou pela guarda. A perda do dia vem do freio durável do
+    coordenador; limite só existe quando configurado (LIVE) — sem limite
+    configurado não há bloqueio por este critério.
+    """
+    from tradingagents.desk.decisao import decidir_do_ciclo
+
+    modo = d["modo"].resumo()
+    posse = d["posse"].resumo()
+    coord, led = d["coordinator"], d["ledger"]
+    perda = Decimal("0")
+    try:
+        perda = Decimal(str(coord.estado_do_dia().get("perda_do_dia") or "0"))
+    except Exception:
+        pass                       # freio indisponível: não inventa perda
+    ponte = getattr(coord.broker, "bridge", None)
+    limite = getattr(ponte, "max_daily_loss", None) or Decimal("0")
+    return decidir_do_ciclo(
+        mesa_ativa=bool(modo.get("pode_executar")),
+        mesa_estado=str(modo.get("estado") or ""),
+        motivo_do_modo=str(modo.get("motivo") or ""),
+        posse_sou_eu=bool(posse.get("sou_eu")),
+        posse_dono=str(posse.get("dono") or ""),
+        pendencias_de_reconciliacao=len(coord.pending_reconciliation()),
+        contabilidade_balanceada=bool(led.is_balanced()),
+        perda_do_dia_atingida=bool(Decimal(str(limite)) > 0
+                                   and perda >= Decimal(str(limite))),
+        ultimo_ciclo=(d["cycles"][-1] if d.get("cycles") else None),
+    )
+
+
 @app.get("/v1/desk/status")
 def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
     try:
@@ -2904,6 +2941,7 @@ def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
         "livro_restauracao": d.get("livro_restauracao", {}),
         "agendador": d["scheduler"].status(),
         "modo": {**d["modo"].resumo(), "posse": d["posse"].resumo()},
+        "decisao": _decisao_da_mesa(d),
         "escola": {"sala": (d["sala"].resumo() if d.get("sala") else None),
                    "motivo": d.get("sala_motivo", ""),
                    "avisos_vigia": d.get("avisos_vigia", [])[-5:]},

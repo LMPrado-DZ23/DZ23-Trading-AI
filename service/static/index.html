@@ -197,7 +197,7 @@ const r=await api('/v1/config');const cfg=r.ok?(r.data.config||{}):{};const val=
 const ce=$('iniConectarEstado');
 if(ce)ce.innerHTML='<div class="metric-line"><span>Corretora</span><b>'+escapeHtml(val('TRADINGAGENTS_EXCHANGE')||'—')+'</b></div><div class="metric-line"><span>Chaves da corretora</span><span>'+(sta('EXCHANGE_API_KEY')&&sta('EXCHANGE_API_SECRET')?'<b class="ok">configuradas</b>':'<small class="muted">ainda não configuradas</small>')+'</span></div><div class="metric-line"><span>Provedor de IA</span><b>'+escapeHtml(val('TRADINGAGENTS_LLM_PROVIDER')||'—')+'</b></div>';
 const rd=await api('/v1/desk/status');const me=$('iniMesaEstado');
-if(me){if(rd.ok){const a=rd.data.agendador||{};const fonte=(rd.data.fonte||{}).dados||'—';me.innerHTML='Mesa autônoma: <b class="'+(a.rodando?'ok':'warn')+'">'+(a.rodando?'RODANDO':'PARADA')+'</b> · '+((a.ciclos??0))+' ciclos · dados: '+escapeHtml(String(fonte))+' — PAPER (simulado), dinheiro real bloqueado.'}else me.textContent='Estado da mesa indisponível agora.'}
+if(me){if(rd.ok){const a=rd.data.agendador||{};const fonte=(rd.data.fonte||{}).dados||'—';const dec=rd.data.decisao||{};const clsDec=dec.estado==='OPERAR'?'ok':(dec.estado==='AGUARDAR'?'':'warn');me.innerHTML='Mesa autônoma: <b class="'+(a.rodando?'ok':'warn')+'">'+(a.rodando?'RODANDO':'PARADA')+'</b> · '+((a.ciclos??0))+' ciclos · dados: '+escapeHtml(String(fonte))+' — PAPER (simulado), dinheiro real bloqueado.'+(dec.estado?'<div class="metric-line" style="margin-top:6px"><span>Decisão do ciclo</span><b class="'+clsDec+'">'+escapeHtml(String(dec.estado))+'</b></div><div class="muted"><small>'+escapeHtml(String(dec.motivo||''))+'</small></div>':'')}else me.textContent='Estado da mesa indisponível agora.'}
 const pi=$('iniPendencias');
 if(pi){const rs=await api('/v1/setup/estado?perfil=pronto');if(rs.ok){const p=rs.data.pendencias||[];pi.innerHTML='<h3 style="margin-top:12px">Próximos passos</h3>'+(p.length?p.map(x=>'<div class="event"><b>'+escapeHtml(x.titulo||'')+'</b><small>'+escapeHtml(x.detalhe||'')+' — '+escapeHtml(x.como||'')+'</small></div>').join(''):'<div class="muted">Nada essencial pendente — a mesa pode rodar em PAPER.</div>')}else pi.textContent='Pendências indisponíveis agora.'}}
 async function inicioConectar(){
@@ -407,6 +407,8 @@ const expoRows=expo.length?expo.map(x=>`<tr><td>${escapeHtml(x.instrumento)}</td
 const ordens=p.ordens_abertas||[];
 const ordensLinhas=ordens.length?ordens.map(o=>`<div class="event"><b>${escapeHtml(String(o.id||o.order_id||'—'))}</b><small>${escapeHtml(String(o.instrumento||''))} · ${escapeHtml(String(o.estado||''))} · qtd ${escapeHtml(String(o.qtd||''))}</small></div>`).join(''):'<div class="muted">nenhuma ordem aberta deste trader</div>';
 const champ=d.champion_challenger||[];
+const rz=p.risco||{};const nz=v=>v!=null?num(v):'—';
+const riscoHTML=ml('Volatilidade (por operação)',nz(rz.volatilidade))+ml('Sharpe (por operação, não anualizado)',nz(rz.sharpe))+ml('Sortino (por operação, não anualizado)',nz(rz.sortino))+(rz.motivo?`<div class="muted"><small>${escapeHtml(rz.motivo)}</small></div>`:'');
 const expHTML=champ.length?champ.map(e=>{const ver=e.resultado?('veredito: '+escapeHtml(JSON.stringify(e.resultado).slice(0,180))):'pendente — sem veredito (não é aprovado por omissão)';return `<div class="event"><b>${escapeHtml(String(e.titulo||e.id||''))}</b><small>champion ${escapeHtml(JSON.stringify(e.champion||{}).slice(0,90))} · challenger ${escapeHtml(JSON.stringify(e.challenger||{}).slice(0,90))}</small><small>${ver}</small></div>`}).join(''):'<div class="muted">nenhum experimento pré-registrado deste trader</div>';
 box.innerHTML=ml('Modo',escapeHtml(String(d.modo||'').toUpperCase())+' · moeda '+escapeHtml(String(d.moeda||'—'))+' · LIVE bloqueado')
 +(m.aviso?`<div class="warn">${escapeHtml(m.aviso)}</div>`:'')
@@ -421,6 +423,7 @@ box.innerHTML=ml('Modo',escapeHtml(String(d.modo||'').toUpperCase())+' · moeda 
 +ml('Fator de lucro',p.profit_factor!=null?num(p.profit_factor):escapeHtml(p.motivo_profit_factor||'—'),p.profit_factor!=null?'':'warn')
 +ml('Custos acumulados (diário)',num(p.custos_total))
 +ml('Drawdown máximo',pct(p.drawdown))
++riscoHTML
 +ml('Resultado bruto do livro',num(p.resultado_bruto_livro))
 +ml('Resultado líquido estimado',num(p.resultado_liquido_estimado))
 +`<div class="muted"><small>${escapeHtml(p.nota_resultado||'')}</small></div>`

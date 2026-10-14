@@ -15,6 +15,7 @@ desenha. Cada camada pode ser testada sozinha.
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -166,6 +167,7 @@ def metricas_portfolio(ops: Sequence[dict]) -> dict:
                                       Decimal("0"))),
            "soma_retornos": round(sum(retornos), 8),
            "drawdown": drawdown_maximo([c["acumulado"] for c in curva]),
+           "risco": indices_de_risco(retornos),
            "curva": curva}
     if not n:
         met["motivo_profit_factor"] = (
@@ -183,6 +185,51 @@ def metricas_portfolio(ops: Sequence[dict]) -> dict:
             "sem perdas no período — fator de lucro indefinido (não é "
             "'infinito': dividir por zero não mede nada)")
     return met
+
+
+def indices_de_risco(retornos: Sequence, *, minimo: int = 30) -> dict:
+    """Volatilidade e índices de Sharpe/Sortino POR OPERAÇÃO (V8.1 §6).
+
+    "Sharpe/Sortino quando estatisticamente apropriados": abaixo de
+    `minimo` operações fechadas os índices NÃO existem — None com motivo.
+    Convenções declaradas (não escondidas):
+    - volatilidade = desvio-padrão AMOSTRAL (n-1) dos retornos por operação;
+    - benchmark = zero (excedente = retorno líquido) — a hipótese
+      "não operar renderia 0" fica explícita;
+    - Sortino usa o desvio das QUEDAS contra o alvo 0;
+    - nada é anualizado: horizontes de operação variam — anualizar
+      inventaria um número que o diário não sustenta.
+    """
+    vals = [v for v in (_f(r) for r in (retornos or [])) if v is not None]
+    n = len(vals)
+    base = {"observacoes": n, "minimo_operacoes": minimo,
+            "unidade": "por operação (não anualizado)",
+            "benchmark": "zero — hipótese: não operar renderia 0",
+            "volatilidade": None, "sharpe": None, "sortino": None,
+            "motivo": ""}
+    if n < max(1, int(minimo)):
+        base["motivo"] = (f"{n} operações fechadas — abaixo do mínimo "
+                          f"{max(1, int(minimo))}: Sharpe/Sortino não são "
+                          "estatisticamente apropriados; sem número "
+                          "inventado")
+        return base
+    media = sum(vals) / n
+    var = sum((v - media) ** 2 for v in vals) / (n - 1)
+    desvio = math.sqrt(var)
+    base["volatilidade"] = round(desvio, 8)
+    if desvio > 0:
+        base["sharpe"] = round(media / desvio, 8)
+    else:
+        base["motivo"] = ("volatilidade zero no período — Sharpe "
+                          "indefinido (dividir por zero não mede nada)")
+    desvio_neg = math.sqrt(sum(min(v, 0.0) ** 2 for v in vals) / n)
+    if desvio_neg > 0:
+        base["sortino"] = round(media / desvio_neg, 8)
+    else:
+        base["motivo"] = (base["motivo"] + "; " if base["motivo"] else "") + \
+            "sem quedas no período — Sortino indefinido (dividir por zero " \
+            "não mede nada)"
+    return base
 
 
 def exposicao_do_trader(lotes: Sequence[dict], agent_id: str) -> dict:
@@ -450,6 +497,7 @@ def retrato_do_trader(agent_id: str, *, trader: dict, instrumento: str,
 
 __all__ = ["AVISOS_DE_HONESTIDADE", "curva_de_resultado", "drawdown_maximo",
            "experimentos_do_trader", "exposicao_do_trader", "indicadores",
+           "indices_de_risco",
            "marcacoes_de_execucao", "marcacoes_dos_ciclos", "media_movel",
            "metricas_portfolio", "ordens_do_trader", "prompt_de_leitura",
            "retrato_do_trader", "rsi", "suportes_e_resistencias",

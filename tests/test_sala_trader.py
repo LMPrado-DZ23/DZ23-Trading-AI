@@ -14,7 +14,9 @@ rota coleta (velas/diário/livro/ciclos). Nenhum caminho de ordem.
 from __future__ import annotations
 
 import importlib
+import math
 import re
+import statistics
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -24,6 +26,7 @@ from tradingagents.desk.sala_trader import (
     experimentos_do_trader,
     exposicao_do_trader,
     indicadores,
+    indices_de_risco,
     marcacoes_de_execucao,
     marcacoes_dos_ciclos,
     media_movel,
@@ -125,6 +128,58 @@ class TestCurvaEMetricas:
         assert m["profit_factor"] is None
         assert "sem perdas" in m["motivo_profit_factor"]
         assert "não é" in m["motivo_profit_factor"]
+
+
+class TestIndicesDeRisco:
+    """V8.1 §6 — "Sharpe/Sortino quando estatisticamente apropriados":
+    abaixo do mínimo, None com motivo; nada anualizado (horizontes variam)."""
+
+    def test_abaixo_do_minimo_declara_motivo_e_nao_inventa(self):
+        rz = indices_de_risco([0.01, -0.02, 0.03])
+        assert rz["volatilidade"] is None and rz["sharpe"] is None
+        assert rz["sortino"] is None
+        assert "3" in rz["motivo"] and "30" in rz["motivo"]
+
+    def test_amostra_suficiente_calcula_com_convencoes_declaradas(self):
+        vals = [0.02, -0.01, 0.03, -0.01]
+        rz = indices_de_risco(vals, minimo=4)
+        desvio = statistics.stdev(vals)          # amostral (n-1)
+        media = sum(vals) / len(vals)
+        assert abs(rz["volatilidade"] - round(desvio, 8)) < 1e-12
+        assert abs(rz["sharpe"] - round(media / desvio, 8)) < 1e-9
+        dn = math.sqrt(sum(min(v, 0.0) ** 2 for v in vals) / len(vals))
+        assert abs(rz["sortino"] - round(media / dn, 8)) < 1e-9
+        assert rz["motivo"] == ""
+        assert "por operação" in rz["unidade"]
+        assert "não anualizado" in rz["unidade"]
+        assert "zero" in rz["benchmark"]
+
+    def test_volatilidade_zero_sharpe_indefinido_nao_infinito(self):
+        rz = indices_de_risco([0.0] * 4, minimo=4)
+        assert rz["volatilidade"] == 0.0
+        assert rz["sharpe"] is None
+        assert "zero" in rz["motivo"]
+
+    def test_sem_quedas_sortino_indefinido(self):
+        rz = indices_de_risco([0.01, 0.02, 0.01, 0.03], minimo=4)
+        assert rz["sortino"] is None
+        assert "sem quedas" in rz["motivo"]
+        assert rz["sharpe"] is not None
+
+    def test_metricas_anexam_risco_com_minimo_padrao(self):
+        m = metricas_portfolio(TestCurvaEMetricas()._ops())
+        assert "risco" in m
+        assert m["risco"]["volatilidade"] is None
+        assert "30" in m["risco"]["motivo"]
+
+
+class TestPainelIndicesRisco:
+    def test_sala_renderiza_indices_com_rotulo_honesto(self):
+        html = HTML.read_text(encoding="utf-8")
+        assert "Volatilidade (por operação)" in html
+        assert "Sharpe (por operação, não anualizado)" in html
+        assert "Sortino (por operação, não anualizado)" in html
+        assert "p.risco||{}" in html
 
 
 class TestMarcacoes:
