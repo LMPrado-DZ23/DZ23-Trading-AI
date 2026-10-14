@@ -21,7 +21,8 @@ def barra(i: int, close, volume) -> Bar:
 
 def serie(volumes, closes=None) -> tuple[Bar, ...]:
     closes = closes or [100 + i for i in range(len(volumes))]
-    return tuple(barra(i, c, v) for i, (c, v) in enumerate(zip(closes, volumes)))
+    return tuple(barra(i, c, v)
+                 for i, (c, v) in enumerate(zip(closes, volumes, strict=True)))
 
 
 def sempre_comprado(history):

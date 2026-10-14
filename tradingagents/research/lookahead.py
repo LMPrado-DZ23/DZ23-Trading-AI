@@ -36,7 +36,7 @@ def detectar_lookahead(bars: Iterable[Bar], fabrica: Callable, *,
     n = len(ordered)
     if cortes is None:
         cortes = (n // 2,) if n >= 3 else ()
-    cortes = tuple(sorted(set(int(c) for c in cortes)))
+    cortes = tuple(sorted({int(c) for c in cortes}))
     for c in cortes:
         if not 2 <= c <= n - 1:
             raise ValueError(
