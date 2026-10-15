@@ -27,7 +27,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install locked project with dev extras
@@ -45,7 +45,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -65,7 +65,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install locked dev tools
@@ -83,7 +83,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install locked project and audit tool
@@ -142,7 +142,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install locked project
