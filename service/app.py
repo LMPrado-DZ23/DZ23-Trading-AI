@@ -18,7 +18,7 @@ import time
 import traceback
 import uuid
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -3991,6 +3991,37 @@ def _parada(tenant_id: str) -> DeskKillSwitch:
     return DeskKillSwitch(armazem, tenant_id)
 
 
+def _teto_positivo(cfg: dict, chave: str) -> bool:
+    """Teto de dinheiro real só é teto como NÚMERO finito > 0 — a mesma
+    exigência da ponte CCXT (`_decimal_env`). "0", "-5", "abc", "inf" e
+    "NaN" não podem aparecer como pronto no painel."""
+    try:
+        valor = Decimal(str(cfg.get(chave) or ""))
+    except (InvalidOperation, ValueError):
+        return False
+    return valor.is_finite() and valor > 0
+
+
+def _fill_de_corretora_externa(d) -> bool:
+    """Ordem PREENCHIDA com id de exchange de verdade.
+
+    O simulador local grava id `paper-*` (PaperBroker); o id do
+    CCXTDeskBroker é o id opaco devolvido pela corretora externa. Neste
+    lançamento a única corretora externa construível é a testnet (LIVE é
+    selado por código), então um fill com id externo é a evidência honesta
+    de "já operou em testnet". Registro sem id, id do simulador ou estado
+    desconhecido NÃO conta."""
+    if not d:
+        return False
+    for r in d["coordinator"].orders.values():
+        if r.state.value != "filled":
+            continue
+        externo = str(getattr(r, "external_id", "") or "")
+        if externo and not externo.startswith("paper-"):
+            return True
+    return False
+
+
 @app.get("/v1/live/status")
 def live_status(request: Request, _=Depends(auth)):
     """Diz, sem rodeio, se este inquilino pode operar dinheiro real e o que
@@ -4004,19 +4035,28 @@ def live_status(request: Request, _=Depends(auth)):
         {"item": "Chaves da corretora configuradas",
          "pronto": bool(cfg.get("EXCHANGE_API_KEY") and cfg.get("EXCHANGE_API_SECRET")),
          "acao": "Cole a chave e o segredo da sua corretora"},
+        {"item": "Permissões da chave da corretora comprovadas (somente leitura)",
+         "pronto": False,
+         "acao": ("Comprove que a chave só lê (sem saque e sem trade) com uma "
+                  "consulta real autorizada — preparação ainda não registrada")},
+        {"item": "Identidade da conta REAL confirmada",
+         "pronto": False,
+         "acao": ("Confirme, com consulta autorizada, que a conta cadastrada é "
+                  "a conta real pretendida — preparação ainda não registrada")},
         {"item": "Teto por ordem definido",
-         "pronto": bool(cfg.get("LIVE_MAX_ORDER_VALUE")),
-         "acao": "Defina LIVE_MAX_ORDER_VALUE (valor máximo de UMA ordem)"},
+         "pronto": _teto_positivo(cfg, "LIVE_MAX_ORDER_VALUE"),
+         "acao": "Defina LIVE_MAX_ORDER_VALUE (número finito maior que zero)"},
         {"item": "Perda máxima diária definida",
-         "pronto": bool(cfg.get("LIVE_MAX_DAILY_LOSS")),
-         "acao": "Defina LIVE_MAX_DAILY_LOSS (quando parar no vermelho)"},
+         "pronto": _teto_positivo(cfg, "LIVE_MAX_DAILY_LOSS"),
+         "acao": "Defina LIVE_MAX_DAILY_LOSS (número finito maior que zero)"},
         {"item": "Modo da corretora em LIVE",
          "pronto": (cfg.get("TRADINGAGENTS_BROKER_MODE") or "") == "live",
          "acao": "Troque o modo da corretora para LIVE"},
         {"item": "Já operou em testnet",
-         "pronto": bool(d and any(r.state.value == "filled"
-                                  for r in d["coordinator"].orders.values())),
-         "acao": "Rode a mesa em testnet e veja uma ordem preenchida antes"},
+         "pronto": _fill_de_corretora_externa(d),
+         "acao": ("Rode a mesa com a corretora TESTNET (CCXT) e veja uma ordem "
+                  "preenchida de verdade — ordem PAPER (simulada neste PC) "
+                  "não conta")},
         # O selo de CÓDIGO da mesa (ADR-006). Sem ele, mesmo com todos os
         # itens acima verdes, a mesa recusa arrancar em LIVE — e é bom que
         # recuse: o painel nunca é a última fechadura de dinheiro real.
