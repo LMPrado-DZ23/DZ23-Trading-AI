@@ -4,7 +4,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from tradingagents.desk.traders import TrendTrader, default_desk
-from tradingagents.desk.validation import ResultadoValidacao, validar
+from tradingagents.desk.validation import Operacao, ResultadoValidacao, validar
 
 
 def tendencia_forte(n=300):
@@ -65,6 +65,39 @@ class TestVeredito:
         r.abstencoes = 200
         v = r.veredito()
         assert v["aprovada"] is False and "nenhuma operação" in v["resumo"]
+
+    def _resultado(self, n: int, bruto: str, liquido: str) -> ResultadoValidacao:
+        r = ResultadoValidacao("e", "BTC/USDT", "binance")
+        r.velas_avaliadas = 300
+        for i in range(n):
+            r.operacoes.append(
+                Operacao(i, i + 1, Decimal("100"), Decimal("101"),
+                         Decimal(bruto), Decimal(liquido), "simulado")
+            )
+        return r
+
+    def test_reprovacao_por_amostra_pequena_nao_culpa_os_custos(self):
+        """6 operações lucrativas reprovadas por amostra: o resumo cita a
+        amostra, não custos que não causaram a reprovação."""
+        v = self._resultado(6, bruto="0.01", liquido="0.009").veredito()
+        assert v["aprovada"] is False
+        assert "amostra pequena" in v["resumo"]
+        assert "comeram" not in v["resumo"]
+
+    def test_duas_ressalvas_aparecem_as_duas(self):
+        """Custos acima de metade do bruto somados a amostra pequena: o
+        resumo cita as duas ressalvas, não só uma."""
+        v = self._resultado(10, bruto="0.0025", liquido="-0.002").veredito()
+        assert "amostra pequena" in v["resumo"]
+        assert "custos" in v["resumo"]
+
+    def test_prejuizo_sem_culpa_dos_custos_e_dito_sem_invencao(self):
+        """25 operações em prejuízo com custo pequeno: o resumo não pode
+        inventar que os custos causaram o vermelho."""
+        v = self._resultado(25, bruto="-0.001", liquido="-0.00112").veredito()
+        assert v["aprovada"] is False
+        assert "resultado líquido não positivo" in v["resumo"]
+        assert "comeram" not in v["resumo"]
 
     def test_small_sample_is_flagged_not_celebrated(self):
         t = TrendTrader("t", ("BTC/USDT",))

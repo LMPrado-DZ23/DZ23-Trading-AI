@@ -1,4 +1,8 @@
-"""Run local audit tests without inherited credentials or owner data paths."""
+"""Run local audit tests without inherited credentials or owner data paths.
+
+Set DZ23_V9_EVIDENCE_DIR (relative to repo root) to redirect the evidence trio
+away from the frozen v9-baseline directory.
+"""
 from __future__ import annotations
 
 import json
@@ -58,7 +62,9 @@ def main() -> int:
         ALERTA_WINDOWS='false', REAL_MONEY_EXECUTION='false', MULTI_TENANT_ENABLED='false',
         TRADINGAGENTS_MEMORY_LOG_PATH=str(work / 'memory.md'),
     )
-    evidence = ROOT / 'docs/mission/evidence/v9-baseline'
+    rel = os.environ.get('DZ23_V9_EVIDENCE_DIR')
+    evidence = (ROOT / rel) if rel else (ROOT / 'docs/mission/evidence/v9-baseline')
+    evidence.mkdir(parents=True, exist_ok=True)
     xml = evidence / f'{label}.xml'
     cmd = [sys.executable, '-B', '-c', CHILD, *tests, '-q', f'--junitxml={xml}']
     record = {
