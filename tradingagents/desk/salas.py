@@ -40,8 +40,7 @@ from typing import TYPE_CHECKING
 
 from .costs import custo_de_operar, retorno_liquido
 from .escola import Avaliacao, EscolaDeTraders, PerfilDeMercado
-from .learning import (Desfecho, desfecho_de_dict, desfecho_para_dict,
-                       validar_desfecho)
+from .learning import Desfecho, desfecho_de_dict, desfecho_para_dict, validar_desfecho
 from .mercados import MERCADOS, MercadoError, classe_de, mercado_aberto
 from .models import utcnow
 

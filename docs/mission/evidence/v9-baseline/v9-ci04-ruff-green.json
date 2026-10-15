@@ -1,0 +1,7 @@
+{
+  "head": "78e64bfa2351fa97b3a59bf52ecd8884efcfbda0 + correção não commitada de tradingagents/desk/salas.py",
+  "command": ".venv/Scripts/python.exe -m ruff check .",
+  "exit_code": 0,
+  "summary": "All checks passed! (repo inteiro; ruff 0.16.9 = versão do uv.lock usada pelo CI)",
+  "network": "none"
+}

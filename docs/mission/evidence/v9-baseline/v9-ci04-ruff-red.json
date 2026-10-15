@@ -1,0 +1,7 @@
+{
+  "head": "78e64bfa2351fa97b3a59bf52ecd8884efcfbda0",
+  "command": "git show HEAD:tradingagents/desk/salas.py | .venv/Scripts/python.exe -m ruff check --stdin-filename tradingagents/desk/salas.py -",
+  "exit_code": 1,
+  "summary": "I001 Import block is un-sorted or un-formatted at tradingagents/desk/salas.py:34 (ruff 0.16.9, versão pinada no uv.lock) — reprodução local do job ruff do CI",
+  "network": "none"
+}

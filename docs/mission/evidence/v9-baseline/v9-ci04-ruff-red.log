@@ -1,0 +1,33 @@
+I001 [*] Import block is un-sorted or un-formatted
+  --> tradingagents\desk\salas.py:34:1
+   |
+32 |     piloto (`piloto.py`), com gates e vigia.
+33 |   """
+34 | / from __future__ import annotations
+35 | |
+36 | | from dataclasses import dataclass, replace
+37 | | from datetime import datetime
+38 | | from decimal import Decimal, InvalidOperation
+39 | | from typing import TYPE_CHECKING
+40 | |
+41 | | from .costs import custo_de_operar, retorno_liquido
+42 | | from .escola import Avaliacao, EscolaDeTraders, PerfilDeMercado
+43 | | from .learning import (Desfecho, desfecho_de_dict, desfecho_para_dict,
+44 | |                        validar_desfecho)
+45 | | from .mercados import MERCADOS, MercadoError, classe_de, mercado_aberto
+46 | | from .models import utcnow
+   | |__________________________^
+47 |
+48 |   if TYPE_CHECKING:                     # pragma: no cover
+   |
+help: Organize imports
+   |
+42 | from .escola import Avaliacao, EscolaDeTraders, PerfilDeMercado
+   - from .learning import (Desfecho, desfecho_de_dict, desfecho_para_dict,
+   -                        validar_desfecho)
+43 + from .learning import Desfecho, desfecho_de_dict, desfecho_para_dict, validar_desfecho
+44 | from .mercados import MERCADOS, MercadoError, classe_de, mercado_aberto
+   |
+
+Found 1 error.
+[*] 1 fixable with the `--fix` option.
