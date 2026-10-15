@@ -40,7 +40,8 @@ from typing import TYPE_CHECKING
 
 from .costs import custo_de_operar, retorno_liquido
 from .escola import Avaliacao, EscolaDeTraders, PerfilDeMercado
-from .learning import Desfecho, desfecho_de_dict, desfecho_para_dict
+from .learning import (Desfecho, desfecho_de_dict, desfecho_para_dict,
+                       validar_desfecho)
 from .mercados import MERCADOS, MercadoError, classe_de, mercado_aberto
 from .models import utcnow
 
@@ -320,7 +321,9 @@ class Sala:
 
     def registrar_desfecho(self, desfecho: Desfecho) -> None:
         """Aceita evidência apenas da PRÓPRIA corretora. Resultado de outra
-        sala entraria como contaminação — e é recusado na porta."""
+        sala entraria como contaminação — e é recusado na porta. A mesma
+        porta recusa duplicata e data impossível: a estatística só vê
+        evidência honesta."""
         corretora = (desfecho.exchange or "").strip().lower()
         if corretora and corretora != self.contexto.corretora:
             raise SalaError(
@@ -329,6 +332,14 @@ class Sala:
                 "misturam entre corretoras")
         if not corretora:
             desfecho = replace(desfecho, exchange=self.contexto.corretora)
+        try:
+            validar_desfecho(desfecho)
+        except ValueError as erro:
+            raise SalaError(str(erro)) from erro
+        if desfecho in self._desfechos:
+            raise SalaError(
+                f"desfecho duplicado na sala '{self.contexto.chave}': a "
+                "mesma operação não conta duas vezes")
         self._desfechos.append(desfecho)
         self.salvar()
 
@@ -414,8 +425,8 @@ class Sala:
         bruto = (preco - entrada) / entrada
         liquido = retorno_liquido(bruto, custo)
         resultado = valor_ordem * liquido
-        self.saldo_realizado += resultado
-        self.taxas_acumuladas += valor_ordem * custo.ida_e_volta
+        aberta_em = (datetime.fromisoformat(posicao["aberta_em"])
+                     if posicao.get("aberta_em") else None)
         desfecho = Desfecho(
             estrategia=posicao.get("estrategia") or posicao.get("agente", ""),
             regime=posicao.get("regime", "indefinido"),
@@ -424,7 +435,17 @@ class Sala:
             exchange=self.contexto.corretora,
             versao=str(posicao.get("versao", "1")),
             agente=posicao.get("agente", ""),
-            horizonte=posicao.get("horizonte", "1h"))
+            horizonte=posicao.get("horizonte", "1h"),
+            aberta_em=aberta_em)
+        # A porta da evidência valida ANTES de mexer no saldo: desfecho
+        # impossível devolve a posição e nada foi fechado (nem contado).
+        try:
+            validar_desfecho(desfecho)
+        except ValueError as erro:
+            self.posicoes[instrumento] = posicao
+            raise SalaError(str(erro)) from erro
+        self.saldo_realizado += resultado
+        self.taxas_acumuladas += valor_ordem * custo.ida_e_volta
         self._desfechos.append(desfecho)
         self.salvar()
         return {"instrumento": instrumento, "quantidade": str(quantidade),

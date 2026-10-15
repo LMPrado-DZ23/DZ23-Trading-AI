@@ -186,7 +186,7 @@ class TestSalasIsolamentoFinanceiro:
         sala_o = reg.abrir_sala(_ctx(corretora="okx"))
 
         sala_b.registrar_entrada(ATIVO, 1, Decimal("100"), agente="t1",
-                                 estrategia=ESTRATEGIA)
+                                 estrategia=ESTRATEGIA, quando=BASE)
         sala_o.registrar_entrada(ATIVO, 1, Decimal("100"), agente="t1",
                                  estrategia=ESTRATEGIA)
         sala_b.registrar_saida(ATIVO, Decimal("105"), quando=BASE)
@@ -204,7 +204,7 @@ class TestSalasIsolamentoFinanceiro:
         reg = RegistroDeSalas(armazem=ArmazemFake())
         sala = reg.abrir_sala(_ctx(corretora="binance"))
         sala.registrar_entrada(ATIVO, 1, Decimal("100"), agente="t1",
-                               estrategia=ESTRATEGIA)
+                               estrategia=ESTRATEGIA, quando=BASE)
         r = sala.registrar_saida(ATIVO, Decimal("105"), quando=BASE)
 
         custo = custo_de_operar(ATIVO, "binance", Decimal("100"))
@@ -259,7 +259,7 @@ class TestSalasIsolamentoFinanceiro:
         sala_b = reg.abrir_sala(_ctx(corretora="binance"))
         sala_o = reg.abrir_sala(_ctx(corretora="okx"))
         sala_b.registrar_entrada(ATIVO, 1, Decimal("100"), agente="t1",
-                                 estrategia=ESTRATEGIA)
+                                 estrategia=ESTRATEGIA, quando=BASE)
         sala_b.registrar_saida(ATIVO, Decimal("105"), quando=BASE)
         sala_o.registrar_entrada("ETH/USDT", 2, Decimal("50"))
 

@@ -1,0 +1,442 @@
+............................FF....F..................................... [ 68%]
+.................................                                        [100%]
+================================== FAILURES ===================================
+_ TestSalasIsolamentoFinanceiro.test_saldo_posicoes_taxas_e_desfechos_nao_se_misturam _
+
+self = <tradingagents.desk.salas.Sala object at 0x000001E7A8AB5670>
+instrumento = 'BTC/USDT', preco = Decimal('105')
+quando = datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.timezone.utc)
+
+    def registrar_saida(self, instrumento: str, preco, *,
+                        quando: datetime | None = None) -> dict:
+        """Fecha a posição: custo real descontado, resultado no saldo DESTA
+        sala e desfecho registrado para a escola DESTE contexto."""
+        posicao = self.posicoes.pop(instrumento, None)
+        if posicao is None:
+            raise SalaError(f"{instrumento} não tem posição aberta nesta sala")
+        preco = Decimal(str(preco))
+        quantidade = Decimal(posicao["quantidade"])
+        entrada = Decimal(posicao["preco_entrada"])
+        if preco <= 0:
+            self.posicoes[instrumento] = posicao   # devolve: nada foi fechado
+            raise SalaError("preço de saída precisa ser positivo")
+        valor_ordem = quantidade * entrada
+        custo = custo_de_operar(instrumento, self.contexto.corretora,
+                                valor_ordem)
+        bruto = (preco - entrada) / entrada
+        liquido = retorno_liquido(bruto, custo)
+        resultado = valor_ordem * liquido
+        aberta_em = (datetime.fromisoformat(posicao["aberta_em"])
+                     if posicao.get("aberta_em") else None)
+        desfecho = Desfecho(
+            estrategia=posicao.get("estrategia") or posicao.get("agente", ""),
+            regime=posicao.get("regime", "indefinido"),
+            instrumento=instrumento, retorno=liquido,
+            fechado_em=quando or utcnow(), forca_do_sinal=0.0,
+            exchange=self.contexto.corretora,
+            versao=str(posicao.get("versao", "1")),
+            agente=posicao.get("agente", ""),
+            horizonte=posicao.get("horizonte", "1h"),
+            aberta_em=aberta_em)
+        # A porta da evidência valida ANTES de mexer no saldo: desfecho
+        # impossível devolve a posição e nada foi fechado (nem contado).
+        try:
+>           validar_desfecho(desfecho)
+
+tradingagents\desk\salas.py:443: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+desfecho = Desfecho(estrategia='trend_following', regime='indefinido', instrumento='BTC/USDT', retorno=Decimal('0.047000'), fecha...ente='t1', horizonte='1h', aberta_em=datetime.datetime(2026, 10, 15, 14, 10, 37, 554329, tzinfo=datetime.timezone.utc))
+agora = datetime.datetime(2026, 10, 15, 14, 10, 37, 554329, tzinfo=datetime.timezone.utc)
+
+    def validar_desfecho(desfecho: Desfecho, *,
+                         agora: datetime | None = None) -> None:
+        """A porta da evidência: recusa dado impossível ANTES da estatística.
+    
+        - Fechamento (ou abertura) no futuro além da tolerância de relógio:
+          a operação ainda não aconteceu — aceitá-la infla a amostra.
+        - Fechamento anterior à abertura: dado corrompido.
+        Legado sem `aberta_em` permanece válido — o fechamento decide.
+        """
+        agora = agora or datetime.now(timezone.utc)
+        if agora.tzinfo is None:
+            agora = agora.replace(tzinfo=timezone.utc)
+        fechado = desfecho.fechado_em
+        if fechado.tzinfo is None:
+            fechado = fechado.replace(tzinfo=timezone.utc)
+        if fechado > agora + TOLERANCIA_FUTURO:
+            raise ValueError(
+                f"desfecho com fechado_em no futuro ({fechado.isoformat()}) — "
+                "operação ainda não aconteceu")
+        aberta = desfecho.aberta_em
+        if aberta is not None:
+            if aberta.tzinfo is None:
+                aberta = aberta.replace(tzinfo=timezone.utc)
+            if aberta > agora + TOLERANCIA_FUTURO:
+                raise ValueError(
+                    f"desfecho com aberta_em no futuro ({aberta.isoformat()}) — "
+                    "operação ainda não aconteceu")
+            if fechado < aberta:
+>               raise ValueError(
+                    f"fechamento em {fechado.isoformat()} antes de ser aberto "
+                    f"em {aberta.isoformat()}")
+E               ValueError: fechamento em 2026-01-01T12:00:00+00:00 antes de ser aberto em 2026-10-15T14:10:37.554329+00:00
+
+tradingagents\desk\learning.py:126: ValueError
+
+The above exception was the direct cause of the following exception:
+
+self = <tests.test_salas.TestSalasIsolamentoFinanceiro object at 0x000001E7A8DBE480>
+
+    def test_saldo_posicoes_taxas_e_desfechos_nao_se_misturam(self):
+        armazem = ArmazemFake()
+        reg = RegistroDeSalas(armazem=armazem)
+        sala_b = reg.abrir_sala(_ctx(corretora="binance"))
+        sala_o = reg.abrir_sala(_ctx(corretora="okx"))
+    
+        sala_b.registrar_entrada(ATIVO, 1, Decimal("100"), agente="t1",
+                                 estrategia=ESTRATEGIA)
+        sala_o.registrar_entrada(ATIVO, 1, Decimal("100"), agente="t1",
+                                 estrategia=ESTRATEGIA)
+>       sala_b.registrar_saida(ATIVO, Decimal("105"), quando=BASE)
+
+tests\test_salas.py:192: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tradingagents.desk.salas.Sala object at 0x000001E7A8AB5670>
+instrumento = 'BTC/USDT', preco = Decimal('105')
+quando = datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.timezone.utc)
+
+    def registrar_saida(self, instrumento: str, preco, *,
+                        quando: datetime | None = None) -> dict:
+        """Fecha a posição: custo real descontado, resultado no saldo DESTA
+        sala e desfecho registrado para a escola DESTE contexto."""
+        posicao = self.posicoes.pop(instrumento, None)
+        if posicao is None:
+            raise SalaError(f"{instrumento} não tem posição aberta nesta sala")
+        preco = Decimal(str(preco))
+        quantidade = Decimal(posicao["quantidade"])
+        entrada = Decimal(posicao["preco_entrada"])
+        if preco <= 0:
+            self.posicoes[instrumento] = posicao   # devolve: nada foi fechado
+            raise SalaError("preço de saída precisa ser positivo")
+        valor_ordem = quantidade * entrada
+        custo = custo_de_operar(instrumento, self.contexto.corretora,
+                                valor_ordem)
+        bruto = (preco - entrada) / entrada
+        liquido = retorno_liquido(bruto, custo)
+        resultado = valor_ordem * liquido
+        aberta_em = (datetime.fromisoformat(posicao["aberta_em"])
+                     if posicao.get("aberta_em") else None)
+        desfecho = Desfecho(
+            estrategia=posicao.get("estrategia") or posicao.get("agente", ""),
+            regime=posicao.get("regime", "indefinido"),
+            instrumento=instrumento, retorno=liquido,
+            fechado_em=quando or utcnow(), forca_do_sinal=0.0,
+            exchange=self.contexto.corretora,
+            versao=str(posicao.get("versao", "1")),
+            agente=posicao.get("agente", ""),
+            horizonte=posicao.get("horizonte", "1h"),
+            aberta_em=aberta_em)
+        # A porta da evidência valida ANTES de mexer no saldo: desfecho
+        # impossível devolve a posição e nada foi fechado (nem contado).
+        try:
+            validar_desfecho(desfecho)
+        except ValueError as erro:
+            self.posicoes[instrumento] = posicao
+>           raise SalaError(str(erro)) from erro
+E           tradingagents.desk.salas.SalaError: fechamento em 2026-01-01T12:00:00+00:00 antes de ser aberto em 2026-10-15T14:10:37.554329+00:00
+
+tradingagents\desk\salas.py:446: SalaError
+__ TestSalasIsolamentoFinanceiro.test_custos_reais_descontados_da_evidencia ___
+
+self = <tradingagents.desk.salas.Sala object at 0x000001E7A8AB68D0>
+instrumento = 'BTC/USDT', preco = Decimal('105')
+quando = datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.timezone.utc)
+
+    def registrar_saida(self, instrumento: str, preco, *,
+                        quando: datetime | None = None) -> dict:
+        """Fecha a posição: custo real descontado, resultado no saldo DESTA
+        sala e desfecho registrado para a escola DESTE contexto."""
+        posicao = self.posicoes.pop(instrumento, None)
+        if posicao is None:
+            raise SalaError(f"{instrumento} não tem posição aberta nesta sala")
+        preco = Decimal(str(preco))
+        quantidade = Decimal(posicao["quantidade"])
+        entrada = Decimal(posicao["preco_entrada"])
+        if preco <= 0:
+            self.posicoes[instrumento] = posicao   # devolve: nada foi fechado
+            raise SalaError("preço de saída precisa ser positivo")
+        valor_ordem = quantidade * entrada
+        custo = custo_de_operar(instrumento, self.contexto.corretora,
+                                valor_ordem)
+        bruto = (preco - entrada) / entrada
+        liquido = retorno_liquido(bruto, custo)
+        resultado = valor_ordem * liquido
+        aberta_em = (datetime.fromisoformat(posicao["aberta_em"])
+                     if posicao.get("aberta_em") else None)
+        desfecho = Desfecho(
+            estrategia=posicao.get("estrategia") or posicao.get("agente", ""),
+            regime=posicao.get("regime", "indefinido"),
+            instrumento=instrumento, retorno=liquido,
+            fechado_em=quando or utcnow(), forca_do_sinal=0.0,
+            exchange=self.contexto.corretora,
+            versao=str(posicao.get("versao", "1")),
+            agente=posicao.get("agente", ""),
+            horizonte=posicao.get("horizonte", "1h"),
+            aberta_em=aberta_em)
+        # A porta da evidência valida ANTES de mexer no saldo: desfecho
+        # impossível devolve a posição e nada foi fechado (nem contado).
+        try:
+>           validar_desfecho(desfecho)
+
+tradingagents\desk\salas.py:443: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+desfecho = Desfecho(estrategia='trend_following', regime='indefinido', instrumento='BTC/USDT', retorno=Decimal('0.047000'), fecha...ente='t1', horizonte='1h', aberta_em=datetime.datetime(2026, 10, 15, 14, 10, 37, 666482, tzinfo=datetime.timezone.utc))
+agora = datetime.datetime(2026, 10, 15, 14, 10, 37, 666482, tzinfo=datetime.timezone.utc)
+
+    def validar_desfecho(desfecho: Desfecho, *,
+                         agora: datetime | None = None) -> None:
+        """A porta da evidência: recusa dado impossível ANTES da estatística.
+    
+        - Fechamento (ou abertura) no futuro além da tolerância de relógio:
+          a operação ainda não aconteceu — aceitá-la infla a amostra.
+        - Fechamento anterior à abertura: dado corrompido.
+        Legado sem `aberta_em` permanece válido — o fechamento decide.
+        """
+        agora = agora or datetime.now(timezone.utc)
+        if agora.tzinfo is None:
+            agora = agora.replace(tzinfo=timezone.utc)
+        fechado = desfecho.fechado_em
+        if fechado.tzinfo is None:
+            fechado = fechado.replace(tzinfo=timezone.utc)
+        if fechado > agora + TOLERANCIA_FUTURO:
+            raise ValueError(
+                f"desfecho com fechado_em no futuro ({fechado.isoformat()}) — "
+                "operação ainda não aconteceu")
+        aberta = desfecho.aberta_em
+        if aberta is not None:
+            if aberta.tzinfo is None:
+                aberta = aberta.replace(tzinfo=timezone.utc)
+            if aberta > agora + TOLERANCIA_FUTURO:
+                raise ValueError(
+                    f"desfecho com aberta_em no futuro ({aberta.isoformat()}) — "
+                    "operação ainda não aconteceu")
+            if fechado < aberta:
+>               raise ValueError(
+                    f"fechamento em {fechado.isoformat()} antes de ser aberto "
+                    f"em {aberta.isoformat()}")
+E               ValueError: fechamento em 2026-01-01T12:00:00+00:00 antes de ser aberto em 2026-10-15T14:10:37.666482+00:00
+
+tradingagents\desk\learning.py:126: ValueError
+
+The above exception was the direct cause of the following exception:
+
+self = <tests.test_salas.TestSalasIsolamentoFinanceiro object at 0x000001E7A8DBCC50>
+
+    def test_custos_reais_descontados_da_evidencia(self):
+        reg = RegistroDeSalas(armazem=ArmazemFake())
+        sala = reg.abrir_sala(_ctx(corretora="binance"))
+        sala.registrar_entrada(ATIVO, 1, Decimal("100"), agente="t1",
+                               estrategia=ESTRATEGIA)
+>       r = sala.registrar_saida(ATIVO, Decimal("105"), quando=BASE)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_salas.py:208: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tradingagents.desk.salas.Sala object at 0x000001E7A8AB68D0>
+instrumento = 'BTC/USDT', preco = Decimal('105')
+quando = datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.timezone.utc)
+
+    def registrar_saida(self, instrumento: str, preco, *,
+                        quando: datetime | None = None) -> dict:
+        """Fecha a posição: custo real descontado, resultado no saldo DESTA
+        sala e desfecho registrado para a escola DESTE contexto."""
+        posicao = self.posicoes.pop(instrumento, None)
+        if posicao is None:
+            raise SalaError(f"{instrumento} não tem posição aberta nesta sala")
+        preco = Decimal(str(preco))
+        quantidade = Decimal(posicao["quantidade"])
+        entrada = Decimal(posicao["preco_entrada"])
+        if preco <= 0:
+            self.posicoes[instrumento] = posicao   # devolve: nada foi fechado
+            raise SalaError("preço de saída precisa ser positivo")
+        valor_ordem = quantidade * entrada
+        custo = custo_de_operar(instrumento, self.contexto.corretora,
+                                valor_ordem)
+        bruto = (preco - entrada) / entrada
+        liquido = retorno_liquido(bruto, custo)
+        resultado = valor_ordem * liquido
+        aberta_em = (datetime.fromisoformat(posicao["aberta_em"])
+                     if posicao.get("aberta_em") else None)
+        desfecho = Desfecho(
+            estrategia=posicao.get("estrategia") or posicao.get("agente", ""),
+            regime=posicao.get("regime", "indefinido"),
+            instrumento=instrumento, retorno=liquido,
+            fechado_em=quando or utcnow(), forca_do_sinal=0.0,
+            exchange=self.contexto.corretora,
+            versao=str(posicao.get("versao", "1")),
+            agente=posicao.get("agente", ""),
+            horizonte=posicao.get("horizonte", "1h"),
+            aberta_em=aberta_em)
+        # A porta da evidência valida ANTES de mexer no saldo: desfecho
+        # impossível devolve a posição e nada foi fechado (nem contado).
+        try:
+            validar_desfecho(desfecho)
+        except ValueError as erro:
+            self.posicoes[instrumento] = posicao
+>           raise SalaError(str(erro)) from erro
+E           tradingagents.desk.salas.SalaError: fechamento em 2026-01-01T12:00:00+00:00 antes de ser aberto em 2026-10-15T14:10:37.666482+00:00
+
+tradingagents\desk\salas.py:446: SalaError
+__ TestSalasIsolamentoFinanceiro.test_persistencia_em_chave_propria_por_sala __
+
+self = <tradingagents.desk.salas.Sala object at 0x000001E7A8B8D340>
+instrumento = 'BTC/USDT', preco = Decimal('105')
+quando = datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.timezone.utc)
+
+    def registrar_saida(self, instrumento: str, preco, *,
+                        quando: datetime | None = None) -> dict:
+        """Fecha a posição: custo real descontado, resultado no saldo DESTA
+        sala e desfecho registrado para a escola DESTE contexto."""
+        posicao = self.posicoes.pop(instrumento, None)
+        if posicao is None:
+            raise SalaError(f"{instrumento} não tem posição aberta nesta sala")
+        preco = Decimal(str(preco))
+        quantidade = Decimal(posicao["quantidade"])
+        entrada = Decimal(posicao["preco_entrada"])
+        if preco <= 0:
+            self.posicoes[instrumento] = posicao   # devolve: nada foi fechado
+            raise SalaError("preço de saída precisa ser positivo")
+        valor_ordem = quantidade * entrada
+        custo = custo_de_operar(instrumento, self.contexto.corretora,
+                                valor_ordem)
+        bruto = (preco - entrada) / entrada
+        liquido = retorno_liquido(bruto, custo)
+        resultado = valor_ordem * liquido
+        aberta_em = (datetime.fromisoformat(posicao["aberta_em"])
+                     if posicao.get("aberta_em") else None)
+        desfecho = Desfecho(
+            estrategia=posicao.get("estrategia") or posicao.get("agente", ""),
+            regime=posicao.get("regime", "indefinido"),
+            instrumento=instrumento, retorno=liquido,
+            fechado_em=quando or utcnow(), forca_do_sinal=0.0,
+            exchange=self.contexto.corretora,
+            versao=str(posicao.get("versao", "1")),
+            agente=posicao.get("agente", ""),
+            horizonte=posicao.get("horizonte", "1h"),
+            aberta_em=aberta_em)
+        # A porta da evidência valida ANTES de mexer no saldo: desfecho
+        # impossível devolve a posição e nada foi fechado (nem contado).
+        try:
+>           validar_desfecho(desfecho)
+
+tradingagents\desk\salas.py:443: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+desfecho = Desfecho(estrategia='trend_following', regime='indefinido', instrumento='BTC/USDT', retorno=Decimal('0.047000'), fecha...ente='t1', horizonte='1h', aberta_em=datetime.datetime(2026, 10, 15, 14, 10, 37, 699960, tzinfo=datetime.timezone.utc))
+agora = datetime.datetime(2026, 10, 15, 14, 10, 37, 699960, tzinfo=datetime.timezone.utc)
+
+    def validar_desfecho(desfecho: Desfecho, *,
+                         agora: datetime | None = None) -> None:
+        """A porta da evidência: recusa dado impossível ANTES da estatística.
+    
+        - Fechamento (ou abertura) no futuro além da tolerância de relógio:
+          a operação ainda não aconteceu — aceitá-la infla a amostra.
+        - Fechamento anterior à abertura: dado corrompido.
+        Legado sem `aberta_em` permanece válido — o fechamento decide.
+        """
+        agora = agora or datetime.now(timezone.utc)
+        if agora.tzinfo is None:
+            agora = agora.replace(tzinfo=timezone.utc)
+        fechado = desfecho.fechado_em
+        if fechado.tzinfo is None:
+            fechado = fechado.replace(tzinfo=timezone.utc)
+        if fechado > agora + TOLERANCIA_FUTURO:
+            raise ValueError(
+                f"desfecho com fechado_em no futuro ({fechado.isoformat()}) — "
+                "operação ainda não aconteceu")
+        aberta = desfecho.aberta_em
+        if aberta is not None:
+            if aberta.tzinfo is None:
+                aberta = aberta.replace(tzinfo=timezone.utc)
+            if aberta > agora + TOLERANCIA_FUTURO:
+                raise ValueError(
+                    f"desfecho com aberta_em no futuro ({aberta.isoformat()}) — "
+                    "operação ainda não aconteceu")
+            if fechado < aberta:
+>               raise ValueError(
+                    f"fechamento em {fechado.isoformat()} antes de ser aberto "
+                    f"em {aberta.isoformat()}")
+E               ValueError: fechamento em 2026-01-01T12:00:00+00:00 antes de ser aberto em 2026-10-15T14:10:37.699960+00:00
+
+tradingagents\desk\learning.py:126: ValueError
+
+The above exception was the direct cause of the following exception:
+
+self = <tests.test_salas.TestSalasIsolamentoFinanceiro object at 0x000001E7A8DE0F20>
+
+    def test_persistencia_em_chave_propria_por_sala(self):
+        armazem = ArmazemFake()
+        reg = RegistroDeSalas(armazem=armazem)
+        sala_b = reg.abrir_sala(_ctx(corretora="binance"))
+        sala_o = reg.abrir_sala(_ctx(corretora="okx"))
+        sala_b.registrar_entrada(ATIVO, 1, Decimal("100"), agente="t1",
+                                 estrategia=ESTRATEGIA)
+>       sala_b.registrar_saida(ATIVO, Decimal("105"), quando=BASE)
+
+tests\test_salas.py:263: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tradingagents.desk.salas.Sala object at 0x000001E7A8B8D340>
+instrumento = 'BTC/USDT', preco = Decimal('105')
+quando = datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.timezone.utc)
+
+    def registrar_saida(self, instrumento: str, preco, *,
+                        quando: datetime | None = None) -> dict:
+        """Fecha a posição: custo real descontado, resultado no saldo DESTA
+        sala e desfecho registrado para a escola DESTE contexto."""
+        posicao = self.posicoes.pop(instrumento, None)
+        if posicao is None:
+            raise SalaError(f"{instrumento} não tem posição aberta nesta sala")
+        preco = Decimal(str(preco))
+        quantidade = Decimal(posicao["quantidade"])
+        entrada = Decimal(posicao["preco_entrada"])
+        if preco <= 0:
+            self.posicoes[instrumento] = posicao   # devolve: nada foi fechado
+            raise SalaError("preço de saída precisa ser positivo")
+        valor_ordem = quantidade * entrada
+        custo = custo_de_operar(instrumento, self.contexto.corretora,
+                                valor_ordem)
+        bruto = (preco - entrada) / entrada
+        liquido = retorno_liquido(bruto, custo)
+        resultado = valor_ordem * liquido
+        aberta_em = (datetime.fromisoformat(posicao["aberta_em"])
+                     if posicao.get("aberta_em") else None)
+        desfecho = Desfecho(
+            estrategia=posicao.get("estrategia") or posicao.get("agente", ""),
+            regime=posicao.get("regime", "indefinido"),
+            instrumento=instrumento, retorno=liquido,
+            fechado_em=quando or utcnow(), forca_do_sinal=0.0,
+            exchange=self.contexto.corretora,
+            versao=str(posicao.get("versao", "1")),
+            agente=posicao.get("agente", ""),
+            horizonte=posicao.get("horizonte", "1h"),
+            aberta_em=aberta_em)
+        # A porta da evidência valida ANTES de mexer no saldo: desfecho
+        # impossível devolve a posição e nada foi fechado (nem contado).
+        try:
+            validar_desfecho(desfecho)
+        except ValueError as erro:
+            self.posicoes[instrumento] = posicao
+>           raise SalaError(str(erro)) from erro
+E           tradingagents.desk.salas.SalaError: fechamento em 2026-01-01T12:00:00+00:00 antes de ser aberto em 2026-10-15T14:10:37.699960+00:00
+
+tradingagents\desk\salas.py:446: SalaError
+=========================== short test summary info ===========================
+FAILED tests/test_salas.py::TestSalasIsolamentoFinanceiro::test_saldo_posicoes_taxas_e_desfechos_nao_se_misturam
+FAILED tests/test_salas.py::TestSalasIsolamentoFinanceiro::test_custos_reais_descontados_da_evidencia
+FAILED tests/test_salas.py::TestSalasIsolamentoFinanceiro::test_persistencia_em_chave_propria_por_sala
+3 failed, 102 passed in 23.19s

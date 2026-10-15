@@ -1,0 +1,426 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="105" time="23.166" timestamp="2026-10-15T11:10:37.034274-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_desk_escola.TestPerfilDeMercado" name="test_spot_alvo_zero_e_metrica_retorno" time="0.002" /><testcase classname="tests.test_desk_escola.TestPerfilDeMercado" name="test_binaria_alvo_com_payout_estressado" time="0.001" /><testcase classname="tests.test_desk_escola.TestPerfilDeMercado" name="test_n_efetivo_menor_que_amostras_com_peso_decaindo" time="0.001" /><testcase classname="tests.test_desk_escola.TestEscolaEstados" name="test_coletando_com_amostra_pequena" time="0.001" /><testcase classname="tests.test_desk_escola.TestEscolaEstados" name="test_199_operacoes_ainda_nao_declaram_candidatura" time="0.002" /><testcase classname="tests.test_desk_escola.TestEscolaEstados" name="test_220_boas_declaram_candidata_sem_promover" time="0.002" /><testcase classname="tests.test_desk_escola.TestEscolaEstados" name="test_sem_vantagem_apos_300_sem_ic_acima_do_alvo" time="0.003" /><testcase classname="tests.test_desk_escola.TestEscolaEstados" name="test_sem_vantagem_pode_melhorar_com_evidencia_nova" time="0.006" /><testcase classname="tests.test_desk_escola.TestProvaIndependente" name="test_treino_reaproveitado_nao_vale_como_prova" time="0.005" /><testcase classname="tests.test_desk_escola.TestProvaIndependente" name="test_prova_final_independente_forma_o_trader" time="0.005" /><testcase classname="tests.test_desk_escola.TestProvaIndependente" name="test_prova_parcial_mantem_prova_final" time="0.003" /><testcase classname="tests.test_desk_escola.TestProvaIndependente" name="test_prova_ruim_reprova_e_e_estado_terminal" time="0.008" /><testcase classname="tests.test_desk_escola.TestRevogacao" name="test_revoga_em_50_novas_evidencias_contrarias" time="0.009" /><testcase classname="tests.test_desk_escola.TestRevogacao" name="test_revogada_nao_volta_atras" time="0.010" /><testcase classname="tests.test_desk_escola.TestRevogacao" name="test_versao_nova_recomeca_a_coleta" time="0.009" /><testcase classname="tests.test_desk_escola.TestBinaria" name="test_estresse_de_payout_muda_a_decisao" time="0.004" /><testcase classname="tests.test_desk_escola.TestPersistencia" name="test_estado_historico_e_relatorio_sobrevivem_ao_reinicio" time="0.002" /><testcase classname="tests.test_desk_escola.TestPersistencia" name="test_comparar_com_controle_aleatorio" time="0.004" /><testcase classname="tests.test_salas.TestAdaptadoresEHomologacao" name="test_corretoras_padrao_estao_homologadas" time="0.001" /><testcase classname="tests.test_salas.TestAdaptadoresEHomologacao" name="test_registrar_sem_substituir_recusa_duplicata" time="0.001" /><testcase classname="tests.test_salas.TestAdaptadoresEHomologacao" name="test_extensao_por_adaptador_novo" time="0.001" /><testcase classname="tests.test_salas.TestAdaptadoresEHomologacao" name="test_adaptador_com_mercado_desconhecido_recusa" time="0.001" /><testcase classname="tests.test_salas.TestAdaptadoresEHomologacao" name="test_corretora_sem_adaptador_nenhuma_sala" time="0.001" /><testcase classname="tests.test_salas.TestAdaptadoresEHomologacao" name="test_mercado_incompativel_com_a_corretora" time="0.001" /><testcase classname="tests.test_salas.TestAdaptadoresEHomologacao" name="test_binaria_exige_payout_e_spot_recusa_payout" time="0.001" /><testcase classname="tests.test_salas.TestAdaptadoresEHomologacao" name="test_laboratorio_so_opera_em_paper" time="0.001" /><testcase classname="tests.test_salas.TestAdaptadoresEHomologacao" name="test_sala_live_nao_e_criada_por_esta_camada" time="0.001" /><testcase classname="tests.test_salas.TestAdaptadoresEHomologacao" name="test_modo_desconhecido_e_conta_vazia_recusam" time="0.001" /><testcase classname="tests.test_salas.TestSalasIsolamentoFinanceiro" name="test_saldo_posicoes_taxas_e_desfechos_nao_se_misturam" time="0.001"><failure message="tradingagents.desk.salas.SalaError: fechamento em 2026-01-01T12:00:00+00:00 antes de ser aberto em 2026-10-15T14:10:37.554329+00:00">self = &lt;tradingagents.desk.salas.Sala object at 0x000001E7A8AB5670&gt;
+instrumento = 'BTC/USDT', preco = Decimal('105')
+quando = datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.timezone.utc)
+
+    def registrar_saida(self, instrumento: str, preco, *,
+                        quando: datetime | None = None) -&gt; dict:
+        """Fecha a posição: custo real descontado, resultado no saldo DESTA
+        sala e desfecho registrado para a escola DESTE contexto."""
+        posicao = self.posicoes.pop(instrumento, None)
+        if posicao is None:
+            raise SalaError(f"{instrumento} não tem posição aberta nesta sala")
+        preco = Decimal(str(preco))
+        quantidade = Decimal(posicao["quantidade"])
+        entrada = Decimal(posicao["preco_entrada"])
+        if preco &lt;= 0:
+            self.posicoes[instrumento] = posicao   # devolve: nada foi fechado
+            raise SalaError("preço de saída precisa ser positivo")
+        valor_ordem = quantidade * entrada
+        custo = custo_de_operar(instrumento, self.contexto.corretora,
+                                valor_ordem)
+        bruto = (preco - entrada) / entrada
+        liquido = retorno_liquido(bruto, custo)
+        resultado = valor_ordem * liquido
+        aberta_em = (datetime.fromisoformat(posicao["aberta_em"])
+                     if posicao.get("aberta_em") else None)
+        desfecho = Desfecho(
+            estrategia=posicao.get("estrategia") or posicao.get("agente", ""),
+            regime=posicao.get("regime", "indefinido"),
+            instrumento=instrumento, retorno=liquido,
+            fechado_em=quando or utcnow(), forca_do_sinal=0.0,
+            exchange=self.contexto.corretora,
+            versao=str(posicao.get("versao", "1")),
+            agente=posicao.get("agente", ""),
+            horizonte=posicao.get("horizonte", "1h"),
+            aberta_em=aberta_em)
+        # A porta da evidência valida ANTES de mexer no saldo: desfecho
+        # impossível devolve a posição e nada foi fechado (nem contado).
+        try:
+&gt;           validar_desfecho(desfecho)
+
+tradingagents\desk\salas.py:443: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+desfecho = Desfecho(estrategia='trend_following', regime='indefinido', instrumento='BTC/USDT', retorno=Decimal('0.047000'), fecha...ente='t1', horizonte='1h', aberta_em=datetime.datetime(2026, 10, 15, 14, 10, 37, 554329, tzinfo=datetime.timezone.utc))
+agora = datetime.datetime(2026, 10, 15, 14, 10, 37, 554329, tzinfo=datetime.timezone.utc)
+
+    def validar_desfecho(desfecho: Desfecho, *,
+                         agora: datetime | None = None) -&gt; None:
+        """A porta da evidência: recusa dado impossível ANTES da estatística.
+    
+        - Fechamento (ou abertura) no futuro além da tolerância de relógio:
+          a operação ainda não aconteceu — aceitá-la infla a amostra.
+        - Fechamento anterior à abertura: dado corrompido.
+        Legado sem `aberta_em` permanece válido — o fechamento decide.
+        """
+        agora = agora or datetime.now(timezone.utc)
+        if agora.tzinfo is None:
+            agora = agora.replace(tzinfo=timezone.utc)
+        fechado = desfecho.fechado_em
+        if fechado.tzinfo is None:
+            fechado = fechado.replace(tzinfo=timezone.utc)
+        if fechado &gt; agora + TOLERANCIA_FUTURO:
+            raise ValueError(
+                f"desfecho com fechado_em no futuro ({fechado.isoformat()}) — "
+                "operação ainda não aconteceu")
+        aberta = desfecho.aberta_em
+        if aberta is not None:
+            if aberta.tzinfo is None:
+                aberta = aberta.replace(tzinfo=timezone.utc)
+            if aberta &gt; agora + TOLERANCIA_FUTURO:
+                raise ValueError(
+                    f"desfecho com aberta_em no futuro ({aberta.isoformat()}) — "
+                    "operação ainda não aconteceu")
+            if fechado &lt; aberta:
+&gt;               raise ValueError(
+                    f"fechamento em {fechado.isoformat()} antes de ser aberto "
+                    f"em {aberta.isoformat()}")
+E               ValueError: fechamento em 2026-01-01T12:00:00+00:00 antes de ser aberto em 2026-10-15T14:10:37.554329+00:00
+
+tradingagents\desk\learning.py:126: ValueError
+
+The above exception was the direct cause of the following exception:
+
+self = &lt;tests.test_salas.TestSalasIsolamentoFinanceiro object at 0x000001E7A8DBE480&gt;
+
+    def test_saldo_posicoes_taxas_e_desfechos_nao_se_misturam(self):
+        armazem = ArmazemFake()
+        reg = RegistroDeSalas(armazem=armazem)
+        sala_b = reg.abrir_sala(_ctx(corretora="binance"))
+        sala_o = reg.abrir_sala(_ctx(corretora="okx"))
+    
+        sala_b.registrar_entrada(ATIVO, 1, Decimal("100"), agente="t1",
+                                 estrategia=ESTRATEGIA)
+        sala_o.registrar_entrada(ATIVO, 1, Decimal("100"), agente="t1",
+                                 estrategia=ESTRATEGIA)
+&gt;       sala_b.registrar_saida(ATIVO, Decimal("105"), quando=BASE)
+
+tests\test_salas.py:192: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;tradingagents.desk.salas.Sala object at 0x000001E7A8AB5670&gt;
+instrumento = 'BTC/USDT', preco = Decimal('105')
+quando = datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.timezone.utc)
+
+    def registrar_saida(self, instrumento: str, preco, *,
+                        quando: datetime | None = None) -&gt; dict:
+        """Fecha a posição: custo real descontado, resultado no saldo DESTA
+        sala e desfecho registrado para a escola DESTE contexto."""
+        posicao = self.posicoes.pop(instrumento, None)
+        if posicao is None:
+            raise SalaError(f"{instrumento} não tem posição aberta nesta sala")
+        preco = Decimal(str(preco))
+        quantidade = Decimal(posicao["quantidade"])
+        entrada = Decimal(posicao["preco_entrada"])
+        if preco &lt;= 0:
+            self.posicoes[instrumento] = posicao   # devolve: nada foi fechado
+            raise SalaError("preço de saída precisa ser positivo")
+        valor_ordem = quantidade * entrada
+        custo = custo_de_operar(instrumento, self.contexto.corretora,
+                                valor_ordem)
+        bruto = (preco - entrada) / entrada
+        liquido = retorno_liquido(bruto, custo)
+        resultado = valor_ordem * liquido
+        aberta_em = (datetime.fromisoformat(posicao["aberta_em"])
+                     if posicao.get("aberta_em") else None)
+        desfecho = Desfecho(
+            estrategia=posicao.get("estrategia") or posicao.get("agente", ""),
+            regime=posicao.get("regime", "indefinido"),
+            instrumento=instrumento, retorno=liquido,
+            fechado_em=quando or utcnow(), forca_do_sinal=0.0,
+            exchange=self.contexto.corretora,
+            versao=str(posicao.get("versao", "1")),
+            agente=posicao.get("agente", ""),
+            horizonte=posicao.get("horizonte", "1h"),
+            aberta_em=aberta_em)
+        # A porta da evidência valida ANTES de mexer no saldo: desfecho
+        # impossível devolve a posição e nada foi fechado (nem contado).
+        try:
+            validar_desfecho(desfecho)
+        except ValueError as erro:
+            self.posicoes[instrumento] = posicao
+&gt;           raise SalaError(str(erro)) from erro
+E           tradingagents.desk.salas.SalaError: fechamento em 2026-01-01T12:00:00+00:00 antes de ser aberto em 2026-10-15T14:10:37.554329+00:00
+
+tradingagents\desk\salas.py:446: SalaError</failure></testcase><testcase classname="tests.test_salas.TestSalasIsolamentoFinanceiro" name="test_custos_reais_descontados_da_evidencia" time="0.001"><failure message="tradingagents.desk.salas.SalaError: fechamento em 2026-01-01T12:00:00+00:00 antes de ser aberto em 2026-10-15T14:10:37.666482+00:00">self = &lt;tradingagents.desk.salas.Sala object at 0x000001E7A8AB68D0&gt;
+instrumento = 'BTC/USDT', preco = Decimal('105')
+quando = datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.timezone.utc)
+
+    def registrar_saida(self, instrumento: str, preco, *,
+                        quando: datetime | None = None) -&gt; dict:
+        """Fecha a posição: custo real descontado, resultado no saldo DESTA
+        sala e desfecho registrado para a escola DESTE contexto."""
+        posicao = self.posicoes.pop(instrumento, None)
+        if posicao is None:
+            raise SalaError(f"{instrumento} não tem posição aberta nesta sala")
+        preco = Decimal(str(preco))
+        quantidade = Decimal(posicao["quantidade"])
+        entrada = Decimal(posicao["preco_entrada"])
+        if preco &lt;= 0:
+            self.posicoes[instrumento] = posicao   # devolve: nada foi fechado
+            raise SalaError("preço de saída precisa ser positivo")
+        valor_ordem = quantidade * entrada
+        custo = custo_de_operar(instrumento, self.contexto.corretora,
+                                valor_ordem)
+        bruto = (preco - entrada) / entrada
+        liquido = retorno_liquido(bruto, custo)
+        resultado = valor_ordem * liquido
+        aberta_em = (datetime.fromisoformat(posicao["aberta_em"])
+                     if posicao.get("aberta_em") else None)
+        desfecho = Desfecho(
+            estrategia=posicao.get("estrategia") or posicao.get("agente", ""),
+            regime=posicao.get("regime", "indefinido"),
+            instrumento=instrumento, retorno=liquido,
+            fechado_em=quando or utcnow(), forca_do_sinal=0.0,
+            exchange=self.contexto.corretora,
+            versao=str(posicao.get("versao", "1")),
+            agente=posicao.get("agente", ""),
+            horizonte=posicao.get("horizonte", "1h"),
+            aberta_em=aberta_em)
+        # A porta da evidência valida ANTES de mexer no saldo: desfecho
+        # impossível devolve a posição e nada foi fechado (nem contado).
+        try:
+&gt;           validar_desfecho(desfecho)
+
+tradingagents\desk\salas.py:443: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+desfecho = Desfecho(estrategia='trend_following', regime='indefinido', instrumento='BTC/USDT', retorno=Decimal('0.047000'), fecha...ente='t1', horizonte='1h', aberta_em=datetime.datetime(2026, 10, 15, 14, 10, 37, 666482, tzinfo=datetime.timezone.utc))
+agora = datetime.datetime(2026, 10, 15, 14, 10, 37, 666482, tzinfo=datetime.timezone.utc)
+
+    def validar_desfecho(desfecho: Desfecho, *,
+                         agora: datetime | None = None) -&gt; None:
+        """A porta da evidência: recusa dado impossível ANTES da estatística.
+    
+        - Fechamento (ou abertura) no futuro além da tolerância de relógio:
+          a operação ainda não aconteceu — aceitá-la infla a amostra.
+        - Fechamento anterior à abertura: dado corrompido.
+        Legado sem `aberta_em` permanece válido — o fechamento decide.
+        """
+        agora = agora or datetime.now(timezone.utc)
+        if agora.tzinfo is None:
+            agora = agora.replace(tzinfo=timezone.utc)
+        fechado = desfecho.fechado_em
+        if fechado.tzinfo is None:
+            fechado = fechado.replace(tzinfo=timezone.utc)
+        if fechado &gt; agora + TOLERANCIA_FUTURO:
+            raise ValueError(
+                f"desfecho com fechado_em no futuro ({fechado.isoformat()}) — "
+                "operação ainda não aconteceu")
+        aberta = desfecho.aberta_em
+        if aberta is not None:
+            if aberta.tzinfo is None:
+                aberta = aberta.replace(tzinfo=timezone.utc)
+            if aberta &gt; agora + TOLERANCIA_FUTURO:
+                raise ValueError(
+                    f"desfecho com aberta_em no futuro ({aberta.isoformat()}) — "
+                    "operação ainda não aconteceu")
+            if fechado &lt; aberta:
+&gt;               raise ValueError(
+                    f"fechamento em {fechado.isoformat()} antes de ser aberto "
+                    f"em {aberta.isoformat()}")
+E               ValueError: fechamento em 2026-01-01T12:00:00+00:00 antes de ser aberto em 2026-10-15T14:10:37.666482+00:00
+
+tradingagents\desk\learning.py:126: ValueError
+
+The above exception was the direct cause of the following exception:
+
+self = &lt;tests.test_salas.TestSalasIsolamentoFinanceiro object at 0x000001E7A8DBCC50&gt;
+
+    def test_custos_reais_descontados_da_evidencia(self):
+        reg = RegistroDeSalas(armazem=ArmazemFake())
+        sala = reg.abrir_sala(_ctx(corretora="binance"))
+        sala.registrar_entrada(ATIVO, 1, Decimal("100"), agente="t1",
+                               estrategia=ESTRATEGIA)
+&gt;       r = sala.registrar_saida(ATIVO, Decimal("105"), quando=BASE)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_salas.py:208: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;tradingagents.desk.salas.Sala object at 0x000001E7A8AB68D0&gt;
+instrumento = 'BTC/USDT', preco = Decimal('105')
+quando = datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.timezone.utc)
+
+    def registrar_saida(self, instrumento: str, preco, *,
+                        quando: datetime | None = None) -&gt; dict:
+        """Fecha a posição: custo real descontado, resultado no saldo DESTA
+        sala e desfecho registrado para a escola DESTE contexto."""
+        posicao = self.posicoes.pop(instrumento, None)
+        if posicao is None:
+            raise SalaError(f"{instrumento} não tem posição aberta nesta sala")
+        preco = Decimal(str(preco))
+        quantidade = Decimal(posicao["quantidade"])
+        entrada = Decimal(posicao["preco_entrada"])
+        if preco &lt;= 0:
+            self.posicoes[instrumento] = posicao   # devolve: nada foi fechado
+            raise SalaError("preço de saída precisa ser positivo")
+        valor_ordem = quantidade * entrada
+        custo = custo_de_operar(instrumento, self.contexto.corretora,
+                                valor_ordem)
+        bruto = (preco - entrada) / entrada
+        liquido = retorno_liquido(bruto, custo)
+        resultado = valor_ordem * liquido
+        aberta_em = (datetime.fromisoformat(posicao["aberta_em"])
+                     if posicao.get("aberta_em") else None)
+        desfecho = Desfecho(
+            estrategia=posicao.get("estrategia") or posicao.get("agente", ""),
+            regime=posicao.get("regime", "indefinido"),
+            instrumento=instrumento, retorno=liquido,
+            fechado_em=quando or utcnow(), forca_do_sinal=0.0,
+            exchange=self.contexto.corretora,
+            versao=str(posicao.get("versao", "1")),
+            agente=posicao.get("agente", ""),
+            horizonte=posicao.get("horizonte", "1h"),
+            aberta_em=aberta_em)
+        # A porta da evidência valida ANTES de mexer no saldo: desfecho
+        # impossível devolve a posição e nada foi fechado (nem contado).
+        try:
+            validar_desfecho(desfecho)
+        except ValueError as erro:
+            self.posicoes[instrumento] = posicao
+&gt;           raise SalaError(str(erro)) from erro
+E           tradingagents.desk.salas.SalaError: fechamento em 2026-01-01T12:00:00+00:00 antes de ser aberto em 2026-10-15T14:10:37.666482+00:00
+
+tradingagents\desk\salas.py:446: SalaError</failure></testcase><testcase classname="tests.test_salas.TestSalasIsolamentoFinanceiro" name="test_desfecho_de_outra_corretora_e_recusado" time="0.001" /><testcase classname="tests.test_salas.TestSalasIsolamentoFinanceiro" name="test_desfecho_sem_corretora_recebe_a_da_sala" time="0.001" /><testcase classname="tests.test_salas.TestSalasIsolamentoFinanceiro" name="test_uma_posicao_por_instrumento" time="0.001" /><testcase classname="tests.test_salas.TestSalasIsolamentoFinanceiro" name="test_saida_sem_posicao_recusa_e_preco_invalido_nao_fecha" time="0.001" /><testcase classname="tests.test_salas.TestSalasIsolamentoFinanceiro" name="test_persistencia_em_chave_propria_por_sala" time="0.001"><failure message="tradingagents.desk.salas.SalaError: fechamento em 2026-01-01T12:00:00+00:00 antes de ser aberto em 2026-10-15T14:10:37.699960+00:00">self = &lt;tradingagents.desk.salas.Sala object at 0x000001E7A8B8D340&gt;
+instrumento = 'BTC/USDT', preco = Decimal('105')
+quando = datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.timezone.utc)
+
+    def registrar_saida(self, instrumento: str, preco, *,
+                        quando: datetime | None = None) -&gt; dict:
+        """Fecha a posição: custo real descontado, resultado no saldo DESTA
+        sala e desfecho registrado para a escola DESTE contexto."""
+        posicao = self.posicoes.pop(instrumento, None)
+        if posicao is None:
+            raise SalaError(f"{instrumento} não tem posição aberta nesta sala")
+        preco = Decimal(str(preco))
+        quantidade = Decimal(posicao["quantidade"])
+        entrada = Decimal(posicao["preco_entrada"])
+        if preco &lt;= 0:
+            self.posicoes[instrumento] = posicao   # devolve: nada foi fechado
+            raise SalaError("preço de saída precisa ser positivo")
+        valor_ordem = quantidade * entrada
+        custo = custo_de_operar(instrumento, self.contexto.corretora,
+                                valor_ordem)
+        bruto = (preco - entrada) / entrada
+        liquido = retorno_liquido(bruto, custo)
+        resultado = valor_ordem * liquido
+        aberta_em = (datetime.fromisoformat(posicao["aberta_em"])
+                     if posicao.get("aberta_em") else None)
+        desfecho = Desfecho(
+            estrategia=posicao.get("estrategia") or posicao.get("agente", ""),
+            regime=posicao.get("regime", "indefinido"),
+            instrumento=instrumento, retorno=liquido,
+            fechado_em=quando or utcnow(), forca_do_sinal=0.0,
+            exchange=self.contexto.corretora,
+            versao=str(posicao.get("versao", "1")),
+            agente=posicao.get("agente", ""),
+            horizonte=posicao.get("horizonte", "1h"),
+            aberta_em=aberta_em)
+        # A porta da evidência valida ANTES de mexer no saldo: desfecho
+        # impossível devolve a posição e nada foi fechado (nem contado).
+        try:
+&gt;           validar_desfecho(desfecho)
+
+tradingagents\desk\salas.py:443: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+desfecho = Desfecho(estrategia='trend_following', regime='indefinido', instrumento='BTC/USDT', retorno=Decimal('0.047000'), fecha...ente='t1', horizonte='1h', aberta_em=datetime.datetime(2026, 10, 15, 14, 10, 37, 699960, tzinfo=datetime.timezone.utc))
+agora = datetime.datetime(2026, 10, 15, 14, 10, 37, 699960, tzinfo=datetime.timezone.utc)
+
+    def validar_desfecho(desfecho: Desfecho, *,
+                         agora: datetime | None = None) -&gt; None:
+        """A porta da evidência: recusa dado impossível ANTES da estatística.
+    
+        - Fechamento (ou abertura) no futuro além da tolerância de relógio:
+          a operação ainda não aconteceu — aceitá-la infla a amostra.
+        - Fechamento anterior à abertura: dado corrompido.
+        Legado sem `aberta_em` permanece válido — o fechamento decide.
+        """
+        agora = agora or datetime.now(timezone.utc)
+        if agora.tzinfo is None:
+            agora = agora.replace(tzinfo=timezone.utc)
+        fechado = desfecho.fechado_em
+        if fechado.tzinfo is None:
+            fechado = fechado.replace(tzinfo=timezone.utc)
+        if fechado &gt; agora + TOLERANCIA_FUTURO:
+            raise ValueError(
+                f"desfecho com fechado_em no futuro ({fechado.isoformat()}) — "
+                "operação ainda não aconteceu")
+        aberta = desfecho.aberta_em
+        if aberta is not None:
+            if aberta.tzinfo is None:
+                aberta = aberta.replace(tzinfo=timezone.utc)
+            if aberta &gt; agora + TOLERANCIA_FUTURO:
+                raise ValueError(
+                    f"desfecho com aberta_em no futuro ({aberta.isoformat()}) — "
+                    "operação ainda não aconteceu")
+            if fechado &lt; aberta:
+&gt;               raise ValueError(
+                    f"fechamento em {fechado.isoformat()} antes de ser aberto "
+                    f"em {aberta.isoformat()}")
+E               ValueError: fechamento em 2026-01-01T12:00:00+00:00 antes de ser aberto em 2026-10-15T14:10:37.699960+00:00
+
+tradingagents\desk\learning.py:126: ValueError
+
+The above exception was the direct cause of the following exception:
+
+self = &lt;tests.test_salas.TestSalasIsolamentoFinanceiro object at 0x000001E7A8DE0F20&gt;
+
+    def test_persistencia_em_chave_propria_por_sala(self):
+        armazem = ArmazemFake()
+        reg = RegistroDeSalas(armazem=armazem)
+        sala_b = reg.abrir_sala(_ctx(corretora="binance"))
+        sala_o = reg.abrir_sala(_ctx(corretora="okx"))
+        sala_b.registrar_entrada(ATIVO, 1, Decimal("100"), agente="t1",
+                                 estrategia=ESTRATEGIA)
+&gt;       sala_b.registrar_saida(ATIVO, Decimal("105"), quando=BASE)
+
+tests\test_salas.py:263: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;tradingagents.desk.salas.Sala object at 0x000001E7A8B8D340&gt;
+instrumento = 'BTC/USDT', preco = Decimal('105')
+quando = datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.timezone.utc)
+
+    def registrar_saida(self, instrumento: str, preco, *,
+                        quando: datetime | None = None) -&gt; dict:
+        """Fecha a posição: custo real descontado, resultado no saldo DESTA
+        sala e desfecho registrado para a escola DESTE contexto."""
+        posicao = self.posicoes.pop(instrumento, None)
+        if posicao is None:
+            raise SalaError(f"{instrumento} não tem posição aberta nesta sala")
+        preco = Decimal(str(preco))
+        quantidade = Decimal(posicao["quantidade"])
+        entrada = Decimal(posicao["preco_entrada"])
+        if preco &lt;= 0:
+            self.posicoes[instrumento] = posicao   # devolve: nada foi fechado
+            raise SalaError("preço de saída precisa ser positivo")
+        valor_ordem = quantidade * entrada
+        custo = custo_de_operar(instrumento, self.contexto.corretora,
+                                valor_ordem)
+        bruto = (preco - entrada) / entrada
+        liquido = retorno_liquido(bruto, custo)
+        resultado = valor_ordem * liquido
+        aberta_em = (datetime.fromisoformat(posicao["aberta_em"])
+                     if posicao.get("aberta_em") else None)
+        desfecho = Desfecho(
+            estrategia=posicao.get("estrategia") or posicao.get("agente", ""),
+            regime=posicao.get("regime", "indefinido"),
+            instrumento=instrumento, retorno=liquido,
+            fechado_em=quando or utcnow(), forca_do_sinal=0.0,
+            exchange=self.contexto.corretora,
+            versao=str(posicao.get("versao", "1")),
+            agente=posicao.get("agente", ""),
+            horizonte=posicao.get("horizonte", "1h"),
+            aberta_em=aberta_em)
+        # A porta da evidência valida ANTES de mexer no saldo: desfecho
+        # impossível devolve a posição e nada foi fechado (nem contado).
+        try:
+            validar_desfecho(desfecho)
+        except ValueError as erro:
+            self.posicoes[instrumento] = posicao
+&gt;           raise SalaError(str(erro)) from erro
+E           tradingagents.desk.salas.SalaError: fechamento em 2026-01-01T12:00:00+00:00 antes de ser aberto em 2026-10-15T14:10:37.699960+00:00
+
+tradingagents\desk\salas.py:446: SalaError</failure></testcase><testcase classname="tests.test_salas.TestCertificacaoPorContexto" name="test_formado_na_binance_nao_vale_na_okx" time="0.525" /><testcase classname="tests.test_salas.TestCertificacaoPorContexto" name="test_outro_ativo_e_outro_horizonte_nao_herdam_formacao" time="0.540" /><testcase classname="tests.test_salas.TestCertificacaoPorContexto" name="test_outra_versao_da_estrategia_nao_herda_formacao" time="0.682" /><testcase classname="tests.test_salas.TestCertificacaoPorContexto" name="test_certificacao_persiste_e_aparece_no_relatorio" time="0.736" /><testcase classname="tests.test_salas.TestCertificacaoPorContexto" name="test_laboratorio_forma_mas_nunca_e_elegivel" time="0.731" /><testcase classname="tests.test_salas.TestCertificacaoPorContexto" name="test_evidencia_da_sala_de_outra_corretora_nao_e_vista" time="0.723" /><testcase classname="tests.test_salas.TestLedgerPorSala" name="test_livros_de_salas_diferentes_nao_se_misturam" time="0.001" /><testcase classname="tests.test_salas.TestLedgerPorSala" name="test_ledger_persiste_junto_com_a_sala" time="0.001" /><testcase classname="tests.test_desk_piloto.TestCadeiaObrigatoria" name="test_sem_formatura_solicitar_recusa" time="0.001" /><testcase classname="tests.test_desk_piloto.TestCadeiaObrigatoria" name="test_versao_diferente_nao_e_elegivel" time="0.006" /><testcase classname="tests.test_desk_piloto.TestCadeiaObrigatoria" name="test_sem_escola_solicitar_recusa" time="0.001" /><testcase classname="tests.test_desk_piloto.TestCadeiaObrigatoria" name="test_formado_solicita_aguardando" time="0.006" /><testcase classname="tests.test_desk_piloto.TestCadeiaObrigatoria" name="test_pedido_duplicado_recusado" time="0.006" /><testcase classname="tests.test_desk_piloto.TestCadeiaObrigatoria" name="test_limites_invalidos_recusados" time="0.006" /><testcase classname="tests.test_desk_piloto.TestCadeiaObrigatoria" name="test_autorizar_sem_pedido_recusa" time="0.006" /><testcase classname="tests.test_desk_piloto.TestCadeiaObrigatoria" name="test_autorizar_exige_gates" time="0.007" /><testcase classname="tests.test_desk_piloto.TestCadeiaObrigatoria" name="test_cadeia_completa_autoriza" time="0.007" /><testcase classname="tests.test_desk_piloto.TestCadeiaObrigatoria" name="test_gates_de_ativacao" time="0.001" /><testcase classname="tests.test_desk_piloto.TestLimitesEVigia" name="test_capital_acima_do_maximo_bloqueia" time="0.007" /><testcase classname="tests.test_desk_piloto.TestLimitesEVigia" name="test_perda_diaria_atingida_bloqueia" time="0.007" /><testcase classname="tests.test_desk_piloto.TestLimitesEVigia" name="test_perda_total_suspende_terminal" time="0.007" /><testcase classname="tests.test_desk_piloto.TestLimitesEVigia" name="test_dentro_dos_limites_nao_bloqueia" time="0.006" /><testcase classname="tests.test_desk_piloto.TestLimitesEVigia" name="test_prazo_vencido_expira" time="0.006" /><testcase classname="tests.test_desk_piloto.TestLimitesEVigia" name="test_escola_revoga_formatura_e_suspende" time="0.007" /><testcase classname="tests.test_desk_piloto.TestLimitesEVigia" name="test_vigia_sem_escola_suspende" time="0.006" /><testcase classname="tests.test_desk_piloto.TestLimitesEVigia" name="test_revogar_exige_motivo_e_encerra" time="0.007" /><testcase classname="tests.test_desk_piloto.TestPersistencia" name="test_estado_sobrevive_reinicio" time="0.006" /><testcase classname="tests.test_desk_piloto.TestControleAleatorio" name="test_optin_na_mesa" time="0.001" /><testcase classname="tests.test_desk_piloto.TestControleAleatorio" name="test_versao_guardada_no_trader" time="0.001" /><testcase classname="tests.test_desk_piloto.TestControleAleatorio" name="test_sorteio_deterministico" time="0.003" /><testcase classname="tests.test_desk_piloto.TestControleAleatorio" name="test_imune_a_rebaixamento_e_ao_aprendizado" time="0.003" /><testcase classname="tests.test_desk_piloto.TestControleAleatorio" name="test_guard_de_rebaixamento_vale_para_trader_normal" time="0.003" /><testcase classname="tests.test_desk_piloto.TestVigiaNoCiclo" name="test_vigia_corta_entrada_bloqueada" time="0.003" /><testcase classname="tests.test_desk_piloto.TestVigiaNoCiclo" name="test_vigia_quebrado_fail_closed" time="0.002" /><testcase classname="tests.test_v9_quant02_contexto.TestChaveDeCertificacao" name="test_chave_inclui_conta_modo_e_payout" time="0.001" /><testcase classname="tests.test_v9_quant02_contexto.TestChaveDeCertificacao" name="test_construtor_aceita_conta_modo_payout_por_nome" time="0.001" /><testcase classname="tests.test_v9_quant02_contexto.TestIsolamentoPorContextoCompleto" name="test_evidencia_de_outra_conta_nao_certifica" time="0.713" /><testcase classname="tests.test_v9_quant02_contexto.TestIsolamentoPorContextoCompleto" name="test_evidencia_de_outro_modo_nao_certifica" time="0.777" /><testcase classname="tests.test_v9_quant02_contexto.TestIsolamentoPorContextoCompleto" name="test_payout_diferente_nao_certifica_no_laboratorio" time="0.710" /><testcase classname="tests.test_v9_quant02_contexto.TestLegadoFailClosed" name="test_entrada_legada_nao_certifica_contexto_novo" time="0.001" /><testcase classname="tests.test_service_escola.TestRotasRegistradas" name="test_paths_exists" time="0.662" /><testcase classname="tests.test_service_escola.TestRotasRegistradas" name="test_tudo_exige_auth" time="0.196" /><testcase classname="tests.test_service_escola.TestEscolaCentralEBandeja" name="test_central_vazia_e_honesta" time="0.191" /><testcase classname="tests.test_service_escola.TestEscolaCentralEBandeja" name="test_abrir_sala_idempotente_e_isolada" time="0.213" /><testcase classname="tests.test_service_escola.TestEscolaCentralEBandeja" name="test_duas_corretoras_duas_salas_zeradas" time="0.226" /><testcase classname="tests.test_service_escola.TestEscolaCentralEBandeja" name="test_recusas_com_motivo" time="0.280" /><testcase classname="tests.test_service_escola.TestEscolaCentralEBandeja" name="test_sala_inexistente_404" time="0.190" /><testcase classname="tests.test_service_escola.TestConhecimento" name="test_pacote_sem_certificacao_e_adocao" time="0.260" /><testcase classname="tests.test_service_escola.TestConhecimento" name="test_eco_da_propria_sala_recusado" time="0.223" /><testcase classname="tests.test_service_escola.TestConhecimento" name="test_certificacao_escondida_no_pacote_recusada" time="0.250" /><testcase classname="tests.test_service_escola.TestMaestroRotas" name="test_pausa_exige_motivo_e_persiste" time="0.257" /><testcase classname="tests.test_service_escola.TestMaestroRotas" name="test_acao_invalida_422" time="0.199" /><testcase classname="tests.test_service_escola.TestCertificacaoEPilotos" name="test_sem_evidencia_nao_finge_formacao" time="0.186" /><testcase classname="tests.test_service_escola.TestCertificacaoEPilotos" name="test_laboratorio_jamais_elegivel" time="0.299" /><testcase classname="tests.test_service_escola.TestCertificacaoEPilotos" name="test_pilotos_vazio_e_cadeia_guardada" time="0.312" /><testcase classname="tests.test_service_escola.TestCertificacaoEPilotos" name="test_solicitar_exige_numeros" time="0.205" /><testcase classname="tests.test_service_escola.TestControleOptIn" name="test_controle_desligado_por_padrao" time="0.232" /><testcase classname="tests.test_service_escola.TestControleOptIn" name="test_controle_liga_por_configuracao" time="0.230" /><testcase classname="tests.test_service_escola.TestMesaEscolaE2E" name="test_ciclo_espelha_na_sala_e_saida_realiza" time="0.342" /><testcase classname="tests.test_service_escola.TestMesaEscolaE2E" name="test_avaliacao_avanca_formacao_e_isola_contexto" time="3.660" /><testcase classname="tests.test_service_escola.TestMesaEscolaE2E" name="test_piloto_aguardando_corta_entrada_no_ciclo" time="3.624" /><testcase classname="tests.test_service_escola.TestMesaEscolaE2E" name="test_autorizado_passa_e_revogado_corta_de_novo" time="3.909" /><testcase classname="tests.test_fq_formacao_metricas.TestMetricasDeFormacao" name="test_mede_expectativa_fator_e_drawdown" time="0.001" /><testcase classname="tests.test_fq_formacao_metricas.TestMetricasDeFormacao" name="test_metades_mistas_sao_instaveis" time="0.002" /><testcase classname="tests.test_fq_formacao_metricas.TestMetricasDeFormacao" name="test_sem_perdas_fator_indefinido_e_nao_infinito" time="0.001" /><testcase classname="tests.test_fq_formacao_metricas.TestMetricasDeFormacao" name="test_amostra_vazia_nao_inventa" time="0.001" /><testcase classname="tests.test_fq_formacao_metricas.TestMetricasDeFormacao" name="test_um_desfecho_indetermina_estabilidade" time="0.001" /><testcase classname="tests.test_fq_formacao_metricas.TestMetricasDeFormacao" name="test_por_regime_separa_medias" time="0.001" /><testcase classname="tests.test_fq_formacao_metricas.TestBloqueioPorInstabilidade" name="test_ic_aprovado_com_metades_mistas_nao_forma" time="0.007" /><testcase classname="tests.test_fq_formacao_metricas.TestBloqueioPorInstabilidade" name="test_bloqueio_nao_e_terminal_evidencia_boa_forma" time="0.011" /></testsuite></testsuites>

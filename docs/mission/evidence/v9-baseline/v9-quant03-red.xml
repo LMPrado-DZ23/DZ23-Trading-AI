@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="10" skipped="0" tests="11" time="0.216" timestamp="2026-10-15T11:05:01.879750-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_v9_quant03_escola_integridade.TestPortaDaEvidencia" name="test_memoria_rejeita_desfecho_duplicado" time="0.002"><failure message="Failed: DID NOT RAISE ValueError">self = &lt;tests.test_v9_quant03_escola_integridade.TestPortaDaEvidencia object at 0x0000019C08105280&gt;
+
+    def test_memoria_rejeita_desfecho_duplicado(self):
+        mem = MemoriaDeDesempenho()
+        d = _desfecho("0.01")
+        mem.registrar(d)
+&gt;       with pytest.raises(ValueError, match="duplicad"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_v9_quant03_escola_integridade.py:112: Failed</failure></testcase><testcase classname="tests.test_v9_quant03_escola_integridade.TestPortaDaEvidencia" name="test_memoria_rejeita_fechamento_no_futuro" time="0.001"><failure message="Failed: DID NOT RAISE ValueError">self = &lt;tests.test_v9_quant03_escola_integridade.TestPortaDaEvidencia object at 0x0000019C081070E0&gt;
+
+    def test_memoria_rejeita_fechamento_no_futuro(self):
+        mem = MemoriaDeDesempenho()
+        futuro = datetime.now(timezone.utc) + timedelta(hours=2)
+&gt;       with pytest.raises(ValueError, match="futuro"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_v9_quant03_escola_integridade.py:119: Failed</failure></testcase><testcase classname="tests.test_v9_quant03_escola_integridade.TestPortaDaEvidencia" name="test_sala_rejeita_desfecho_duplicado" time="0.001"><failure message="Failed: DID NOT RAISE SalaError">self = &lt;tests.test_v9_quant03_escola_integridade.TestPortaDaEvidencia object at 0x0000019C0818C050&gt;
+
+    def test_sala_rejeita_desfecho_duplicado(self):
+        sala = _sala()
+        d = _desfecho("0.01")
+        sala.registrar_desfecho(d)
+&gt;       with pytest.raises(SalaError, match="duplicad"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE SalaError
+
+tests\test_v9_quant03_escola_integridade.py:127: Failed</failure></testcase><testcase classname="tests.test_v9_quant03_escola_integridade.TestPortaDaEvidencia" name="test_sala_rejeita_fechamento_no_futuro" time="0.001"><failure message="Failed: DID NOT RAISE SalaError">self = &lt;tests.test_v9_quant03_escola_integridade.TestPortaDaEvidencia object at 0x0000019C0818C3E0&gt;
+
+    def test_sala_rejeita_fechamento_no_futuro(self):
+        sala = _sala()
+        futuro = datetime.now(timezone.utc) + timedelta(hours=2)
+&gt;       with pytest.raises(SalaError, match="futuro"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE SalaError
+
+tests\test_v9_quant03_escola_integridade.py:134: Failed</failure></testcase><testcase classname="tests.test_v9_quant03_escola_integridade.TestPortaDaEvidencia" name="test_sala_rejeita_fechamento_anterior_a_abertura" time="0.001"><failure message="TypeError: Desfecho.__init__() got an unexpected keyword argument 'aberta_em'">self = &lt;tests.test_v9_quant03_escola_integridade.TestPortaDaEvidencia object at 0x0000019C0818C710&gt;
+
+    def test_sala_rejeita_fechamento_anterior_a_abertura(self):
+        sala = _sala()
+        t = BASE + timedelta(days=1)
+        with pytest.raises(SalaError, match="antes de ser aberto"):
+            sala.registrar_desfecho(
+&gt;               _desfecho("0.01", fechado_em=BASE, aberta_em=t))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_v9_quant03_escola_integridade.py:143: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+retorno = '0.01'
+fechado_em = datetime.datetime(2026, 1, 1, 12, 0, tzinfo=datetime.timezone.utc)
+aberta_em = datetime.datetime(2026, 1, 2, 12, 0, tzinfo=datetime.timezone.utc)
+versao = '1'
+
+    def _desfecho(retorno, *, fechado_em=BASE, aberta_em=None, versao="1"):
+        campos = {} if aberta_em is None else {"aberta_em": aberta_em}
+&gt;       return Desfecho(estrategia=ESTRATEGIA, regime="tendencia",
+                        instrumento=ATIVO, retorno=Decimal(str(retorno)),
+                        fechado_em=fechado_em, versao=versao, **campos)
+E       TypeError: Desfecho.__init__() got an unexpected keyword argument 'aberta_em'
+
+tests\test_v9_quant03_escola_integridade.py:65: TypeError</failure></testcase><testcase classname="tests.test_v9_quant03_escola_integridade.TestProvaPelaEntrada" name="test_prova_nao_conta_operacao_aberta_antes_da_candidatura" time="0.002"><failure message="TypeError: Desfecho.__init__() got an unexpected keyword argument 'aberta_em'">self = &lt;tests.test_v9_quant03_escola_integridade.TestProvaPelaEntrada object at 0x0000019C0818CA40&gt;
+
+    def test_prova_nao_conta_operacao_aberta_antes_da_candidatura(self):
+        esc = EscolaDeTraders()
+        d1, t1 = _candidatar(esc)
+&gt;       contaminadas = _serie(_positivos(AMOSTRA_PROVA),
+                              inicio=t1 + timedelta(minutes=1),
+                              aberta_em=t1 - timedelta(hours=2))
+
+tests\test_v9_quant03_escola_integridade.py:154: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+retornos = [0.01, 0.012, 0.01, 0.012, 0.01, 0.012, ...]
+inicio = datetime.datetime(2026, 1, 31, 12, 1, tzinfo=datetime.timezone.utc)
+aberta_em = datetime.datetime(2026, 1, 31, 10, 0, tzinfo=datetime.timezone.utc)
+
+    def _serie(retornos, *, inicio, aberta_em=None):
+        campos = {} if aberta_em is None else {"aberta_em": aberta_em}
+&gt;       return [Desfecho(estrategia=ESTRATEGIA, regime="tendencia",
+                         instrumento=ATIVO, retorno=Decimal(str(r)),
+                         fechado_em=inicio + timedelta(minutes=i),
+                         versao="1", **campos)
+                for i, r in enumerate(retornos)]
+E       TypeError: Desfecho.__init__() got an unexpected keyword argument 'aberta_em'
+
+tests\test_v9_quant03_escola_integridade.py:72: TypeError</failure></testcase><testcase classname="tests.test_v9_quant03_escola_integridade.TestProvaPelaEntrada" name="test_prova_conta_operacao_aberta_depois_da_candidatura" time="0.002"><failure message="TypeError: Desfecho.__init__() got an unexpected keyword argument 'aberta_em'">self = &lt;tests.test_v9_quant03_escola_integridade.TestProvaPelaEntrada object at 0x0000019C0818CD70&gt;
+
+    def test_prova_conta_operacao_aberta_depois_da_candidatura(self):
+        esc = EscolaDeTraders()
+        d1, t1 = _candidatar(esc)
+&gt;       prova = _serie(_positivos(AMOSTRA_PROVA),
+                       inicio=t1 + timedelta(hours=1),
+                       aberta_em=t1 + timedelta(minutes=5))
+
+tests\test_v9_quant03_escola_integridade.py:163: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+retornos = [0.01, 0.012, 0.01, 0.012, 0.01, 0.012, ...]
+inicio = datetime.datetime(2026, 1, 31, 13, 0, tzinfo=datetime.timezone.utc)
+aberta_em = datetime.datetime(2026, 1, 31, 12, 5, tzinfo=datetime.timezone.utc)
+
+    def _serie(retornos, *, inicio, aberta_em=None):
+        campos = {} if aberta_em is None else {"aberta_em": aberta_em}
+&gt;       return [Desfecho(estrategia=ESTRATEGIA, regime="tendencia",
+                         instrumento=ATIVO, retorno=Decimal(str(r)),
+                         fechado_em=inicio + timedelta(minutes=i),
+                         versao="1", **campos)
+                for i, r in enumerate(retornos)]
+E       TypeError: Desfecho.__init__() got an unexpected keyword argument 'aberta_em'
+
+tests\test_v9_quant03_escola_integridade.py:72: TypeError</failure></testcase><testcase classname="tests.test_v9_quant03_escola_integridade.TestProvaPelaEntrada" name="test_sem_aberta_em_o_fechamento_segue_decidindo" time="0.004" /><testcase classname="tests.test_v9_quant03_escola_integridade.TestProvaPelaEntrada" name="test_revogacao_nao_conta_operacao_aberta_antes_da_formatura" time="0.004"><failure message="TypeError: Desfecho.__init__() got an unexpected keyword argument 'aberta_em'">self = &lt;tests.test_v9_quant03_escola_integridade.TestProvaPelaEntrada object at 0x0000019C0818D3A0&gt;
+
+    def test_revogacao_nao_conta_operacao_aberta_antes_da_formatura(self):
+        esc = EscolaDeTraders()
+        d1, t1 = _candidatar(esc)
+        prova = _serie(_positivos(AMOSTRA_PROVA),
+                       inicio=t1 + timedelta(hours=1))
+        t2 = t1 + timedelta(days=90)
+        assert _avaliar(esc, d1 + prova, t2).estado is FORMADA
+&gt;       novas = _serie(_ruins(AMOSTRA_REVOGACAO),
+                       inicio=t2 + timedelta(hours=1),
+                       aberta_em=t2 - timedelta(hours=1))
+
+tests\test_v9_quant03_escola_integridade.py:185: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+retornos = [-0.01, -0.012, -0.01, -0.012, -0.01, -0.012, ...]
+inicio = datetime.datetime(2026, 5, 1, 13, 0, tzinfo=datetime.timezone.utc)
+aberta_em = datetime.datetime(2026, 5, 1, 11, 0, tzinfo=datetime.timezone.utc)
+
+    def _serie(retornos, *, inicio, aberta_em=None):
+        campos = {} if aberta_em is None else {"aberta_em": aberta_em}
+&gt;       return [Desfecho(estrategia=ESTRATEGIA, regime="tendencia",
+                         instrumento=ATIVO, retorno=Decimal(str(r)),
+                         fechado_em=inicio + timedelta(minutes=i),
+                         versao="1", **campos)
+                for i, r in enumerate(retornos)]
+E       TypeError: Desfecho.__init__() got an unexpected keyword argument 'aberta_em'
+
+tests\test_v9_quant03_escola_integridade.py:72: TypeError</failure></testcase><testcase classname="tests.test_v9_quant03_escola_integridade.TestPonteEPersistencia" name="test_saida_da_sala_grava_aberta_em_no_desfecho" time="0.001"><failure message="AttributeError: 'Desfecho' object has no attribute 'aberta_em'">self = &lt;tests.test_v9_quant03_escola_integridade.TestPonteEPersistencia object at 0x0000019C0818D6D0&gt;
+
+    def test_saida_da_sala_grava_aberta_em_no_desfecho(self):
+        sala = _sala()
+        t_a = BASE
+        t_b = BASE + timedelta(hours=3)
+        sala.registrar_entrada(ATIVO, "0.5", "100", estrategia=ESTRATEGIA,
+                               quando=t_a)
+        sala.registrar_saida(ATIVO, "110", quando=t_b)
+        d = sala.desfechos[-1]
+&gt;       assert d.aberta_em == t_a
+               ^^^^^^^^^^^
+E       AttributeError: 'Desfecho' object has no attribute 'aberta_em'
+
+tests\test_v9_quant03_escola_integridade.py:204: AttributeError</failure></testcase><testcase classname="tests.test_v9_quant03_escola_integridade.TestPonteEPersistencia" name="test_persistencia_preserva_aberta_em_e_aceita_legado_sem_ela" time="0.001"><failure message="TypeError: Desfecho.__init__() got an unexpected keyword argument 'aberta_em'">self = &lt;tests.test_v9_quant03_escola_integridade.TestPonteEPersistencia object at 0x0000019C0818D9D0&gt;
+
+    def test_persistencia_preserva_aberta_em_e_aceita_legado_sem_ela(self):
+&gt;       d = Desfecho(ESTRATEGIA, "tendencia", ATIVO, Decimal("0.01"),
+                     BASE + timedelta(hours=1), aberta_em=BASE)
+E       TypeError: Desfecho.__init__() got an unexpected keyword argument 'aberta_em'
+
+tests\test_v9_quant03_escola_integridade.py:208: TypeError</failure></testcase></testsuite></testsuites>

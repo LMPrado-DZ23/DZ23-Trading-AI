@@ -413,17 +413,30 @@ class DeskOrchestrator:
                 versao=str(getattr(trader, "versao", "1")),
                 agente=pos.agent_id,
                 horizonte=str(getattr(trader, "timeframe", "1h")))
-            self.memoria.registrar(desfecho)
-            if self.evolucao is not None:
-                try:
-                    self.evolucao.registrar_operacao(
-                        desfecho, decisao=f"encerrou {instrument} a {preco_saida}",
-                        custo=custo.ida_e_volta)
-                except Exception as exc:
-                    self.avisos_de_evolucao.append(
-                        f"diário da evolução não registrou {instrument}: "
-                        f"{type(exc).__name__}: {exc}"[:200])
-                    del self.avisos_de_evolucao[:-10]
+            try:
+                self.memoria.registrar(desfecho)
+            except ValueError as exc:
+                # A porta da evidência recusou (duplicada/impossível): a
+                # posição JÁ fechou e o resultado já foi apurado — a recusa
+                # vira aviso auditável e nunca derruba a saída. Evidência
+                # recusada também não entra no diário da evolução: seria a
+                # mesma operação contada de novo em outro registro.
+                self.avisos_de_evolucao.append(
+                    f"evidência não registrada para {instrument}: "
+                    f"{type(exc).__name__}: {exc}"[:200])
+                del self.avisos_de_evolucao[:-10]
+            else:
+                if self.evolucao is not None:
+                    try:
+                        self.evolucao.registrar_operacao(
+                            desfecho,
+                            decisao=f"encerrou {instrument} a {preco_saida}",
+                            custo=custo.ida_e_volta)
+                    except Exception as exc:
+                        self.avisos_de_evolucao.append(
+                            f"diário da evolução não registrou {instrument}: "
+                            f"{type(exc).__name__}: {exc}"[:200])
+                        del self.avisos_de_evolucao[:-10]
         if pos is not None and preco_saida is not None and self.sala is not None:
             try:
                 self.sala.registrar_saida(instrument, preco_saida)

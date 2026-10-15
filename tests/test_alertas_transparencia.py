@@ -174,6 +174,7 @@ class TestMudancaDeServidor:
         assert "NÃO contém segredos" in d["aviso"]
 
     def test_import_restores_on_a_fresh_server(self, tmp_path, monkeypatch):
+        from datetime import timedelta
         from decimal import Decimal as D
 
         from tradingagents.desk.learning import Desfecho
@@ -183,9 +184,12 @@ class TestMudancaDeServidor:
         c.post("/v1/config", headers=h, json={"vars": {"GROQ_API_KEY": "gsk-teste-0000000002"}})
         c.get("/v1/desk/status", headers=h)
         mem = m._DESKS["legacy"]["memoria"]
-        for _ in range(12):
+        for _i in range(12):
+            # Carimbo distinto por operação: registros idênticos são a
+            # MESMA operação e a porta da evidência os recusa.
             mem.registrar(Desfecho("trend_following", "tendencia_alta", "BTC/USDT",
-                                   D("0.02"), agora(), 0.8))
+                                   D("0.02"),
+                                   agora() - timedelta(seconds=12 - _i), 0.8))
         pacote = c.get("/v1/mudanca/exportar", headers=h).json()
 
         # "servidor novo": outro diretório, tudo zerado
