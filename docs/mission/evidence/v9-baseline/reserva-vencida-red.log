@@ -1,0 +1,169 @@
+FFFFFF.                                                                  [100%]
+================================== FAILURES ===================================
+_ TestSweepDeReservaVencida.test_vencida_sem_vinculo_devolve_capital_e_libera_o_instrumento _
+
+self = <tests.test_v9_reserva_vencida.TestSweepDeReservaVencida object at 0x00000216C7036E40>
+
+    def test_vencida_sem_vinculo_devolve_capital_e_libera_o_instrumento(self):
+        m, risco, livro, coord = sistema()
+        res = reservar(risco)
+        assert risco.available == m.capital - res.amount
+        with pytest.raises(RiskVeto, match="já há reserva ativa"):
+            reservar(risco)   # CONTROLE: reserva VIVA bloqueia o instrumento
+    
+        vencer(risco, res.reservation_id)
+>       nova = reservar(risco)   # vencida não pode mais bloquear
+               ^^^^^^^^^^^^^^^
+
+tests\test_v9_reserva_vencida.py:89: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_v9_reserva_vencida.py:56: in reservar
+    return risco.reserve(p, Decimal(preco), agent_id=agente)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tradingagents.desk.risk.RiskEngine object at 0x00000216C7037FB0>
+proposal = TradeProposal(agent_id='A', strategy='s', instrument='BTC/USDT', action=<Action.BUY: 'buy'>, reason='t', desired_expos...one, created_at=datetime.datetime(2026, 10, 15, 18, 18, 31, 20711, tzinfo=datetime.timezone.utc), schema='dz23.desk/1')
+price = Decimal('100'), agent_id = 'A'
+
+    def reserve(self, proposal: TradeProposal, price: Decimal, *,
+                agent_id: str | None = None) -> RiskReservation:
+        if price <= 0 or not price.is_finite():
+            raise RiskVeto("preço inválido")
+        self.mandate.assert_active(instrument=proposal.instrument)
+        if proposal.action is Action.SELL:
+            raise RiskVeto("venda a descoberto não existe em spot; use redução de posição")
+        pct = min(proposal.desired_exposure_pct, self.mandate.max_position_pct)
+        if pct <= 0:
+            raise RiskVeto("exposição desejada nula")
+        with self._lock:  # atômico: duas propostas não travam o mesmo capital
+            # Posições ABERTAS contam para o limite: uma posição preenchida
+            # sem reserva continua sendo uma posição.
+            if len(self.open_instruments()) >= self.mandate.max_open_positions:
+                raise RiskVeto("limite de posições simultâneas atingido")
+            if proposal.instrument in self.open_instruments():
+>               raise RiskVeto(f"já há reserva ativa para {proposal.instrument}")
+E               tradingagents.desk.risk.RiskVeto: já há reserva ativa para BTC/USDT
+
+tradingagents\desk\risk.py:222: RiskVeto
+___ TestSweepDeReservaVencida.test_sweep_registra_conclusao_para_auditoria ____
+
+self = <tests.test_v9_reserva_vencida.TestSweepDeReservaVencida object at 0x00000216C54A22A0>
+
+    def test_sweep_registra_conclusao_para_auditoria(self):
+        m, risco, livro, coord = sistema()
+        res = reservar(risco)
+        vencer(risco, res.reservation_id)
+    
+>       assert risco.expirar_reservas_vencidas() == 1
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'RiskEngine' object has no attribute 'expirar_reservas_vencidas'
+
+tests\test_v9_reserva_vencida.py:101: AttributeError
+____ TestSweepDeReservaVencida.test_reserva_viva_sem_vinculo_nao_e_varrida ____
+
+self = <tests.test_v9_reserva_vencida.TestSweepDeReservaVencida object at 0x00000216C7037D40>
+
+    def test_reserva_viva_sem_vinculo_nao_e_varrida(self):
+        m, risco, livro, coord = sistema()
+        res = reservar(risco)
+>       assert risco.expirar_reservas_vencidas() == 0
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'RiskEngine' object has no attribute 'expirar_reservas_vencidas'
+
+tests\test_v9_reserva_vencida.py:111: AttributeError
+_ TestSweepDeReservaVencida.test_reserva_vinculada_vencida_nao_e_varrida_e_o_fill_resolve _
+
+self = <tests.test_v9_reserva_vencida.TestSweepDeReservaVencida object at 0x00000216C7038080>
+
+    def test_reserva_vinculada_vencida_nao_e_varrida_e_o_fill_resolve(self):
+        """Vínculo = ordem possivelmente em voo; quem encerra é o fill."""
+        m, risco, livro, coord = sistema()
+        res = reservar(risco)
+        rec = ordem_de(coord, risco, res)
+        assert rec.state is OrderState.ACKNOWLEDGED
+        assert risco.vinculo(res.reservation_id) != ""
+        vencer(risco, res.reservation_id)
+    
+>       assert risco.expirar_reservas_vencidas() == 0
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'RiskEngine' object has no attribute 'expirar_reservas_vencidas'
+
+tests\test_v9_reserva_vencida.py:124: AttributeError
+_ TestRecusaDeixaReservaVivaMasVencimentoCura.test_recusa_por_reconciliacao_pendente_e_curada_pelo_vencimento _
+
+self = <tests.test_v9_reserva_vencida.TestRecusaDeixaReservaVivaMasVencimentoCura object at 0x00000216C7038470>
+
+    def test_recusa_por_reconciliacao_pendente_e_curada_pelo_vencimento(self):
+        m, risco, livro, coord = sistema()
+        res = reservar(risco)
+        coord.exigir_reconciliacao("posições divergentes na corretora")
+        with pytest.raises(ExecutionRefused, match="reconcilia"):
+            ordem_de(coord, risco, res)
+    
+        # FIN-06: a recusa NÃO libera — a decisão válida pode tentar de novo.
+        assert risco.reserva(res.reservation_id) is not None
+        assert risco.vinculo(res.reservation_id) == ""
+    
+        vencer(risco, res.reservation_id)
+>       nova = reservar(risco)
+               ^^^^^^^^^^^^^^^
+
+tests\test_v9_reserva_vencida.py:149: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_v9_reserva_vencida.py:56: in reservar
+    return risco.reserve(p, Decimal(preco), agent_id=agente)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tradingagents.desk.risk.RiskEngine object at 0x00000216C70C4440>
+proposal = TradeProposal(agent_id='A', strategy='s', instrument='BTC/USDT', action=<Action.BUY: 'buy'>, reason='t', desired_expos...ne, created_at=datetime.datetime(2026, 10, 15, 18, 18, 31, 256046, tzinfo=datetime.timezone.utc), schema='dz23.desk/1')
+price = Decimal('100'), agent_id = 'A'
+
+    def reserve(self, proposal: TradeProposal, price: Decimal, *,
+                agent_id: str | None = None) -> RiskReservation:
+        if price <= 0 or not price.is_finite():
+            raise RiskVeto("preço inválido")
+        self.mandate.assert_active(instrument=proposal.instrument)
+        if proposal.action is Action.SELL:
+            raise RiskVeto("venda a descoberto não existe em spot; use redução de posição")
+        pct = min(proposal.desired_exposure_pct, self.mandate.max_position_pct)
+        if pct <= 0:
+            raise RiskVeto("exposição desejada nula")
+        with self._lock:  # atômico: duas propostas não travam o mesmo capital
+            # Posições ABERTAS contam para o limite: uma posição preenchida
+            # sem reserva continua sendo uma posição.
+            if len(self.open_instruments()) >= self.mandate.max_open_positions:
+                raise RiskVeto("limite de posições simultâneas atingido")
+            if proposal.instrument in self.open_instruments():
+>               raise RiskVeto(f"já há reserva ativa para {proposal.instrument}")
+E               tradingagents.desk.risk.RiskVeto: já há reserva ativa para BTC/USDT
+
+tradingagents\desk\risk.py:222: RiskVeto
+_ TestReinicioComReservaVencida.test_snapshot_com_vencida_nao_ressuscita_o_bloqueio _
+
+self = <tests.test_v9_reserva_vencida.TestReinicioComReservaVencida object at 0x00000216C7038D10>
+
+    def test_snapshot_com_vencida_nao_ressuscita_o_bloqueio(self):
+        m, risco, livro, coord = sistema()
+        res = reservar(risco)
+        vencer(risco, res.reservation_id)
+        doc = coord.snapshot_estado()
+    
+        m2, risco2, livro2, coord2 = sistema()
+        coord2.restaurar_estado(doc)
+>       assert risco2.reserva(res.reservation_id) is None
+E       AssertionError: assert RiskReservation(reservation_id='ba49f8c375d2414d', account='conta-1', instrument='BTC/USDT', amount=Decimal('1500.00')...', consumed_amount=Decimal('0'), filled_quantity=Decimal('0'), bound_client_order_id='', buffer_amount=Decimal('0E-8')) is None
+E        +  where RiskReservation(reservation_id='ba49f8c375d2414d', account='conta-1', instrument='BTC/USDT', amount=Decimal('1500.00')...', consumed_amount=Decimal('0'), filled_quantity=Decimal('0'), bound_client_order_id='', buffer_amount=Decimal('0E-8')) = reserva('ba49f8c375d2414d')
+E        +    where reserva = <tradingagents.desk.risk.RiskEngine object at 0x00000216C703ABA0>.reserva
+E        +    and   'ba49f8c375d2414d' = RiskReservation(reservation_id='ba49f8c375d2414d', account='conta-1', instrument='BTC/USDT', amount=Decimal('1500.00')...', consumed_amount=Decimal('0'), filled_quantity=Decimal('0'), bound_client_order_id='', buffer_amount=Decimal('0E-8')).reservation_id
+
+tests\test_v9_reserva_vencida.py:164: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_v9_reserva_vencida.py::TestSweepDeReservaVencida::test_vencida_sem_vinculo_devolve_capital_e_libera_o_instrumento
+FAILED tests/test_v9_reserva_vencida.py::TestSweepDeReservaVencida::test_sweep_registra_conclusao_para_auditoria
+FAILED tests/test_v9_reserva_vencida.py::TestSweepDeReservaVencida::test_reserva_viva_sem_vinculo_nao_e_varrida
+FAILED tests/test_v9_reserva_vencida.py::TestSweepDeReservaVencida::test_reserva_vinculada_vencida_nao_e_varrida_e_o_fill_resolve
+FAILED tests/test_v9_reserva_vencida.py::TestRecusaDeixaReservaVivaMasVencimentoCura::test_recusa_por_reconciliacao_pendente_e_curada_pelo_vencimento
+FAILED tests/test_v9_reserva_vencida.py::TestReinicioComReservaVencida::test_snapshot_com_vencida_nao_ressuscita_o_bloqueio
+6 failed, 1 passed in 0.57s

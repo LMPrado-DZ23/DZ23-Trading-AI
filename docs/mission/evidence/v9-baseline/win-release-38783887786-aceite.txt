@@ -1,0 +1,31 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.1.1, pluggy-1.6.0 -- D:\a\DZ23-Trading-AI\DZ23-Trading-AI\.venv\Scripts\python.exe
+rootdir: D:\a\DZ23-Trading-AI\DZ23-Trading-AI
+configfile: pyproject.toml
+plugins: anyio-4.15.1, langsmith-0.14.0
+collecting ... collected 20 items
+
+tests/e2e/test_aceite_td5.py::test_aceite_td5_01_inicio_assistente_conectar_modo_play PASSED [  5%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_02_painel_global_maestro PASSED [ 10%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_03_sala_do_trader_com_grafico PASSED [ 15%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_04_analise_do_copiloto PASSED [ 20%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_05_botao_acompanhar_visivel_com_prefill PASSED [ 25%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_06_registro_posicao_e_diario PASSED [ 30%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_07_monitor_alerta_de_stop_objetivo PASSED [ 35%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_08_centro_de_alertas PASSED [ 40%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_09_config_ia_provedores_modelos_consumo PASSED [ 45%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_10_mesa_dez_traders PASSED [ 50%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_11_pwa_instalacao_e_push_ui PASSED [ 55%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_12_responsivo_mobile_sem_corte PASSED [ 60%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_13_fluxo_iniciante_dez_passos PASSED [ 65%]
+tests/e2e/test_fm6_app_isolado.py::test_fm6_01_modo_avancado_todas_as_paginas PASSED [ 70%]
+tests/e2e/test_fm6_app_isolado.py::test_fm6_02_corretoras_catalogo_capacidades_reconciliacao PASSED [ 75%]
+tests/e2e/test_fm6_app_isolado.py::test_fm6_03_escola_central_no_painel PASSED [ 80%]
+tests/e2e/test_fm6_app_isolado.py::test_fm6_03b_escola_falha_visivel_e_tentativa_de_novo PASSED [ 85%]
+tests/e2e/test_fm6_app_isolado.py::test_fm6_03c_capacidades_distingue_suporte_configuracao_permissao_teste PASSED [ 90%]
+tests/e2e/test_fm6_app_isolado.py::test_fm6_03d_toque_da_notificacao_abre_destino_existente PASSED [ 95%]
+tests/e2e/test_fm6_app_isolado.py::test_fm6_04_dashboard_lc_mercado_e_portfolio PASSED [100%]
+
+============================= 20 passed in 51.86s =============================
+
+--- stderr ---

@@ -214,6 +214,10 @@ class RiskEngine:
         if pct <= 0:
             raise RiskVeto("exposição desejada nula")
         with self._lock:  # atômico: duas propostas não travam o mesmo capital
+            # Reserva vencida que nunca financiou ordem não pode bloquear o
+            # instrumento nem segurar capital: o vencimento vale também para
+            # a VIDA da reserva, não só para o momento do uso.
+            self.expirar_reservas_vencidas()
             # Posições ABERTAS contam para o limite: uma posição preenchida
             # sem reserva continua sendo uma posição.
             if len(self.open_instruments()) >= self.mandate.max_open_positions:
@@ -252,6 +256,7 @@ class RiskEngine:
         """Reserva um notional explícito — usada quando o alvo não vem de
         percentual do mandato. Aplica a MESMA regra de cobertura dura."""
         with self._lock:
+            self.expirar_reservas_vencidas()
             folga = (alvo * getattr(self.mandate, "slippage_buffer_pct",
                                     Decimal("0"))).quantize(Decimal("0.00000001"))
             if alvo + folga > self.available:
@@ -1631,6 +1636,10 @@ class RiskEngine:
                     continue
                 self._reservations[res.reservation_id] = res
                 restauradas += 1
+            # Snapshot antigo reidrata reserva vencida: sem isto ela volta
+            # como bloqueio eterno — o vencimento só existia no momento do
+            # uso, e o reinício não pode ressuscitar um defeito já curado.
+            self.expirar_reservas_vencidas()
         return restauradas
 
     def release(self, reservation_id: str) -> bool:
@@ -1638,6 +1647,36 @@ class RiskEngine:
         pode mais existir (cenário 09: timeout NÃO libera)."""
         with self._lock:
             return self._reservations.pop(reservation_id, None) is not None
+
+    def expirar_reservas_vencidas(self) -> int:
+        """Terminaliza reservas vencidas que NUNCA financiaram uma ordem.
+
+        `expires_at` só era aplicado no momento do USO: uma reserva recusada
+        antes do vínculo (versão divergente, reconciliação pendente, portões
+        de incidente) ficava viva para sempre — `available` reduzido e o
+        instrumento bloqueado por `open_instruments()` — e o snapshot a
+        reidratava a cada reinício.
+
+        Reserva VINCULADA não é tocada: ela cobre ordem possivelmente em voo;
+        quem encerra é o ciclo da ordem (fill/rejeição/reconciliação).
+        Reserva sem `expires_at` também não: sem prazo conhecido, a varredura
+        não inventa vencimento — mantém o bloqueio, que é o lado seguro.
+        """
+        agora = utcnow()
+        with self._lock:
+            vencidas = [
+                rid for rid, reserva in self._reservations.items()
+                if reserva.expires_at is not None
+                and agora >= reserva.expires_at
+                and not reserva.bound_client_order_id]
+            for rid in vencidas:
+                # Terminalizar grava a conclusão (RELEASED + motivo) para
+                # auditoria. Não há lastro no livro a devolver: reserva sem
+                # vínculo nunca chegou ao lock do ledger.
+                self.terminalizar(
+                    rid, motivo="reserva vencida sem vínculo: capital "
+                                "liberado sem efeito externo")
+            return len(vencidas)
 
     # -- intenção ------------------------------------------------------
     def intent(self, reservation: RiskReservation, action: Action, mode,

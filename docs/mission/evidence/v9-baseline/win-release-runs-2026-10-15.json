@@ -1,0 +1,42 @@
+{
+  "registro": "Cadeia Windows da missao V9 no CI do GitHub (runner Windows virgem; instalacao do proprietario intocada)",
+  "data": "2026-10-15",
+  "branch": "audit/v9-rc-20261015",
+  "runs": [
+    {
+      "workflow": "CI",
+      "run_id": 38781483003,
+      "head_sha": "4c0675c50a040800e86e2457e37fa4bc317f90ce",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "workflow": "Matriz do Instalador Windows",
+      "run_id": 38781684667,
+      "head_sha": "4c0675c50a040800e86e2457e37fa4bc317f90ce",
+      "status": "completed",
+      "conclusion": "success",
+      "cenarios": "instalacao limpa 0.4.0 -> atualizacao preservando dados com backup verificado -> reparo -> /SIMULAR -> downgrade -> rollback -> desinstalacao/reinstalacao"
+    },
+    {
+      "workflow": "Windows Release Build",
+      "run_id": 38781679788,
+      "head_sha": "4c0675c50a040800e86e2457e37fa4bc317f90ce",
+      "status": "completed",
+      "conclusion": "failure",
+      "jobs": {"build": "success", "aceite-bundle": "failure", "publish-release": "skipped"},
+      "causa": "test_fm6_03c no aceite-bundle: o harness do CI bootava o exe sem pinar ALERTA_WINDOWS (divergencia de ambiente vs runner hermetico local); corrigido em c443c28"
+    },
+    {
+      "workflow": "Windows Release Build (re-run apos c443c28)",
+      "run_id": 38783887786,
+      "head_sha": "c443c28974085dfac611bfaf4c5b6c957266d851",
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": {"build": "success", "aceite-bundle": "success", "publish-release": "skipped"},
+      "aceite": "20 passed (13 TD5 + 7 FM6), incl. fm6_03c; artefato aceite-td5-bundle-evidencias com 33 arquivos (capturas + pytest-aceite-bundle.txt + launcher.log)",
+      "evidencia_local": "win-release-38783887786-aceite.txt"
+    }
+  ],
+  "nota": "publish-release e condicionado a tag e permanece pulado (sem Release oficial sem autorizacao do proprietario)"
+}
