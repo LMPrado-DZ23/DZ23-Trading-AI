@@ -1,0 +1,39 @@
+{
+  "head": "3f3a51fc1938e3f847e6191492ffe16d3697fe1a",
+  "branch": "audit/v9-rc-20261015",
+  "executor": "Qoder (V9)",
+  "data_utc": "2026-10-15T13:52:34Z",
+  "network": "blocked via audit hook",
+  "motivo": "Reexecucao da contraprova §5.1 (quant-accounting-probe.json, head 2b7754a) no HEAD atual, conforme 'As correcoes previamente registradas devem ser testadas novamente no HEAD atual'.",
+  "probe_script_sha256": "184c16da5a979034c5c494376f29af293f4b4e5d3b9e32bc907c813223ceb6f2",
+  "probe_script_python": "import sys\n\n\ndef offline(event, args):\n    if event in ('socket.connect', 'socket.getaddrinfo'):\n        raise RuntimeError('offline audit forbids network')\n\n\nsys.addaudithook(offline)\nimport json\nfrom datetime import datetime, timedelta, timezone\nfrom decimal import Decimal as D\nfrom tradingagents.research import Bar, BacktestConfig, run_backtest\nfrom tradingagents.desk.costs import ModeloDeCusto, retorno_liquido\n\nstart = datetime(2026, 1, 1, tzinfo=timezone.utc)\nbars = [Bar(start + timedelta(hours=i), start + timedelta(hours=i), D(100),\n            D(100), D(100), D(100), D(10000)) for i in range(3)]\nr = run_backtest(bars, lambda history: 1 if len(history) == 1 else 0,\n                 BacktestConfig(initial_equity=D(1000), fee_bps=D(0), slippage_bps=D(0)))\nprint(json.dumps({\n    'constant_price_equity': list(map(str, r.equity_curve)),\n    'constant_price_expected_final': '1000',\n    'return': str(r.total_return),\n    'cost_comparison_net': str(D(100) * retorno_liquido(D('.1'), ModeloDeCusto('binance', D('.001'), D(0), D(0)))),\n    'execution_model': r.manifest.get('execution_model'),\n}))\n",
+  "runs": [
+    {
+      "name": "dz23-head",
+      "command": [
+        "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\.venv\\Scripts\\python.exe",
+        "-B",
+        "C:\\Users\\DZ23\\AppData\\Local\\Temp\\quant01-probe-head.py"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"constant_price_equity\": [\"1000\", \"1000.0\", \"1000.0\"], \"constant_price_expected_final\": \"1000\", \"return\": \"0.0\", \"cost_comparison_net\": \"9.800\", \"execution_model\": \"one_bar_round_trip;entry=next_open;exit=same_close;short=synthetic\"}\n",
+      "stderr": ""
+    }
+  ],
+  "comparacao": {
+    "baseline_2b7754a": {
+      "constant_price_equity": ["1000", "1010.0", "1010.0"],
+      "return": "0.01"
+    },
+    "head_3f3a51f": {
+      "constant_price_equity": ["1000", "1000.0", "1000.0"],
+      "return": "0.0"
+    }
+  },
+  "veredito": "V9-QUANT-01 NAO REPRODUZIDO no HEAD: com preco constante (100), custos zero e uma compra, o equity final e 1000 (identico ao inicial) e o retorno e 0. O baseline 2b7754a devolvia 1010/0.01 (notional contado como lucro). O motor atual e um round-trip de uma barra documentado no manifesto (execution_model), com P&L = quantidade*(fechamento-abertura)*direcao menos custos das duas pernas. Pin de regressao: tests/test_v9_quant01_contabilidade.py (evidencia hermética v9-quant01-green, 9 passed).",
+  "notas": [
+    "cost_comparison_net 9.800 identico ao baseline: a tabela de custos (tradingagents/desk/costs.py) nao mudou.",
+    "Probe roda com audit hook offline embutido; sem rede; sem escrita fora do retorno enviado ao stdout.",
+    "Este artefato NAO substitui o quant-accounting-probe.json original; complementa-o como reexecucao no HEAD atual."
+  ]
+}
