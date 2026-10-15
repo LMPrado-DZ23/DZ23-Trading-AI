@@ -26,6 +26,7 @@ def sistema():
 
 def limpo(coord, **extra):
     base = {"consultar_posicoes": lambda: {},
+            "consultar_caixa": lambda: coord.ledger.cash(),
             "consultar_fills": lambda coid, exid="": []}
     base.update(extra)
     return coord.reconciliar(

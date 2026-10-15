@@ -247,6 +247,39 @@ class CCXTDeskBroker:
                 posicoes[f"{moeda}/{cotacao}"] = qtd
         return posicoes
 
+    def fetch_cash(self) -> Decimal:
+        """Caixa na MOEDA DE COTAÇÃO — a que `fetch_positions` descarta.
+
+        É nesta moeda que vivem taxa debitada, transferência externa e
+        qualquer movimento que o sistema não viu; sem confrontá-la com o
+        livro, uma divergência APENAS de cotação passava como SAFE.
+        Ausência da moeda no saldo é DESCONHECIDO, nunca zero — assumir
+        zero declararia "bate" sobre um valor que ninguém leu.
+        """
+        ex = self.bridge._ex
+        if not hasattr(ex, "fetch_balance"):
+            raise BrokerConsultaIndisponivel(
+                "corretora não expõe consulta de saldo/posição")
+        try:
+            saldo = ex.fetch_balance()
+        except Exception as exc:
+            raise BrokerConsultaIndisponivel(
+                f"consulta de caixa falhou ({type(exc).__name__})") from exc
+        if not isinstance(saldo, dict):
+            raise BrokerConsultaIndisponivel("resposta de saldo malformada")
+        total = saldo.get("total")
+        if not isinstance(total, dict):
+            raise BrokerConsultaIndisponivel("saldo sem a seção 'total'")
+        cotacao = self._moeda_de_cotacao()
+        if cotacao not in total:
+            raise BrokerConsultaIndisponivel(
+                f"saldo sem a moeda de cotação {cotacao}")
+        try:
+            return Decimal(str(total[cotacao]))
+        except (TypeError, ValueError, ArithmeticError):
+            raise BrokerConsultaIndisponivel(
+                f"caixa inválido para {cotacao}: {total[cotacao]!r}") from None
+
     def _moeda_de_cotacao(self) -> str:
         for instrumento in getattr(self, "universe", ()) or ():
             if "/" in instrumento:

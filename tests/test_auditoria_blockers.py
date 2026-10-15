@@ -481,15 +481,21 @@ class TestCredencialDeInquilinoNaoVazaPorAmbiente:
     EXPLÍCITA para o cliente via service.api.ia_provedores.consultar_ia,
     que só toca o ambiente sob _IA_ENV_LOCK e restaura na mesma janela.
     O contrato migrou de lugar; a propriedade de segurança é a MESMA
-    (por isso os pinos abaixo apontam para o novo lar do fix)."""
+    (por isso os pinos abaixo apontam para o novo lar do fix).
+
+    V9-SEC-07 (2026-10-15): o pino acompanhou o endurecimento — a consulta
+    passou a ler a credencial VIVA (cfg_vivo), para que chave removida no
+    painel não seja ressuscitada pela foto do boot. Propriedade a MESMA
+    (delegação explícita, sem mutação de ambiente), pinada na forma atual."""
 
     def test_desk_llm_call_is_not_an_unlocked_env_mutation(self):
         import inspect
 
         import service.app as m
         fonte = inspect.getsource(m._desk_boot)
-        assert "consultar_ia(cfg, prompt" in fonte, (
-            "a consulta da mesa deve delegar credencial explícita ao núcleo")
+        assert "consultar_ia(cfg_vivo, prompt" in fonte, (
+            "a consulta da mesa deve delegar credencial explícita ao núcleo "
+            "(V9-SEC-07: a credencial viva, não a foto do boot)")
         assert "os.environ.update(" not in fonte, (
             "a mesa não pode mutar o ambiente global direto")
 

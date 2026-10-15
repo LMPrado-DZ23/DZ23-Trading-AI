@@ -32,8 +32,8 @@ RAIZ = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RAIZ))
 
 from tradingagents.research.backtest import (  # noqa: E402
-    Bar,
     BacktestConfig,
+    Bar,
     revisao_do_codigo,
     run_backtest,
 )
@@ -51,10 +51,7 @@ PRECISAO_QUANTIDADE = Decimal("0.00001")  # stepSize BTC/USDT (5 casas)
 
 def carregar_velas(caminho: Path) -> list[tuple[datetime, float, float, float, float, float]]:
     bruto = json.loads(caminho.read_text(encoding="utf-8"))
-    if isinstance(bruto, dict):
-        linhas = bruto["data"]
-    else:
-        linhas = bruto
+    linhas = bruto["data"] if isinstance(bruto, dict) else bruto
     velas = []
     for linha in linhas:
         ts_ms = int(linha[0])
@@ -99,7 +96,6 @@ def parte_a(velas, eventos, trades_freqtrade):
     resultado_trades = []
     estado = "flat"
     entrada = None
-    esperados = {t["open_timestamp"]: t for t in trades_freqtrade}
     for ts, aberto, _h, _l, _c, _v in velas:
         if ts < JANELA_INICIO or ts >= JANELA_FIM:
             continue
@@ -129,7 +125,7 @@ def parte_a(velas, eventos, trades_freqtrade):
     divergencias = []
     if len(resultado_trades) != len(trades_freqtrade):
         divergencias.append(f"contagem: sim={len(resultado_trades)} freqtrade={len(trades_freqtrade)}")
-    for i, (sim, real) in enumerate(zip(resultado_trades, trades_freqtrade)):
+    for i, (sim, real) in enumerate(zip(resultado_trades, trades_freqtrade, strict=False)):
         t_sim = datetime.fromisoformat(sim["entrada_ts"])
         t_real = datetime.fromtimestamp(real["open_timestamp"] / 1000, tz=timezone.utc)
         if t_sim != t_real:
@@ -165,7 +161,6 @@ def parte_b(velas, eventos):
             low=Decimal(str(v[3])), close=Decimal(str(v[4])), volume=Decimal(str(v[5])))
         for v in fatia
     ]
-    fechamentos = [v[4] for v in fatia]
     rapida, lenta = smas(fatia)
 
     def sinal(historico):
@@ -244,7 +239,7 @@ def main() -> int:
             "cruzamentos_saida_arquivo": len(saidas_eventos),
             "entradas_de_sinal_na_janela": len(dentro),
             "entradas_de_fill_no_export": len(entradas_freq),
-            "entrada_ts_iguais_ao_export": entradas_freq == [ts for ts in dentro],
+            "entrada_ts_iguais_ao_export": entradas_freq == list(dentro),
             "saidas_de_fill_no_export": len(saidas_freq),
         },
         "parte_a_motor_contabil": resultado_a,

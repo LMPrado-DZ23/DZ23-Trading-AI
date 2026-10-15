@@ -1,0 +1,20 @@
+== v9-fq-rerun-pos-lint — re-execucao de tools/v9_fq_equivalencia.py apos saneamento ruff ==
+head=32d5140 branch=audit/v9-rc-20261015 data_utc=2026-10-15
+== entradas (sha256) ==
+bd5b1a736374ca5afd70dcbdbbeda5ead55a4e4c18b247324cf331d9bc1e570c *docs/mission/evidence/v9-baseline/fq2-round1-velas-btcusdt-1h.json
+d15296b711f67381175a695ce5b357528e207e001af6528bda925a23b219061c *docs/mission/evidence/v9-baseline/fq2-round1-freqtrade-export.zip
+144de42193dfde54561a7b99bc3e9dcf8545fe818ea909ef0b768f0514045d3e *../freqtrade-spike/round1_extract/backtest-result-2026-10-15_11-37-48.json
+== execucao ==
+velas: 4999 | cruzamentos no arquivo: 96 entrada / 95 saida
+entradas na janela (candidatas): 66 | fills no export freqtrade: 66
+PARTE A: EQUIVALENTE | trades sim=66 freqtrade=66 | carteira sim=989.1910209104 export=989.19102087
+PARTE B (motor laboratorio DZ23): trades=66 retorno=-0.0089571297583076558956201 drawdown=0.01057147111512901739595103618 carteira=991.0428702416923441043799000 rejeitados=0
+dataset_hash DZ23: afd77b1668eef4072f8a5490d51e88709d9be2fad0e4ebb2f4ca08d123146c9c
+exit=0
+== comparacao campo a campo vs congelado (fq2-round1-comparacao.json) ==
+divergencias_campo_a_campo (fora code_revision): 2
+('.velas_arquivo', 'BTC_USDT-1h.json', 'fq2-round1-velas-btcusdt-1h.json')
+('.zip_export', 'backtest-result-2026-10-15_11-37-48.zip', 'fq2-round1-freqtrade-export.zip')
+== saida re-execucao (sha256) e congelado (sha256) ==
+a6195ac4ea67cf4482475918a66c4a1272d63b96213f2cbc781041a73fa61bfe *../freqtrade-spike/fq2-round1-comparacao-rerun.json
+3ee1f073b202e2ca009ab30ac2f186163c504dfea8e9b8438112738416905fd8 *docs/mission/evidence/v9-baseline/fq2-round1-comparacao.json

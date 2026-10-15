@@ -328,7 +328,8 @@ class ExecutionCoordinator:
 
     def reconciliar(self, consultar_corretora=None, *,
                     consultar_posicoes=None, consultar_fills=None,
-                    consultar_ordens_abertas=None) -> dict:
+                    consultar_ordens_abertas=None,
+                    consultar_caixa=None) -> dict:
         """Confere o estado local com a CORRETORA. Exchange-first.
 
         A auditoria encontrou três buracos na versão anterior, todos capazes
@@ -356,7 +357,7 @@ class ExecutionCoordinator:
             "worker_id": self.worker_id,
             "ordens_conferidas": 0, "ordens_status": "UNKNOWN",
             "posicoes_status": "UNKNOWN", "livro_status": "UNKNOWN",
-            "fills_status": "UNKNOWN",
+            "fills_status": "UNKNOWN", "caixa_status": "UNKNOWN",
             "divergencias": [],
             # LIMITAÇÕES são estruturais (a corretora não oferece a
             # verificação); DIVERGÊNCIAS são problemas a resolver. Misturar
@@ -411,6 +412,12 @@ class ExecutionCoordinator:
         # --- POSIÇÕES: comparação real, não limpeza otimista ---
         relatorio.update(self._conferir_posicoes(consultar_posicoes, relatorio))
 
+        # --- CAIXA: a moeda de cotação que a comparação de posições descarta.
+        # Depois dos fills remotos: um preenchimento legítimo move o caixa do
+        # livro, e a leitura adiantada o transformaria em falso divergente.
+        relatorio["caixa_status"] = self._conferir_caixa(consultar_caixa,
+                                                         relatorio)
+
         # --- LIVRO: invariante interno (necessário, não suficiente) ---
         if relatorio["fills_status"] == "UNKNOWN" and not relatorio.get("_fills_exigidos"):
             relatorio["fills_status"] = "NAO_APLICAVEL"
@@ -424,10 +431,12 @@ class ExecutionCoordinator:
     def relatorio_valido(self) -> tuple[bool, str]:
         """O último relatório ainda autoriza operar?
 
-        Quatro condições, todas necessárias: existe, é SAFE, é da versão
-        ATUAL do estado financeiro, e é DESTE inquilino/conta. Qualquer
-        delas ausente é recusa — um relatório de outro contexto autorizaria
-        dinheiro que não é o dele.
+        Cinco condições, todas necessárias: existe, é SAFE, é da versão
+        ATUAL do estado financeiro, CONFERIU O CAIXA, e é DESTE
+        inquilino/conta. Qualquer delas ausente é recusa — um relatório de
+        outro contexto autorizaria dinheiro que não é o dele, e um relatório
+        anterior à conferência de caixa foi selado sem olhar a moeda de
+        cotação.
         """
         rel = self.ultimo_relatorio
         if not rel:
@@ -438,6 +447,9 @@ class ExecutionCoordinator:
             return False, (f"relatório é da versão {rel.get('oms_version')} e o "
                            f"estado já está na {self.oms_version}: reconcilie "
                            "de novo")
+        if rel.get("caixa_status") != "MATCHED":
+            return False, ("o relatório não conferiu o caixa com a corretora; "
+                           "faça uma nova reconciliação")
         esperado_tenant = getattr(self, "tenant_id", "")
         if rel.get("tenant_id", "") != esperado_tenant:
             return False, (f"relatório é do inquilino {rel.get('tenant_id')!r} "
@@ -452,7 +464,8 @@ class ExecutionCoordinator:
                   and relatorio["ordens_status"] == "MATCHED"
                   and relatorio["posicoes_status"] == "MATCHED"
                   and relatorio["fills_status"] in ("MATCHED", "NAO_APLICAVEL")
-                  and relatorio["livro_status"] == "BALANCED")
+                  and relatorio["livro_status"] == "BALANCED"
+                  and relatorio["caixa_status"] == "MATCHED")
         relatorio["seguro"] = seguro
         relatorio["oms_version"] = self.oms_version
         if seguro:
@@ -565,6 +578,40 @@ class ExecutionCoordinator:
         if status == "MATCHED":
             self.posicoes_restauradas = {}     # só agora, após comparar
         return {"posicoes_status": status}
+
+    def _conferir_caixa(self, consultar_caixa, relatorio: dict) -> str:
+        """Compara o caixa do livro com o caixa REAL da corretora.
+
+        A comparação de posições descarta a moeda de cotação — e é nela que
+        vivem taxa debitada, transferência externa e qualquer movimento que
+        o sistema não viu. Sem esta conferência, uma divergência APENAS de
+        cotação passava como SAFE.
+        """
+        if consultar_caixa is None:
+            relatorio["divergencias"].append(
+                "caixa não foi comparado com a corretora (sem consulta "
+                "disponível): divergência apenas na moeda de cotação "
+                "ficaria invisível")
+            return "UNKNOWN"
+        try:
+            remoto = consultar_caixa()
+        except Exception as exc:
+            relatorio["divergencias"].append(
+                f"consulta de caixa falhou ({type(exc).__name__})")
+            return "UNKNOWN"
+        try:
+            remoto_dec = Decimal(str(remoto))
+        except (TypeError, ValueError, ArithmeticError):
+            relatorio["divergencias"].append(
+                f"caixa reportado pela corretora é inválido: {remoto!r}")
+            return "UNKNOWN"
+        local = self.ledger.cash()
+        if local != remoto_dec:
+            relatorio["divergencias"].append(
+                f"CAIXA_DIVERGENTE: livro tem {local} e a corretora "
+                f"{remoto_dec}")
+            return "MISMATCH"
+        return "MATCHED"
 
     def _aplicar_ordem_remota(self, rec, remota, relatorio: dict,
                               consultar_fills=None) -> None:

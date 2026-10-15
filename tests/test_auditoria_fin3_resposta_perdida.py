@@ -143,8 +143,15 @@ class CorretoraFalsaBinance:
         return [dict(t) for t in self.trades]
 
     def fetch_balance(self):
+        # O caixa da corretora DERIVA das execuções: é ele que a reconciliação
+        # confronta com o livro — um número fixo aqui passaria mesmo se o
+        # preenchimento não tivesse sido aplicado.
         btc = sum((t["amount"] for t in self.trades), Decimal("0"))
-        return {"total": {"USDT": Decimal("1000"), "BTC": btc}}
+        usdt = Decimal("1000")
+        for t in self.trades:
+            custo = t["amount"] * t["price"] + t["fee"]["cost"]
+            usdt += -custo if t["side"] == "buy" else custo
+        return {"total": {"USDT": usdt, "BTC": btc}}
 
     def fetch_orders(self, *a, **k):
         return list(self.ordens.values())
@@ -220,7 +227,8 @@ def _reconciliar(coord, corretora):
         corretora.fetch_order_by_client_id,
         consultar_posicoes=corretora.fetch_positions,
         consultar_fills=corretora.fetch_order_fills,
-        consultar_ordens_abertas=corretora.fetch_open_orders)
+        consultar_ordens_abertas=corretora.fetch_open_orders,
+        consultar_caixa=corretora.fetch_cash)
 
 
 def _dz23(coid: str) -> str:

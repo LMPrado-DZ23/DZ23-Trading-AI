@@ -491,13 +491,15 @@ class TestGuiasDoProdutoReal:
 
 
 def _reconciliar_com_corretora_que_confirma(coord):
-    """Corretora que CONFIRMA o estado local: nenhuma ordem viva e as mesmas
-    posições que o livro tem. É o cenário 'tudo bate' — e mesmo ele precisa
-    passar pela reconciliação para gerar evidência."""
+    """Corretora que CONFIRMA o estado local: nenhuma ordem viva, as mesmas
+    posições e o mesmo caixa que o livro tem. É o cenário 'tudo bate' — e
+    mesmo ele precisa passar pela reconciliação para gerar evidência."""
     from decimal import Decimal as _D
     posicoes = {i: _D(str(d["quantidade"]))
                 for i, d in coord.ledger.open_positions_detail().items()}
-    return coord.reconciliar(lambda coid: None, consultar_posicoes=lambda: posicoes, consultar_ordens_abertas=lambda: [])
+    return coord.reconciliar(lambda coid: None, consultar_posicoes=lambda: posicoes,
+                             consultar_ordens_abertas=lambda: [],
+                             consultar_caixa=lambda: coord.ledger.cash())
 
 
 class TestDinheiroRealNoServico:

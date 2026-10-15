@@ -4999,16 +4999,23 @@ def desk_reconciliar(request: Request, _=Depends(auth)):
             raise RuntimeError("corretora não expõe consulta de ordens abertas")
         return corretora.fetch_open_orders()
 
+    def consultar_caixa():
+        if not hasattr(corretora, "fetch_cash"):
+            raise RuntimeError("corretora não expõe consulta de caixa")
+        return corretora.fetch_cash()
+
     tem_abertas = hasattr(corretora, "fetch_open_orders")
     tem_consulta = hasattr(corretora, "fetch_order_by_client_id")
     tem_posicoes = hasattr(corretora, "fetch_positions")
     tem_fills = hasattr(corretora, "fetch_order_fills")
+    tem_caixa = hasattr(corretora, "fetch_cash")
     resultado = coord.reconciliar(
         consultar if tem_consulta else None,
         consultar_posicoes=consultar_posicoes if tem_posicoes else None,
         consultar_fills=consultar_fills if tem_fills else None,
         consultar_ordens_abertas=(consultar_ordens_abertas if tem_abertas
-                                  else None))
+                                  else None),
+        consultar_caixa=consultar_caixa if tem_caixa else None)
     return {**resultado,
             "acao": ("portão liberado: pode operar" if resultado["seguro"] else
                      "confira as divergências na corretora antes de operar")}

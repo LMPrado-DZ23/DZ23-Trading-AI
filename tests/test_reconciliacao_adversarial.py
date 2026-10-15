@@ -152,6 +152,7 @@ class TestFillRemotoEntraNoLivro:
             lambda coid: {"id": "ex-9", "status": "filled",
                           "filled": "1.5", "average": "100", "fee": "0.15"},
             consultar_posicoes=lambda: {"BTC/USDT": "1.5"}, consultar_ordens_abertas=lambda: [],
+            consultar_caixa=lambda: coord.ledger.cash(),
             consultar_fills=lambda coid, exid="": [{"fill_id": "t-ex9", "quantity": Decimal("1.5"), "price": Decimal("100"), "fee": Decimal("0"), "side": "buy"}],)
 
         assert rel["seguro"] is True, rel["divergencias"]
@@ -312,6 +313,7 @@ class TestVendaReconciliadaFechaPosicao:
             lambda coid: {"id": "ex-sell", "status": "filled", "filled": "1",
                           "average": "110", "fee": "0.5"},
             consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [],
+            consultar_caixa=lambda: coord.ledger.cash(),
             consultar_fills=lambda coid, exid="": [{"fill_id": "s-110", "quantity": Decimal("1"), "price": Decimal("110"), "fee": Decimal("0"), "side": "sell"}],)
 
         assert livro.position_quantity("BTC/USDT") == Decimal("0"), (

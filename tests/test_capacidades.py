@@ -138,7 +138,8 @@ class TestRelatorioDeclaraOLimite:
         coord = self._coord(ExchangeSemBuscaDireta())
         rel = coord.reconciliar(
             lambda coid: {"resultado": "UNKNOWN", "ordem": None, "motivo": "x"},
-            consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
+            consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [],
+            consultar_caixa=lambda: coord.ledger.cash())
         assert rel["seguro"] is True
         assert rel["limitacoes"], "a limitação precisa aparecer mesmo no SAFE"
 

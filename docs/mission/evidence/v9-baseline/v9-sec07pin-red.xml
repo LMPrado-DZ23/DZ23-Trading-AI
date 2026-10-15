@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.521" timestamp="2026-10-15T10:19:36.905243-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_auditoria_blockers.TestCredencialDeInquilinoNaoVazaPorAmbiente" name="test_desk_llm_call_is_not_an_unlocked_env_mutation" time="0.356"><failure message="AssertionError: a consulta da mesa deve delegar credencial explícita ao núcleo&#10;assert 'consultar_ia(cfg, prompt' in 'def _desk_boot(tenant_id: str) -&gt; dict:\n    from decimal import Decimal\n\n    from tradingagents.desk.brokers impor...nds=int(os.environ.get(&quot;DESK_INTERVAL_SECONDS&quot;, &quot;300&quot;)),\n        guarda_operacao=_guarda_operacao)\n    return desk\n'">self = &lt;tests.test_auditoria_blockers.TestCredencialDeInquilinoNaoVazaPorAmbiente object at 0x000001F2738A0F20&gt;
+
+    def test_desk_llm_call_is_not_an_unlocked_env_mutation(self):
+        import inspect
+    
+        import service.app as m
+        fonte = inspect.getsource(m._desk_boot)
+&gt;       assert "consultar_ia(cfg, prompt" in fonte, (
+            "a consulta da mesa deve delegar credencial explícita ao núcleo")
+E       AssertionError: a consulta da mesa deve delegar credencial explícita ao núcleo
+E       assert 'consultar_ia(cfg, prompt' in 'def _desk_boot(tenant_id: str) -&gt; dict:\n    from decimal import Decimal\n\n    from tradingagents.desk.brokers impor...nds=int(os.environ.get("DESK_INTERVAL_SECONDS", "300")),\n        guarda_operacao=_guarda_operacao)\n    return desk\n'
+
+tests\test_auditoria_blockers.py:491: AssertionError</failure></testcase></testsuite></testsuites>

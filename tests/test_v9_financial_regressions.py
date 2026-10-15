@@ -280,6 +280,7 @@ def _reconcile(desk, rec, *, status, cumulative, remote_quantity, fills):
         orders.__getitem__, consultar_fills=query_fills,
         consultar_posicoes=lambda: {INSTRUMENT: D(remote_quantity)},
         consultar_ordens_abertas=lambda: [],
+        consultar_caixa=lambda: desk.ledger.cash(),
     )
 
 
@@ -504,6 +505,7 @@ def test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreem
             consultar_fills=lambda *args: [],
             consultar_posicoes=lambda: {INSTRUMENT: D("2")},
             consultar_ordens_abertas=lambda: [],
+            consultar_caixa=lambda: desk.ledger.cash(),
         )
     else:
         report = _reconcile(
@@ -530,7 +532,8 @@ def test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreem
 
     report = desk.reconciliar(no_historical_query, consultar_fills=no_historical_query,
                               consultar_posicoes=lambda: {INSTRUMENT: D("2")},
-                              consultar_ordens_abertas=lambda: [])
+                              consultar_ordens_abertas=lambda: [],
+                              consultar_caixa=lambda: desk.ledger.cash())
     assert report["seguro"] is True
     assert report["ordens_conferidas"] == 0
 
