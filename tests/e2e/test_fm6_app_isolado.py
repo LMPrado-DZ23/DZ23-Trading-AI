@@ -365,6 +365,43 @@ def test_fm6_03c_capacidades_distingue_suporte_configuracao_permissao_teste(
     page.screenshot(path=str(evidence_dir / "fm6-03c-capacidades-vapid-gerado.png"))
 
 
+# ------------------------------------------------------------------- item 03d
+def test_fm6_03d_toque_da_notificacao_abre_destino_existente(
+        page, mesa_url, senha, evidence_dir):
+    # V9-PWA-02: o push do servidor abre /app#notificacoes (sw.js e
+    # push_web.URL_DO_TOQUE). O toque precisa de um CONSUMIDOR real — sem
+    # ele o app abre e o fragmento morre em silêncio. O destino é a área
+    # autenticada já existente (Configuração › Caixa de entrada), sem
+    # prometer operação não implementada. Dois caminhos reais do navegador:
+    # (a) app fechado  → carga fria já com o fragmento (openWindow do sw.js);
+    # (b) app aberto   → navegação same-document (janela.navigate do sw.js).
+    entrar_como_dono(page, mesa_url, senha)
+
+    # (a) carga fria: a MESMA URL que o sw.js abre com o app fechado. A
+    # sessão do dono continua viva nesta aba (sessionStorage), então o
+    # boot entrega o painel e o fragmento tem de ser consumido.
+    page.goto(f"{mesa_url}/app#notificacoes")
+    expect(page.locator("#app")).to_be_visible(timeout=15000)
+    expect(page.locator("#page-config")).to_have_class(re.compile(r"\bactive\b"))
+    expect(page.locator("#notifInbox")).not_to_contain_text(
+        "Carregando...", timeout=15000)
+    # O fragmento é CONSUMIDO (replaceState): a URL limpa permite que um
+    # novo toque do mesmo alerta dispare a navegação de novo.
+    expect(page).to_have_url(re.compile(r"/app$"))
+    page.screenshot(path=str(evidence_dir / "fm6-03d-toque-carga-fria.png"))
+
+    # (b) app já aberto: o sw.js navega a janela para o mesmo caminho com o
+    # fragmento — navegação same-document que dispara hashchange; o app
+    # aberto em outra página tem de reagir e levar à Caixa de entrada.
+    ir_para(page, "inicio")
+    expect(page.locator("#page-inicio")).to_have_class(re.compile(r"\bactive\b"))
+    page.evaluate("location.hash = '#notificacoes'")
+    expect(page.locator("#page-config")).to_have_class(re.compile(r"\bactive\b"))
+    expect(page.locator("#notifInbox")).not_to_contain_text(
+        "Carregando...", timeout=15000)
+    page.screenshot(path=str(evidence_dir / "fm6-03d-toque-app-aberto.png"))
+
+
 # ------------------------------------------------------------------- item 04
 def test_fm6_04_dashboard_lc_mercado_e_portfolio(page, mesa_url, senha, evidence_dir):
     # §11 "Trading Dashboard" + §6: a biblioteca profissional carrega NO APP

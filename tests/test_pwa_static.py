@@ -70,6 +70,15 @@ class TestPainelPwa:
         assert "isSecureContext" in html
         assert "exigem HTTPS ou localhost" in html
 
+    def test_fragmento_do_push_tem_consumidor_real_no_painel(self):
+        # O sw.js e o backend (URL_DO_TOQUE) abrem /app#notificacoes; o
+        # painel precisa CONSUMIR o fragmento (carga fria e navegação
+        # same-document via hashchange) e levar a um destino existente —
+        # senão o toque abre o app e o destino morre em silêncio.
+        html = self._html()
+        assert "#notificacoes" in html
+        assert "hashchange" in html
+
 
 class TestRotasPwa:
     def _app(self, tmp_path, monkeypatch):

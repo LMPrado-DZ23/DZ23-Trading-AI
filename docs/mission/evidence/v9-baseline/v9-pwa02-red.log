@@ -1,0 +1,19 @@
+......F...                                                               [100%]
+================================== FAILURES ===================================
+_____ TestPainelPwa.test_fragmento_do_push_tem_consumidor_real_no_painel ______
+
+self = <tests.test_pwa_static.TestPainelPwa object at 0x00000145C2BA8F80>
+
+    def test_fragmento_do_push_tem_consumidor_real_no_painel(self):
+        # O sw.js e o backend (URL_DO_TOQUE) abrem /app#notificacoes; o
+        # painel precisa CONSUMIR o fragmento (carga fria e navegação
+        # same-document via hashchange) e levar a um destino existente —
+        # senão o toque abre o app e o destino morre em silêncio.
+        html = self._html()
+>       assert "#notificacoes" in html
+E       assert '#notificacoes' in '<!doctype html>\n<html lang="pt-BR">\n<head>\n<meta charset="utf-8"><meta name="viewport" content="width=device-width.../[&<>"]/g,c=>({\'&\':\'&amp;\',\'<\':\'&lt;\',\'>\':\'&gt;\',\'"\':\'&quot;\'}[c]))}boot();\n</script></body></html>\n'
+
+tests\test_pwa_static.py:79: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_pwa_static.py::TestPainelPwa::test_fragmento_do_push_tem_consumidor_real_no_painel
+1 failed, 9 passed in 0.69s
