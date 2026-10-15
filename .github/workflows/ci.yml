@@ -216,6 +216,7 @@ jobs:
             python - <<'PY'
           import platform
           import argon2, ccxt, fastapi, lxml, pandas, psycopg, uvicorn
+          import pywebpush  # V9-PWA-07: a imagem serve o Web Push (extra [push])
           print("arm64 import smoke OK em", platform.machine(),
                 "| pandas", pandas.__version__)
           PY

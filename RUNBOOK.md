@@ -121,9 +121,11 @@ deploy em produção e sem mexer em DNS por conta própria.
    `DATABASE_URL`: o estado vive no banco e não há nada a importar.)
 3. **No Oracle (aarch64).** Instale Docker e suba o serviço com o
    `docker-compose.yml` (ou só o Dockerfile, em Coolify), definindo
-   `ACCESS_PASSWORD` e o volume `/data`. Não exponha a porta direto: TLS/
-   reverse proxy na frente. Homologação do Oracle = rodar o ciclo completo
-   LÁ com evidência registrada; o Dockerfile existir não homologa nada.
+   `ACCESS_PASSWORD` e o volume `/data`. A imagem já instala o canal de
+   Web Push (extra `[push]`); gere as chaves VAPID no painel. Não exponha
+   a porta direto: TLS/ reverse proxy na frente. Homologação do Oracle =
+   rodar o ciclo completo LÁ com evidência registrada; o Dockerfile
+   existir não homologa nada.
 4. **No painel do servidor novo.** Primeiro acesso (o assistente cria a senha
    do dono), importe o pacote em `POST /v1/mudanca/importar` e confira o
    aprendizado restaurado.
