@@ -5,6 +5,10 @@ extrai cada hash de 64 hex registrado nos documentos de docs/mission/ e
 cruza os dois conjuntos. Saída JSON em stdout; exit 1 se houver hash
 registrado que não corresponda a nenhum arquivo real (referência órfã).
 
+O próprio relatório, seu log e seu arquivo de invocação ficam fora do
+manifesto: eles são regravados após a varredura e não podem ser
+verificados contra si mesmos sem entrar em referência circular.
+
 Somente leitura: não altera nenhum artefato.
 """
 from __future__ import annotations
@@ -38,6 +42,10 @@ EXTERNOS_CONHECIDOS: dict[str, str] = {
         "CI run 38450504893 — zip Windows x64 homologado, binário CI",
     "3582b2af52bf64e837665988d46aa175893fa93486d3c1867dcbb225801b77f4":
         "agregado canônico dos 17 achados gitleaks (ordenados por fingerprint), computado em memória",
+    "144de42193dfde54561a7b99bc3e9dcf8545fe818ea909ef0b768f0514045d3e":
+        "FQ-2 rodada 1 — JSON interno do export Freqtrade (backtest-result-2026-10-15_11-37-48.json,"
+        " 105 299 bytes), re-extraído byte-idêntico com zipfile; artefato do spike isolado"
+        " (../freqtrade-spike/), fora do repo — ver fq2-round1-veredito.md",
 }
 
 
@@ -53,9 +61,14 @@ def main() -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     out_path = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else None
+    excluidos: set[Path] = set()
+    if out_path is not None:
+        excluidos.add(out_path)
+        excluidos.add(out_path.with_suffix(".log"))
+        excluidos.add(out_path.with_name(out_path.stem + "-invocation.json"))
     manifest: dict[str, str] = {}
     for path in sorted(EVID.rglob("*")):
-        if path.is_file() and (out_path is None or path.resolve() != out_path):
+        if path.is_file() and path.resolve() not in excluidos:
             manifest[str(path.relative_to(ROOT)).replace("\\", "/")] = sha256(path)
 
     by_hash: dict[str, list[str]] = {}

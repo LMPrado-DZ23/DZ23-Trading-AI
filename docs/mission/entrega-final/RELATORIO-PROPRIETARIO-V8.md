@@ -1,7 +1,8 @@
 # DZ23 TRADING AI — RELATÓRIO PARA O PROPRIETÁRIO (Documento C)
 
 > **Documento C de 3 da entrega final (V8 §19).** Em português simples: o que funciona, o que ainda não
-> funciona e como usar o programa. Data: 2026-10-14. Escrito para você, sem termos técnicos desnecessários.
+> funciona e como usar o programa. Data: 2026-10-14; **revisado em 2026-10-15 (missão V9) — ver "Revisão V9"
+> no fim do documento.** Escrito para você, sem termos técnicos desnecessários.
 
 ## 1. Resumo em uma página
 
@@ -20,6 +21,11 @@ O DZ23 Trading AI é hoje um aplicativo Windows que você instala, abre, entra c
 **Estado geral:** tudo o que era possível fazer sem chaves reais e sem servidor externo **está feito e
 testado**. O que falta depende de você (chaves de corretoras/IA, servidor Oracle, celular para testar o
 aplicativo móvel) — a lista está no final.
+
+**Atualização V9 (2026-10-15):** a auditoria final independente revalidou tudo o que está abaixo no código
+atual, corrigiu defeitos demonstráveis (cada correção com teste "antes falhava → depois passa" registrado)
+e deixou o candidato pronto para a revisão do ChatGPT e do Claude (PR #12, sem merge automático). Nada
+mudou sobre dinheiro real: LIVE continua desligado e este guia continua valendo.
 
 ## 2. O que já funciona (e foi provado no aplicativo instalado)
 
@@ -55,6 +61,7 @@ aplicativo móvel) — a lista está no final.
 | Celular de verdade (Android/iPhone) | O app é responsivo e o push é real; para o teste final faltam celulares físicos + o servidor HTTPS. |
 | Aviso do Windows SmartScreen no instalador | Sumiria com um certificado de assinatura de código — uma compra opcional, só importa na hora de distribuir para outras pessoas. |
 | Sleep/wake (dormir/acordar o PC) | Não foi exercitado numa sessão real de suspensão — anotado como ressalva. |
+| Teste com usuário iniciante (pessoa de verdade) | O fluxo de 10 passos do iniciante é testado automaticamente (navegador real), mas uma pessoa novata real ainda não foi disponibilizada — depende de você ou de alguém para sentar e usar. |
 
 Ou seja: **nada disso é um defeito do programa** — é dependência de chave, servidor ou equipamento. Está
 tudo registrado para auditoria.
@@ -128,6 +135,11 @@ tudo registrado para auditoria.
 - `docs/mission/entrega-final/MATRIZ-REQUISITOS-V8.md` — a lista completa do que foi pedido × o que foi
   feito × onde está a prova.
 - `docs/mission/entrega-final/RELATORIO-HOMOLOGACAO-V8.md` — o relatório técnico de homologação.
+- `docs/mission/V9-MATRIZ-EVIDENCIAS.md` — a matriz única da auditoria V9 (requisito × estado × evidência,
+  com links para cada prova).
+- `docs/mission/V9-BASELINE.md` — a auditoria V9 antes das correções (achados classificados).
+- PR #12 no GitHub (branch `audit/v9-rc-20261015`) — a entrega preparada para a revisão independente do
+  ChatGPT e do Claude.
 
 ## 9. Palavras que aparecem no painel, explicadas
 
@@ -142,3 +154,20 @@ tudo registrado para auditoria.
 | Drawdown | Quanto o resultado caiu do ponto mais alto até o mais baixo. |
 | Sharpe/Sortino | Medidas de retorno por risco. Aparecem só quando fazem sentido (com operações suficientes); senão, "indefinido" com motivo. |
 | AGUARDAR/BLOQUEAR/SUSPENDER | Estados da decisão do ciclo: esperar / não pode agora (motivo) / parar por segurança. |
+
+## 10. Revisão V9 (2026-10-15)
+
+A auditoria final (missão V9) concluiu a parte técnica. O que importa para você:
+
+- **O que foi corrigido:** integridade financeira (taxas e caixa conferidos na reconciliação, reservas
+  vencidas liberadas, P&L do freio com a taxa de entrada, ordem gravada ANTES do envio, posse exclusiva da
+  execução entre dois processos), segurança (chave removida não é reutilizada, rotas fictícias removidas,
+  corretora MT5 fail-closed, backup nasce restrito ao dono), Escola (walk-forward com treino/embargo,
+  lookahead fail-closed, abstenção inteligente, evidência contada por abertura) e experiência (falhas do
+  painel visíveis e retentáveis, cards de capacidade honestos).
+- **O que continua bloqueado:** LIVE/REAL por trava de código (`MESA_LIVE_LIBERADA=False`) e os **R$ 1.000**
+  (não autorizados, não é depósito, não é meta — nada começa sem a sua autorização após a auditoria).
+- **O que depende de você:** chaves de corretora somente-leitura, servidor Oracle, celulares físicos e uma
+  pessoa iniciante para o teste de usabilidade — a lista está na seção 7.
+- **Próximo passo:** revisão independente do PR #12 pelo ChatGPT e Claude. Nada de Release oficial ou
+  deploy sem a sua autorização explícita.

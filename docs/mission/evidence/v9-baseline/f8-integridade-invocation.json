@@ -2,16 +2,16 @@
  "ferramenta": "tools/v9_f8_integridade.py",
  "comando": "PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe tools/v9_f8_integridade.py docs/mission/evidence/v9-baseline/f8-integridade.json",
  "head": "2b7754a94cc1e4233ad95ac6fa377be4078e5055",
- "data_utc": "2026-10-15T11:28:46Z",
+ "data_utc": "2026-10-15T18:41:48Z",
  "exit": 0,
- "relatorio_sha256": "bbf8bd1946fb9d4f66e3bb1fac442f963d7e509acb1481d9cf9ba86a2203021b",
- "log_sha256": "64661a2abbf623414312d66c48532cfdfc55b52da61a9fdf117d4b0c69f1fd4f",
+ "relatorio_sha256": "a3d87ff693d5ade8f8004973ccfccdc108176247385c04c4e1d9eaa1d5263754",
+ "log_sha256": "a3d87ff693d5ade8f8004973ccfccdc108176247385c04c4e1d9eaa1d5263754",
  "resumo": {
-  "artefatos_no_manifesto": 385,
-  "hashes_registrados_em_docs": 44,
-  "hashes_verificados_ok": 38,
-  "hashes_externos_conhecidos": 6,
+  "artefatos_no_manifesto": 747,
+  "hashes_registrados_em_docs": 64,
+  "hashes_verificados_ok": 57,
+  "hashes_externos_conhecidos": 7,
   "hashes_orfaos": 0
  },
- "nota": "Somente leitura sobre o diretorio de evidencias; o proprio relatorio e excluido do manifesto."
+ "nota": "Somente leitura sobre o diretorio de evidencias. O relatorio, seu log (copia integral do stdout; por isso o mesmo sha256) e este arquivo de invocacao ficam fora do manifesto, pois sao regravados apos a varredura. O hash FQ-2 rodada 1 (144de42193...) consta como externo conhecido: e o JSON interno do export Freqtrade, re-extraido byte-identico com zipfile, artefato do spike isolado fora do repositorio."
 }
