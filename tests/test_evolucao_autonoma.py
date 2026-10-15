@@ -146,8 +146,11 @@ class TestClassificacaoDePerda:
 
     def test_regra_madura_negativa_vira_regra_descalibrada(self):
         mem = MemoriaDeDesempenho()
-        for _ in range(AMOSTRA_MINIMA):
-            mem.registrar(_desfecho("a", "-0.01"))
+        for _i in range(AMOSTRA_MINIMA):
+            # Carimbo distinto por operação: registros idênticos são a
+            # MESMA operação e a porta da evidência os recusa.
+            mem.registrar(_desfecho("a", "-0.01",
+                                    quando=AGORA + timedelta(seconds=_i)))
         causa, _ = classificar_causa(_desfecho("a", "-0.01"), memoria=mem)
         assert causa == CAUSA_REGRA_DESCALIBRADA
 
@@ -506,11 +509,15 @@ class TestIntegracaoComOrquestrador:
         t = _trader_controle()
         orch = self._orch(t, evolucao=EvolucaoQuebrada(),
                           memoria=MemoriaDeDesempenho())
-        for _ in range(12):
+        for _i in range(12):
             orch.register_fill("BTC/USDT", Decimal("1"), Decimal("100"),
                                "trader-controle", Decimal("100"))
+            # Preço distinto por rodada: evidências idênticas seriam a
+            # MESMA operação e a porta as recusaria (o teste aqui é outro:
+            # o diário da evolução quebrado não derruba a saída).
             assert orch.close_position(
-                "BTC/USDT", preco_saida=Decimal("110")) is not None
+                "BTC/USDT",
+                preco_saida=Decimal("110") + Decimal(_i)) is not None
         assert len(orch.avisos_de_evolucao) == 10   # lista limitada
         assert "disco cheio" in orch.avisos_de_evolucao[-1]
 

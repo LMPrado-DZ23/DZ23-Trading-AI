@@ -1,0 +1,6 @@
+# V9-F8.2 adendo — varredura de valores API_KEY* em docs/ apos SEC-03/TEST-01/02 (2026-10-15)
+# Classificacao por FORMA; nenhum valor reproduzido.
+
+classes: OTHER=1, placeholder-mask=101
+arquivos varridos: 992
+OTHER: docs/mission/evidence/v9-baseline/v9-gitleaks-triagem.md x1 (literal em prosa: nome de variavel entre quotes, n=2 com quebra CRLF — ver triagem (b))

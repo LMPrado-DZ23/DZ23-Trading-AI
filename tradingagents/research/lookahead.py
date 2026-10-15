@@ -10,6 +10,10 @@ dataset num corte não pode alterar nenhuma decisão anterior ao corte.
 Este detector compara as decisões do pipeline completo com as do mesmo
 pipeline rodado sobre o prefixo e aponta cada divergência com corte, índice
 e as duas direções — evidência localizada, auditável, sem heurística.
+
+Veredito **fail-closed**: sem corte aplicável não existe evidência — o
+resultado é `ok=False` com aviso explícito de que nada foi medido, nunca
+aprovação por ausência de teste.
 """
 from __future__ import annotations
 
@@ -61,4 +65,5 @@ def detectar_lookahead(bars: Iterable[Bar], fabrica: Callable, *,
     else:
         aviso = "decisões estáveis sob truncamento: sem vazamento detectado"
     return {"total_barras": n, "cortes": list(cortes),
-            "vazamentos": vazamentos, "ok": not vazamentos, "aviso": aviso}
+            "vazamentos": vazamentos, "ok": bool(cortes) and not vazamentos,
+            "aviso": aviso}

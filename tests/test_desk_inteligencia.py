@@ -110,9 +110,12 @@ class TestAprendizado:
     def _preencher(self, mem, retorno, n=AMOSTRA_MINIMA, regime=Regime.ALTA,
                    estrategia="trend_following", dias=1):
         for _i in range(n):
+            # Carimbo distinto por operação: registros idênticos são a
+            # MESMA operação e a porta da evidência os recusa.
             mem.registrar(Desfecho(estrategia, regime.value, "BTC/USDT",
                                    Decimal(str(retorno)),
-                                   AGORA - timedelta(days=dias), 0.8))
+                                   AGORA - timedelta(days=dias)
+                                   + timedelta(seconds=_i), 0.8))
 
     def test_no_learning_without_minimum_sample(self, tmp_path):
         mem = self._memoria(tmp_path)
@@ -185,9 +188,12 @@ class TestAprendizado:
 class TestTraderQueAprende:
     def test_demoted_strategy_stops_proposing(self, tmp_path):
         mem = MemoriaDeDesempenho(tmp_path / "m.json")
-        for _ in range(AMOSTRA_MINIMA):
+        for _i in range(AMOSTRA_MINIMA):
+            # Carimbo distinto por operação: registros idênticos são a
+            # MESMA operação e a porta da evidência os recusa.
             mem.registrar(Desfecho("trend_following", Regime.ALTA.value, "BTC/USDT",
-                                   Decimal("-0.03"), utcnow()))
+                                   Decimal("-0.03"),
+                                   utcnow() - timedelta(seconds=AMOSTRA_MINIMA - _i)))
         t = default_desk(("BTC/USDT",), memoria=mem)[0]
         for st in (AgentStage.VALIDATED, AgentStage.SHADOW, AgentStage.PAPER_ENABLED):
             t.spec.move_to(st)
@@ -196,9 +202,12 @@ class TestTraderQueAprende:
 
     def test_bad_history_reduces_the_requested_size(self, tmp_path):
         mem = MemoriaDeDesempenho(tmp_path / "m.json")
-        for _ in range(AMOSTRA_MINIMA):
+        for _i in range(AMOSTRA_MINIMA):
+            # Carimbo distinto por operação: registros idênticos são a
+            # MESMA operação e a porta da evidência os recusa.
             mem.registrar(Desfecho("breakout", Regime.ALTA.value, "BTC/USDT",
-                                   Decimal("-0.01"), utcnow()))
+                                   Decimal("-0.01"),
+                                   utcnow() - timedelta(seconds=AMOSTRA_MINIMA - _i)))
         com = default_desk(("BTC/USDT",), memoria=mem)[2]
         sem = default_desk(("BTC/USDT",))[2]
         for t in (com, sem):
@@ -300,9 +309,12 @@ class TestMesaRecarregaAoConfigurar:
         h = {"Authorization": "Bearer s3nh4"}
         c.get("/v1/desk/status", headers=h)        # cria a mesa e a memória
         mem = m._DESKS["legacy"]["memoria"]
-        for _ in range(AMOSTRA_MINIMA):
+        for _i in range(AMOSTRA_MINIMA):
+            # Carimbo distinto por operação: registros idênticos são a
+            # MESMA operação e a porta da evidência os recusa.
             mem.registrar(Desfecho("trend_following", "tendencia_alta", "BTC/USDT",
-                                   Decimal("0.02"), utcnow(), 0.8))
+                                   Decimal("0.02"),
+                                   utcnow() - timedelta(seconds=AMOSTRA_MINIMA - _i), 0.8))
         d = c.get("/v1/desk/aprendizado", headers=h).json()
         linha = next(e for e in d["estrategias"] if e["estrategia"] == "trend_following")
         assert linha["operacoes"] == AMOSTRA_MINIMA and linha["maduro"] is True
@@ -317,9 +329,12 @@ class TestEstadoSobreviveAoServidor:
         from tradingagents.desk.storage import ArmazemDeEstado
         armazem = ArmazemDeEstado(None, diretorio=tmp_path / "estado")
         mem = MemoriaDeDesempenho(None, armazem=armazem, tenant_id="t1")
-        for _ in range(AMOSTRA_MINIMA):
+        for _i in range(AMOSTRA_MINIMA):
+            # Carimbo distinto por operação: registros idênticos são a
+            # MESMA operação e a porta da evidência os recusa.
             mem.registrar(Desfecho("trend_following", "tendencia_alta", "BTC/USDT",
-                                   Decimal("0.02"), utcnow(), 0.8))
+                                   Decimal("0.02"),
+                                   utcnow() - timedelta(seconds=AMOSTRA_MINIMA - _i), 0.8))
         # "novo servidor": instância nova, mesmo armazém
         revivida = MemoriaDeDesempenho(None, armazem=armazem, tenant_id="t1")
         assert revivida.estatistica("trend_following").amostras == AMOSTRA_MINIMA

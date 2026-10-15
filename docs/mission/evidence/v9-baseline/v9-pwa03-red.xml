@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="6" skipped="0" tests="94" time="9.226" timestamp="2026-10-15T13:05:27.476794-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_pwa_push.TestValidacaoDeAssinatura" name="test_assinatura_valida_passa" time="0.002" /><testcase classname="tests.test_pwa_push.TestValidacaoDeAssinatura" name="test_invalida_e_recusada_com_motivo[troca0-https]" time="0.001" /><testcase classname="tests.test_pwa_push.TestValidacaoDeAssinatura" name="test_invalida_e_recusada_com_motivo[troca1-longo]" time="0.001" /><testcase classname="tests.test_pwa_push.TestValidacaoDeAssinatura" name="test_invalida_e_recusada_com_motivo[troca2-inv\xe1lidos]" time="0.001" /><testcase classname="tests.test_pwa_push.TestValidacaoDeAssinatura" name="test_invalida_e_recusada_com_motivo[troca3-p256dh]" time="0.001" /><testcase classname="tests.test_pwa_push.TestValidacaoDeAssinatura" name="test_invalida_e_recusada_com_motivo[troca4-auth]" time="0.001" /><testcase classname="tests.test_pwa_push.TestValidacaoDeAssinatura" name="test_invalida_e_recusada_com_motivo[troca5-https]" time="0.001" /><testcase classname="tests.test_pwa_push.TestValidacaoDeAssinatura" name="test_identificador_nao_expoe_endpoint" time="0.001" /><testcase classname="tests.test_pwa_push.TestValidacaoDeAssinatura" name="test_resumo_nunca_contem_segredos" time="0.001" /><testcase classname="tests.test_pwa_push.TestValidacaoDeAssinatura" name="test_from_dict_aceita_formato_do_navegador" time="0.001" /><testcase classname="tests.test_pwa_push.TestPersistenciaNoConfig" name="test_ida_e_volta_com_limite" time="0.001" /><testcase classname="tests.test_pwa_push.TestPersistenciaNoConfig" name="test_lixo_no_config_vira_lista_vazia" time="0.001" /><testcase classname="tests.test_pwa_push.TestPersistenciaNoConfig" name="test_invalida_nao_e_carregada" time="0.001" /><testcase classname="tests.test_pwa_push.TestPersistenciaNoConfig" name="test_limite_de_dispositivos_e_aplicado_na_leitura" time="0.001" /><testcase classname="tests.test_pwa_push.TestPayloadETtl" name="test_payload_minimo_sem_dado_sensivel_na_url" time="0.001" /><testcase classname="tests.test_pwa_push.TestPayloadETtl" name="test_payload_trunca_textos_longos" time="0.001" /><testcase classname="tests.test_pwa_push.TestPayloadETtl" name="test_ttl_e_urgencia_por_severidade" time="0.001" /><testcase classname="tests.test_pwa_push.TestEntregaHonesta" name="test_sem_chave_privada_recusa_com_instrucao" time="0.001" /><testcase classname="tests.test_pwa_push.TestEntregaHonesta" name="test_sem_assinaturas_recusa" time="0.001" /><testcase classname="tests.test_pwa_push.TestEntregaHonesta" name="test_entrega_marca_ultimo_ok_e_conta" time="0.001" /><testcase classname="tests.test_pwa_push.TestEntregaHonesta" name="test_erro_generico_conta_falha_e_nao_finge" time="0.001" /><testcase classname="tests.test_pwa_push.TestEntregaHonesta" name="test_apenas_uma_entregue_ainda_e_sucesso_com_detalhe" time="0.001" /><testcase classname="tests.test_pwa_push.TestEntregaHonesta" name="test_expirada_e_podada_com_callback" time="0.272" /><testcase classname="tests.test_pwa_push.TestEntregaHonesta" name="test_todas_expiradas_manda_reinscrever" time="0.001" /><testcase classname="tests.test_pwa_push.TestEntregaHonesta" name="test_poda_que_falha_nao_derruba_a_entrega" time="0.001" /><testcase classname="tests.test_pwa_push.TestEstadoPublico" name="test_estado_nunca_contem_chave_privada_nem_endpoint" time="0.001" /><testcase classname="tests.test_pwa_push.TestChavesVapid" name="test_geracao_produz_par_utilizavel" time="0.006" /><testcase classname="tests.test_pwa_push.TestCriptoRealSemRede" name="test_criptografia_e_assinatura_vapid_reais" time="0.002" /><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_estado_sem_auth_recusa" time="0.187" /><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_estado_inicial_honesto_sem_segredo" time="0.087" /><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_cabecalhos_de_seguranca" time="0.139" /><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_csp_nao_quebra_o_iframe_do_floor" time="0.082" /><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_vapid_gerar_persiste_e_recusa_sobrescrever" time="0.116" /><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_assinar_valida_deduplica_e_nao_ecoa_endpoint" time="0.188" /><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_assinar_respeita_limite" time="0.206" /><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_cancelar_remove_aparelho" time="0.162" /><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_estado_guarda_diagnostico_real_apos_envio" time="0.223"><failure message="AssertionError: o sucesso do envio precisa ficar persistido no estado&#10;assert ''">self = &lt;tests.test_pwa_push.TestRotasPush object at 0x00000221DCD4E330&gt;
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-pwa03-red-5u48ulxh/tmp/pytest-of-unknown/pytest-0/test_estado_guarda_diagnostico0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000221DE65A270&gt;
+
+    @pytest.mark.skipif(not _TEM_PY_VAPID, reason="py_vapid ausente")
+    def test_estado_guarda_diagnostico_real_apos_envio(self, tmp_path,
+                                                       monkeypatch):
+        m, c, h = self._app(tmp_path, monkeypatch)
+        self._preparar_push(c, h)
+        self._despachar_com_remetente(
+            m, c, h, monkeypatch, lambda a, p, ttl, u: None)
+    
+        antes = c.get("/v1/push/estado", headers=h).json()
+&gt;       assert antes["dispositivos"][0]["ultimo_ok"], \
+            "o sucesso do envio precisa ficar persistido no estado"
+E       AssertionError: o sucesso do envio precisa ficar persistido no estado
+E       assert ''
+
+tests\test_pwa_push.py:509: AssertionError</failure></testcase><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_estado_guarda_falha_e_contagem_reais_apos_envio" time="0.250"><failure message="AssertionError: a falha real do envio precisa aparecer no estado persistido&#10;assert (0 &gt;= 1)">self = &lt;tests.test_pwa_push.TestRotasPush object at 0x00000221DCD4E7E0&gt;
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-pwa03-red-5u48ulxh/tmp/pytest-of-unknown/pytest-0/test_estado_guarda_falha_e_con0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000221DE501820&gt;
+
+    @pytest.mark.skipif(not _TEM_PY_VAPID, reason="py_vapid ausente")
+    def test_estado_guarda_falha_e_contagem_reais_apos_envio(self, tmp_path,
+                                                             monkeypatch):
+        m, c, h = self._app(tmp_path, monkeypatch)
+        self._preparar_push(c, h)
+    
+        def remetente_quebrado(a, p, ttl, u):
+            raise TimeoutError("sem resposta do serviço de push")
+    
+        self._despachar_com_remetente(
+            m, c, h, monkeypatch, remetente_quebrado)
+    
+        disp = c.get("/v1/push/estado", headers=h).json()["dispositivos"][0]
+&gt;       assert disp["falhas"] &gt;= 1 and "TimeoutError" in disp["ultimo_erro"], \
+            "a falha real do envio precisa aparecer no estado persistido"
+E       AssertionError: a falha real do envio precisa aparecer no estado persistido
+E       assert (0 &gt;= 1)
+
+tests\test_pwa_push.py:540: AssertionError</failure></testcase><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_persistencia_nao_ressuscita_inscricao_expirada_no_despacho" time="0.391"><failure message="AssertionError: o aparelho vivo mantém o sucesso real&#10;assert ''">self = &lt;tests.test_pwa_push.TestRotasPush object at 0x00000221DCD4EBA0&gt;
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-pwa03-red-5u48ulxh/tmp/pytest-of-unknown/pytest-0/test_persistencia_nao_ressusci0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000221DE2A3950&gt;
+
+    @pytest.mark.skipif(not _TEM_PY_VAPID, reason="py_vapid ausente")
+    def test_persistencia_nao_ressuscita_inscricao_expirada_no_despacho(
+            self, tmp_path, monkeypatch):
+        m, c, h = self._app(tmp_path, monkeypatch)
+        self._preparar_push(c, h)                    # aparelho bom ("tok")
+        c.post("/v1/push/assinar", headers=h, json=self._corpo("velho"))
+        assert c.get("/v1/push/estado", headers=h).json()["total"] == 2
+    
+        def remetente(a, p, ttl, u):
+            if a.endpoint.endswith("tokvelho"):
+                raise self._Expirado410()
+            return None
+    
+        self._despachar_com_remetente(m, c, h, monkeypatch, remetente)
+    
+        d = c.get("/v1/push/estado", headers=h).json()
+        assert d["total"] == 1, "a inscrição expirada precisa ser podada"
+        vivo = d["dispositivos"][0]
+&gt;       assert vivo["ultimo_ok"], "o aparelho vivo mantém o sucesso real"
+E       AssertionError: o aparelho vivo mantém o sucesso real
+E       assert ''
+
+tests\test_pwa_push.py:565: AssertionError</failure></testcase><testcase classname="tests.test_centro_de_alertas.TestFilaNucleo" name="test_entrega_marca_estado_canal_e_audita" time="0.001" /><testcase classname="tests.test_centro_de_alertas.TestFilaNucleo" name="test_dedupe_incrementa_ocorrencias_sem_segundo_alerta" time="0.001" /><testcase classname="tests.test_centro_de_alertas.TestFilaNucleo" name="test_dedupe_libera_apos_janela" time="0.001" /><testcase classname="tests.test_centro_de_alertas.TestFilaNucleo" name="test_falha_aplica_backoff_exponencial_e_nao_repete_antes_da_hora" time="0.001" /><testcase classname="tests.test_centro_de_alertas.TestFilaNucleo" name="test_retry_apos_janela_entrega" time="0.001" /><testcase classname="tests.test_centro_de_alertas.TestFilaNucleo" name="test_timeout_de_um_canal_nao_derruba_os_demais" time="0.001" /><testcase classname="tests.test_centro_de_alertas.TestFilaNucleo" name="test_rate_limit_adia_e_libera_depois_da_janela" time="0.001" /><testcase classname="tests.test_centro_de_alertas.TestFilaNucleo" name="test_max_tentativas_esgota_e_para_de_tentar" time="0.001" /><testcase classname="tests.test_centro_de_alertas.TestFilaNucleo" name="test_expirado_nao_e_despachado_nem_parece_atual" time="0.001" /><testcase classname="tests.test_centro_de_alertas.TestFilaNucleo" name="test_validade_ainda_futura_entrega_normal_e_sem_marca" time="0.001" /><testcase classname="tests.test_centro_de_alertas.TestFilaNucleo" name="test_reinicio_restaura_estados_e_retoma_pendentes" time="0.002" /><testcase classname="tests.test_centro_de_alertas.TestFilaNucleo" name="test_inbox_marca_vencido_e_separa_ativos" time="0.001" /><testcase classname="tests.test_centro_de_alertas.TestFilaNucleo" name="test_sem_canal_externo_o_painel_e_a_entrega_garantida" time="0.001" /><testcase classname="tests.test_centro_de_alertas.TestFilaNucleo" name="test_despacho_concorrente_nao_entrega_o_mesmo_alerta_duas_vezes" time="3.008" /><testcase classname="tests.test_centro_de_alertas.TestMatrizDeRoteamento" name="test_regra_por_trader_e_severidade" time="0.003" /><testcase classname="tests.test_centro_de_alertas.TestMatrizDeRoteamento" name="test_canal_desconhecido_e_ignorado_com_aviso" time="0.002" /><testcase classname="tests.test_centro_de_alertas.TestMatrizDeRoteamento" name="test_regra_sem_canal_valido_e_descartada" time="0.002" /><testcase classname="tests.test_centro_de_alertas.TestMatrizDeRoteamento" name="test_matriz_e_serializavel_e_sobrevive" time="0.002" /><testcase classname="tests.test_centro_de_alertas.TestSegurancaDosBotoes" name="test_acao_desconhecida_recusada" time="0.002" /><testcase classname="tests.test_centro_de_alertas.TestSegurancaDosBotoes" name="test_ler_registra_recebimento" time="0.002" /><testcase classname="tests.test_centro_de_alertas.TestSegurancaDosBotoes" name="test_intencao_registra_sem_executar" time="0.001" /><testcase classname="tests.test_centro_de_alertas.TestSegurancaDosBotoes" name="test_notificacao_viva_nao_conhece_execucao" time="0.002" /><testcase classname="tests.test_centro_de_alertas.TestSegurancaDosBotoes" name="test_apenas_ler_e_intencao_sao_acoes_permitidas" time="0.001" /><testcase classname="tests.test_centro_de_alertas.TestCanais" name="test_telegram_envia_texto_e_botoes_sem_execucao" time="0.001" /><testcase classname="tests.test_centro_de_alertas.TestCanais" name="test_telegram_sem_config_nao_esta_configurado" time="0.001" /><testcase classname="tests.test_centro_de_alertas.TestCanais" name="test_windows_aceita_executor_injetavel" time="0.001" /><testcase classname="tests.test_centro_de_alertas.TestCanais" name="test_windows_desligado_nao_esta_configurado" time="0.001" /><testcase classname="tests.test_centro_de_alertas.TestCanais" name="test_email_recusa_alerta_por_estrutura" time="0.001" /><testcase classname="tests.test_centro_de_alertas.TestCanais" name="test_email_envia_relatorio_com_smtp_injetado" time="0.001" /><testcase classname="tests.test_centro_de_alertas.TestCanais" name="test_construir_canais_ordena_por_prioridade" time="0.001" /><testcase classname="tests.test_centro_de_alertas.TestCanais" name="test_webpush_sem_flag_nao_finge_funcionar" time="0.001" /><testcase classname="tests.test_centro_de_alertas.TestNoServico" name="test_canais_status_nunca_vaza_segredo" time="0.199" /><testcase classname="tests.test_centro_de_alertas.TestNoServico" name="test_testar_canal_sem_config_recusa_com_instrucao" time="0.153" /><testcase classname="tests.test_centro_de_alertas.TestNoServico" name="test_testar_canal_configurado_devolve_evidencia" time="0.269" /><testcase classname="tests.test_centro_de_alertas.TestNoServico" name="test_ultimo_teste_de_canal_sobrevive_ao_reinicio" time="0.268"><failure message="AssertionError: o último teste do canal precisa sobreviver ao reinício&#10;assert ''">self = &lt;tests.test_centro_de_alertas.TestNoServico object at 0x00000221DD3B96A0&gt;
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-pwa03-red-5u48ulxh/tmp/pytest-of-unknown/pytest-0/test_ultimo_teste_de_canal_sob0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000221DEAE9DF0&gt;
+
+    def test_ultimo_teste_de_canal_sobrevive_ao_reinicio(self, tmp_path,
+                                                        monkeypatch):
+        m, c, h = self._app(tmp_path, monkeypatch)
+        c.post("/v1/config", headers=h, json={"vars": {
+            "ALERTA_TELEGRAM_TOKEN": "tok", "ALERTA_TELEGRAM_CHAT": "1"}})
+        m._TESTE_CANAL_TRANSPORTES["legacy"] = {"telegram": lambda a: None}
+        r = c.post("/v1/notificacoes/testar", headers=h,
+                   json={"canal": "telegram"})
+        assert r.status_code == 200 and r.json()["ok"] is True
+    
+        # Reinício: o registro do teste precisa vir do armazém, não da RAM.
+        importlib.reload(m)
+        m._FAILS.clear()
+        m._DESKS.clear()
+        m._FILAS_ALERTAS.clear()
+        c2 = TestClient(m.app)
+        d = c2.get("/v1/notificacoes/canais", headers=h).json()
+        tg = next(x for x in d["canais"] if x["nome"] == "telegram")
+&gt;       assert tg["ultimo_teste"], \
+            "o último teste do canal precisa sobreviver ao reinício"
+E       AssertionError: o último teste do canal precisa sobreviver ao reinício
+E       assert ''
+
+tests\test_centro_de_alertas.py:446: AssertionError</failure></testcase><testcase classname="tests.test_centro_de_alertas.TestNoServico" name="test_teste_de_canal_falho_fica_registrado_sem_se_disfarcar" time="0.286"><failure message="AssertionError: um teste que falhou não pode aparecer como sucesso&#10;assert None is False&#10; +  where None = &lt;built-in method get of dict object at 0x00000221DE3C8580&gt;('ultimo_teste_ok')&#10; +    where &lt;built-in method get of dict object at 0x00000221DE3C8580&gt; = {'nome': 'telegram', 'prioridade': 1, 'configurado': True, 'disponivel': True, ...}.get">self = &lt;tests.test_centro_de_alertas.TestNoServico object at 0x00000221DD3BA750&gt;
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-pwa03-red-5u48ulxh/tmp/pytest-of-unknown/pytest-0/test_teste_de_canal_falho_fica0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000221DCE54680&gt;
+
+    def test_teste_de_canal_falho_fica_registrado_sem_se_disfarcar(
+            self, tmp_path, monkeypatch):
+        m, c, h = self._app(tmp_path, monkeypatch)
+        c.post("/v1/config", headers=h, json={"vars": {
+            "ALERTA_TELEGRAM_TOKEN": "tok", "ALERTA_TELEGRAM_CHAT": "1"}})
+    
+        def transporte_quebrado(a):
+            raise RuntimeError("rede fora do ar")
+    
+        m._TESTE_CANAL_TRANSPORTES["legacy"] = {
+            "telegram": transporte_quebrado}
+        r = c.post("/v1/notificacoes/testar", headers=h,
+                   json={"canal": "telegram"})
+        assert r.status_code == 502
+    
+        d = c.get("/v1/notificacoes/canais", headers=h).json()
+        tg = next(x for x in d["canais"] if x["nome"] == "telegram")
+&gt;       assert tg.get("ultimo_teste_ok") is False, \
+            "um teste que falhou não pode aparecer como sucesso"
+E       AssertionError: um teste que falhou não pode aparecer como sucesso
+E       assert None is False
+E        +  where None = &lt;built-in method get of dict object at 0x00000221DE3C8580&gt;('ultimo_teste_ok')
+E        +    where &lt;built-in method get of dict object at 0x00000221DE3C8580&gt; = {'nome': 'telegram', 'prioridade': 1, 'configurado': True, 'disponivel': True, ...}.get
+
+tests\test_centro_de_alertas.py:467: AssertionError</failure></testcase><testcase classname="tests.test_centro_de_alertas.TestNoServico" name="test_inbox_e_ack" time="0.221" /><testcase classname="tests.test_centro_de_alertas.TestNoServico" name="test_webhook_telegram_exige_segredo" time="0.235" /><testcase classname="tests.test_centro_de_alertas.TestNoServico" name="test_alertas_rota_antiga_compativel" time="0.245" /><testcase classname="tests.test_centro_de_alertas.TestNoServico" name="test_matriz_rota_salva_e_le" time="0.432" /><testcase classname="tests.test_centro_de_alertas.TestNoServico" name="test_fila_sobrevive_ao_reinicio_do_servico" time="0.437" /><testcase classname="tests.test_centro_de_alertas" name="test_alerta_vivo_carrega_contexto[preco]" time="0.002" /><testcase classname="tests.test_centro_de_alertas" name="test_alerta_vivo_carrega_contexto[fonte]" time="0.002" /><testcase classname="tests.test_centro_de_alertas" name="test_alerta_vivo_carrega_contexto[link]" time="0.002" /><testcase classname="tests.test_pwa_static.TestServiceWorker" name="test_cache_so_de_estaticos_publicos_e_versionado" time="0.002" /><testcase classname="tests.test_pwa_static.TestServiceWorker" name="test_push_mostra_notificacao_com_tag_e_abre_area_autenticada" time="0.002" /><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_instalar_comeca_escondido_ate_o_navegador_oferecer" time="0.002" /><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_registra_sw_sem_cache_velho_e_inscreve_push_real" time="0.002" /><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_card_do_aplicativo_com_dica_iphone_e_estados" time="0.002" /><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_endereco_inseguro_degrada_honesto" time="0.002" /><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_fragmento_do_push_tem_consumidor_real_no_painel" time="0.002" /><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_ultimo_teste_do_canal_e_honesto_no_painel" time="0.003"><failure message="assert 'ultimo_teste_ok' in '&lt;!doctype html&gt;\n&lt;html lang=&quot;pt-BR&quot;&gt;\n&lt;head&gt;\n&lt;meta charset=&quot;utf-8&quot;&gt;&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width.../[&amp;&lt;&gt;&quot;]/g,c=&gt;({\'&amp;\':\'&amp;amp;\',\'&lt;\':\'&amp;lt;\',\'&gt;\':\'&amp;gt;\',\'&quot;\':\'&amp;quot;\'}[c]))}boot();\n&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;\n'">self = &lt;tests.test_pwa_static.TestPainelPwa object at 0x00000221DD125D90&gt;
+
+    def test_ultimo_teste_do_canal_e_honesto_no_painel(self):
+        # V9-PWA-03: o painel consome ultimo_teste_ok — um teste de canal
+        # que FALHOU nunca aparece como "testado" sem ressalva.
+        html = self._html()
+&gt;       assert "ultimo_teste_ok" in html
+E       assert 'ultimo_teste_ok' in '&lt;!doctype html&gt;\n&lt;html lang="pt-BR"&gt;\n&lt;head&gt;\n&lt;meta charset="utf-8"&gt;&lt;meta name="viewport" content="width=device-width.../[&amp;&lt;&gt;"]/g,c=&gt;({\'&amp;\':\'&amp;amp;\',\'&lt;\':\'&amp;lt;\',\'&gt;\':\'&amp;gt;\',\'"\':\'&amp;quot;\'}[c]))}boot();\n&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;\n'
+
+tests\test_pwa_static.py:86: AssertionError</failure></testcase><testcase classname="tests.test_pwa_static.TestRotasPwa" name="test_sw_js_servido_com_escopo_raiz_e_sem_cache_velho" time="0.148" /><testcase classname="tests.test_pwa_static.TestRotasPwa" name="test_manifest_continua_servido" time="0.178" /><testcase classname="tests.test_pwa_static.TestRotasPwa" name="test_sw_exige_contexto_autenticado_apenas_para_painel_nao_para_o_arquivo" time="0.150" /></testsuite></testsuites>

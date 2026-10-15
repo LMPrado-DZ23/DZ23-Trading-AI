@@ -120,12 +120,14 @@ def _intencao(risco, *, exposicao="0.1", instrument="BTC/USDT",
 
 
 def _corretora_confirma(coord) -> dict:
-    """Corretora que CONFIRMA o estado local: nenhuma ordem viva e as mesmas
-    posições do livro. É o cenário 'tudo bate' — e só ele reabre o portão."""
+    """Corretora que CONFIRMA o estado local: nenhuma ordem viva, as mesmas
+    posições do livro e o mesmo caixa. É o cenário 'tudo bate' — e só ele
+    reabre o portão."""
     posicoes = {i: Decimal(str(d["quantidade"]))
                 for i, d in coord.ledger.open_positions_detail().items()}
     return coord.reconciliar(lambda coid: None, consultar_posicoes=lambda: posicoes,
-                             consultar_ordens_abertas=lambda: [])
+                             consultar_ordens_abertas=lambda: [],
+                             consultar_caixa=lambda: coord.ledger.cash())
 
 
 # ------------------------------------------------------------- router fakes

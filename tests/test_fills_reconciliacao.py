@@ -75,7 +75,8 @@ class TestFillsIndividualizados:
         rel = coord.reconciliar(lambda coid: ordem_remota(),
                                 consultar_posicoes=lambda: {"BTC/USDT": Decimal("1.5")},
             consultar_ordens_abertas=lambda: [],
-                                consultar_fills=lambda coid, exid="": fills)
+                                consultar_fills=lambda coid, exid="": fills,
+                                consultar_caixa=lambda: coord.ledger.cash())
         rec = coord.orders["ord-1"]
         assert rec.seen_fills == {"t-1", "t-2", "t-3"}, (
             "a reconciliação criou um fill sintético em vez de usar os reais")

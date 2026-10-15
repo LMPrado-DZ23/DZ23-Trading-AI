@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import threading
 import uuid
+from contextlib import contextmanager
+from copy import deepcopy
 from decimal import ROUND_DOWN, Decimal
 
 from .models import (
@@ -120,7 +122,8 @@ class RiskEngine:
         """
         self.mandate = mandate
         self.carteira = carteira
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
+        self._economic_undo: list[dict] = []
         self._reservations: dict[str, RiskReservation] = {}
         self._concluidas: dict[str, dict] = {}
         self._deficits: dict[str, Decimal] = {}
@@ -211,6 +214,10 @@ class RiskEngine:
         if pct <= 0:
             raise RiskVeto("exposição desejada nula")
         with self._lock:  # atômico: duas propostas não travam o mesmo capital
+            # Reserva vencida que nunca financiou ordem não pode bloquear o
+            # instrumento nem segurar capital: o vencimento vale também para
+            # a VIDA da reserva, não só para o momento do uso.
+            self.expirar_reservas_vencidas()
             # Posições ABERTAS contam para o limite: uma posição preenchida
             # sem reserva continua sendo uma posição.
             if len(self.open_instruments()) >= self.mandate.max_open_positions:
@@ -249,6 +256,7 @@ class RiskEngine:
         """Reserva um notional explícito — usada quando o alvo não vem de
         percentual do mandato. Aplica a MESMA regra de cobertura dura."""
         with self._lock:
+            self.expirar_reservas_vencidas()
             folga = (alvo * getattr(self.mandate, "slippage_buffer_pct",
                                     Decimal("0"))).quantize(Decimal("0.00000001"))
             if alvo + folga > self.available:
@@ -310,6 +318,35 @@ class RiskEngine:
             self._reservations[reservation_id] = atualizada
             return atualizada.remaining_amount
 
+    @contextmanager
+    def economic_transaction(self, reservation_id: str):
+        """Rollback da reserva e apenas dos incidentes tocados pela operação."""
+        with self._lock:
+            reserva = self._reservations.get(reservation_id)
+            conclusao = deepcopy(self._concluidas.get(reservation_id))
+            incidentes = {}
+            self._economic_undo.append(incidentes)
+            try:
+                yield
+            except BaseException:
+                for mapping, key, value in (
+                    (self._reservations, reservation_id, reserva),
+                    (self._concluidas, reservation_id, conclusao),
+                    *((self._incidentes, key, value) for key, value in incidentes.items()),
+                ):
+                    if value is None:
+                        mapping.pop(key, None)
+                    else:
+                        mapping[key] = value
+                raise
+            finally:
+                self._economic_undo.pop()
+
+    def _remember_incident(self, key: str) -> None:
+        for undo in self._economic_undo:
+            if key not in undo:
+                undo[key] = deepcopy(self._incidentes.get(key))
+
     # ------------------------------------------------ custo real vs cobertura
     def registrar_execucao(self, reservation_id: str, *, custo: Decimal,
                            quantidade: Decimal, terminal: bool) -> dict:
@@ -350,7 +387,9 @@ class RiskEngine:
                     reservation_id=reservation_id,
                     evidence=f"execução custou {custo} contra cobertura {limite}")
 
-            if terminal or atualizada.remaining_quantity <= 0:
+            # O executor só confirma terminalidade após conferir os fills;
+            # quantidade completa com evidência divergente mantém a sobra.
+            if terminal:
                 sobra = atualizada.remaining_amount
                 # Conclusão fica registrada: apagar a reserva sem deixar
                 # rastro tiraria a única evidência do consumo terminal.
@@ -442,6 +481,7 @@ class RiskEngine:
         ocorrencia = {"amount": str(amount), "order_id": order_id,
                       "reservation_id": reservation_id,
                       "at": utcnow().isoformat(), "evidence": evidence}
+        self._remember_incident(chave)
         existente = self._incidentes.get(chave)
         if existente and existente["status"] == "OPEN":
             # Mesma violação econômica: soma o total e GUARDA a origem de
@@ -795,6 +835,7 @@ class RiskEngine:
                       "fill_id": fill_id, "instrumento": instrumento,
                       "at": utcnow().isoformat(),
                       "evidence": f"taxa de {quantidade} {moeda} sem cotação"}
+        self._remember_incident(chave)
         existente = self._incidentes.get(chave)
         if existente and existente["status"] == "OPEN":
             existente["fee_amount"] = str(
@@ -837,6 +878,7 @@ class RiskEngine:
                       "fill_id": fill_id, "instrumento": instrumento,
                       "at": utcnow().isoformat(),
                       "evidence": motivo or f"taxa de {quantidade} sem moeda"}
+        self._remember_incident(chave)
         existente = self._incidentes.get(chave)
         if existente and existente["status"] in self.ESTADOS_BLOQUEANTES:
             existente["fee_amount"] = str(
@@ -878,6 +920,7 @@ class RiskEngine:
         """
         import uuid as _uuid
         chave = f"FEE_COMPONENTS_AMBIGUOUS:{fill_id or order_id}"
+        self._remember_incident(chave)
         existente = self._incidentes.get(chave)
         if existente and existente["status"] in self.ESTADOS_BLOQUEANTES:
             return existente["incident_id"]
@@ -1372,10 +1415,10 @@ class RiskEngine:
     def conversao_acumulada(self) -> Decimal:
         """Passivo acumulado das taxas valoradas e ainda não financiadas.
 
-        Fica numa conta própria (FX:CONVERSION) e NÃO vira resultado de
-        trader: o que a estratégia fez e o que a conversão cambial fez são
-        coisas diferentes, e somar as duas premiaria ou puniria o agente por
-        um câmbio que ele não escolheu.
+        Fica em LIABILITY:FEE_FUNDING e NÃO vira resultado de trader: o que a
+        estratégia fez e o que a conversão cambial fez são coisas diferentes,
+        e somar as duas premiaria ou puniria o agente por um câmbio que ele
+        não escolheu. O aporte do ativo descoberto quita este passivo.
         """
         if self.carteira is None:
             return Decimal("0")
@@ -1593,6 +1636,10 @@ class RiskEngine:
                     continue
                 self._reservations[res.reservation_id] = res
                 restauradas += 1
+            # Snapshot antigo reidrata reserva vencida: sem isto ela volta
+            # como bloqueio eterno — o vencimento só existia no momento do
+            # uso, e o reinício não pode ressuscitar um defeito já curado.
+            self.expirar_reservas_vencidas()
         return restauradas
 
     def release(self, reservation_id: str) -> bool:
@@ -1600,6 +1647,36 @@ class RiskEngine:
         pode mais existir (cenário 09: timeout NÃO libera)."""
         with self._lock:
             return self._reservations.pop(reservation_id, None) is not None
+
+    def expirar_reservas_vencidas(self) -> int:
+        """Terminaliza reservas vencidas que NUNCA financiaram uma ordem.
+
+        `expires_at` só era aplicado no momento do USO: uma reserva recusada
+        antes do vínculo (versão divergente, reconciliação pendente, portões
+        de incidente) ficava viva para sempre — `available` reduzido e o
+        instrumento bloqueado por `open_instruments()` — e o snapshot a
+        reidratava a cada reinício.
+
+        Reserva VINCULADA não é tocada: ela cobre ordem possivelmente em voo;
+        quem encerra é o ciclo da ordem (fill/rejeição/reconciliação).
+        Reserva sem `expires_at` também não: sem prazo conhecido, a varredura
+        não inventa vencimento — mantém o bloqueio, que é o lado seguro.
+        """
+        agora = utcnow()
+        with self._lock:
+            vencidas = [
+                rid for rid, reserva in self._reservations.items()
+                if reserva.expires_at is not None
+                and agora >= reserva.expires_at
+                and not reserva.bound_client_order_id]
+            for rid in vencidas:
+                # Terminalizar grava a conclusão (RELEASED + motivo) para
+                # auditoria. Não há lastro no livro a devolver: reserva sem
+                # vínculo nunca chegou ao lock do ledger.
+                self.terminalizar(
+                    rid, motivo="reserva vencida sem vínculo: capital "
+                                "liberado sem efeito externo")
+            return len(vencidas)
 
     # -- intenção ------------------------------------------------------
     def intent(self, reservation: RiskReservation, action: Action, mode,

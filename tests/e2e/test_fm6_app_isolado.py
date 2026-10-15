@@ -23,6 +23,7 @@ executar contra um alvo externo sem depender de outros módulos de teste.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 
@@ -206,6 +207,199 @@ def test_fm6_03_escola_central_no_painel(page, mesa_url, senha, evidence_dir):
     expect(escola).to_contain_text(re.compile(r"Pilotos \(modo"))
     expect(escola).not_to_contain_text("falhou")
     page.screenshot(path=str(evidence_dir / "fm6-03-escola.png"))
+
+
+def test_fm6_03b_escola_falha_visivel_e_tentativa_de_novo(page, mesa_url, senha, evidence_dir):
+    # V9-UI-01: o run F0 deixou #deskMsg em branco por 15 s quando uma das
+    # três consultas da Escola falhou (toast efêmero sumia e sobrava painel
+    # vazio — indistinguível de "nunca cliquei"). A falha injetada aqui é
+    # determinística: uma rota responde 500. O painel PRECISA mostrar o que
+    # falhou, sem alterar nada, e "Tentar de novo" deve recuperar o painel
+    # completo quando a consulta volta a funcionar.
+    entrar_como_dono(page, mesa_url, senha)
+    modo_avancado(page)
+    ir_para(page, "mesa")
+    expect(page.locator("#deskOut")).to_contain_text("(10 perfis)", timeout=20000)
+
+    def falhar_pilotos(route):
+        route.fulfill(
+            status=500,
+            content_type="application/json",
+            body='{"detail":"falha injetada no teste (pilotos)"}',
+        )
+
+    page.route("**/v1/escola/pilotos", falhar_pilotos)
+    page.get_by_role("button", name="Escola Central").click()
+    escola = page.locator("#deskMsg")
+    expect(escola).to_contain_text("não respondeu", timeout=15000)
+    expect(escola).to_contain_text("pilotos")
+    expect(escola).to_contain_text("falha injetada no teste")
+    expect(escola).to_contain_text("Nada foi alterado")
+    expect(escola.get_by_role("button", name="Tentar de novo")).to_be_visible()
+    page.screenshot(path=str(evidence_dir / "fm6-03b-escola-erro-visivel.png"))
+
+    page.unroute("**/v1/escola/pilotos", falhar_pilotos)
+    escola.get_by_role("button", name="Tentar de novo").click()
+    expect(escola).to_contain_text("Contextos de certificação", timeout=15000)
+    expect(escola).to_contain_text("Maestro: pausa global")
+    expect(escola).not_to_contain_text("não respondeu")
+    page.screenshot(path=str(evidence_dir / "fm6-03b-escola-retomada.png"))
+
+
+# ------------------------------------------------------------------- item 03c
+def test_fm6_03c_capacidades_distingue_suporte_configuracao_permissao_teste(
+        page, mesa_url, senha, evidence_dir):
+    # V9-PWA-01: o cartão de capacidades não pode tratar HTTPS como capacidade
+    # de push, nem presença de chave como capacidade operacional, nem prometer
+    # toast do Windows fora do Windows. Cada cartão distingue SUPORTE (existe
+    # neste endereço/navegador), CONFIGURAÇÃO (chaves/inscrição), PERMISSÃO
+    # (navegador) e TESTE (entrega confirmada pelo backend).
+    entrar_como_dono(page, mesa_url, senha)
+    caps = page.locator("#capacidadesLista")
+    expect(caps).to_be_visible(timeout=15000)
+    push = caps.locator(".event", has_text="Aplicativo no celular e push")
+    pc = caps.locator(".event", has_text="Alertas no PC")
+
+    # 1) Servidor recém-criado: localhost é contexto seguro, mas SEM chaves
+    # VAPID geradas e SEM inscrição. Dizer "liberados" só porque o endereço é
+    # seguro é a sobre-promessa — falta configurar, inscrever e autorizar.
+    expect(push).to_contain_text("configuração necessária")
+    expect(push).to_contain_text("VAPID")
+    expect(push).to_contain_text("permissão")
+    expect(push).not_to_contain_text("liberados")
+
+    # 2) Toast do PC segue o BACKEND (canal windows), nunca promessa fixa: o
+    # runner hermético desliga ALERTA_WINDOWS de propósito (nenhum toast real
+    # durante os testes) e o cartão tem de dizer isso — não "funcionam agora".
+    expect(pc).to_contain_text("configuração necessária")
+    expect(pc).to_contain_text("desligado")
+    expect(pc).not_to_contain_text("funcionam agora")
+    page.screenshot(path=str(evidence_dir / "fm6-03c-capacidades-iniciais.png"))
+
+    # Estado do backend simulado (determinístico em qualquer máquina): o
+    # cartão tem de reagir ao que o servidor responde, não a texto fixo.
+    def canais_stub(*canais):
+        corpo = json.dumps({"canais": list(canais),
+                            "aviso": "resposta simulada do teste V9-PWA-01"})
+
+        def _handler(route):
+            route.fulfill(status=200, content_type="application/json",
+                          body=corpo)
+        return _handler
+
+    painel = {"nome": "painel", "prioridade": 1, "configurado": True,
+              "disponivel": True, "ultimo_teste": "",
+              "detalhe": ("entrega garantida: o alerta fica na Caixa de "
+                          "entrada do painel")}
+    webpush = {"nome": "webpush", "prioridade": 6, "configurado": False,
+               "disponivel": True, "ultimo_teste": "",
+               "detalhe": ("estrutura pronta — gere as chaves VAPID e "
+                           "inscreva o celular em Configuração → Aplicativo")}
+
+    # 2b) Windows LIGADO, mas sem teste de entrega registrado ainda: o cartão
+    # mostra o suporte real (toast nativo) e cobra a prova — ligado ≠
+    # comprovado, então nada de "funcionam agora".
+    page.route("**/v1/notificacoes/canais", canais_stub(
+        painel, webpush,
+        {"nome": "windows", "prioridade": 2, "configurado": True,
+         "disponivel": True, "ultimo_teste": "",
+         "detalhe": "notificação nativa do Windows (toast)"}))
+    page.evaluate("capacidadesLoad()")
+    expect(pc).to_contain_text("disponível")
+    expect(pc).to_contain_text("toast")
+    expect(pc).to_contain_text("teste a entrega")
+    expect(pc).not_to_contain_text("funcionam agora")
+    page.screenshot(path=str(evidence_dir / "fm6-03c-capacidades-windows-sem-teste.png"))
+
+    # 3) Servidor NÃO-Windows: o cartão assume a limitação real e não some
+    # com a Caixa de entrada do painel.
+    page.route("**/v1/notificacoes/canais", canais_stub(
+        painel, webpush,
+        {"nome": "windows", "prioridade": 2, "configurado": True,
+         "disponivel": False, "ultimo_teste": "",
+         "detalhe": "toast nativo só existe no Windows"}))
+    page.evaluate("capacidadesLoad()")
+    expect(pc).to_contain_text("só no Windows")
+    expect(pc).not_to_contain_text("funcionam agora")
+    expect(pc).to_contain_text("Caixa de entrada")
+    page.screenshot(path=str(evidence_dir / "fm6-03c-capacidades-nao-windows.png"))
+
+    # 4) Servidor Windows com teste de entrega REGISTRADO: o cartão mostra a
+    # evidência do teste — distinção explícita entre disponível e testado.
+    page.unroute("**/v1/notificacoes/canais")
+    page.route("**/v1/notificacoes/canais", canais_stub(
+        painel, webpush,
+        {"nome": "windows", "prioridade": 2, "configurado": True,
+         "disponivel": True, "ultimo_teste": "2026-10-15T12:00:00+00:00",
+         "detalhe": "notificação nativa do Windows (toast)"}))
+    page.evaluate("capacidadesLoad()")
+    expect(pc).to_contain_text("disponível")
+    expect(pc).to_contain_text("Último teste")
+    expect(pc).to_contain_text("2026-10-15T12:00")
+
+    # 4b) Toast DESLIGADO (ALERTA_WINDOWS=false) não vira "disponível".
+    page.unroute("**/v1/notificacoes/canais")
+    page.route("**/v1/notificacoes/canais", canais_stub(
+        painel, webpush,
+        {"nome": "windows", "prioridade": 2, "configurado": False,
+         "disponivel": True, "ultimo_teste": "",
+         "detalhe": "desligado (ALERTA_WINDOWS=false)"}))
+    page.evaluate("capacidadesLoad()")
+    expect(pc).to_contain_text("configuração necessária")
+    expect(pc).to_contain_text("desligado")
+    page.unroute("**/v1/notificacoes/canais")
+
+    # 5) Chaves VAPID geradas pelo fluxo REAL da Configuração: o cartão muda
+    # de "gere as chaves" para "inscreva o aparelho" — e segue sem prometer
+    # "liberados" enquanto não houver inscrição e permissão.
+    modo_avancado(page)
+    ir_para(page, "config")
+    page.get_by_role("button", name="Gerar chaves VAPID").click()
+    expect(page.locator("#pwaEstado")).to_contain_text(
+        "chaves VAPID geradas", timeout=15000)
+    page.evaluate("capacidadesLoad()")
+    expect(push).to_contain_text("sem navegador inscrito ainda")
+    expect(push).to_contain_text("permissão")
+    expect(push).not_to_contain_text("liberados")
+    expect(push).not_to_contain_text("gere as chaves VAPID")
+    page.screenshot(path=str(evidence_dir / "fm6-03c-capacidades-vapid-gerado.png"))
+
+
+# ------------------------------------------------------------------- item 03d
+def test_fm6_03d_toque_da_notificacao_abre_destino_existente(
+        page, mesa_url, senha, evidence_dir):
+    # V9-PWA-02: o push do servidor abre /app#notificacoes (sw.js e
+    # push_web.URL_DO_TOQUE). O toque precisa de um CONSUMIDOR real — sem
+    # ele o app abre e o fragmento morre em silêncio. O destino é a área
+    # autenticada já existente (Configuração › Caixa de entrada), sem
+    # prometer operação não implementada. Dois caminhos reais do navegador:
+    # (a) app fechado  → carga fria já com o fragmento (openWindow do sw.js);
+    # (b) app aberto   → navegação same-document (janela.navigate do sw.js).
+    entrar_como_dono(page, mesa_url, senha)
+
+    # (a) carga fria: a MESMA URL que o sw.js abre com o app fechado. A
+    # sessão do dono continua viva nesta aba (sessionStorage), então o
+    # boot entrega o painel e o fragmento tem de ser consumido.
+    page.goto(f"{mesa_url}/app#notificacoes")
+    expect(page.locator("#app")).to_be_visible(timeout=15000)
+    expect(page.locator("#page-config")).to_have_class(re.compile(r"\bactive\b"))
+    expect(page.locator("#notifInbox")).not_to_contain_text(
+        "Carregando...", timeout=15000)
+    # O fragmento é CONSUMIDO (replaceState): a URL limpa permite que um
+    # novo toque do mesmo alerta dispare a navegação de novo.
+    expect(page).to_have_url(re.compile(r"/app$"))
+    page.screenshot(path=str(evidence_dir / "fm6-03d-toque-carga-fria.png"))
+
+    # (b) app já aberto: o sw.js navega a janela para o mesmo caminho com o
+    # fragmento — navegação same-document que dispara hashchange; o app
+    # aberto em outra página tem de reagir e levar à Caixa de entrada.
+    ir_para(page, "inicio")
+    expect(page.locator("#page-inicio")).to_have_class(re.compile(r"\bactive\b"))
+    page.evaluate("location.hash = '#notificacoes'")
+    expect(page.locator("#page-config")).to_have_class(re.compile(r"\bactive\b"))
+    expect(page.locator("#notifInbox")).not_to_contain_text(
+        "Carregando...", timeout=15000)
+    page.screenshot(path=str(evidence_dir / "fm6-03d-toque-app-aberto.png"))
 
 
 # ------------------------------------------------------------------- item 04

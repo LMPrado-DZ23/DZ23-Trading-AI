@@ -28,7 +28,8 @@ def reconciliar_limpo(coord):
     return coord.reconciliar(
         lambda coid: {"resultado": "CONFIRMED_NOT_FOUND", "ordem": None},
         consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [],
-        consultar_fills=lambda coid, exid="": [])
+        consultar_fills=lambda coid, exid="": [],
+        consultar_caixa=lambda: coord.ledger.cash())
 
 
 class TestIdentidadeDoRelatorio:

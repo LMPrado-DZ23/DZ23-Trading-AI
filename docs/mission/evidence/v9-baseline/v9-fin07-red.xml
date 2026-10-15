@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="3" time="0.298" timestamp="2026-10-15T00:55:21.888711-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_v9_financial_regressions" name="test_fin07_oversized_notional_is_refused_by_projected_exposure" time="0.006"><failure message="AssertionError: assert 'APPROVE' == 'REJECT'&#10;  &#10;  - REJECT&#10;  + APPROVE">def test_fin07_oversized_notional_is_refused_by_projected_exposure():
+        """Notional 2× o patrimônio com stop estreito: o risco por trade cabe, mas
+        a cobertura PROJETADA estoura o teto — o motor antigo aprovava."""
+        decision = _mercado_decision(quantity="20", stop="99.9", target="101")
+        result = RiskDeMercado().evaluate(
+            decision, _mercado_portfolio(equity="1000", gross="0"),
+            _mercado_snapshot())
+&gt;       assert result.status.value == "REJECT"
+E       AssertionError: assert 'APPROVE' == 'REJECT'
+E         
+E         - REJECT
+E         + APPROVE
+
+tests\test_v9_financial_regressions.py:680: AssertionError</failure></testcase><testcase classname="tests.test_v9_financial_regressions" name="test_fin07_stop_distance_risk_is_refused_even_when_declared_is_small" time="0.001"><failure message="AssertionError: assert 'APPROVE' == 'REJECT'&#10;  &#10;  - REJECT&#10;  + APPROVE">def test_fin07_stop_distance_risk_is_refused_even_when_declared_is_small():
+        """Risco declarado ínfimo (0,01%) mas risco EFETIVO 5% pela distância ao
+        stop: o teto por trade tem de pegar o risco REAL, não o declarado."""
+        decision = _mercado_decision(quantity="50", stop="90", target="115",
+                                     declared_risk="0.0001")
+        result = RiskDeMercado().evaluate(
+            decision, _mercado_portfolio(equity="10000", gross="0"),
+            _mercado_snapshot())
+&gt;       assert result.status.value == "REJECT"
+E       AssertionError: assert 'APPROVE' == 'REJECT'
+E         
+E         - REJECT
+E         + APPROVE
+
+tests\test_v9_financial_regressions.py:693: AssertionError</failure></testcase><testcase classname="tests.test_v9_financial_regressions" name="test_fin07_a_sane_order_still_opens" time="0.001" /></testsuite></testsuites>

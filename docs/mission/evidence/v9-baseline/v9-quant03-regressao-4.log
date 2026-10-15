@@ -1,0 +1,119 @@
+........................................................................ [ 26%]
+........................................................................ [ 52%]
+..................FF....FF.............................................. [ 78%]
+...........................................................              [100%]
+================================== FAILURES ===================================
+_________ TestTraderQueAprende.test_demoted_strategy_stops_proposing __________
+
+self = <tests.test_desk_inteligencia.TestTraderQueAprende object at 0x000002295FCCB530>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-quant03-regressao-4-hzh3vx1r/tmp/pytest-of-unknown/pytest-0/test_demoted_strategy_stops_pr0')
+
+    def test_demoted_strategy_stops_proposing(self, tmp_path):
+        mem = MemoriaDeDesempenho(tmp_path / "m.json")
+        for _ in range(AMOSTRA_MINIMA):
+>           mem.registrar(Desfecho("trend_following", Regime.ALTA.value, "BTC/USDT",
+                                   Decimal("-0.03"), utcnow()))
+
+tests\test_desk_inteligencia.py:192: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tradingagents.desk.learning.MemoriaDeDesempenho object at 0x000002296207E000>
+desfecho = Desfecho(estrategia='trend_following', regime='tendencia_alta', instrumento='BTC/USDT', retorno=Decimal('-0.03'), fech... tzinfo=datetime.timezone.utc), forca_do_sinal=0.0, exchange='', versao='1', agente='', horizonte='1h', aberta_em=None)
+
+    def registrar(self, desfecho: Desfecho) -> None:
+        validar_desfecho(desfecho)
+        if desfecho in self._desfechos:
+>           raise ValueError("desfecho duplicado — a mesma operação não "
+                             "conta duas vezes")
+E           ValueError: desfecho duplicado — a mesma operação não conta duas vezes
+
+tradingagents\desk\learning.py:199: ValueError
+______ TestTraderQueAprende.test_bad_history_reduces_the_requested_size _______
+
+self = <tests.test_desk_inteligencia.TestTraderQueAprende object at 0x000002295FCCBD70>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-quant03-regressao-4-hzh3vx1r/tmp/pytest-of-unknown/pytest-0/test_bad_history_reduces_the_r0')
+
+    def test_bad_history_reduces_the_requested_size(self, tmp_path):
+        mem = MemoriaDeDesempenho(tmp_path / "m.json")
+        for _ in range(AMOSTRA_MINIMA):
+>           mem.registrar(Desfecho("breakout", Regime.ALTA.value, "BTC/USDT",
+                                   Decimal("-0.01"), utcnow()))
+
+tests\test_desk_inteligencia.py:203: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tradingagents.desk.learning.MemoriaDeDesempenho object at 0x0000022962079F40>
+desfecho = Desfecho(estrategia='breakout', regime='tendencia_alta', instrumento='BTC/USDT', retorno=Decimal('-0.01'), fechado_em=... tzinfo=datetime.timezone.utc), forca_do_sinal=0.0, exchange='', versao='1', agente='', horizonte='1h', aberta_em=None)
+
+    def registrar(self, desfecho: Desfecho) -> None:
+        validar_desfecho(desfecho)
+        if desfecho in self._desfechos:
+>           raise ValueError("desfecho duplicado — a mesma operação não "
+                             "conta duas vezes")
+E           ValueError: desfecho duplicado — a mesma operação não conta duas vezes
+
+tradingagents\desk\learning.py:199: ValueError
+_ TestMesaRecarregaAoConfigurar.test_learning_route_reads_what_was_persisted __
+
+self = <tests.test_desk_inteligencia.TestMesaRecarregaAoConfigurar object at 0x000002295FCC3AD0>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-quant03-regressao-4-hzh3vx1r/tmp/pytest-of-unknown/pytest-0/test_learning_route_reads_what0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000022961FE8D40>
+
+    def test_learning_route_reads_what_was_persisted(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = self._app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+        h = {"Authorization": "Bearer s3nh4"}
+        c.get("/v1/desk/status", headers=h)        # cria a mesa e a memória
+        mem = m._DESKS["legacy"]["memoria"]
+        for _ in range(AMOSTRA_MINIMA):
+>           mem.registrar(Desfecho("trend_following", "tendencia_alta", "BTC/USDT",
+                                   Decimal("0.02"), utcnow(), 0.8))
+
+tests\test_desk_inteligencia.py:307: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tradingagents.desk.learning.MemoriaDeDesempenho object at 0x0000022962898410>
+desfecho = Desfecho(estrategia='trend_following', regime='tendencia_alta', instrumento='BTC/USDT', retorno=Decimal('0.02'), fecha... tzinfo=datetime.timezone.utc), forca_do_sinal=0.8, exchange='', versao='1', agente='', horizonte='1h', aberta_em=None)
+
+    def registrar(self, desfecho: Desfecho) -> None:
+        validar_desfecho(desfecho)
+        if desfecho in self._desfechos:
+>           raise ValueError("desfecho duplicado — a mesma operação não "
+                             "conta duas vezes")
+E           ValueError: desfecho duplicado — a mesma operação não conta duas vezes
+
+tradingagents\desk\learning.py:199: ValueError
+_ TestEstadoSobreviveAoServidor.test_memory_loads_from_the_store_not_only_from_file _
+
+self = <tests.test_desk_inteligencia.TestEstadoSobreviveAoServidor object at 0x000002295FCC11F0>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-quant03-regressao-4-hzh3vx1r/tmp/pytest-of-unknown/pytest-0/test_memory_loads_from_the_sto0')
+
+    def test_memory_loads_from_the_store_not_only_from_file(self, tmp_path):
+        from tradingagents.desk.storage import ArmazemDeEstado
+        armazem = ArmazemDeEstado(None, diretorio=tmp_path / "estado")
+        mem = MemoriaDeDesempenho(None, armazem=armazem, tenant_id="t1")
+        for _ in range(AMOSTRA_MINIMA):
+>           mem.registrar(Desfecho("trend_following", "tendencia_alta", "BTC/USDT",
+                                   Decimal("0.02"), utcnow(), 0.8))
+
+tests\test_desk_inteligencia.py:324: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tradingagents.desk.learning.MemoriaDeDesempenho object at 0x00000229604C3CB0>
+desfecho = Desfecho(estrategia='trend_following', regime='tendencia_alta', instrumento='BTC/USDT', retorno=Decimal('0.02'), fecha... tzinfo=datetime.timezone.utc), forca_do_sinal=0.8, exchange='', versao='1', agente='', horizonte='1h', aberta_em=None)
+
+    def registrar(self, desfecho: Desfecho) -> None:
+        validar_desfecho(desfecho)
+        if desfecho in self._desfechos:
+>           raise ValueError("desfecho duplicado — a mesma operação não "
+                             "conta duas vezes")
+E           ValueError: desfecho duplicado — a mesma operação não conta duas vezes
+
+tradingagents\desk\learning.py:199: ValueError
+=========================== short test summary info ===========================
+FAILED tests/test_desk_inteligencia.py::TestTraderQueAprende::test_demoted_strategy_stops_proposing
+FAILED tests/test_desk_inteligencia.py::TestTraderQueAprende::test_bad_history_reduces_the_requested_size
+FAILED tests/test_desk_inteligencia.py::TestMesaRecarregaAoConfigurar::test_learning_route_reads_what_was_persisted
+FAILED tests/test_desk_inteligencia.py::TestEstadoSobreviveAoServidor::test_memory_loads_from_the_store_not_only_from_file
+4 failed, 271 passed in 34.66s

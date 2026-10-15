@@ -105,8 +105,10 @@ class ResultadoValidacao:
                 f"{self.total} operações"
                 if aprovada else
                 f"REPROVADA: {self.retorno_liquido_total:+.2%} líquidos em "
-                f"{self.total} operações — os custos "
-                f"({self.custo_total:.2%}) comeram o resultado"),
+                f"{self.total} operações — "
+                + ("; ".join(ressalvas) if ressalvas
+                   else "resultado líquido não positivo")
+            ),
             "aviso": "teste sobre o passado; não prevê o futuro",
         }
 

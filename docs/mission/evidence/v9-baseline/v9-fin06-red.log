@@ -1,0 +1,78 @@
+FFF                                                                      [100%]
+================================== FAILURES ===================================
+_________ test_fin06_expired_reservation_cannot_authorize_a_new_order _________
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x00000258E5207B30>
+
+    def test_fin06_expired_reservation_cannot_authorize_a_new_order(desk):
+        """Reserva vencida recusada no caminho único; reserva viva continua ok.
+    
+        A validade existia só em `RiskEngine.intent()`: quem chamava o caminho
+        único direto (copiloto, worker, API) enviava ordem coberta por reserva
+        que já caducou."""
+        vencida = desk.risk.reserve_exato(
+            instrument=INSTRUMENT, alvo=D("100"), agent_id="trader-A")
+        desk.risk._reservations[vencida.reservation_id] = dataclasses.replace(
+            vencida, expires_at=utcnow() - timedelta(minutes=1))
+    
+        ei = _entrada_para_reserva(desk, vencida, client_order_id="fin06-vencida")
+>       with pytest.raises(ExecutionRefused, match="expir"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ExecutionRefused
+
+tests\test_v9_financial_regressions.py:846: Failed
+_______________ test_fin06_divergent_mandate_version_is_refused _______________
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x00000258E52132F0>
+
+    def test_fin06_divergent_mandate_version_is_refused(desk):
+        """Intenção presa a outra versão do mandato não autoriza ordem.
+    
+        A checagem vivia só no adaptador `OrderIntent.assert_sendable`; o
+        caminho único aceitava decisão tomada sob política antiga."""
+        viva = desk.risk.reserve_exato(
+            instrument=INSTRUMENT, alvo=D("100"), agent_id="trader-A")
+        ei = _entrada_para_reserva(
+            desk, viva, client_order_id="fin06-versao",
+            mandate_version=desk.mandate.version + 1)
+>       with pytest.raises(ExecutionRefused, match="versão"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ExecutionRefused
+
+tests\test_v9_financial_regressions.py:871: Failed
+_____________ test_fin06_two_sells_cannot_compromise_the_same_lot _____________
+
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-fin06-red-d2k4oj7h/tmp/pytest-of-unknown/pytest-0/test_fin06_two_sells_cannot_co0')
+
+    def test_fin06_two_sells_cannot_compromise_the_same_lot(tmp_path):
+        """Duas vendas ACK não podem comprometer o MESMO lote na corretora.
+    
+        O lote só sai do livro quando o fill chega; no intervalo, cada venda
+        via o lote inteiro como livre e a segunda só falharia na corretora,
+        depois de já ter comprometido o que a primeira vendia."""
+        _sched, _orch, coord, ledger = _painel_de_gestao(tmp_path)
+        compra = _buy_order(coord, notional="100", price="100", agent="trader-trend")
+        _fill(coord, compra, "fin06-compra", price="100", quantity="1")
+        assert ledger.lot_quantity(INSTRUMENT, "trader-trend") == D("1")
+    
+        def vender(quantidade, coid):
+            return coord.close_position(
+                instrument=INSTRUMENT, quantity=D(quantidade), price=D("100"),
+                cost_basis=D("100") * D(quantidade), agent_id="trader-trend",
+                client_order_id=coid)
+    
+        venda1 = vender("0.4", "fin06-venda-1")
+        assert venda1["estado"] == "acknowledged"
+        venda2 = vender("0.6", "fin06-venda-2")
+        assert venda2["estado"] == "acknowledged"   # 0,4 + 0,6 = 1,0: ainda cabe
+    
+>       with pytest.raises(ExecutionRefused, match="voo"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ExecutionRefused
+
+tests\test_v9_financial_regressions.py:905: Failed
+=========================== short test summary info ===========================
+FAILED tests/test_v9_financial_regressions.py::test_fin06_expired_reservation_cannot_authorize_a_new_order
+FAILED tests/test_v9_financial_regressions.py::test_fin06_divergent_mandate_version_is_refused
+FAILED tests/test_v9_financial_regressions.py::test_fin06_two_sells_cannot_compromise_the_same_lot
+3 failed, 32 deselected in 0.51s

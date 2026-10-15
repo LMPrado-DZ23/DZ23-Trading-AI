@@ -1,0 +1,39 @@
+{
+  "artefato": "f6-arm64-build.log",
+  "artefato_sha256": "bd3bfed34b015f665b52d54c4fc6725597e582fe307634613130c932212de069",
+  "data_utc": "2026-10-15",
+  "executor": "Qoder (missão V9) — executado FORA do executor hermético de propósito (Docker não é Python), como documentado em f6-classificacao-pwa-oracle.md",
+  "comandos": [
+    {
+      "passo": "construção (réplica do job arm64-deps do CI)",
+      "cwd": "worktree de auditoria",
+      "comando": "docker buildx build --platform linux/arm64 --load -t dz23-trading-ai:arm64-validacao-local .",
+      "execucao": "segundo plano pelo executor (tarefa b5h3gb1ib)",
+      "exit": 0,
+      "nota": "A cauda do log preservada (40 linhas) mostra: pip instalando wheels aarch64 (argon2, ccxt, lxml, pandas, psycopg, pandas 3.0.6…), build do wheel tradingagents-0.5.0, camadas finais (useradd appuser, COPY), export de camadas e 'exporting manifest list sha256:5e39e89645927c75c787ebedd52ff8e24943f8f567044f5ed65f9e7a8723b631' + 'naming to docker.io/library/dz23-trading-ai:arm64-validacao-local done'."
+    },
+    {
+      "passo": "versão do backend de build",
+      "comando": "docker buildx version",
+      "exit": 0,
+      "saida": "github.com/docker/buildx v0.37.1 0b265a9f62db554fa9aba6dd19e1bd5704bc7d8a"
+    },
+    {
+      "passo": "identidade da imagem resultante",
+      "comando": "docker image inspect dz23-trading-ai:arm64-validacao-local --format '{{.Id}} arch={{.Architecture}} os={{.Os}}'",
+      "exit": 0,
+      "saida": "sha256:5e39e89645927c75c787ebedd52ff8e24943f8f567044f5ed65f9e7a8723b631 arch=arm64 os=linux"
+    },
+    {
+      "passo": "import smoke dentro da imagem emulada (QEMU)",
+      "comando": "docker run --rm -i --platform linux/arm64 dz23-trading-ai:arm64-validacao-local python -c \"import platform, argon2, ccxt, fastapi, lxml, pandas, psycopg, uvicorn; print('arm64 import smoke OK em', platform.machine(), '| pandas', pandas.__version__)\"",
+      "exit": 0,
+      "saida": "arm64 import smoke OK em aarch64 | pandas 3.0.6"
+    }
+  ],
+  "notas": [
+    "Valida que a árvore de dependências INSTALA e IMPORTA em aarch64 — evidência de compatibilidade, NÃO homologação: a homologação exige execução na VPS Oracle Ampere real, não autorizada nesta missão (sem deploy, sem DNS).",
+    "A construção não usa credenciais; apenas camadas públicas e o próprio código do repositório.",
+    "Réplica do job arm64-deps de .github/workflows/ci.yml (rotulado no próprio CI como 'NÃO é homologação Oracle')."
+  ]
+}

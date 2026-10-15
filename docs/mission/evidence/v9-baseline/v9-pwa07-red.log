@@ -1,0 +1,20 @@
+...F.......                                                              [100%]
+================================== FAILURES ===================================
+_____________ TestImagem.test_dockerfile_installs_product_extras ______________
+
+self = <tests.test_empacotamento.TestImagem object at 0x00000253BB7E8B00>
+
+    def test_dockerfile_installs_product_extras(self):
+        # V9-PWA-07: a imagem é a receita do servidor 24/7 com HTTPS que
+        # serve o Web Push ao celular (RUNBOOK, PC → Oracle). Sem o extra
+        # [push] o canal reportava "pywebpush ausente" no servidor; o
+        # install passa a ser ".[desk,push]".
+        df = (ROOT / "Dockerfile").read_text()
+>       assert '".[desk,push]"' in df, "a imagem precisa instalar os extras [desk,push]"
+E       AssertionError: a imagem precisa instalar os extras [desk,push]
+E       assert '".[desk,push]"' in '# TradingAgents DZ23 â€” imagem Ãºnica: API + painel + mesa autÃ´noma.\nFROM python:3.12-slim AS builder\n\nENV PYTHO...-entrypoint tradingagents <imagem> --help\nCMD ["uvicorn", "service.app:app", "--host", "0.0.0.0", "--port", "8080"]\n'
+
+tests\test_empacotamento.py:48: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_empacotamento.py::TestImagem::test_dockerfile_installs_product_extras
+1 failed, 10 passed in 1.05s

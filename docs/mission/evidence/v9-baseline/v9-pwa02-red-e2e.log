@@ -1,0 +1,128 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+__________ test_fm6_03d_toque_da_notificacao_abre_destino_existente ___________
+
+page = <Page url='http://127.0.0.1:64286/app#notificacoes'>
+mesa_url = 'http://127.0.0.1:64286', senha = 's3nh4-dz23-e2e'
+evidence_dir = WindowsPath('C:/Users/DZ23/Documents/Qoder/2026-10-12/2f7f19a4/dz23-v9-audit/docs/mission/evidence/v9-baseline/screenshots')
+
+    def test_fm6_03d_toque_da_notificacao_abre_destino_existente(
+            page, mesa_url, senha, evidence_dir):
+        # V9-PWA-02: o push do servidor abre /app#notificacoes (sw.js e
+        # push_web.URL_DO_TOQUE). O toque precisa de um CONSUMIDOR real — sem
+        # ele o app abre e o fragmento morre em silêncio. O destino é a área
+        # autenticada já existente (Configuração › Caixa de entrada), sem
+        # prometer operação não implementada. Dois caminhos reais do navegador:
+        # (a) app fechado  → carga fria já com o fragmento (openWindow do sw.js);
+        # (b) app aberto   → navegação same-document (janela.navigate do sw.js).
+        entrar_como_dono(page, mesa_url, senha)
+    
+        # (a) carga fria: a MESMA URL que o sw.js abre com o app fechado. A
+        # sessão do dono continua viva nesta aba (sessionStorage), então o
+        # boot entrega o painel e o fragmento tem de ser consumido.
+        page.goto(f"{mesa_url}/app#notificacoes")
+        expect(page.locator("#app")).to_be_visible(timeout=15000)
+>       expect(page.locator("#page-config")).to_have_class(re.compile(r"\bactive\b"))
+E       AssertionError: Locator expected to have class 're.compile('\\bactive\\b')'
+E       Actual value: page 
+E       Call log:
+E         - Expect "to_have_class" locator("#page-config") with timeout 5000ms
+E         - waiting for locator("#page-config")
+E           14 × locator resolved to <section class="page" id="page-config">…</section>
+E              - unexpected value "page"
+E       
+E       Aria snapshot:
+E       - complementary:
+E         - img "DZ23"
+E         - text: Trading AI
+E         - navigation:
+E           - button "▶ Início"
+E           - button "⌂ Visão geral"
+E           - button "▣ Minhas Operações"
+E         - text: PAPER Operação real BLOQUEADA — auditoria de segurança em andamento Modo da interface
+E         - combobox "Modo da interface":
+E           - option "Simples — conecte, escolha e dê PLAY" [selected]
+E           - option "Avançado — todos os controles"
+E         - text: O Avançado mostra todos os controles existentes — nada é removido do aplicativo.
+E       - banner:
+E         - text: Command center
+E         - heading "Início" [level=1]
+E         - text: ADMIN legacy legacy
+E         - button "Fechar aplicativo"
+E         - button "Sair"
+E       - main:
+E         - heading "Início" [level=2]
+E         - paragraph: Conecte suas APIs, escolha o modo e aperte PLAY — o Avançado continua com todos os controles, nada é removido do aplicativo.
+E         - heading "1 · CONECTAR" [level=3]
+E         - paragraph: Suas próprias credenciais, salvas protegidas do mesmo jeito que na tela de Configuração — nada é criado automaticamente, nenhum serviço pago é contratado.
+E         - text: Corretora (sandbox)
+E         - combobox:
+E           - option "Binance" [selected]
+E           - option "Bybit"
+E           - option "OKX"
+E           - option "Coinbase"
+E         - text: API Key
+E         - textbox
+E         - text: API Secret
+E         - textbox
+E         - text: Provedor de IA (opcional)
+E         - combobox:
+E           - option "— escolher depois —" [selected]
+E           - option "Groq (gratuito)"
+E           - option "OpenRouter"
+E           - option "OpenAI"
+E           - option "Anthropic"
+E           - option "Google Gemini"
+E           - option "DeepSeek"
+E           - option "Mistral"
+E         - text: Chave do provedor de IA (opcional)
+E         - textbox
+E         - button "Salvar conexões"
+E         - text: Corretora — Chaves da corretora ainda não configuradas Provedor de IA —
+E         - heading "2 · MODO" [level=3]
+E         - paragraph: O que a mesa pode fazer neste computador.
+E         - 'radio "DEMO — PAPER: treino simulado com dinheiro fictício. Resultados PAPER são simulados e nunca se apresentam como reais." [checked]'
+E         - text: "DEMO — PAPER: treino simulado com dinheiro fictício. Resultados PAPER são simulados e nunca se apresentam como reais."
+E         - radio "REAL BLOQUEADO — dinheiro real fica bloqueado até a homologação e a autorização explícita do proprietário." [disabled]
+E         - text: REAL BLOQUEADO — dinheiro real fica bloqueado até a homologação e a autorização explícita do proprietário.
+E         - radio "COPILOTO DE SINAIS — você opera na sua corretora; ele acompanha, calcula e alerta, mas nunca envia ordens."
+E         - text: COPILOTO DE SINAIS — você opera na sua corretora; ele acompanha, calcula e alerta, mas nunca envia ordens.
+E         - heading "3 · PLAY" [level=3]
+E         - paragraph: Os limites de risco são aplicados por código determinístico — nenhuma IA altera limites, permissões ou habilita operações reais. Se os dados estiverem vencidos ou inconsistentes, a mesa recusa e avisa.
+E         - button "▶ PLAY — ligar a mesa"
+E         - button "⏸ PAUSAR / PARAR"
+E         - text: "Mesa autônoma: PARADA · 0 ciclos · dados: fixture — PAPER (simulado), dinheiro real bloqueado. Decisão do ciclo AGUARDAR ainda sem ciclo avaliado — ligue a mesa e aguarde a primeira avaliação"
+E         - heading "Próximos passos" [level=3]
+E         - text: Escolher o provedor de IA opcional para a mesa operar; necessário para a IA comentar a mesa e o diário — cole a chave em 'Chaves dos provedores' e aplique um perfil Definir a cadeia de fallback você tem mais de um provedor com chave — aplique um perfil para montar a ordem por custo Idioma de saída da IA o padrão de fábrica é inglês; você escreve em português — aplique o perfil 'Pronto para Usar'
+E         - heading "Todas as capacidades — estado honesto e caminho para cada tela" [level=3]
+E         - paragraph: "Estados derivados da sua configuração real, nunca de selo fixo: disponível funciona agora · configuração necessária pede uma chave ou ajuste seu · bloqueado por segurança é trava inegociável, não falha · ainda não implementado está fora da operação. O botão \"Abrir\" leva à tela — se ela estiver fora do Simples, o clique liga o Modo Avançado para você e abre. Nada é escondido por acidente."
+E         - text: Mesa de Agentes (PAPER) — disponível 10 traders + Maestro em ciclos simulados; nada sai para corretora. Ligar/pausar no passo 3 acima.
+E         - button "Abrir"
+E         - text: Análises multiagente — configurada Provedor de IA configurado — use Testar em Configuração para confirmar que a chave responde de verdade.
+E         - button "Abrir"
+E         - text: Corretora (TESTNET) — configuração necessária Cole as chaves Testnet em Configuração; esta versão NÃO aceita LIVE.
+E         - button "Abrir"
+E         - text: "Copiloto de sinais (Minhas Operações) — disponível Registre o que você JÁ executou: ele acompanha, calcula e alerta — nunca envia ordens."
+E         - button "Abrir"
+E         - text: Risco e execução — disponível KillSwitch e shadow trading; limites aplicados por código no servidor, nunca pela IA.
+E         - button "Abrir"
+E         - text: Trading Floor — disponível Read model de agentes, desks, reuniões e eventos da mesa.
+E         - button "Abrir"
+E         - text: Alertas no PC — configuração necessária desligado (ALERTA_WINDOWS=false) — ligue o canal em Configuração › Notificações.
+E         - button "Abrir"
+E         - text: "Alertas externos (Telegram/Discord/WhatsApp/e-mail) — configuração necessária telegram: preencha ALERTA_TELEGRAM_TOKEN e ALERTA_TELEGRAM_CHAT vindos do @BotFather; discord: opcional — preencha ALERTA_DISCORD_WEBHOOK; whatsapp: opcional — exige conta oficial (ALERTA_WHATSAPP_TOKEN, ALERTA_WHATSAPP_PHONE, ALERTA_WHATSAPP_DESTINO)."
+E         - button "Abrir"
+E         - text: Aplicativo no celular e push — configuração necessária estrutura pronta — gere as chaves VAPID e inscreva o celular em Configuração → Aplicativo — permissão de notificação bloqueada pelo navegador. Inscreva o aparelho em Configuração › Aplicativo.
+E         - button "Abrir"
+E         - text: "Dinheiro real (LIVE) — bloqueado por segurança Servidor: BLOQUEADA — auditoria de segurança em andamento. Só destrava com homologação e autorização explícita do proprietário."
+E         - button "Abrir"
+E         - text: IQ Option e corretoras fora do catálogo — ainda não implementado Conector experimental, não validado e sem CCXT — fora da operação até ser construído e passar por revisão independente.
+E         - heading "Dinheiro real (REAL) — preparação visível, ativação BLOQUEADA" [level=3]
+E         - paragraph: "Item por item, o que falta para operar dinheiro real e por que o sistema recusa hoje. Conferir aqui não ativa nada: a liberação é trava de código no servidor (ADR-006), nunca um botão de tela."
+E         - button "Ver preparação para dinheiro real (não ativa nada)"
+E         - text: Clique para ler o checklist real do servidor (item por item).
+
+tests\e2e\test_fm6_app_isolado.py:385: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/e2e/test_fm6_app_isolado.py::test_fm6_03d_toque_da_notificacao_abre_destino_existente
+1 failed in 9.41s

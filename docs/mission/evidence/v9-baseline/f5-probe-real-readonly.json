@@ -1,0 +1,77 @@
+{
+  "missao": "V9-F5",
+  "quando_utc": "2026-10-15T11:12:42+00:00",
+  "python": "3.12.10",
+  "plataforma": "Windows-11-10.0.26300-SP0",
+  "ccxt_version": "4.5.85",
+  "observacao": "Execução DELIBERADA fora do executor hermético: rede real, somente leitura pública, sem credenciais, sem ordens.",
+  "provas": [
+    {
+      "probe": "feed_publico_binance_producao",
+      "alvo": "Binance produção — velas 1h BTC/USDT (CCXT público)",
+      "caminho_no_produto": "tradingagents.desk.market.PublicMarketFeed.snapshot",
+      "credenciais_usadas": false,
+      "ordens_enviadas": false,
+      "ok": true,
+      "fonte": "binance:1h",
+      "qualidade": "ok",
+      "n_velas_fechadas": 4,
+      "ultimo_fechamento_utc": "2026-10-15T11:00:00+00:00",
+      "ultimo_preco_publico": "81043.87",
+      "duracao_s": 3.92
+    },
+    {
+      "probe": "livro_l2_binance_producao",
+      "alvo": "Binance produção — livro L2 público BTC/USDT",
+      "caminho_no_produto": "tradingagents.desk.market.PublicMarketFeed.leitura_de_livro",
+      "credenciais_usadas": false,
+      "ordens_enviadas": false,
+      "ok": true,
+      "tipo_retorno": "LeituraDeLivro",
+      "campos": {
+        "motivo": "",
+        "exchange": "binance",
+        "instrumento": "BTC/USDT",
+        "niveis_bid": "tuple(20)",
+        "niveis_ask": "tuple(20)"
+      },
+      "duracao_s": 3.46
+    },
+    {
+      "probe": "ponte_ccxt_testnet_sem_chaves",
+      "alvo": "Binance TESTNET (testnet.binance.vision) — ticker público",
+      "caminho_no_produto": "tradingagents.brokers.ccxt_bridge.CCXTBridge(modo=testnet)",
+      "credenciais_usadas": false,
+      "ordens_enviadas": false,
+      "ok": true,
+      "objeto_real": "CCXTBridge modo=testnet",
+      "status_da_ponte": {
+        "exchange": "binance",
+        "ccxt_id": "binance",
+        "mode": "testnet",
+        "sandbox": true,
+        "keys_set": false,
+        "aviso": "testnet: ordens de mentira, risco zero"
+      },
+      "ticker_sandbox": {
+        "symbol": "BTC/USDT",
+        "ultimo_preco_publico": "80976.1",
+        "exchange_no_payload": null
+      },
+      "duracao_s": 1.95
+    },
+    {
+      "probe": "yfinance_publico",
+      "alvo": "Yahoo Finance — AAPL 14 dias (sem chave)",
+      "caminho_no_produto": "tradingagents.dataflows.y_finance.get_YFin_data_online",
+      "credenciais_usadas": false,
+      "ordens_enviadas": false,
+      "ok": true,
+      "fonte": "Yahoo Finance (yfinance) via dataflow do app",
+      "janela": "2026-10-01 a 2026-10-15",
+      "total_registros": 10,
+      "ultima_linha_de_dados": "2026-10-14,344.61,347.09,341.72,342.96,49861700,0.0,0.0",
+      "duracao_s": 1.83
+    }
+  ]
+}

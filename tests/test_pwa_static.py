@@ -28,12 +28,36 @@ class TestServiceWorker:
         assert "/v1" not in codigo
         assert "caches.delete" in fonte  # purga de versões antigas no activate
 
+    def test_ativacao_remove_apenas_caches_do_proprio_app(self):
+        # V9-PWA-06: a purga de ativação apagava QUALQUER cache que não fosse
+        # o CACHE atual — inclusive caches de outro app no mesmo domínio
+        # (cache sentinela alheio) e o marcador persistente
+        # "dz23-push-pendente" da reinscrição (V9-PWA-05). A purga passa a
+        # ser escopada à família de caches do DZ23 ("dz23-pwa-"): alheios e
+        # o marcador sobrevivem por construção (o marcador não casa o prefixo).
+        fonte = (STATIC / "sw.js").read_text(encoding="utf-8")
+        assert 'startsWith("dz23-pwa-")' in fonte
+        assert "chaves.filter((k) => k !== CACHE)" not in fonte
+
     def test_push_mostra_notificacao_com_tag_e_abre_area_autenticada(self):
         fonte = (STATIC / "sw.js").read_text(encoding="utf-8")
         assert "showNotification" in fonte
         assert "tag: dados.id" in fonte  # reenvio do MESMO alerta não duplica
         assert '"/app#notificacoes"' in fonte  # fragmento não vai ao servidor
         assert "openWindow" in fonte and "focus" in fonte
+
+    def test_troca_de_inscricao_reinscreve_e_marca_pendente(self):
+        # V9-PWA-05: o navegador pode trocar a inscrição (expiração do
+        # push service). Sem tratamento, o endpoint novo nunca chega ao
+        # servidor e o aparelho para de receber em silêncio. O SW
+        # re-inscreve com a MESMA chave VAPID e deixa o novo destino num
+        # marcador persistente que o painel autenticado consome.
+        fonte = (STATIC / "sw.js").read_text(encoding="utf-8")
+        assert "pushsubscriptionchange" in fonte
+        assert "oldSubscription" in fonte
+        assert "applicationServerKey" in fonte
+        assert "dz23-push-pendente" in fonte
+        assert "postMessage" in fonte  # avisa janelas abertas para registrar
 
 
 class TestPainelPwa:
@@ -69,6 +93,58 @@ class TestPainelPwa:
         html = self._html()
         assert "isSecureContext" in html
         assert "exigem HTTPS ou localhost" in html
+
+    def test_fragmento_do_push_tem_consumidor_real_no_painel(self):
+        # O sw.js e o backend (URL_DO_TOQUE) abrem /app#notificacoes; o
+        # painel precisa CONSUMIR o fragmento (carga fria e navegação
+        # same-document via hashchange) e levar a um destino existente —
+        # senão o toque abre o app e o destino morre em silêncio.
+        html = self._html()
+        assert "#notificacoes" in html
+        assert "hashchange" in html
+
+    def test_ultimo_teste_do_canal_e_honesto_no_painel(self):
+        # V9-PWA-03: o painel consome ultimo_teste_ok — um teste de canal
+        # que FALHOU nunca aparece como "testado" sem ressalva.
+        html = self._html()
+        assert "ultimo_teste_ok" in html
+
+    def test_toast_do_teste_de_canal_declara_a_lacuna_quando_parcial(self):
+        # V9-PWA-04: entrega parcial (1 de N aparelhos) não pode virar toast
+        # de "entrega confirmada" sem declarar a lacuna que o backend expõe.
+        html = self._html()
+        assert "r.data.parcial" in html
+
+    def test_ativar_apos_rotacao_vapid_descarta_assinatura_obsoleta(self):
+        # V9-PWA-05: depois de trocar as chaves VAPID, a inscrição antiga do
+        # navegador continua local e o subscribe() com a chave nova é
+        # recusado (InvalidStateError) — sem recuperação, o aparelho nunca
+        # volta a receber. Ativar precisa comparar a chave da inscrição
+        # existente com a atual, cancelar a obsoleta e reinscrever.
+        html = self._html()
+        assert "getSubscription" in html
+        assert "pwaB64uDe" in html
+        assert "vapid_publica" in html
+        assert "unsubscribe" in html
+
+    def test_remover_aparelho_cancela_tambem_a_assinatura_local(self):
+        # V9-PWA-05: cancelar no painel removia só o registro remoto — a
+        # inscrição local continuava viva e o próximo subscribe()/teste
+        # mentia sobre o estado. O id curto do painel é derivado do endpoint
+        # (sha256[:10]); quando o id removido é o DESTE navegador, a
+        # inscrição local também precisa ser cancelada.
+        html = self._html()
+        assert "pwaIdCurto" in html
+
+    def test_marcador_de_reinscricao_e_consumido_pelo_painel(self):
+        # V9-PWA-05: a reinscrição feita pelo SW (troca de endpoint sem a
+        # página aberta) só restaura a entrega quando o servidor conhece o
+        # destino novo. O painel (autenticado) consome o marcador persistente
+        # na primeira abertura e registra via /v1/push/assinar.
+        html = self._html()
+        assert "dz23-push-pendente" in html
+        assert "push-reinscrito" in html
+        assert "/v1/push/assinar" in html
 
 
 class TestRotasPwa:

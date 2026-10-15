@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="10" skipped="0" tests="16" time="0.390" timestamp="2026-10-15T11:42:11.722587-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_v9_quant04_walk_forward.TestEmbargoNasJanelas" name="test_embargo_separa_fim_do_treino_do_inicio_do_teste" time="0.003"><failure message="TypeError: windows() got an unexpected keyword argument 'embargo'">self = &lt;tests.test_v9_quant04_walk_forward.TestEmbargoNasJanelas object at 0x0000027500062420&gt;
+
+    def test_embargo_separa_fim_do_treino_do_inicio_do_teste(self):
+&gt;       janelas = windows(40, 20, 5, embargo=3)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: windows() got an unexpected keyword argument 'embargo'
+
+tests\test_v9_quant04_walk_forward.py:53: TypeError</failure></testcase><testcase classname="tests.test_v9_quant04_walk_forward.TestEmbargoNasJanelas" name="test_embargo_zero_preserva_o_comportamento_legado" time="0.001"><failure message="TypeError: windows() got an unexpected keyword argument 'embargo'">self = &lt;tests.test_v9_quant04_walk_forward.TestEmbargoNasJanelas object at 0x000002757FDD6FC0&gt;
+
+    def test_embargo_zero_preserva_o_comportamento_legado(self):
+&gt;       assert windows(40, 20, 5) == windows(40, 20, 5, embargo=0)
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: windows() got an unexpected keyword argument 'embargo'
+
+tests\test_v9_quant04_walk_forward.py:59: TypeError</failure></testcase><testcase classname="tests.test_v9_quant04_walk_forward.TestEmbargoNasJanelas" name="test_embargo_negativo_e_recusado" time="0.001"><failure message="TypeError: windows() got an unexpected keyword argument 'embargo'">self = &lt;tests.test_v9_quant04_walk_forward.TestEmbargoNasJanelas object at 0x0000027500063BF0&gt;
+
+    def test_embargo_negativo_e_recusado(self):
+        with pytest.raises(ValueError):
+&gt;           windows(40, 20, 5, embargo=-1)
+E           TypeError: windows() got an unexpected keyword argument 'embargo'
+
+tests\test_v9_quant04_walk_forward.py:63: TypeError</failure></testcase><testcase classname="tests.test_v9_quant04_walk_forward.TestEmbargoNasJanelas" name="test_embargo_consome_amostra" time="0.001"><failure message="TypeError: windows() got an unexpected keyword argument 'embargo'">self = &lt;tests.test_v9_quant04_walk_forward.TestEmbargoNasJanelas object at 0x0000027500063EF0&gt;
+
+    def test_embargo_consome_amostra(self):
+        sem = windows(40, 20, 5)
+&gt;       com = windows(40, 20, 5, embargo=13)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: windows() got an unexpected keyword argument 'embargo'
+
+tests\test_v9_quant04_walk_forward.py:67: TypeError</failure></testcase><testcase classname="tests.test_v9_quant04_walk_forward.TestEmbargoNasJanelas" name="test_amostra_sem_espaco_para_o_embargo_produz_nada" time="0.001"><failure message="TypeError: windows() got an unexpected keyword argument 'embargo'">self = &lt;tests.test_v9_quant04_walk_forward.TestEmbargoNasJanelas object at 0x00000275000641A0&gt;
+
+    def test_amostra_sem_espaco_para_o_embargo_produz_nada(self):
+&gt;       assert windows(30, 20, 5, embargo=6) == ()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: windows() got an unexpected keyword argument 'embargo'
+
+tests\test_v9_quant04_walk_forward.py:72: TypeError</failure></testcase><testcase classname="tests.test_v9_quant04_walk_forward.TestWalkForwardComEmbargo" name="test_sinal_do_walk_forward_so_ve_passado_estrito" time="0.072" /><testcase classname="tests.test_v9_quant04_walk_forward.TestWalkForwardComEmbargo" name="test_embargo_atravessa_da_janela_ate_os_dados" time="0.001"><failure message="TypeError: run_walk_forward() got an unexpected keyword argument 'embargo'">self = &lt;tests.test_v9_quant04_walk_forward.TestWalkForwardComEmbargo object at 0x0000027500064890&gt;
+
+    def test_embargo_atravessa_da_janela_ate_os_dados(self):
+        b = bars(40)
+        cfg = BacktestConfig()
+&gt;       resultados = run_walk_forward(b, 20, 5, lambda history: 0, cfg,
+                                      embargo=3)
+E       TypeError: run_walk_forward() got an unexpected keyword argument 'embargo'
+
+tests\test_v9_quant04_walk_forward.py:89: TypeError</failure></testcase><testcase classname="tests.test_v9_quant04_walk_forward.TestLookaheadFailClosed" name="test_sem_corte_aplicavel_nao_aprova" time="0.001"><failure message="assert True is False">self = &lt;tests.test_v9_quant04_walk_forward.TestLookaheadFailClosed object at 0x0000027500064B90&gt;
+
+    def test_sem_corte_aplicavel_nao_aprova(self):
+        r = detectar_lookahead(bars(2), lambda b: lambda h: 0)
+        assert r["cortes"] == []
+&gt;       assert r["ok"] is False
+E       assert True is False
+
+tests\test_v9_quant04_walk_forward.py:105: AssertionError</failure></testcase><testcase classname="tests.test_v9_quant04_walk_forward.TestLookaheadFailClosed" name="test_corte_vazio_explicito_tambem_nao_aprova" time="0.001"><failure message="assert True is False">self = &lt;tests.test_v9_quant04_walk_forward.TestLookaheadFailClosed object at 0x0000027500064EC0&gt;
+
+    def test_corte_vazio_explicito_tambem_nao_aprova(self):
+        r = detectar_lookahead(bars(10), lambda b: lambda h: 0, cortes=())
+&gt;       assert r["ok"] is False
+E       assert True is False
+
+tests\test_v9_quant04_walk_forward.py:110: AssertionError</failure></testcase><testcase classname="tests.test_v9_quant04_walk_forward.TestLookaheadFailClosed" name="test_com_corte_real_o_veredito_continua_normal" time="0.001" /><testcase classname="tests.test_v9_quant04_walk_forward.TestExecutorSoVePrefixo" name="test_executor_do_laboratorio_recebe_apenas_o_prefixo" time="0.001"><failure message="assert [(30, 25), (30, 26), (30, 27)] == [(26, 25), (27, 26), (28, 27)]&#10;  &#10;  At index 0 diff: (30, 25) != (26, 25)&#10;  Use -v to get more diff">self = &lt;tests.test_v9_quant04_walk_forward.TestExecutorSoVePrefixo object at 0x00000275000654F0&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000275000771D0&gt;
+
+    def test_executor_do_laboratorio_recebe_apenas_o_prefixo(self, monkeypatch):
+        comprimentos: list[tuple[int, int]] = []
+    
+        def espiao(serie, i, params):
+            comprimentos.append((len(serie), i))
+            return 0.0
+    
+        monkeypatch.setitem(lab_mod.EXECUTORES, "espiao_v9", espiao)
+        lab = Laboratorio()
+        h = Hipotese(
+            id="H-quant04", titulo="spy de prefixo", familia="spy",
+            tipo_de_regra="espiao_v9",
+            parametros=(("janela", 3),),
+            instrumentos=("BTC/USDT",),
+            janela_treino_barras=10, janela_teste_barras=5,
+            horizonte_barras=2)
+        lab.registrar(h)
+        lab.executar(h, {"BTC/USDT": _saw(30)})
+    
+&gt;       assert comprimentos == [(26, 25), (27, 26), (28, 27)]
+E       assert [(30, 25), (30, 26), (30, 27)] == [(26, 25), (27, 26), (28, 27)]
+E         
+E         At index 0 diff: (30, 25) != (26, 25)
+E         Use -v to get more diff
+
+tests\test_v9_quant04_walk_forward.py:143: AssertionError</failure></testcase><testcase classname="tests.test_fq_lookahead" name="test_pipeline_causal_nao_acusa_vazamento" time="0.001" /><testcase classname="tests.test_fq_lookahead" name="test_indicador_da_casa_e_causal" time="0.001" /><testcase classname="tests.test_fq_lookahead" name="test_pipeline_vazado_e_detectado_com_evidencia" time="0.001" /><testcase classname="tests.test_fq_lookahead" name="test_corte_fora_da_amostra_e_rejeitado" time="0.001" /><testcase classname="tests.test_fq_lookahead" name="test_amostra_curta_nao_produz_corte" time="0.001"><failure message="assert True is False">def test_amostra_curta_nao_produz_corte():
+        r = detectar_lookahead(serie(2), fabrica_causal)
+        assert r["cortes"] == []
+        assert "sem corte aplicável" in r["aviso"]
+        # V9-QUANT-04: sem corte NÃO há evidência — o veredito é fail-closed;
+        # "não produzido" jamais pode ser lido como "sem vazamento".
+&gt;       assert r["ok"] is False
+E       assert True is False
+
+tests\test_fq_lookahead.py:86: AssertionError</failure></testcase></testsuite></testsuites>

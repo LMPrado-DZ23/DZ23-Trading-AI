@@ -1,0 +1,37 @@
+FF                                                                       [100%]
+================================== FAILURES ===================================
+_______________ test_fin10_long_without_quote_keeps_book_value ________________
+
+    def test_fin10_long_without_quote_keeps_book_value():
+        """Catch a held paper position vanishing from equity when no quote is available."""
+        adapter = PaperAdapter()
+        adapter.submit(_paper_request("fin10-buy", Side.BUY, "100"), risk_approved=True)
+        metrics = adapter.mark_to_market({})
+>       assert metrics == {
+            "equity": D("100000"), "unrealized_pnl": D("0"),
+            "gross_exposure": D("200"), "positions": D("1"),
+        }
+E       AssertionError: assert {'equity': De... Decimal('1')} == {'equity': De... Decimal('1')}
+E         
+E         Omitting 2 identical items, use -vv to show
+E         Differing items:
+E         {'gross_exposure': Decimal('0')} != {'gross_exposure': Decimal('200')}
+E         {'equity': Decimal('99800')} != {'equity': Decimal('100000')}
+E         Use -v to get more diff
+
+tests\test_v9_financial_regressions.py:556: AssertionError
+_______________ test_fin10_opening_a_short_from_flat_is_refused _______________
+
+    def test_fin10_opening_a_short_from_flat_is_refused():
+        """Catch an initial paper short whose notional is added as positive equity."""
+        adapter = PaperAdapter()
+        before = deepcopy(adapter.reconciliation_snapshot())
+>       with pytest.raises(ValueError, match="short não habilitado"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_v9_financial_regressions.py:566: Failed
+=========================== short test summary info ===========================
+FAILED tests/test_v9_financial_regressions.py::test_fin10_long_without_quote_keeps_book_value
+FAILED tests/test_v9_financial_regressions.py::test_fin10_opening_a_short_from_flat_is_refused
+2 failed, 23 deselected in 0.37s

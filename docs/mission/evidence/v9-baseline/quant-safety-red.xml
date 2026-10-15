@@ -1,0 +1,271 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="11" skipped="0" tests="34" time="0.518" timestamp="2026-10-14T22:21:32.183189-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_research" name="test_backtest_produces_manifest_and_costs" time="0.004" /><testcase classname="tests.test_research" name="test_backtest_rejects_invalid_availability" time="0.001" /><testcase classname="tests.test_research" name="test_walk_forward_windows_are_disjoint" time="0.001" /><testcase classname="tests.test_research" name="test_signal_only_sees_strictly_past_bars" time="0.001" /><testcase classname="tests.test_research" name="test_walk_forward_marks_each_window_with_its_own_revision" time="0.215" /><testcase classname="tests.test_research" name="test_flat_prices_never_create_profit_or_loss_without_costs[-1]" time="0.001" /><testcase classname="tests.test_research" name="test_flat_prices_never_create_profit_or_loss_without_costs[1]" time="0.001" /><testcase classname="tests.test_research" name="test_round_trip_pnl_and_per_leg_fees[1-110-1009.79]" time="0.001" /><testcase classname="tests.test_research" name="test_round_trip_pnl_and_per_leg_fees[-1-110-989.79]" time="0.001" /><testcase classname="tests.test_research" name="test_round_trip_pnl_and_per_leg_fees[1-90-989.81]" time="0.001" /><testcase classname="tests.test_research" name="test_round_trip_pnl_and_per_leg_fees[-1-90-1009.81]" time="0.001" /><testcase classname="tests.test_research" name="test_entry_uses_next_open_not_last_close_or_future_close" time="0.001" /><testcase classname="tests.test_research" name="test_fixed_reference_capital_does_not_compound_wins" time="0.001" /><testcase classname="tests.test_research" name="test_bar_volume_budget_covers_both_legs" time="0.001" /><testcase classname="tests.test_research" name="test_slippage_estimate_is_charged_on_both_legs" time="0.001" /><testcase classname="tests.test_research" name="test_invalid_economic_config_is_rejected[changes0]" time="0.001" /><testcase classname="tests.test_research" name="test_invalid_economic_config_is_rejected[changes1]" time="0.001" /><testcase classname="tests.test_research" name="test_invalid_economic_config_is_rejected[changes2]" time="0.001" /><testcase classname="tests.test_research" name="test_invalid_economic_config_is_rejected[changes3]" time="0.001" /><testcase classname="tests.test_research" name="test_invalid_economic_config_is_rejected[changes4]" time="0.001" /><testcase classname="tests.test_research" name="test_invalid_economic_config_is_rejected[changes5]" time="0.001" /><testcase classname="tests.test_research" name="test_duplicate_timestamps_cannot_count_the_same_period_twice" time="0.001" /><testcase classname="tests.test_research" name="test_invalid_market_data_is_rejected_before_calling_signal[open-0]" time="0.001"><failure message="decimal.DivisionByZero: [&lt;class 'decimal.DivisionByZero'&gt;]">field = 'open', value = '0'
+
+    @pytest.mark.parametrize("field,value", [
+        ("open", "0"), ("close", "-1"), ("high", "NaN"),
+        ("low", "Infinity"), ("volume", "NaN"), ("volume", "Infinity"),
+        ("high", "99"), ("low", "101"),
+    ])
+    def test_invalid_market_data_is_rejected_before_calling_signal(field, value):
+        from dataclasses import replace
+    
+        rows = priced_bars([(100, 100)] * 2)
+        rows = (rows[0], replace(rows[1], **{field: Decimal(value)}))
+        calls = []
+    
+        def signal(history):
+            calls.append(history)
+            return 1
+    
+        with pytest.raises(ValueError):
+&gt;           run_backtest(rows, signal, BacktestConfig())
+
+tests\test_research.py:179: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+bars = (Bar(timestamp=datetime.datetime(2025, 1, 1, 0, 0, tzinfo=datetime.timezone.utc), available_at=datetime.datetime(2025,...ezone.utc), open=Decimal('0'), high=Decimal('100'), low=Decimal('100'), close=Decimal('100'), volume=Decimal('10000')))
+signal = &lt;function test_invalid_market_data_is_rejected_before_calling_signal.&lt;locals&gt;.signal at 0x0000020D3847DEE0&gt;
+config = BacktestConfig(initial_equity=Decimal('100000'), fee_bps=Decimal('5'), slippage_bps=Decimal('2'), position_pct=Decimal('0.1'), max_participacao=Decimal('0.01'), seed=0)
+code_revision = 'working-tree', janela = ''
+
+    def run_backtest(bars: Iterable[Bar], signal: Callable[[tuple[Bar, ...]], int], config: BacktestConfig, *, code_revision: str = "working-tree", janela: str = "") -&gt; BacktestResult:
+        values = (config.initial_equity, config.position_pct, config.fee_bps,
+                  config.slippage_bps, config.max_participacao)
+        if any(not value.is_finite() for value in values):
+            raise ValueError("configuração econômica deve ser finita")
+        if config.initial_equity &lt;= 0:
+            raise ValueError("initial_equity deve ser positivo")
+        if not 0 &lt; config.position_pct &lt;= 1 or not 0 &lt; config.max_participacao &lt;= 1:
+            raise ValueError("position_pct e max_participacao devem estar em (0, 1]")
+        if config.fee_bps &lt; 0 or config.slippage_bps &lt; 0:
+            raise ValueError("custos não podem ser negativos")
+        ordered = tuple(sorted(bars, key=lambda bar: bar.timestamp))
+        if len({bar.timestamp for bar in ordered}) != len(ordered):
+            raise ValueError("timestamps duplicados")
+        if any(bar.available_at &gt; bar.timestamp for bar in ordered):
+            raise ValueError("available_at não pode ser posterior ao timestamp observado")
+        if any(bar.volume &lt; 0 for bar in ordered):
+            raise ValueError("volume não pode ser negativo")
+        dataset_hash = sha256(json.dumps([asdict(bar) for bar in ordered], default=str, sort_keys=True).encode()).hexdigest()
+        equity = config.initial_equity
+        curve = [equity]
+        trades = 0
+        fills_limitados = 0
+        fills_rejeitados = 0
+        cost_rate = (config.fee_bps + config.slippage_bps) / Decimal("10000")
+        notional = config.initial_equity * config.position_pct
+        for index in range(1, len(ordered)):
+            history = ordered[:index]
+            direction = signal(history)
+            if direction not in (-1, 0, 1):
+                raise ValueError("signal deve retornar -1, 0 ou 1")
+            if direction:
+                barra = ordered[index]
+&gt;               desejado = notional / barra.open
+                           ^^^^^^^^^^^^^^^^^^^^^
+E               decimal.DivisionByZero: [&lt;class 'decimal.DivisionByZero'&gt;]
+
+tradingagents\research\backtest.py:109: DivisionByZero</failure></testcase><testcase classname="tests.test_research" name="test_invalid_market_data_is_rejected_before_calling_signal[close--1]" time="0.001"><failure message="Failed: DID NOT RAISE ValueError">field = 'close', value = '-1'
+
+    @pytest.mark.parametrize("field,value", [
+        ("open", "0"), ("close", "-1"), ("high", "NaN"),
+        ("low", "Infinity"), ("volume", "NaN"), ("volume", "Infinity"),
+        ("high", "99"), ("low", "101"),
+    ])
+    def test_invalid_market_data_is_rejected_before_calling_signal(field, value):
+        from dataclasses import replace
+    
+        rows = priced_bars([(100, 100)] * 2)
+        rows = (rows[0], replace(rows[1], **{field: Decimal(value)}))
+        calls = []
+    
+        def signal(history):
+            calls.append(history)
+            return 1
+    
+&gt;       with pytest.raises(ValueError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_research.py:178: Failed</failure></testcase><testcase classname="tests.test_research" name="test_invalid_market_data_is_rejected_before_calling_signal[high-NaN]" time="0.001"><failure message="Failed: DID NOT RAISE ValueError">field = 'high', value = 'NaN'
+
+    @pytest.mark.parametrize("field,value", [
+        ("open", "0"), ("close", "-1"), ("high", "NaN"),
+        ("low", "Infinity"), ("volume", "NaN"), ("volume", "Infinity"),
+        ("high", "99"), ("low", "101"),
+    ])
+    def test_invalid_market_data_is_rejected_before_calling_signal(field, value):
+        from dataclasses import replace
+    
+        rows = priced_bars([(100, 100)] * 2)
+        rows = (rows[0], replace(rows[1], **{field: Decimal(value)}))
+        calls = []
+    
+        def signal(history):
+            calls.append(history)
+            return 1
+    
+&gt;       with pytest.raises(ValueError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_research.py:178: Failed</failure></testcase><testcase classname="tests.test_research" name="test_invalid_market_data_is_rejected_before_calling_signal[low-Infinity]" time="0.001"><failure message="Failed: DID NOT RAISE ValueError">field = 'low', value = 'Infinity'
+
+    @pytest.mark.parametrize("field,value", [
+        ("open", "0"), ("close", "-1"), ("high", "NaN"),
+        ("low", "Infinity"), ("volume", "NaN"), ("volume", "Infinity"),
+        ("high", "99"), ("low", "101"),
+    ])
+    def test_invalid_market_data_is_rejected_before_calling_signal(field, value):
+        from dataclasses import replace
+    
+        rows = priced_bars([(100, 100)] * 2)
+        rows = (rows[0], replace(rows[1], **{field: Decimal(value)}))
+        calls = []
+    
+        def signal(history):
+            calls.append(history)
+            return 1
+    
+&gt;       with pytest.raises(ValueError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_research.py:178: Failed</failure></testcase><testcase classname="tests.test_research" name="test_invalid_market_data_is_rejected_before_calling_signal[volume-NaN]" time="0.001"><failure message="decimal.InvalidOperation: [&lt;class 'decimal.InvalidOperation'&gt;]">field = 'volume', value = 'NaN'
+
+    @pytest.mark.parametrize("field,value", [
+        ("open", "0"), ("close", "-1"), ("high", "NaN"),
+        ("low", "Infinity"), ("volume", "NaN"), ("volume", "Infinity"),
+        ("high", "99"), ("low", "101"),
+    ])
+    def test_invalid_market_data_is_rejected_before_calling_signal(field, value):
+        from dataclasses import replace
+    
+        rows = priced_bars([(100, 100)] * 2)
+        rows = (rows[0], replace(rows[1], **{field: Decimal(value)}))
+        calls = []
+    
+        def signal(history):
+            calls.append(history)
+            return 1
+    
+        with pytest.raises(ValueError):
+&gt;           run_backtest(rows, signal, BacktestConfig())
+
+tests\test_research.py:179: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tradingagents\research\backtest.py:92: in run_backtest
+    if any(bar.volume &lt; 0 for bar in ordered):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+.0 = &lt;tuple_iterator object at 0x0000020D383B8850&gt;
+
+&gt;   if any(bar.volume &lt; 0 for bar in ordered):
+           ^^^^^^^^^^^^^^
+E   decimal.InvalidOperation: [&lt;class 'decimal.InvalidOperation'&gt;]
+
+tradingagents\research\backtest.py:92: InvalidOperation</failure></testcase><testcase classname="tests.test_research" name="test_invalid_market_data_is_rejected_before_calling_signal[volume-Infinity]" time="0.003"><failure message="Failed: DID NOT RAISE ValueError">field = 'volume', value = 'Infinity'
+
+    @pytest.mark.parametrize("field,value", [
+        ("open", "0"), ("close", "-1"), ("high", "NaN"),
+        ("low", "Infinity"), ("volume", "NaN"), ("volume", "Infinity"),
+        ("high", "99"), ("low", "101"),
+    ])
+    def test_invalid_market_data_is_rejected_before_calling_signal(field, value):
+        from dataclasses import replace
+    
+        rows = priced_bars([(100, 100)] * 2)
+        rows = (rows[0], replace(rows[1], **{field: Decimal(value)}))
+        calls = []
+    
+        def signal(history):
+            calls.append(history)
+            return 1
+    
+&gt;       with pytest.raises(ValueError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_research.py:178: Failed</failure></testcase><testcase classname="tests.test_research" name="test_invalid_market_data_is_rejected_before_calling_signal[high-99]" time="0.002"><failure message="Failed: DID NOT RAISE ValueError">field = 'high', value = '99'
+
+    @pytest.mark.parametrize("field,value", [
+        ("open", "0"), ("close", "-1"), ("high", "NaN"),
+        ("low", "Infinity"), ("volume", "NaN"), ("volume", "Infinity"),
+        ("high", "99"), ("low", "101"),
+    ])
+    def test_invalid_market_data_is_rejected_before_calling_signal(field, value):
+        from dataclasses import replace
+    
+        rows = priced_bars([(100, 100)] * 2)
+        rows = (rows[0], replace(rows[1], **{field: Decimal(value)}))
+        calls = []
+    
+        def signal(history):
+            calls.append(history)
+            return 1
+    
+&gt;       with pytest.raises(ValueError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_research.py:178: Failed</failure></testcase><testcase classname="tests.test_research" name="test_invalid_market_data_is_rejected_before_calling_signal[low-101]" time="0.001"><failure message="Failed: DID NOT RAISE ValueError">field = 'low', value = '101'
+
+    @pytest.mark.parametrize("field,value", [
+        ("open", "0"), ("close", "-1"), ("high", "NaN"),
+        ("low", "Infinity"), ("volume", "NaN"), ("volume", "Infinity"),
+        ("high", "99"), ("low", "101"),
+    ])
+    def test_invalid_market_data_is_rejected_before_calling_signal(field, value):
+        from dataclasses import replace
+    
+        rows = priced_bars([(100, 100)] * 2)
+        rows = (rows[0], replace(rows[1], **{field: Decimal(value)}))
+        calls = []
+    
+        def signal(history):
+            calls.append(history)
+            return 1
+    
+&gt;       with pytest.raises(ValueError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_research.py:178: Failed</failure></testcase><testcase classname="tests.test_research" name="test_losses_reduce_next_trade_to_available_capital" time="0.001"><failure message="AssertionError: assert (Decimal('100...ecimal('150')) == (Decimal('100...ecimal('100'))&#10;  &#10;  At index 2 diff: Decimal('150') != Decimal('100')&#10;  Use -v to get more diff">def test_losses_reduce_next_trade_to_available_capital():
+        result = run_backtest(
+            priced_bars([(100, 100), (100, 50), (100, 200)], volume=1000000),
+            lambda history: 1,
+            BacktestConfig(initial_equity=Decimal("100"), position_pct=Decimal("1"),
+                           fee_bps=Decimal("0"), slippage_bps=Decimal("0")),
+        )
+&gt;       assert result.equity_curve == (Decimal("100"), Decimal("50"), Decimal("100"))
+E       AssertionError: assert (Decimal('100...ecimal('150')) == (Decimal('100...ecimal('100'))
+E         
+E         At index 2 diff: Decimal('150') != Decimal('100')
+E         Use -v to get more diff
+
+tests\test_research.py:190: AssertionError</failure></testcase><testcase classname="tests.test_research" name="test_entry_budget_includes_entry_costs" time="0.002"><failure message="AssertionError: assert (Decimal('99'...imal('79.20')) == (Decimal('99'), Decimal('81'))&#10;  &#10;  At index 1 diff: Decimal('79.20') != Decimal('81')&#10;  Use -v to get more diff">def test_entry_budget_includes_entry_costs():
+        result = run_backtest(
+            priced_bars([(90, 90)] * 2, volume=1000000), lambda history: 1,
+            BacktestConfig(initial_equity=Decimal("99"), position_pct=Decimal("1"),
+                           fee_bps=Decimal("1000"), slippage_bps=Decimal("0")),
+        )
+&gt;       assert result.equity_curve == (Decimal("99"), Decimal("81"))
+E       AssertionError: assert (Decimal('99'...imal('79.20')) == (Decimal('99'), Decimal('81'))
+E         
+E         At index 1 diff: Decimal('79.20') != Decimal('81')
+E         Use -v to get more diff
+
+tests\test_research.py:201: AssertionError</failure></testcase><testcase classname="tests.test_research" name="test_insolvency_stops_new_trades_without_erasing_short_debt" time="0.001"><failure message="AssertionError: assert (Decimal('100...Decimal('49')) == (Decimal('100...ecimal('-50'))&#10;  &#10;  At index 2 diff: Decimal('49') != Decimal('-50')&#10;  Use -v to get more diff">def test_insolvency_stops_new_trades_without_erasing_short_debt():
+        result = run_backtest(
+            priced_bars([(100, 100), (100, 250), (100, 1)], volume=1000000),
+            lambda history: -1,
+            BacktestConfig(initial_equity=Decimal("100"), position_pct=Decimal("1"),
+                           fee_bps=Decimal("0"), slippage_bps=Decimal("0")),
+        )
+&gt;       assert result.equity_curve == (Decimal("100"), Decimal("-50"), Decimal("-50"))
+E       AssertionError: assert (Decimal('100...Decimal('49')) == (Decimal('100...ecimal('-50'))
+E         
+E         At index 2 diff: Decimal('49') != Decimal('-50')
+E         Use -v to get more diff
+
+tests\test_research.py:211: AssertionError</failure></testcase><testcase classname="tests.test_research" name="test_abstention_does_not_incur_costs_or_fills" time="0.001" /></testsuite></testsuites>

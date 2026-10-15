@@ -40,8 +40,20 @@ class TestExtras:
 
 class TestImagem:
     def test_dockerfile_installs_product_extras(self):
+        # V9-PWA-07: a imagem é a receita do servidor 24/7 com HTTPS que
+        # serve o Web Push ao celular (RUNBOOK, PC → Oracle). Sem o extra
+        # [push] o canal reportava "pywebpush ausente" no servidor; o
+        # install passa a ser ".[desk,push]".
         df = (ROOT / "Dockerfile").read_text()
-        assert '".[desk]"' in df, "a imagem precisa instalar o extra [desk]"
+        assert '".[desk,push]"' in df, "a imagem precisa instalar os extras [desk,push]"
+
+    def test_push_extra_exists_in_pyproject(self):
+        # pip apenas AVISA e segue quando um extra citado não existe — a
+        # imagem ficaria sem o Web Push em silêncio. O extra precisa existir
+        # de verdade (o Dockerfile instala ".[desk,push]").
+        extras = pyproject()["project"]["optional-dependencies"]
+        assert "push" in extras, "falta o extra [push] do canal Web Push"
+        assert any("pywebpush" in dep.lower() for dep in extras["push"])
 
     def test_dockerfile_serves_the_panel_not_the_cli(self):
         df = (ROOT / "Dockerfile").read_text()

@@ -1,0 +1,28 @@
+2026-10-15 08:43:07,280 - freqtrade - INFO - freqtrade 2026.9
+2026-10-15 08:43:07,711 - numexpr.utils - INFO - Note: NumExpr detected 32 cores but "NUMEXPR_MAX_THREADS" not set, so enforcing safe limit of 16.
+2026-10-15 08:43:07,712 - numexpr.utils - INFO - NumExpr defaulting to 16 threads.
+2026-10-15 08:43:08,959 - freqtrade.configuration.load_config - INFO - Using config: user_data/config.json ...
+2026-10-15 08:43:08,961 - freqtrade.loggers - INFO - Enabling colorized output.
+2026-10-15 08:43:08,961 - freqtrade.loggers - INFO - Logfile configured
+2026-10-15 08:43:08,961 - freqtrade.loggers - INFO - Verbosity set to 0
+2026-10-15 08:43:08,961 - freqtrade.configuration.configuration - INFO - Parameter --timerange detected: 20251215-20260701 ...
+2026-10-15 08:43:08,963 - freqtrade.configuration.configuration - INFO - Using user-data directory: C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\freqtrade-spike\user_data ...
+2026-10-15 08:43:08,964 - freqtrade.configuration.configuration - INFO - Using data directory: C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\freqtrade-spike\user_data\data\binance ...
+2026-10-15 08:43:08,964 - freqtrade.configuration.configuration - INFO - timeframes --timeframes: ['1h']
+2026-10-15 08:43:08,964 - freqtrade.configuration.configuration - INFO - Filter trades by timerange: 20251215-20260701
+2026-10-15 08:43:08,965 - freqtrade.exchange.check_exchange - INFO - Checking exchange...
+2026-10-15 08:43:08,970 - freqtrade.exchange.check_exchange - INFO - Exchange "binance" is officially supported by the Freqtrade development team.
+2026-10-15 08:43:08,971 - freqtrade.configuration.configuration - INFO - Using pairlist from configuration.
+2026-10-15 08:43:08,971 - freqtrade.configuration.config_validation - INFO - Validating configuration ...
+2026-10-15 08:43:09,769 - freqtrade.exchange.exchange - INFO - Instance is running with dry_run enabled
+2026-10-15 08:43:09,769 - freqtrade.exchange.exchange - INFO - Using CCXT 4.5.88
+2026-10-15 08:43:09,774 - freqtrade.exchange.exchange - INFO - Using Exchange "Binance"
+2026-10-15 08:43:09,774 - freqtrade.resolvers.exchange_resolver - INFO - Using resolved exchange class 'Binance' ...
+2026-10-15 08:43:09,775 - freqtrade.exchange.exchange - INFO - Markets were not loaded. Loading them now..
+2026-10-15 08:43:11,455 - freqtrade.data.history.history_utils - INFO - About to download pairs: ['BTC/USDT'], intervals: ['1h'] to 
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\freqtrade-spike\user_data\data\binance
+2026-10-15 08:43:11,483 - freqtrade.data.history.history_utils - INFO - Download history data for "BTC/USDT", 1h, spot and store in 
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\freqtrade-spike\user_data\data\binance. From 2026-07-11T05:00:00 to 2026-07-01T00:00:00
+2026-10-15 08:43:11,490 - freqtrade.data.history.history_utils - INFO - Downloaded data for BTC/USDT, 1h, spot with length 0.
+Timeframe            ------------------------------------------------------------------------------------------------------------------------------------------------------ 1/1 100% • 0:00:00 • 0:00:00
+Downloading BTC/USDT ------------------------------------------------------------------------------------------------------------------------------------------------------ 1/1 100% • 0:00:00 • 0:00:00

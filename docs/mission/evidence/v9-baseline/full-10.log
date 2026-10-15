@@ -1,0 +1,213 @@
+........................................................................ [  2%]
+........................................................................ [  4%]
+........................................................................ [  6%]
+.......................................................s................ [  8%]
+........................................................................ [ 10%]
+........................................................................ [ 13%]
+........................................................................ [ 15%]
+........................................................................ [ 17%]
+........................................................................ [ 19%]
+........................................................................ [ 21%]
+.....s..............................s................................... [ 24%]
+........................................................................ [ 26%]
+........................................................................ [ 28%]
+........................................................................ [ 30%]
+........................................................................ [ 32%]
+........................................................................ [ 35%]
+........................................................................ [ 37%]
+........................................................................ [ 39%]
+..................................................................... [ 41%]
+........................................................................ [ 43%]
+........................................................................ [ 46%]
+........................................................................ [ 48%]
+........................................................................ [ 50%]
+.................................................................s.......... [ 52%]
+........................................................................ [ 54%]
+........................................................................ [ 57%]
+........................................................................ [ 59%]
+........................................................................ [ 61%]
+.................................................FF...F................. [ 63%]
+......s................................................................. [ 65%]
+........................................................................ [ 68%]
+........................................................................ [ 70%]
+........................................................................ [ 72%]
+........................................................................ [ 74%]
+........................................................................ [ 76%]
+........................................................................ [ 79%]
+........................................................................ [ 81%]
+........................................................................ [ 83%]
+........................................................................ [ 85%]
+........................................................................ [ 87%]
+........................................................................ [ 90%]
+........................................................................ [ 92%]
+........................................................................ [ 94%]
+........................................................................ [ 96%]
+........................................................................ [ 98%]
+...................................                                      [100%]
+================================== FAILURES ===================================
+__________ TestGateDeEvidencia.test_amostra_madura_positiva_promove ___________
+
+self = <tests.test_qoder_maestro_traders.TestGateDeEvidencia object at 0x00000203D160D580>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-full-10-pgr3ex6b/tmp/pytest-of-unknown/pytest-0/test_amostra_madura_positiva_p0')
+
+    def test_amostra_madura_positiva_promove(self, tmp_path):
+>       mem = _memoria_com(tmp_path, "scalping", [0.004] * 14)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_qoder_maestro_traders.py:131: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_qoder_maestro_traders.py:43: in _memoria_com
+    mem.registrar(Desfecho(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tradingagents.desk.learning.MemoriaDeDesempenho object at 0x00000203D36B2840>
+desfecho = Desfecho(estrategia='scalping', regime='tendencia_alta', instrumento='BTC/USDT', retorno=Decimal('0.004'), fechado_em=... tzinfo=datetime.timezone.utc), forca_do_sinal=0.0, exchange='', versao='1', agente='', horizonte='1h', aberta_em=None)
+
+    def registrar(self, desfecho: Desfecho) -> None:
+        validar_desfecho(desfecho)
+        if desfecho in self._desfechos:
+>           raise ValueError("desfecho duplicado — a mesma operação não "
+                             "conta duas vezes")
+E           ValueError: desfecho duplicado — a mesma operação não conta duas vezes
+
+tradingagents\desk\learning.py:199: ValueError
+___________ TestGateDeEvidencia.test_retorno_medio_negativo_reprova ___________
+
+self = <tests.test_qoder_maestro_traders.TestGateDeEvidencia object at 0x00000203D160F530>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-full-10-pgr3ex6b/tmp/pytest-of-unknown/pytest-0/test_retorno_medio_negativo_re0')
+
+    def test_retorno_medio_negativo_reprova(self, tmp_path):
+>       mem = _memoria_com(tmp_path, "scalping", [-0.004] * 14)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_qoder_maestro_traders.py:136: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_qoder_maestro_traders.py:43: in _memoria_com
+    mem.registrar(Desfecho(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tradingagents.desk.learning.MemoriaDeDesempenho object at 0x00000203D6BB89E0>
+desfecho = Desfecho(estrategia='scalping', regime='tendencia_alta', instrumento='BTC/USDT', retorno=Decimal('-0.004'), fechado_em... tzinfo=datetime.timezone.utc), forca_do_sinal=0.0, exchange='', versao='1', agente='', horizonte='1h', aberta_em=None)
+
+    def registrar(self, desfecho: Desfecho) -> None:
+        validar_desfecho(desfecho)
+        if desfecho in self._desfechos:
+>           raise ValueError("desfecho duplicado — a mesma operação não "
+                             "conta duas vezes")
+E           ValueError: desfecho duplicado — a mesma operação não conta duas vezes
+
+tradingagents\desk\learning.py:199: ValueError
+_ TestBootETiersDaMesa.test_promover_com_evidencia_habilita_e_sobrevive_ao_reinicio _
+
+self = <tests.test_qoder_maestro_traders.TestBootETiersDaMesa object at 0x00000203D163EA50>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-full-10-pgr3ex6b/tmp/pytest-of-unknown/pytest-0/test_promover_com_evidencia_ha0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000203D6CC3C80>
+
+    def test_promover_com_evidencia_habilita_e_sobrevive_ao_reinicio(
+            self, tmp_path, monkeypatch):
+        c, m = _client(tmp_path, monkeypatch)
+        c.get("/v1/desk/status", headers=H)
+        d = m._DESKS["legacy"]
+        for _ in range(14):
+>           d["memoria"].registrar(Desfecho(
+                estrategia="scalping", regime="lateral",
+                instrumento="BTC/USDT", retorno=Decimal("0.004"),
+                fechado_em=datetime.now(timezone.utc)))
+
+tests\test_qoder_maestro_traders.py:186: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tradingagents.desk.learning.MemoriaDeDesempenho object at 0x00000203D72192E0>
+desfecho = Desfecho(estrategia='scalping', regime='lateral', instrumento='BTC/USDT', retorno=Decimal('0.004'), fechado_em=datetim... tzinfo=datetime.timezone.utc), forca_do_sinal=0.0, exchange='', versao='1', agente='', horizonte='1h', aberta_em=None)
+
+    def registrar(self, desfecho: Desfecho) -> None:
+        validar_desfecho(desfecho)
+        if desfecho in self._desfechos:
+>           raise ValueError("desfecho duplicado — a mesma operação não "
+                             "conta duas vezes")
+E           ValueError: desfecho duplicado — a mesma operação não conta duas vezes
+
+tradingagents\desk\learning.py:199: ValueError
+============================== warnings summary ===============================
+tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-haiku-5-0]
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-haiku-5-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-haiku-4-7-preview]
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-haiku-4-7-preview' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-sonnet-4-5]
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-4-5' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-sonnet-4-0]
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-4-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_current_opus_and_sonnet_receive_effort[claude-opus-4-5]
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-opus-4-5' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_current_opus_and_sonnet_receive_effort[claude-opus-4-6]
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-opus-4-6' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_current_opus_and_sonnet_receive_effort[claude-sonnet-4-6]
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-4-6' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_future_opus_sonnet_inherit_effort_via_pattern[claude-opus-5-0]
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-opus-5-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_future_opus_sonnet_inherit_effort_via_pattern[claude-sonnet-5-0]
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-5-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_claude_5_family_receives_effort[claude-mythos-5]
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-mythos-5' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_mythos_preview_receives_effort
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-mythos-preview' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_unknown_anthropic_model_does_not_receive_effort
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-experimental-x' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_llm_transport_timeouts.py::TestConstrucaoGoogle::test_modelo_carrega_timeout_finito
+tests/test_llm_transport_timeouts.py::TestConstrucaoGoogle::test_timeout_do_usuario_prevalece
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\google_client.py:35: RuntimeWarning: Model 'gemini-3-pro' is not in the known model list for provider 'google'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_ollama_base_url.py::test_resolver_does_not_affect_other_providers
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\openai_client.py:284: RuntimeWarning: Model 'm' is not in the known model list for provider 'xai'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_ollama_base_url.py::test_resolver_does_not_affect_other_providers
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\openai_client.py:284: RuntimeWarning: Model 'm' is not in the known model list for provider 'deepseek'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_openai_reasoning_effort.py::test_non_reasoning_model_drops_effort
+tests/test_temperature_config.py::TestTemperatureForwarding::test_temperature_reaches_client_when_set[openai-gpt-4.1]
+tests/test_temperature_config.py::TestTemperatureForwarding::test_temperature_omitted_leaves_provider_default
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\openai_client.py:284: RuntimeWarning: Model 'gpt-4.1' is not in the known model list for provider 'openai'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_temperature_config.py::TestTemperatureForwarding::test_temperature_reaches_client_when_set[deepseek-deepseek-chat]
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\openai_client.py:284: RuntimeWarning: Model 'deepseek-chat' is not in the known model list for provider 'deepseek'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_bedrock_provider.py:74: could not import 'langchain_aws': No module named 'langchain_aws'
+SKIPPED [1] tests\test_deepseek_reasoning.py:209: DEEPSEEK_API_KEY not set (or placeholder); skipping live API call
+SKIPPED [1] tests\test_desk_backup.py:58: POSIX permissions (600) are not natively supported on Windows NTFS
+SKIPPED [1] tests\test_modo_da_mesa.py:161: sem DATABASE_URL — caminho postgres roda no CI
+SKIPPED [1] tests\test_quant_intelligence.py:74: could not import 'lightgbm': No module named 'lightgbm'
+FAILED tests/test_qoder_maestro_traders.py::TestGateDeEvidencia::test_amostra_madura_positiva_promove
+FAILED tests/test_qoder_maestro_traders.py::TestGateDeEvidencia::test_retorno_medio_negativo_reprova
+FAILED tests/test_qoder_maestro_traders.py::TestBootETiersDaMesa::test_promover_com_evidencia_habilita_e_sobrevive_ao_reinicio
+3 failed, 3268 passed, 5 skipped, 20 warnings, 71 subtests passed in 192.11s (0:03:12)

@@ -1,0 +1,65 @@
+{
+  "rodada": "FQ-2 rodada 1 — BTC/USDT 1h — SMA 10/30 — janela 2026-02-01..2026-07-01 UTC",
+  "data_utc": "2026-10-15",
+  "executor": "Qoder (missão V9, Fase 3)",
+  "fora_do_executor_hermetico": "Sim, de propósito: o download de dados exige rede pública (Binance) e o backtest roda no venv isolado do freqtrade (processo separado GPLv3). Nenhuma credencial de corretora, nenhuma conta, nenhuma ordem, nenhum dry-run com conta.",
+  "instrumento_de_auditoria": "tools/v9_fq_equivalencia.py (read-only; sem rede, sem credencial, sem ordem)",
+  "comandos": [
+    {
+      "passo": "1. download de dados (Binance pública, velas 1h)",
+      "cwd": "../freqtrade-spike (venv próprio, fora do repositório)",
+      "comando": "PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe -m freqtrade download-data --config user_data/config.json --timeframes 1h --timerange 20251215-20260701 2>&1 | tail -12",
+      "exit": "não capturado (pipeline com tail)",
+      "nota": "Executado uma vez na rodada original; re-executado em 2026-10-15 para registrar código de saída e log — ver passo 6."
+    },
+    {
+      "passo": "2. backtest freqtrade (venv isolado; export de trades)",
+      "cwd": "../freqtrade-spike",
+      "comando": "PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe -m freqtrade backtesting --config user_data/config.json --strategy Dz23SmaCross --timerange 20260201-20260701 --cache none --fee 0.001 --export trades --export-filename user_data/backtest_results/fq2-round1.json > fq2-round1-freqtrade.log 2>&1",
+      "exit": "não capturado (saída redirecionada); o log congelado registra o relatório final completo (66 trades, −1,08%) sem exceções",
+      "nota": "Aviso do próprio log: `--export-filename` não tem efeito em backtesting; por isso o resultado saiu em `user_data/backtest_results/backtest-result-2026-10-15_11-37-48.{json,zip,meta.json}`. Versões verbatim: freqtrade 2026.9 / Python 3.12.10 / CCXT 4.5.88 / Windows-11-10.0.26300-SP0."
+    },
+    {
+      "passo": "3. extração do ZIP export (re-execução para o registro)",
+      "cwd": "../freqtrade-spike",
+      "comando": "python -c \"import zipfile; zipfile.ZipFile('user_data/backtest_results/backtest-result-2026-10-15_11-37-48.zip').extractall('round1_reextract')\"",
+      "exit": 0,
+      "nota": "O one-liner original da extração não foi preservado no transcript; re-executado com a stdlib (zipfile). O JSON interno re-extraído é byte-idêntico ao arquivo consumido pelo probe (`round1_extract/`): sha256 144de42193dfde54561a7b99bc3e9dcf8545fe818ea909ef0b768f0514045d3e, 105299 bytes. Conteúdo do ZIP: backtest-result-2026-10-15_11-37-48.json, _config.json, _Dz23SmaCross.py, _market_change.feather, _Dz23SmaCross_wallet.feather."
+    },
+    {
+      "passo": "4. probe de equivalência (DZ23 × export freqtrade) — execução congelada",
+      "cwd": "worktree de auditoria (venv do projeto)",
+      "comando": "PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe tools/v9_fq_equivalencia.py --velas ../freqtrade-spike/user_data/data/binance/BTC_USDT-1h.json --resultado ../freqtrade-spike/round1_extract/backtest-result-2026-10-15_11-37-48.json --zip ../freqtrade-spike/user_data/backtest_results/backtest-result-2026-10-15_11-37-48.zip --out ../freqtrade-spike/fq2-round1-comparacao.json > ../freqtrade-spike/fq2-round1-probe.log 2>&1",
+      "exit": 0,
+      "nota": "Re-executado após correção do campo code_revision (constante hardcoded substituída por revisao_do_codigo()); resultado numérico idêntico à primeira execução; o log congelado (fq2-round1-probe.log) contém a saída completa do re-run."
+    },
+    {
+      "passo": "5. congelamento dos artefatos em docs/mission/evidence/v9-baseline/ (cópia; nove arquivos fq2-round1-*) + reconferência sha256",
+      "exit": 0,
+      "nota": "Todos os hashes do bloco artefatos_sha256 foram reconferidos com sha256sum em 2026-10-15T11:46Z e batem com os valores abaixo."
+    },
+    {
+      "passo": "6. reprodutibilidade do download (re-execução)",
+      "cwd": "../freqtrade-spike",
+      "comando": "PYTHONIOENCODING=utf-8 .venv/Scripts/python.exe -m freqtrade download-data --config user_data/config.json --timeframes 1h --timerange 20251215-20260701 > fq2-round1-download-repro.log 2>&1; echo exit=$?",
+      "exit": 0,
+      "nota": "Log: 'Downloaded data for BTC/USDT, 1h, spot with length 0'. Comparação de conteúdo: 4998/4998 velas comuns posição a posição IDÊNTICAS; única diferença: a vela final 2026-07-11 06:00 UTC (fora da janela da rodada) deixou de acompanhar o arquivo reescrito. Dentro da janela 2026-02-01..2026-07-01 o dado é reproduzível; o artefato canônico permanece a cópia congelada (sha256 bd5b1a73...)."
+    }
+  ],
+  "artefatos_sha256": {
+    "fq2-round1-velas-btcusdt-1h.json": "bd5b1a736374ca5afd70dcbdbbeda5ead55a4e4c18b247324cf331d9bc1e570c",
+    "fq2-round1-freqtrade-export.zip": "d15296b711f67381175a695ce5b357528e207e001af6528bda925a23b219061c",
+    "fq2-round1-comparacao.json": "3ee1f073b202e2ca009ab30ac2f186163c504dfea8e9b8438112738416905fd8",
+    "fq2-round1-config.json": "4ee72fe87721839c13cb1b7cf979b3ffe003dbb4a16b31156a13276b9d8cae04",
+    "fq2-round1-estrategia.py": "9109890f44d7f20e2f1876504f057319bdaf4eefb64de4c69e4d4c6f775bc20c",
+    "fq2-round1-freqtrade-export.meta.json": "84cb9517a6d9916d1bf315d79957b632df069c0eb6244204342a5f3eb97cb230",
+    "fq2-round1-freqtrade.log": "3440b455bec957c363e225a08dba7010a1f6dadd75e4256b1bc2a9a475d12014",
+    "fq2-round1-probe.log": "618a7fc0e0b1613e3bdf53426f3ed6723b88d2d5c1c9a1d7e6b4d26bfe9fe8ac",
+    "fq2-round1-download-repro.log": "0ec18bcef91cb065044183ce40888c66ff2c0c4fd653fabadb8c8308d15a5dcf"
+  },
+  "notas": [
+    "Nenhum valor de credencial/token envolvido; chaves de exchange vazias no config do freqtrade; backtest puro (sem conta, sem ordens).",
+    "Freqtrade permanece processo separado (GPLv3): a estratégia de confronto é código próprio, vive fora do repositório do produto, sem import do núcleo em nenhum sentido.",
+    "O veredito não promove estratégia alguma: a decisão continua na Escola (protocolo §3.6). Veredito completo em fq2-round1-veredito.md."
+  ]
+}

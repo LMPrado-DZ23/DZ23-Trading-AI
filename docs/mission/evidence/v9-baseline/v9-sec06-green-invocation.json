@@ -1,0 +1,49 @@
+{
+  "head": "2b7754a94cc1e4233ad95ac6fa377be4078e5055",
+  "command": [
+    "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\.venv\\Scripts\\python.exe",
+    "-B",
+    "C:/Users/DZ23/AppData/Local/Temp/v9-sec06-green-runner.py",
+    "tests/unit/test_diagnostics.py",
+    "tests/unit/test_security_center.py",
+    "tests/windows/test_installer_and_packaging.py::TestSettingsAndPaperHomologation::test_live_trading_hard_locked_fail_closed",
+    "tests/windows/test_installer_and_packaging.py::TestSettingsAndPaperHomologation::test_ai_key_masking_in_settings",
+    "-q",
+    "--junitxml=C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\docs\\mission\\evidence\\v9-baseline\\v9-sec06-green.xml"
+  ],
+  "working_directory": "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit",
+  "environment_prefix": [
+    "PYTHONIOENCODING=utf-8",
+    "PYTHON_DOTENV_DISABLED=1",
+    "MULTI_TENANT_ENABLED=0",
+    "REAL_MONEY_EXECUTION=false"
+  ],
+  "runner": {
+    "path": "docs/mission/evidence/v9-baseline/v9-sec06-green-runner.py",
+    "sha256_prefix": "dd0336333ec00c9d",
+    "purpose": "audit hook: proíbe gravação no registro Windows e restringe rede a loopback"
+  },
+  "network": "loopback only",
+  "result": "4 passed in 5.22s",
+  "exit_code": 0,
+  "artifacts": {
+    "log": "v9-sec06-green.log",
+    "junitxml": "v9-sec06-green.xml"
+  },
+  "corroborating_runs": [
+    {
+      "kind": "plain pytest + ruff (mesma árvore, sem audit hook)",
+      "command": ".venv/Scripts/python.exe -m pytest tests/unit/test_diagnostics.py tests/unit/test_security_center.py \"tests/windows/test_installer_and_packaging.py::TestSettingsAndPaperHomologation\" -q",
+      "result": "pytest_exit=0 — 4 passed in 0.43s",
+      "log": "v9-sec06-green-plain.log"
+    },
+    {
+      "kind": "ruff nos 4 arquivos tocados (service/app.py, tests/unit/test_diagnostics.py, tests/unit/test_security_center.py, tests/windows/test_installer_and_packaging.py)",
+      "result": "All checks passed! (ruff_exit=0, saída de sessão)"
+    }
+  ],
+  "notes": [
+    "GREEN após a remoção dos 2 stubs ficcionais sem auth e sem consumidor (V9-SEC-06/F7.2): as rotas passam a 404 em service/app.py, com teste-direto travando a remoção contra remontagem acidental.",
+    "Os testes novos mantêm assert_status_code(404) — nenhum assert foi afrouxado para obter verde."
+  ]
+}

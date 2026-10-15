@@ -9,7 +9,9 @@
  *    resposta com credencial — nenhum segredo entra no Cache Storage;
  *  - operar na corretora: o toque na notificação só abre o painel.
  *
- * VERSIONAMENTO: trocar CACHE descarta os caches antigos no activate.
+ * VERSIONAMENTO: trocar CACHE descarta no activate apenas as versões
+ * antigas desta família de caches ("dz23-pwa-*") — nunca caches de
+ * outros apps no mesmo domínio nem o marcador de push pendente.
  */
 const CACHE = "dz23-pwa-v1";
 const ESTATICOS = [
@@ -33,13 +35,19 @@ self.addEventListener("install", (evento) => {
   );
 });
 
+// V9-PWA-06: a purga é ESCOPADA à família de caches deste app
+// ("dz23-pwa-*"). Um cache de outro app no mesmo domínio e o marcador
+// persistente da reinscrição (dz23-push-pendente) sobrevivem à ativação;
+// só versões antigas deste Service Worker são descartadas.
 self.addEventListener("activate", (evento) => {
   evento.waitUntil(
     caches
       .keys()
       .then((chaves) =>
         Promise.all(
-          chaves.filter((k) => k !== CACHE).map((k) => caches.delete(k))
+          chaves
+            .filter((k) => k.startsWith("dz23-pwa-") && k !== CACHE)
+            .map((k) => caches.delete(k))
         )
       )
       .then(() => self.clients.claim())
@@ -86,6 +94,65 @@ self.addEventListener("push", (evento) => {
       // dado financeiro entra na URL da notificação.
       data: { url: dados.url || "/app#notificacoes" },
     })
+  );
+});
+
+// V9-PWA-05: o push service pode TROCAR a inscrição (expiração do
+// endpoint) sem a página aberta. Sem tratamento, o destino novo nunca
+// chega ao servidor e o aparelho para de receber em silêncio. O SW
+// re-inscreve com a MESMA chave VAPID (a do servidor) e deixa o destino
+// novo num marcador persistente — o painel autenticado (único que tem
+// token) registra no servidor na primeira abertura; nada é apresentado
+// como ativo antes disso.
+const MARCADOR_PENDENTE = "dz23-push-pendente";
+self.addEventListener("pushsubscriptionchange", (evento) => {
+  evento.waitUntil(
+    (async () => {
+      let nova = evento.newSubscription || null;
+      const antiga = evento.oldSubscription || null;
+      if (
+        !nova &&
+        antiga &&
+        antiga.options &&
+        antiga.options.applicationServerKey
+      ) {
+        try {
+          nova = await self.registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: antiga.options.applicationServerKey,
+          });
+        } catch (erro) {
+          nova = null;
+        }
+      }
+      if (!nova) {
+        return;
+      }
+      const json = nova.toJSON ? nova.toJSON() : null;
+      if (!json || !json.endpoint) {
+        return;
+      }
+      try {
+        const cache = await caches.open(MARCADOR_PENDENTE);
+        await cache.put(
+          "/pendente",
+          new Response(
+            JSON.stringify({ endpoint: json.endpoint, keys: json.keys || {} }),
+            { headers: { "content-type": "application/json" } }
+          )
+        );
+      } catch (erro) {
+        // Marcador é melhor-esforço; sem ele o painel reconcilia pelo
+        // estado real (o aparelho aparece sem envios, nunca como ativo).
+      }
+      const janelas = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+      for (const janela of janelas) {
+        janela.postMessage({ tipo: "push-reinscrito" });
+      }
+    })()
   );
 });
 

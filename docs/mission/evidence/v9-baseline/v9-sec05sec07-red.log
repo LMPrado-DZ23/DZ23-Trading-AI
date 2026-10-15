@@ -1,0 +1,223 @@
+FFFFFFFF.FFF                                                             [100%]
+================================== FAILURES ===================================
+____ TestSec05TenantNaoEscapa.test_anonimo_desabilitado_nao_cria_diretorio ____
+
+self = <tests.test_v9_tenant_e_revogacao.TestSec05TenantNaoEscapa object at 0x0000015840DD5820>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-sec05sec07-red-j1at_a6o/tmp/pytest-of-unknown/pytest-0/test_anonimo_desabilitado_nao_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000015840DD70B0>
+
+    def test_anonimo_desabilitado_nao_cria_diretorio(self, tmp_path, monkeypatch):
+        c, m = _client(tmp_path, monkeypatch)
+        r = c.get("/publico/v9-fantasma")
+        assert r.status_code == 404
+        # Contraprova: leitura de página pública desligada não ESCREVE.
+>       assert not (tmp_path / "tenants").exists()
+E       AssertionError: assert not True
+E        +  where True = exists()
+E        +    where exists = (WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-sec05sec07-red-j1at_a6o/tmp/pytest-of-unknown/pytest-0/test_anonimo_desabilitado_nao_0') / 'tenants').exists
+
+tests\test_v9_tenant_e_revogacao.py:91: AssertionError
+___ TestSec05TenantNaoEscapa.test_identificador_invalido_recusado[../fuga] ____
+
+self = <tests.test_v9_tenant_e_revogacao.TestSec05TenantNaoEscapa object at 0x0000015840DD5C70>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-sec05sec07-red-j1at_a6o/tmp/pytest-of-unknown/pytest-0/test_identificador_invalido_re0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001584135F020>
+tenant_id = '../fuga'
+
+    @pytest.mark.parametrize(
+        "tenant_id", ["../fuga", "..", "a/b", "", "x y", "a" * 65])
+    def test_identificador_invalido_recusado(self, tmp_path, monkeypatch, tenant_id):
+        c, m = _client(tmp_path, monkeypatch)
+>       with pytest.raises(ValueError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_v9_tenant_e_revogacao.py:97: Failed
+______ TestSec05TenantNaoEscapa.test_identificador_invalido_recusado[..] ______
+
+self = <tests.test_v9_tenant_e_revogacao.TestSec05TenantNaoEscapa object at 0x0000015840DD5700>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-sec05sec07-red-j1at_a6o/tmp/pytest-of-unknown/pytest-0/test_identificador_invalido_re1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001584149BB60>
+tenant_id = '..'
+
+    @pytest.mark.parametrize(
+        "tenant_id", ["../fuga", "..", "a/b", "", "x y", "a" * 65])
+    def test_identificador_invalido_recusado(self, tmp_path, monkeypatch, tenant_id):
+        c, m = _client(tmp_path, monkeypatch)
+>       with pytest.raises(ValueError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_v9_tenant_e_revogacao.py:97: Failed
+_____ TestSec05TenantNaoEscapa.test_identificador_invalido_recusado[a/b] ______
+
+self = <tests.test_v9_tenant_e_revogacao.TestSec05TenantNaoEscapa object at 0x0000015840DD56A0>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-sec05sec07-red-j1at_a6o/tmp/pytest-of-unknown/pytest-0/test_identificador_invalido_re2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000015841548200>
+tenant_id = 'a/b'
+
+    @pytest.mark.parametrize(
+        "tenant_id", ["../fuga", "..", "a/b", "", "x y", "a" * 65])
+    def test_identificador_invalido_recusado(self, tmp_path, monkeypatch, tenant_id):
+        c, m = _client(tmp_path, monkeypatch)
+>       with pytest.raises(ValueError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_v9_tenant_e_revogacao.py:97: Failed
+_______ TestSec05TenantNaoEscapa.test_identificador_invalido_recusado[] _______
+
+self = <tests.test_v9_tenant_e_revogacao.TestSec05TenantNaoEscapa object at 0x0000015840DD5640>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-sec05sec07-red-j1at_a6o/tmp/pytest-of-unknown/pytest-0/test_identificador_invalido_re3')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000015841652990>
+tenant_id = ''
+
+    @pytest.mark.parametrize(
+        "tenant_id", ["../fuga", "..", "a/b", "", "x y", "a" * 65])
+    def test_identificador_invalido_recusado(self, tmp_path, monkeypatch, tenant_id):
+        c, m = _client(tmp_path, monkeypatch)
+>       with pytest.raises(ValueError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_v9_tenant_e_revogacao.py:97: Failed
+_____ TestSec05TenantNaoEscapa.test_identificador_invalido_recusado[x y] ______
+
+self = <tests.test_v9_tenant_e_revogacao.TestSec05TenantNaoEscapa object at 0x0000015840DD5D30>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-sec05sec07-red-j1at_a6o/tmp/pytest-of-unknown/pytest-0/test_identificador_invalido_re4')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000015841877AA0>
+tenant_id = 'x y'
+
+    @pytest.mark.parametrize(
+        "tenant_id", ["../fuga", "..", "a/b", "", "x y", "a" * 65])
+    def test_identificador_invalido_recusado(self, tmp_path, monkeypatch, tenant_id):
+        c, m = _client(tmp_path, monkeypatch)
+>       with pytest.raises(ValueError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_v9_tenant_e_revogacao.py:97: Failed
+_ TestSec05TenantNaoEscapa.test_identificador_invalido_recusado[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa] _
+
+self = <tests.test_v9_tenant_e_revogacao.TestSec05TenantNaoEscapa object at 0x0000015840DD5DC0>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-sec05sec07-red-j1at_a6o/tmp/pytest-of-unknown/pytest-0/test_identificador_invalido_re5')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000158419B5FD0>
+tenant_id = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    @pytest.mark.parametrize(
+        "tenant_id", ["../fuga", "..", "a/b", "", "x y", "a" * 65])
+    def test_identificador_invalido_recusado(self, tmp_path, monkeypatch, tenant_id):
+        c, m = _client(tmp_path, monkeypatch)
+>       with pytest.raises(ValueError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_v9_tenant_e_revogacao.py:97: Failed
+_______ TestSec05TenantNaoEscapa.test_pagina_publica_nao_escapa_da_raiz _______
+
+self = <tests.test_v9_tenant_e_revogacao.TestSec05TenantNaoEscapa object at 0x0000015840DD6090>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-sec05sec07-red-j1at_a6o/tmp/pytest-of-unknown/pytest-0/test_pagina_publica_nao_escapa0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000015841AFF530>
+
+    def test_pagina_publica_nao_escapa_da_raiz(self, tmp_path, monkeypatch):
+        c, m = _client(tmp_path, monkeypatch)
+        with pytest.raises(HTTPException) as exc:
+            m.pagina_publica("../fuga")
+        assert exc.value.status_code == 404
+>       assert not (tmp_path / "fuga").exists()
+E       AssertionError: assert not True
+E        +  where True = exists()
+E        +    where exists = (WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-sec05sec07-red-j1at_a6o/tmp/pytest-of-unknown/pytest-0/test_pagina_publica_nao_escapa0') / 'fuga').exists
+
+tests\test_v9_tenant_e_revogacao.py:105: AssertionError
+_ TestSec07MesaNaoReusaChaveRemovida.test_analista_da_mesa_le_credencial_viva _
+
+self = <tests.test_v9_tenant_e_revogacao.TestSec07MesaNaoReusaChaveRemovida object at 0x0000015840DD6720>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-sec05sec07-red-j1at_a6o/tmp/pytest-of-unknown/pytest-0/test_analista_da_mesa_le_crede0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000015841B8B1A0>
+
+    def test_analista_da_mesa_le_credencial_viva(self, tmp_path, monkeypatch):
+        import service.api.ia_provedores as iap
+    
+        c, m = _client(tmp_path, monkeypatch)
+        _configurar_ia(c, chave="k-v9-a")
+        d = m._DESKS.get("legacy") or m._desk_boot("legacy")
+        chamadas: list = []
+        monkeypatch.setattr(iap, "_invocar", _fake_invocar(chamadas))
+        cliente = d["orchestrator"].analista.cliente
+    
+        assert cliente("pergunta") == "texto-fake"
+        assert chamadas == ["k-v9-a"]
+    
+        _remover(c, "GROQ_API_KEY")
+>       with pytest.raises(RuntimeError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE RuntimeError
+
+tests\test_v9_tenant_e_revogacao.py:135: Failed
+_ TestSec07AgenciaNaoReusaChaveRemovida.test_rebuild_ao_remover_e_ao_trocar_chave _
+
+self = <tests.test_v9_tenant_e_revogacao.TestSec07AgenciaNaoReusaChaveRemovida object at 0x0000015840DD6BD0>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-sec05sec07-red-j1at_a6o/tmp/pytest-of-unknown/pytest-0/test_rebuild_ao_remover_e_ao_t0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000158417B3E00>
+
+    def test_rebuild_ao_remover_e_ao_trocar_chave(self, tmp_path, monkeypatch):
+        c, m = _client(tmp_path, monkeypatch)
+        _configurar_ia(c, chave="k-v9-a")
+    
+        def _fake_build(*, provider, model, role, base_url=None, api_key=None):
+            return SimpleNamespace(api_key=api_key, role=role)
+    
+        monkeypatch.setattr(m, "build_llm_handler", _fake_build)
+        runtime = SimpleNamespace(agency=_AgenciaFalsa())
+    
+        assert m.configure_agency_llm(runtime, "legacy") is None
+        handlers = runtime.agency.executor.handlers
+        assert set(m._AGENCY_LLM_AGENT_IDS) <= set(handlers)
+        assert {h.api_key for h in handlers.values()} == {"k-v9-a"}
+    
+        # Chave removida: nenhum handler pode continuar servindo a antiga.
+        _remover(c, "GROQ_API_KEY")
+        diag = m.configure_agency_llm(runtime, "legacy")
+>       assert diag is not None
+E       assert None is not None
+
+tests\test_v9_tenant_e_revogacao.py:171: AssertionError
+___ TestSec07RevisorNaoReusaChaveRemovida.test_revisao_usa_credencial_viva ____
+
+self = <tests.test_v9_tenant_e_revogacao.TestSec07RevisorNaoReusaChaveRemovida object at 0x0000015840DD6F30>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-sec05sec07-red-j1at_a6o/tmp/pytest-of-unknown/pytest-0/test_revisao_usa_credencial_vi0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000015841A3D610>
+
+    def test_revisao_usa_credencial_viva(self, tmp_path, monkeypatch):
+        import service.api.ia_provedores as iap
+    
+        c, m = _client(tmp_path, monkeypatch)
+        _configurar_ia(c, chave="k-v9-a")
+        chamadas: list = []
+        monkeypatch.setattr(iap, "_invocar", _fake_invocar(chamadas))
+        revisar = m._revisor_de_ia("legacy", m.load_cfg("legacy"))
+        assert revisar is not None
+    
+        assert revisar({"preco": "100"}) == "texto-fake"
+        assert chamadas == ["k-v9-a"]
+    
+        _remover(c, "GROQ_API_KEY")
+>       with pytest.raises(RuntimeError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE RuntimeError
+
+tests\test_v9_tenant_e_revogacao.py:199: Failed
+=========================== short test summary info ===========================
+FAILED tests/test_v9_tenant_e_revogacao.py::TestSec05TenantNaoEscapa::test_anonimo_desabilitado_nao_cria_diretorio
+FAILED tests/test_v9_tenant_e_revogacao.py::TestSec05TenantNaoEscapa::test_identificador_invalido_recusado[../fuga]
+FAILED tests/test_v9_tenant_e_revogacao.py::TestSec05TenantNaoEscapa::test_identificador_invalido_recusado[..]
+FAILED tests/test_v9_tenant_e_revogacao.py::TestSec05TenantNaoEscapa::test_identificador_invalido_recusado[a/b]
+FAILED tests/test_v9_tenant_e_revogacao.py::TestSec05TenantNaoEscapa::test_identificador_invalido_recusado[]
+FAILED tests/test_v9_tenant_e_revogacao.py::TestSec05TenantNaoEscapa::test_identificador_invalido_recusado[x y]
+FAILED tests/test_v9_tenant_e_revogacao.py::TestSec05TenantNaoEscapa::test_identificador_invalido_recusado[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa]
+FAILED tests/test_v9_tenant_e_revogacao.py::TestSec05TenantNaoEscapa::test_pagina_publica_nao_escapa_da_raiz
+FAILED tests/test_v9_tenant_e_revogacao.py::TestSec07MesaNaoReusaChaveRemovida::test_analista_da_mesa_le_credencial_viva
+FAILED tests/test_v9_tenant_e_revogacao.py::TestSec07AgenciaNaoReusaChaveRemovida::test_rebuild_ao_remover_e_ao_trocar_chave
+FAILED tests/test_v9_tenant_e_revogacao.py::TestSec07RevisorNaoReusaChaveRemovida::test_revisao_usa_credencial_viva
+11 failed, 1 passed in 1.59s

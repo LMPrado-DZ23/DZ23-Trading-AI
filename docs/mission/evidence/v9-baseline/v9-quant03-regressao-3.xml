@@ -1,0 +1,344 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="14" skipped="0" tests="263" time="24.371" timestamp="2026-10-15T11:11:44.790055-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_desk_escola.TestPerfilDeMercado" name="test_spot_alvo_zero_e_metrica_retorno" time="0.002" /><testcase classname="tests.test_desk_escola.TestPerfilDeMercado" name="test_binaria_alvo_com_payout_estressado" time="0.001" /><testcase classname="tests.test_desk_escola.TestPerfilDeMercado" name="test_n_efetivo_menor_que_amostras_com_peso_decaindo" time="0.002" /><testcase classname="tests.test_desk_escola.TestEscolaEstados" name="test_coletando_com_amostra_pequena" time="0.001" /><testcase classname="tests.test_desk_escola.TestEscolaEstados" name="test_199_operacoes_ainda_nao_declaram_candidatura" time="0.002" /><testcase classname="tests.test_desk_escola.TestEscolaEstados" name="test_220_boas_declaram_candidata_sem_promover" time="0.003" /><testcase classname="tests.test_desk_escola.TestEscolaEstados" name="test_sem_vantagem_apos_300_sem_ic_acima_do_alvo" time="0.003" /><testcase classname="tests.test_desk_escola.TestEscolaEstados" name="test_sem_vantagem_pode_melhorar_com_evidencia_nova" time="0.005" /><testcase classname="tests.test_desk_escola.TestProvaIndependente" name="test_treino_reaproveitado_nao_vale_como_prova" time="0.004" /><testcase classname="tests.test_desk_escola.TestProvaIndependente" name="test_prova_final_independente_forma_o_trader" time="0.004" /><testcase classname="tests.test_desk_escola.TestProvaIndependente" name="test_prova_parcial_mantem_prova_final" time="0.003" /><testcase classname="tests.test_desk_escola.TestProvaIndependente" name="test_prova_ruim_reprova_e_e_estado_terminal" time="0.008" /><testcase classname="tests.test_desk_escola.TestRevogacao" name="test_revoga_em_50_novas_evidencias_contrarias" time="0.009" /><testcase classname="tests.test_desk_escola.TestRevogacao" name="test_revogada_nao_volta_atras" time="0.010" /><testcase classname="tests.test_desk_escola.TestRevogacao" name="test_versao_nova_recomeca_a_coleta" time="0.008" /><testcase classname="tests.test_desk_escola.TestBinaria" name="test_estresse_de_payout_muda_a_decisao" time="0.004" /><testcase classname="tests.test_desk_escola.TestPersistencia" name="test_estado_historico_e_relatorio_sobrevivem_ao_reinicio" time="0.002" /><testcase classname="tests.test_desk_escola.TestPersistencia" name="test_comparar_com_controle_aleatorio" time="0.004" /><testcase classname="tests.test_salas.TestAdaptadoresEHomologacao" name="test_corretoras_padrao_estao_homologadas" time="0.001" /><testcase classname="tests.test_salas.TestAdaptadoresEHomologacao" name="test_registrar_sem_substituir_recusa_duplicata" time="0.001" /><testcase classname="tests.test_salas.TestAdaptadoresEHomologacao" name="test_extensao_por_adaptador_novo" time="0.001" /><testcase classname="tests.test_salas.TestAdaptadoresEHomologacao" name="test_adaptador_com_mercado_desconhecido_recusa" time="0.001" /><testcase classname="tests.test_salas.TestAdaptadoresEHomologacao" name="test_corretora_sem_adaptador_nenhuma_sala" time="0.001" /><testcase classname="tests.test_salas.TestAdaptadoresEHomologacao" name="test_mercado_incompativel_com_a_corretora" time="0.001" /><testcase classname="tests.test_salas.TestAdaptadoresEHomologacao" name="test_binaria_exige_payout_e_spot_recusa_payout" time="0.001" /><testcase classname="tests.test_salas.TestAdaptadoresEHomologacao" name="test_laboratorio_so_opera_em_paper" time="0.001" /><testcase classname="tests.test_salas.TestAdaptadoresEHomologacao" name="test_sala_live_nao_e_criada_por_esta_camada" time="0.001" /><testcase classname="tests.test_salas.TestAdaptadoresEHomologacao" name="test_modo_desconhecido_e_conta_vazia_recusam" time="0.001" /><testcase classname="tests.test_salas.TestSalasIsolamentoFinanceiro" name="test_saldo_posicoes_taxas_e_desfechos_nao_se_misturam" time="0.001" /><testcase classname="tests.test_salas.TestSalasIsolamentoFinanceiro" name="test_custos_reais_descontados_da_evidencia" time="0.001" /><testcase classname="tests.test_salas.TestSalasIsolamentoFinanceiro" name="test_desfecho_de_outra_corretora_e_recusado" time="0.001" /><testcase classname="tests.test_salas.TestSalasIsolamentoFinanceiro" name="test_desfecho_sem_corretora_recebe_a_da_sala" time="0.001" /><testcase classname="tests.test_salas.TestSalasIsolamentoFinanceiro" name="test_uma_posicao_por_instrumento" time="0.001" /><testcase classname="tests.test_salas.TestSalasIsolamentoFinanceiro" name="test_saida_sem_posicao_recusa_e_preco_invalido_nao_fecha" time="0.001" /><testcase classname="tests.test_salas.TestSalasIsolamentoFinanceiro" name="test_persistencia_em_chave_propria_por_sala" time="0.001" /><testcase classname="tests.test_salas.TestCertificacaoPorContexto" name="test_formado_na_binance_nao_vale_na_okx" time="0.526" /><testcase classname="tests.test_salas.TestCertificacaoPorContexto" name="test_outro_ativo_e_outro_horizonte_nao_herdam_formacao" time="0.517" /><testcase classname="tests.test_salas.TestCertificacaoPorContexto" name="test_outra_versao_da_estrategia_nao_herda_formacao" time="0.512" /><testcase classname="tests.test_salas.TestCertificacaoPorContexto" name="test_certificacao_persiste_e_aparece_no_relatorio" time="0.512" /><testcase classname="tests.test_salas.TestCertificacaoPorContexto" name="test_laboratorio_forma_mas_nunca_e_elegivel" time="0.543" /><testcase classname="tests.test_salas.TestCertificacaoPorContexto" name="test_evidencia_da_sala_de_outra_corretora_nao_e_vista" time="0.562" /><testcase classname="tests.test_salas.TestLedgerPorSala" name="test_livros_de_salas_diferentes_nao_se_misturam" time="0.001" /><testcase classname="tests.test_salas.TestLedgerPorSala" name="test_ledger_persiste_junto_com_a_sala" time="0.001" /><testcase classname="tests.test_desk_piloto.TestCadeiaObrigatoria" name="test_sem_formatura_solicitar_recusa" time="0.001" /><testcase classname="tests.test_desk_piloto.TestCadeiaObrigatoria" name="test_versao_diferente_nao_e_elegivel" time="0.005" /><testcase classname="tests.test_desk_piloto.TestCadeiaObrigatoria" name="test_sem_escola_solicitar_recusa" time="0.001" /><testcase classname="tests.test_desk_piloto.TestCadeiaObrigatoria" name="test_formado_solicita_aguardando" time="0.005" /><testcase classname="tests.test_desk_piloto.TestCadeiaObrigatoria" name="test_pedido_duplicado_recusado" time="0.005" /><testcase classname="tests.test_desk_piloto.TestCadeiaObrigatoria" name="test_limites_invalidos_recusados" time="0.005" /><testcase classname="tests.test_desk_piloto.TestCadeiaObrigatoria" name="test_autorizar_sem_pedido_recusa" time="0.006" /><testcase classname="tests.test_desk_piloto.TestCadeiaObrigatoria" name="test_autorizar_exige_gates" time="0.006" /><testcase classname="tests.test_desk_piloto.TestCadeiaObrigatoria" name="test_cadeia_completa_autoriza" time="0.005" /><testcase classname="tests.test_desk_piloto.TestCadeiaObrigatoria" name="test_gates_de_ativacao" time="0.001" /><testcase classname="tests.test_desk_piloto.TestLimitesEVigia" name="test_capital_acima_do_maximo_bloqueia" time="0.006" /><testcase classname="tests.test_desk_piloto.TestLimitesEVigia" name="test_perda_diaria_atingida_bloqueia" time="0.007" /><testcase classname="tests.test_desk_piloto.TestLimitesEVigia" name="test_perda_total_suspende_terminal" time="0.006" /><testcase classname="tests.test_desk_piloto.TestLimitesEVigia" name="test_dentro_dos_limites_nao_bloqueia" time="0.005" /><testcase classname="tests.test_desk_piloto.TestLimitesEVigia" name="test_prazo_vencido_expira" time="0.005" /><testcase classname="tests.test_desk_piloto.TestLimitesEVigia" name="test_escola_revoga_formatura_e_suspende" time="0.005" /><testcase classname="tests.test_desk_piloto.TestLimitesEVigia" name="test_vigia_sem_escola_suspende" time="0.006" /><testcase classname="tests.test_desk_piloto.TestLimitesEVigia" name="test_revogar_exige_motivo_e_encerra" time="0.005" /><testcase classname="tests.test_desk_piloto.TestPersistencia" name="test_estado_sobrevive_reinicio" time="0.005" /><testcase classname="tests.test_desk_piloto.TestControleAleatorio" name="test_optin_na_mesa" time="0.001" /><testcase classname="tests.test_desk_piloto.TestControleAleatorio" name="test_versao_guardada_no_trader" time="0.001" /><testcase classname="tests.test_desk_piloto.TestControleAleatorio" name="test_sorteio_deterministico" time="0.002" /><testcase classname="tests.test_desk_piloto.TestControleAleatorio" name="test_imune_a_rebaixamento_e_ao_aprendizado" time="0.003" /><testcase classname="tests.test_desk_piloto.TestControleAleatorio" name="test_guard_de_rebaixamento_vale_para_trader_normal" time="0.002" /><testcase classname="tests.test_desk_piloto.TestVigiaNoCiclo" name="test_vigia_corta_entrada_bloqueada" time="0.002" /><testcase classname="tests.test_desk_piloto.TestVigiaNoCiclo" name="test_vigia_quebrado_fail_closed" time="0.002" /><testcase classname="tests.test_v9_quant02_contexto.TestChaveDeCertificacao" name="test_chave_inclui_conta_modo_e_payout" time="0.001" /><testcase classname="tests.test_v9_quant02_contexto.TestChaveDeCertificacao" name="test_construtor_aceita_conta_modo_payout_por_nome" time="0.001" /><testcase classname="tests.test_v9_quant02_contexto.TestIsolamentoPorContextoCompleto" name="test_evidencia_de_outra_conta_nao_certifica" time="0.567" /><testcase classname="tests.test_v9_quant02_contexto.TestIsolamentoPorContextoCompleto" name="test_evidencia_de_outro_modo_nao_certifica" time="0.561" /><testcase classname="tests.test_v9_quant02_contexto.TestIsolamentoPorContextoCompleto" name="test_payout_diferente_nao_certifica_no_laboratorio" time="0.584" /><testcase classname="tests.test_v9_quant02_contexto.TestLegadoFailClosed" name="test_entrada_legada_nao_certifica_contexto_novo" time="0.001" /><testcase classname="tests.test_service_escola.TestRotasRegistradas" name="test_paths_exists" time="0.368" /><testcase classname="tests.test_service_escola.TestRotasRegistradas" name="test_tudo_exige_auth" time="0.141" /><testcase classname="tests.test_service_escola.TestEscolaCentralEBandeja" name="test_central_vazia_e_honesta" time="0.126" /><testcase classname="tests.test_service_escola.TestEscolaCentralEBandeja" name="test_abrir_sala_idempotente_e_isolada" time="0.151" /><testcase classname="tests.test_service_escola.TestEscolaCentralEBandeja" name="test_duas_corretoras_duas_salas_zeradas" time="0.136" /><testcase classname="tests.test_service_escola.TestEscolaCentralEBandeja" name="test_recusas_com_motivo" time="0.145" /><testcase classname="tests.test_service_escola.TestEscolaCentralEBandeja" name="test_sala_inexistente_404" time="0.114" /><testcase classname="tests.test_service_escola.TestConhecimento" name="test_pacote_sem_certificacao_e_adocao" time="0.233" /><testcase classname="tests.test_service_escola.TestConhecimento" name="test_eco_da_propria_sala_recusado" time="0.156" /><testcase classname="tests.test_service_escola.TestConhecimento" name="test_certificacao_escondida_no_pacote_recusada" time="0.152" /><testcase classname="tests.test_service_escola.TestMaestroRotas" name="test_pausa_exige_motivo_e_persiste" time="0.191" /><testcase classname="tests.test_service_escola.TestMaestroRotas" name="test_acao_invalida_422" time="0.148" /><testcase classname="tests.test_service_escola.TestCertificacaoEPilotos" name="test_sem_evidencia_nao_finge_formacao" time="0.136" /><testcase classname="tests.test_service_escola.TestCertificacaoEPilotos" name="test_laboratorio_jamais_elegivel" time="0.121" /><testcase classname="tests.test_service_escola.TestCertificacaoEPilotos" name="test_pilotos_vazio_e_cadeia_guardada" time="0.190" /><testcase classname="tests.test_service_escola.TestCertificacaoEPilotos" name="test_solicitar_exige_numeros" time="0.129" /><testcase classname="tests.test_service_escola.TestControleOptIn" name="test_controle_desligado_por_padrao" time="0.130" /><testcase classname="tests.test_service_escola.TestControleOptIn" name="test_controle_liga_por_configuracao" time="0.132" /><testcase classname="tests.test_service_escola.TestMesaEscolaE2E" name="test_ciclo_espelha_na_sala_e_saida_realiza" time="0.238" /><testcase classname="tests.test_service_escola.TestMesaEscolaE2E" name="test_avaliacao_avanca_formacao_e_isola_contexto" time="2.236" /><testcase classname="tests.test_service_escola.TestMesaEscolaE2E" name="test_piloto_aguardando_corta_entrada_no_ciclo" time="2.213" /><testcase classname="tests.test_service_escola.TestMesaEscolaE2E" name="test_autorizado_passa_e_revogado_corta_de_novo" time="2.306" /><testcase classname="tests.test_fq_formacao_metricas.TestMetricasDeFormacao" name="test_mede_expectativa_fator_e_drawdown" time="0.001" /><testcase classname="tests.test_fq_formacao_metricas.TestMetricasDeFormacao" name="test_metades_mistas_sao_instaveis" time="0.001" /><testcase classname="tests.test_fq_formacao_metricas.TestMetricasDeFormacao" name="test_sem_perdas_fator_indefinido_e_nao_infinito" time="0.001" /><testcase classname="tests.test_fq_formacao_metricas.TestMetricasDeFormacao" name="test_amostra_vazia_nao_inventa" time="0.001" /><testcase classname="tests.test_fq_formacao_metricas.TestMetricasDeFormacao" name="test_um_desfecho_indetermina_estabilidade" time="0.001" /><testcase classname="tests.test_fq_formacao_metricas.TestMetricasDeFormacao" name="test_por_regime_separa_medias" time="0.001" /><testcase classname="tests.test_fq_formacao_metricas.TestBloqueioPorInstabilidade" name="test_ic_aprovado_com_metades_mistas_nao_forma" time="0.004" /><testcase classname="tests.test_fq_formacao_metricas.TestBloqueioPorInstabilidade" name="test_bloqueio_nao_e_terminal_evidencia_boa_forma" time="0.008" /><testcase classname="tests.test_desk_contexto.TestPoderesLimitados" name="test_veto_zeroes_the_exposure" time="0.001" /><testcase classname="tests.test_desk_contexto.TestPoderesLimitados" name="test_reduce_halves_it" time="0.001" /><testcase classname="tests.test_desk_contexto.TestPoderesLimitados" name="test_ai_can_never_increase_exposure" time="0.001" /><testcase classname="tests.test_desk_contexto.TestPoderesLimitados" name="test_follow_keeps_the_size" time="0.001" /><testcase classname="tests.test_desk_contexto.TestRespostaDoModelo" name="test_valid_json_is_accepted" time="0.001" /><testcase classname="tests.test_desk_contexto.TestRespostaDoModelo" name="test_json_inside_markdown_is_accepted" time="0.001" /><testcase classname="tests.test_desk_contexto.TestRespostaDoModelo" name="test_free_text_is_treated_as_absent" time="0.001" /><testcase classname="tests.test_desk_contexto.TestRespostaDoModelo" name="test_invented_verdict_is_rejected" time="0.001" /><testcase classname="tests.test_desk_contexto.TestRespostaDoModelo" name="test_weak_veto_becomes_a_reduction" time="0.001" /><testcase classname="tests.test_desk_contexto.TestFalhaNaoParaAMesa" name="test_no_client_means_no_check_but_no_block" time="0.001" /><testcase classname="tests.test_desk_contexto.TestFalhaNaoParaAMesa" name="test_provider_error_does_not_stop_trading" time="0.001" /><testcase classname="tests.test_desk_contexto.TestFalhaNaoParaAMesa" name="test_absence_is_visible_not_silent" time="0.001" /><testcase classname="tests.test_desk_contexto.TestNoCicloDaMesa" name="test_ai_veto_blocks_the_entry" time="0.003" /><testcase classname="tests.test_desk_contexto.TestNoCicloDaMesa" name="test_desk_keeps_working_without_the_ai" time="0.002" /><testcase classname="tests.test_desk_conhecimento.TestPacote" name="test_pacote_tem_estatisticas_e_nenhuma_certificacao" time="0.001" /><testcase classname="tests.test_desk_conhecimento.TestPacote" name="test_filtro_de_estrategias" time="0.001" /><testcase classname="tests.test_desk_conhecimento.TestPacote" name="test_laboratorio_usa_unidade_de_taxa_de_acerto" time="0.001" /><testcase classname="tests.test_desk_conhecimento.TestAdocaoControlada" name="test_adotar_registra_prior_rotulado_e_permanece" time="0.001" /><testcase classname="tests.test_desk_conhecimento.TestAdocaoControlada" name="test_pacote_com_certificacao_embutida_e_recusado" time="0.001" /><testcase classname="tests.test_desk_conhecimento.TestAdocaoControlada" name="test_pacote_da_propria_sala_e_recusado" time="0.001" /><testcase classname="tests.test_desk_conhecimento.TestAdocaoControlada" name="test_prior_nao_certifica_ninguem" time="0.181" /><testcase classname="tests.test_desk_conhecimento.TestCamposDeCertificacao" name="test_detecta_campos_em_qualquer_profundidade" time="0.001" /><testcase classname="tests.test_desk_conhecimento.TestCamposDeCertificacao" name="test_documento_limpo_passa" time="0.001" /><testcase classname="tests.test_desk_inteligencia.TestIndicadores" name="test_sma_and_rsi_match_manual_calculation" time="0.001" /><testcase classname="tests.test_desk_inteligencia.TestIndicadores" name="test_short_series_returns_none_instead_of_guessing" time="0.001" /><testcase classname="tests.test_desk_inteligencia.TestIndicadores" name="test_indicators_only_use_the_series_given" time="0.001" /><testcase classname="tests.test_desk_inteligencia.TestRegime" name="test_uptrend_is_detected" time="0.001" /><testcase classname="tests.test_desk_inteligencia.TestRegime" name="test_downtrend_is_detected" time="0.001" /><testcase classname="tests.test_desk_inteligencia.TestRegime" name="test_sideways_is_detected" time="0.001" /><testcase classname="tests.test_desk_inteligencia.TestRegime" name="test_volatile_beats_other_labels" time="0.001" /><testcase classname="tests.test_desk_inteligencia.TestRegime" name="test_short_series_is_undefined_not_optimistic" time="0.001" /><testcase classname="tests.test_desk_inteligencia.TestRegime" name="test_reading_explains_itself_in_plain_words" time="0.001" /><testcase classname="tests.test_desk_inteligencia.TestTradersUsamORegime" name="test_trend_trader_stays_out_of_sideways" time="0.001" /><testcase classname="tests.test_desk_inteligencia.TestTradersUsamORegime" name="test_mean_reversion_avoids_strong_uptrend" time="0.001" /><testcase classname="tests.test_desk_inteligencia.TestTradersUsamORegime" name="test_proposal_carries_the_evidence" time="0.001" /><testcase classname="tests.test_desk_inteligencia.TestAprendizado" name="test_no_learning_without_minimum_sample" time="0.004"><failure message="ValueError: desfecho duplicado — a mesma operação não conta duas vezes">self = &lt;tests.test_desk_inteligencia.TestAprendizado object at 0x000002650DA4EA80&gt;
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-quant03-regressao-3-9xtzk4jf/tmp/pytest-of-unknown/pytest-0/test_no_learning_without_minim0')
+
+    def test_no_learning_without_minimum_sample(self, tmp_path):
+        mem = self._memoria(tmp_path)
+&gt;       self._preencher(mem, 0.05, n=3)
+
+tests\test_desk_inteligencia.py:119: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_desk_inteligencia.py:113: in _preencher
+    mem.registrar(Desfecho(estrategia, regime.value, "BTC/USDT",
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;tradingagents.desk.learning.MemoriaDeDesempenho object at 0x000002650E231AC0&gt;
+desfecho = Desfecho(estrategia='trend_following', regime='tendencia_alta', instrumento='BTC/USDT', retorno=Decimal('0.05'), fecha... tzinfo=datetime.timezone.utc), forca_do_sinal=0.8, exchange='', versao='1', agente='', horizonte='1h', aberta_em=None)
+
+    def registrar(self, desfecho: Desfecho) -&gt; None:
+        validar_desfecho(desfecho)
+        if desfecho in self._desfechos:
+&gt;           raise ValueError("desfecho duplicado — a mesma operação não "
+                             "conta duas vezes")
+E           ValueError: desfecho duplicado — a mesma operação não conta duas vezes
+
+tradingagents\desk\learning.py:199: ValueError</failure></testcase><testcase classname="tests.test_desk_inteligencia.TestAprendizado" name="test_good_history_raises_confidence_within_the_cap" time="0.004"><failure message="ValueError: desfecho duplicado — a mesma operação não conta duas vezes">self = &lt;tests.test_desk_inteligencia.TestAprendizado object at 0x000002650DA4EF60&gt;
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-quant03-regressao-3-9xtzk4jf/tmp/pytest-of-unknown/pytest-0/test_good_history_raises_confi0')
+
+    def test_good_history_raises_confidence_within_the_cap(self, tmp_path):
+        mem = self._memoria(tmp_path)
+&gt;       self._preencher(mem, 0.04)
+
+tests\test_desk_inteligencia.py:127: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_desk_inteligencia.py:113: in _preencher
+    mem.registrar(Desfecho(estrategia, regime.value, "BTC/USDT",
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;tradingagents.desk.learning.MemoriaDeDesempenho object at 0x000002650FAB7FB0&gt;
+desfecho = Desfecho(estrategia='trend_following', regime='tendencia_alta', instrumento='BTC/USDT', retorno=Decimal('0.04'), fecha... tzinfo=datetime.timezone.utc), forca_do_sinal=0.8, exchange='', versao='1', agente='', horizonte='1h', aberta_em=None)
+
+    def registrar(self, desfecho: Desfecho) -&gt; None:
+        validar_desfecho(desfecho)
+        if desfecho in self._desfechos:
+&gt;           raise ValueError("desfecho duplicado — a mesma operação não "
+                             "conta duas vezes")
+E           ValueError: desfecho duplicado — a mesma operação não conta duas vezes
+
+tradingagents\desk\learning.py:199: ValueError</failure></testcase><testcase classname="tests.test_desk_inteligencia.TestAprendizado" name="test_bad_history_shrinks_exposure" time="0.004"><failure message="ValueError: desfecho duplicado — a mesma operação não conta duas vezes">self = &lt;tests.test_desk_inteligencia.TestAprendizado object at 0x000002650DA4F950&gt;
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-quant03-regressao-3-9xtzk4jf/tmp/pytest-of-unknown/pytest-0/test_bad_history_shrinks_expos0')
+
+    def test_bad_history_shrinks_exposure(self, tmp_path):
+        mem = self._memoria(tmp_path)
+&gt;       self._preencher(mem, -0.03)
+
+tests\test_desk_inteligencia.py:134: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_desk_inteligencia.py:113: in _preencher
+    mem.registrar(Desfecho(estrategia, regime.value, "BTC/USDT",
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;tradingagents.desk.learning.MemoriaDeDesempenho object at 0x000002650E233230&gt;
+desfecho = Desfecho(estrategia='trend_following', regime='tendencia_alta', instrumento='BTC/USDT', retorno=Decimal('-0.03'), fech... tzinfo=datetime.timezone.utc), forca_do_sinal=0.8, exchange='', versao='1', agente='', horizonte='1h', aberta_em=None)
+
+    def registrar(self, desfecho: Desfecho) -&gt; None:
+        validar_desfecho(desfecho)
+        if desfecho in self._desfechos:
+&gt;           raise ValueError("desfecho duplicado — a mesma operação não "
+                             "conta duas vezes")
+E           ValueError: desfecho duplicado — a mesma operação não conta duas vezes
+
+tradingagents\desk\learning.py:199: ValueError</failure></testcase><testcase classname="tests.test_desk_inteligencia.TestAprendizado" name="test_learning_never_raises_exposure_above_the_mandate" time="0.004"><failure message="ValueError: desfecho duplicado — a mesma operação não conta duas vezes">self = &lt;tests.test_desk_inteligencia.TestAprendizado object at 0x000002650DA4F9E0&gt;
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-quant03-regressao-3-9xtzk4jf/tmp/pytest-of-unknown/pytest-0/test_learning_never_raises_exp0')
+
+    def test_learning_never_raises_exposure_above_the_mandate(self, tmp_path):
+        mem = self._memoria(tmp_path)
+&gt;       self._preencher(mem, 0.30)          # histórico excelente
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_desk_inteligencia.py:140: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_desk_inteligencia.py:113: in _preencher
+    mem.registrar(Desfecho(estrategia, regime.value, "BTC/USDT",
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;tradingagents.desk.learning.MemoriaDeDesempenho object at 0x000002650E247AA0&gt;
+desfecho = Desfecho(estrategia='trend_following', regime='tendencia_alta', instrumento='BTC/USDT', retorno=Decimal('0.3'), fechad... tzinfo=datetime.timezone.utc), forca_do_sinal=0.8, exchange='', versao='1', agente='', horizonte='1h', aberta_em=None)
+
+    def registrar(self, desfecho: Desfecho) -&gt; None:
+        validar_desfecho(desfecho)
+        if desfecho in self._desfechos:
+&gt;           raise ValueError("desfecho duplicado — a mesma operação não "
+                             "conta duas vezes")
+E           ValueError: desfecho duplicado — a mesma operação não conta duas vezes
+
+tradingagents\desk\learning.py:199: ValueError</failure></testcase><testcase classname="tests.test_desk_inteligencia.TestAprendizado" name="test_old_outcomes_weigh_less" time="0.004"><failure message="ValueError: desfecho duplicado — a mesma operação não conta duas vezes">self = &lt;tests.test_desk_inteligencia.TestAprendizado object at 0x000002650DA4AC90&gt;
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-quant03-regressao-3-9xtzk4jf/tmp/pytest-of-unknown/pytest-0/test_old_outcomes_weigh_less0')
+
+    def test_old_outcomes_weigh_less(self, tmp_path):
+        recente, antigo = self._memoria(tmp_path), self._memoria(tmp_path / "x")
+&gt;       self._preencher(recente, 0.05, dias=1)
+
+tests\test_desk_inteligencia.py:145: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_desk_inteligencia.py:113: in _preencher
+    mem.registrar(Desfecho(estrategia, regime.value, "BTC/USDT",
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;tradingagents.desk.learning.MemoriaDeDesempenho object at 0x000002650E2440B0&gt;
+desfecho = Desfecho(estrategia='trend_following', regime='tendencia_alta', instrumento='BTC/USDT', retorno=Decimal('0.05'), fecha... tzinfo=datetime.timezone.utc), forca_do_sinal=0.8, exchange='', versao='1', agente='', horizonte='1h', aberta_em=None)
+
+    def registrar(self, desfecho: Desfecho) -&gt; None:
+        validar_desfecho(desfecho)
+        if desfecho in self._desfechos:
+&gt;           raise ValueError("desfecho duplicado — a mesma operação não "
+                             "conta duas vezes")
+E           ValueError: desfecho duplicado — a mesma operação não conta duas vezes
+
+tradingagents\desk\learning.py:199: ValueError</failure></testcase><testcase classname="tests.test_desk_inteligencia.TestAprendizado" name="test_demotion_requires_evidence_not_a_bad_day" time="0.004" /><testcase classname="tests.test_desk_inteligencia.TestAprendizado" name="test_consistently_losing_strategy_is_demoted" time="0.003"><failure message="ValueError: desfecho duplicado — a mesma operação não conta duas vezes">self = &lt;tests.test_desk_inteligencia.TestAprendizado object at 0x000002650DA4FAD0&gt;
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-quant03-regressao-3-9xtzk4jf/tmp/pytest-of-unknown/pytest-0/test_consistently_losing_strat0')
+
+    def test_consistently_losing_strategy_is_demoted(self, tmp_path):
+        mem = self._memoria(tmp_path)
+&gt;       self._preencher(mem, -0.02)
+
+tests\test_desk_inteligencia.py:159: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_desk_inteligencia.py:113: in _preencher
+    mem.registrar(Desfecho(estrategia, regime.value, "BTC/USDT",
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;tradingagents.desk.learning.MemoriaDeDesempenho object at 0x000002650FDAC2F0&gt;
+desfecho = Desfecho(estrategia='trend_following', regime='tendencia_alta', instrumento='BTC/USDT', retorno=Decimal('-0.02'), fech... tzinfo=datetime.timezone.utc), forca_do_sinal=0.8, exchange='', versao='1', agente='', horizonte='1h', aberta_em=None)
+
+    def registrar(self, desfecho: Desfecho) -&gt; None:
+        validar_desfecho(desfecho)
+        if desfecho in self._desfechos:
+&gt;           raise ValueError("desfecho duplicado — a mesma operação não "
+                             "conta duas vezes")
+E           ValueError: desfecho duplicado — a mesma operação não conta duas vezes
+
+tradingagents\desk\learning.py:199: ValueError</failure></testcase><testcase classname="tests.test_desk_inteligencia.TestAprendizado" name="test_memory_finds_where_the_strategy_works" time="0.008"><failure message="ValueError: desfecho duplicado — a mesma operação não conta duas vezes">self = &lt;tests.test_desk_inteligencia.TestAprendizado object at 0x000002650DA4F170&gt;
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-quant03-regressao-3-9xtzk4jf/tmp/pytest-of-unknown/pytest-0/test_memory_finds_where_the_st0')
+
+    def test_memory_finds_where_the_strategy_works(self, tmp_path):
+        mem = self._memoria(tmp_path)
+&gt;       self._preencher(mem, 0.05, regime=Regime.ALTA)
+
+tests\test_desk_inteligencia.py:165: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_desk_inteligencia.py:113: in _preencher
+    mem.registrar(Desfecho(estrategia, regime.value, "BTC/USDT",
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;tradingagents.desk.learning.MemoriaDeDesempenho object at 0x000002650E2479E0&gt;
+desfecho = Desfecho(estrategia='trend_following', regime='tendencia_alta', instrumento='BTC/USDT', retorno=Decimal('0.05'), fecha... tzinfo=datetime.timezone.utc), forca_do_sinal=0.8, exchange='', versao='1', agente='', horizonte='1h', aberta_em=None)
+
+    def registrar(self, desfecho: Desfecho) -&gt; None:
+        validar_desfecho(desfecho)
+        if desfecho in self._desfechos:
+&gt;           raise ValueError("desfecho duplicado — a mesma operação não "
+                             "conta duas vezes")
+E           ValueError: desfecho duplicado — a mesma operação não conta duas vezes
+
+tradingagents\desk\learning.py:199: ValueError</failure></testcase><testcase classname="tests.test_desk_inteligencia.TestAprendizado" name="test_memory_survives_restart" time="0.004"><failure message="ValueError: desfecho duplicado — a mesma operação não conta duas vezes">self = &lt;tests.test_desk_inteligencia.TestAprendizado object at 0x000002650DA4EB10&gt;
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-quant03-regressao-3-9xtzk4jf/tmp/pytest-of-unknown/pytest-0/test_memory_survives_restart0')
+
+    def test_memory_survives_restart(self, tmp_path):
+        mem = self._memoria(tmp_path)
+&gt;       self._preencher(mem, 0.03)
+
+tests\test_desk_inteligencia.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_desk_inteligencia.py:113: in _preencher
+    mem.registrar(Desfecho(estrategia, regime.value, "BTC/USDT",
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;tradingagents.desk.learning.MemoriaDeDesempenho object at 0x000002650E245C70&gt;
+desfecho = Desfecho(estrategia='trend_following', regime='tendencia_alta', instrumento='BTC/USDT', retorno=Decimal('0.03'), fecha... tzinfo=datetime.timezone.utc), forca_do_sinal=0.8, exchange='', versao='1', agente='', horizonte='1h', aberta_em=None)
+
+    def registrar(self, desfecho: Desfecho) -&gt; None:
+        validar_desfecho(desfecho)
+        if desfecho in self._desfechos:
+&gt;           raise ValueError("desfecho duplicado — a mesma operação não "
+                             "conta duas vezes")
+E           ValueError: desfecho duplicado — a mesma operação não conta duas vezes
+
+tradingagents\desk\learning.py:199: ValueError</failure></testcase><testcase classname="tests.test_desk_inteligencia.TestAprendizado" name="test_report_is_honest_about_uncertainty" time="0.004"><failure message="ValueError: desfecho duplicado — a mesma operação não conta duas vezes">self = &lt;tests.test_desk_inteligencia.TestAprendizado object at 0x000002650DA4E330&gt;
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-quant03-regressao-3-9xtzk4jf/tmp/pytest-of-unknown/pytest-0/test_report_is_honest_about_un0')
+
+    def test_report_is_honest_about_uncertainty(self, tmp_path):
+        mem = self._memoria(tmp_path)
+&gt;       self._preencher(mem, 0.03)
+
+tests\test_desk_inteligencia.py:179: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_desk_inteligencia.py:113: in _preencher
+    mem.registrar(Desfecho(estrategia, regime.value, "BTC/USDT",
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;tradingagents.desk.learning.MemoriaDeDesempenho object at 0x000002650E230380&gt;
+desfecho = Desfecho(estrategia='trend_following', regime='tendencia_alta', instrumento='BTC/USDT', retorno=Decimal('0.03'), fecha... tzinfo=datetime.timezone.utc), forca_do_sinal=0.8, exchange='', versao='1', agente='', horizonte='1h', aberta_em=None)
+
+    def registrar(self, desfecho: Desfecho) -&gt; None:
+        validar_desfecho(desfecho)
+        if desfecho in self._desfechos:
+&gt;           raise ValueError("desfecho duplicado — a mesma operação não "
+                             "conta duas vezes")
+E           ValueError: desfecho duplicado — a mesma operação não conta duas vezes
+
+tradingagents\desk\learning.py:199: ValueError</failure></testcase><testcase classname="tests.test_desk_inteligencia.TestTraderQueAprende" name="test_demoted_strategy_stops_proposing" time="0.017" /><testcase classname="tests.test_desk_inteligencia.TestTraderQueAprende" name="test_bad_history_reduces_the_requested_size" time="0.017" /><testcase classname="tests.test_desk_inteligencia.TestMesaRecarregaAoConfigurar" name="test_saving_desk_config_rebuilds_the_desk" time="0.211" /><testcase classname="tests.test_desk_inteligencia.TestMesaRecarregaAoConfigurar" name="test_resaving_the_same_value_keeps_the_desk_running" time="0.180" /><testcase classname="tests.test_desk_inteligencia.TestMesaRecarregaAoConfigurar" name="test_first_save_of_panel_defaults_is_not_a_change" time="0.159" /><testcase classname="tests.test_desk_inteligencia.TestMesaRecarregaAoConfigurar" name="test_saving_the_feed_toggle_rebuilds_with_the_new_source" time="0.170" /><testcase classname="tests.test_desk_inteligencia.TestMesaRecarregaAoConfigurar" name="test_learning_route_reads_what_was_persisted" time="0.127"><failure message="ValueError: desfecho duplicado — a mesma operação não conta duas vezes">self = &lt;tests.test_desk_inteligencia.TestMesaRecarregaAoConfigurar object at 0x000002650DA40C20&gt;
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-quant03-regressao-3-9xtzk4jf/tmp/pytest-of-unknown/pytest-0/test_learning_route_reads_what0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000002650F6AC110&gt;
+
+    def test_learning_route_reads_what_was_persisted(self, tmp_path, monkeypatch):
+        from fastapi.testclient import TestClient
+        m = self._app(tmp_path, monkeypatch)
+        c = TestClient(m.app)
+        h = {"Authorization": "Bearer s3nh4"}
+        c.get("/v1/desk/status", headers=h)        # cria a mesa e a memória
+        mem = m._DESKS["legacy"]["memoria"]
+        for _ in range(AMOSTRA_MINIMA):
+&gt;           mem.registrar(Desfecho("trend_following", "tendencia_alta", "BTC/USDT",
+                                   Decimal("0.02"), utcnow(), 0.8))
+
+tests\test_desk_inteligencia.py:304: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;tradingagents.desk.learning.MemoriaDeDesempenho object at 0x0000026510643B60&gt;
+desfecho = Desfecho(estrategia='trend_following', regime='tendencia_alta', instrumento='BTC/USDT', retorno=Decimal('0.02'), fecha... tzinfo=datetime.timezone.utc), forca_do_sinal=0.8, exchange='', versao='1', agente='', horizonte='1h', aberta_em=None)
+
+    def registrar(self, desfecho: Desfecho) -&gt; None:
+        validar_desfecho(desfecho)
+        if desfecho in self._desfechos:
+&gt;           raise ValueError("desfecho duplicado — a mesma operação não "
+                             "conta duas vezes")
+E           ValueError: desfecho duplicado — a mesma operação não conta duas vezes
+
+tradingagents\desk\learning.py:199: ValueError</failure></testcase><testcase classname="tests.test_desk_inteligencia.TestEstadoSobreviveAoServidor" name="test_memory_loads_from_the_store_not_only_from_file" time="0.004"><failure message="ValueError: desfecho duplicado — a mesma operação não conta duas vezes">self = &lt;tests.test_desk_inteligencia.TestEstadoSobreviveAoServidor object at 0x000002650DA41040&gt;
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-quant03-regressao-3-9xtzk4jf/tmp/pytest-of-unknown/pytest-0/test_memory_loads_from_the_sto0')
+
+    def test_memory_loads_from_the_store_not_only_from_file(self, tmp_path):
+        from tradingagents.desk.storage import ArmazemDeEstado
+        armazem = ArmazemDeEstado(None, diretorio=tmp_path / "estado")
+        mem = MemoriaDeDesempenho(None, armazem=armazem, tenant_id="t1")
+        for _ in range(AMOSTRA_MINIMA):
+&gt;           mem.registrar(Desfecho("trend_following", "tendencia_alta", "BTC/USDT",
+                                   Decimal("0.02"), utcnow(), 0.8))
+
+tests\test_desk_inteligencia.py:321: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;tradingagents.desk.learning.MemoriaDeDesempenho object at 0x000002650FC670E0&gt;
+desfecho = Desfecho(estrategia='trend_following', regime='tendencia_alta', instrumento='BTC/USDT', retorno=Decimal('0.02'), fecha... tzinfo=datetime.timezone.utc), forca_do_sinal=0.8, exchange='', versao='1', agente='', horizonte='1h', aberta_em=None)
+
+    def registrar(self, desfecho: Desfecho) -&gt; None:
+        validar_desfecho(desfecho)
+        if desfecho in self._desfechos:
+&gt;           raise ValueError("desfecho duplicado — a mesma operação não "
+                             "conta duas vezes")
+E           ValueError: desfecho duplicado — a mesma operação não conta duas vezes
+
+tradingagents\desk\learning.py:199: ValueError</failure></testcase><testcase classname="tests.test_desk_inteligencia.TestEstadoSobreviveAoServidor" name="test_tenants_do_not_share_learning" time="0.005" /><testcase classname="tests.test_desk_inteligencia.TestEstadoSobreviveAoServidor" name="test_store_says_plainly_if_state_is_disposable" time="0.003" /><testcase classname="tests.test_desk_inteligencia.TestEstadoSobreviveAoServidor" name="test_broken_database_falls_back_instead_of_breaking" time="5.100" /><testcase classname="tests.test_desk_inteligencia.TestEstadoSobreviveAoServidor" name="test_scheduler_state_round_trips_through_the_store" time="0.005" /><testcase classname="tests.test_evolucao_autonoma.TestClassificacaoDePerda" name="test_ganho_nao_tem_causa_de_perda" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestClassificacaoDePerda" name="test_desvio_de_execucao_vira_erro_de_execucao" time="0.000" /><testcase classname="tests.test_evolucao_autonoma.TestClassificacaoDePerda" name="test_dados_atrasados_vira_dados_inadequados" time="0.000" /><testcase classname="tests.test_evolucao_autonoma.TestClassificacaoDePerda" name="test_regime_diferente_na_saida_vira_mudanca_de_regime" time="0.000" /><testcase classname="tests.test_evolucao_autonoma.TestClassificacaoDePerda" name="test_regra_madura_negativa_vira_regra_descalibrada" time="0.001"><failure message="ValueError: desfecho duplicado — a mesma operação não conta duas vezes">self = &lt;tests.test_evolucao_autonoma.TestClassificacaoDePerda object at 0x000002650D973800&gt;
+
+    def test_regra_madura_negativa_vira_regra_descalibrada(self):
+        mem = MemoriaDeDesempenho()
+        for _ in range(AMOSTRA_MINIMA):
+&gt;           mem.registrar(_desfecho("a", "-0.01"))
+
+tests\test_evolucao_autonoma.py:150: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;tradingagents.desk.learning.MemoriaDeDesempenho object at 0x00000265108663F0&gt;
+desfecho = Desfecho(estrategia='momentum', regime='tendencia_alta', instrumento='BTC/USDT', retorno=Decimal('-0.01'), fechado_em=...tzinfo=datetime.timezone.utc), forca_do_sinal=0.0, exchange='', versao='1', agente='a', horizonte='1h', aberta_em=None)
+
+    def registrar(self, desfecho: Desfecho) -&gt; None:
+        validar_desfecho(desfecho)
+        if desfecho in self._desfechos:
+&gt;           raise ValueError("desfecho duplicado — a mesma operação não "
+                             "conta duas vezes")
+E           ValueError: desfecho duplicado — a mesma operação não conta duas vezes
+
+tradingagents\desk\learning.py:199: ValueError</failure></testcase><testcase classname="tests.test_evolucao_autonoma.TestClassificacaoDePerda" name="test_sem_sinais_vira_risco_normal" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestClassificacaoDePerda" name="test_execucao_tem_prioridade_sobre_demais_sinais" time="0.000" /><testcase classname="tests.test_evolucao_autonoma.TestDiarioAuditavel" name="test_registra_decisao_pnl_liquido_e_custos" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestDiarioAuditavel" name="test_desempenho_agrega_por_trader" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestDiarioAuditavel" name="test_diario_sobrevive_reconstrucao" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestExperimentoChampionChallenger" name="test_assinatura_estavel_e_sensivel" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestExperimentoChampionChallenger" name="test_champion_igual_challenger_recusado" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestExperimentoChampionChallenger" name="test_executar_sem_registro_recusa" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestExperimentoChampionChallenger" name="test_execucao_unica_e_forcar" time="0.002" /><testcase classname="tests.test_evolucao_autonoma.TestExperimentoChampionChallenger" name="test_challenger_melhor_e_aprovado_com_benchmark" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestExperimentoChampionChallenger" name="test_challenger_equivalente_nao_aprova" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestExperimentoChampionChallenger" name="test_sem_operacoes_suficientes_nao_aprova" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestExperimentoChampionChallenger" name="test_bonferroni_encolhe_alpha_por_familia" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestExperimentoChampionChallenger" name="test_metricas_sao_de_rentabilidade_sem_taxa_de_acerto" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestExperimentoChampionChallenger" name="test_veredito_e_persistido" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestPromocaoERollback" name="test_promocao_recusada_em_live" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestPromocaoERollback" name="test_promocao_exige_veredito_aprovado" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestPromocaoERollback" name="test_promocao_em_paper_atualiza_versao_e_e_idempotente" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestPromocaoERollback" name="test_ciclo_autopromove_so_aprovado_em_paper" time="0.002" /><testcase classname="tests.test_evolucao_autonoma.TestPromocaoERollback" name="test_rollback_por_deterioracao_com_versao_anterior" time="0.003" /><testcase classname="tests.test_evolucao_autonoma.TestPromocaoERollback" name="test_suspensao_sem_versao_anterior_bloqueia_e_alimenta_vigia" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestPromocaoERollback" name="test_amostra_insuficiente_nao_suspende" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestPromocaoERollback" name="test_expectativa_positiva_nao_suspende" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestPromocaoERollback" name="test_reabilitar_exige_motivo_e_esta_na_evidencia" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestPromocaoERollback" name="test_suspensao_sobrevive_reconstrucao" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestPromocaoERollback" name="test_relatorio_traz_traders_e_experimentos_com_o_que_mudou" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestIntegracaoComOrquestrador" name="test_fechamento_alimenta_o_diario_com_retorno_liquido" time="0.001" /><testcase classname="tests.test_evolucao_autonoma.TestIntegracaoComOrquestrador" name="test_falha_da_evolucao_vira_aviso_sem_derrubar_a_saida" time="0.001"><failure message="ValueError: desfecho duplicado — a mesma operação não conta duas vezes">self = &lt;tests.test_evolucao_autonoma.TestIntegracaoComOrquestrador object at 0x000002650D9737D0&gt;
+
+    def test_falha_da_evolucao_vira_aviso_sem_derrubar_a_saida(self):
+        class EvolucaoQuebrada:
+            def registrar_operacao(self, *args, **kwargs):
+                raise RuntimeError("disco cheio")
+    
+        t = _trader_controle()
+        orch = self._orch(t, evolucao=EvolucaoQuebrada(),
+                          memoria=MemoriaDeDesempenho())
+        for _ in range(12):
+            orch.register_fill("BTC/USDT", Decimal("1"), Decimal("100"),
+                               "trader-controle", Decimal("100"))
+&gt;           assert orch.close_position(
+                "BTC/USDT", preco_saida=Decimal("110")) is not None
+
+tests\test_evolucao_autonoma.py:512: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tradingagents\desk\orchestrator.py:416: in close_position
+    self.memoria.registrar(desfecho)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;tradingagents.desk.learning.MemoriaDeDesempenho object at 0x00000265108711F0&gt;
+desfecho = Desfecho(estrategia='controle_aleatorio', regime='indefinido', instrumento='BTC/USDT', retorno=Decimal('0.097000'), fe...one.utc), forca_do_sinal=0.0, exchange='binance', versao='1', agente='trader-controle', horizonte='1h', aberta_em=None)
+
+    def registrar(self, desfecho: Desfecho) -&gt; None:
+        validar_desfecho(desfecho)
+        if desfecho in self._desfechos:
+&gt;           raise ValueError("desfecho duplicado — a mesma operação não "
+                             "conta duas vezes")
+E           ValueError: desfecho duplicado — a mesma operação não conta duas vezes
+
+tradingagents\desk\learning.py:199: ValueError</failure></testcase><testcase classname="tests.test_evolucao_autonoma.TestIntegracaoComOrquestrador" name="test_deterioracao_bloqueia_entradas_no_ciclo" time="0.003" /><testcase classname="tests.test_alertas_transparencia.TestRegrasDeAlerta" name="test_healthy_desk_generates_nothing" time="0.001" /><testcase classname="tests.test_alertas_transparencia.TestRegrasDeAlerta" name="test_uncertain_order_is_urgent" time="0.001" /><testcase classname="tests.test_alertas_transparencia.TestRegrasDeAlerta" name="test_unbalanced_book_is_urgent" time="0.001" /><testcase classname="tests.test_alertas_transparencia.TestRegrasDeAlerta" name="test_warns_before_the_daily_limit_not_only_after" time="0.001" /><testcase classname="tests.test_alertas_transparencia.TestRegrasDeAlerta" name="test_limit_reached_is_urgent" time="0.001" /><testcase classname="tests.test_alertas_transparencia.TestRegrasDeAlerta" name="test_desk_stopped_when_it_should_run" time="0.001" /><testcase classname="tests.test_alertas_transparencia.TestRegrasDeAlerta" name="test_running_desk_does_not_alert" time="0.001" /><testcase classname="tests.test_alertas_transparencia.TestRegrasDeAlerta" name="test_repeated_cycle_errors_alert" time="0.001" /><testcase classname="tests.test_alertas_transparencia.TestRegrasDeAlerta" name="test_every_alert_says_what_to_do" time="0.001" /><testcase classname="tests.test_alertas_transparencia.TestEntregaSemVirarRuido" name="test_same_alert_is_not_repeated_within_the_silence_window" time="0.001" /><testcase classname="tests.test_alertas_transparencia.TestEntregaSemVirarRuido" name="test_after_the_window_it_alerts_again" time="0.001" /><testcase classname="tests.test_alertas_transparencia.TestEntregaSemVirarRuido" name="test_without_channel_the_alert_is_kept_not_lost" time="0.001" /><testcase classname="tests.test_alertas_transparencia.TestEntregaSemVirarRuido" name="test_delivery_failure_is_reported_not_swallowed" time="0.001" /><testcase classname="tests.test_alertas_transparencia.TestEntregaSemVirarRuido" name="test_message_never_carries_secrets" time="0.001" /><testcase classname="tests.test_alertas_transparencia.TestNoServico" name="test_alert_route_lists_and_explains" time="0.123" /><testcase classname="tests.test_alertas_transparencia.TestNoServico" name="test_public_page_is_off_by_default" time="0.171" /><testcase classname="tests.test_alertas_transparencia.TestNoServico" name="test_public_page_shows_truth_when_enabled" time="0.154" /><testcase classname="tests.test_alertas_transparencia.TestNoServico" name="test_public_page_never_leaks_account_data" time="0.149" /><testcase classname="tests.test_alertas_transparencia.TestMudancaDeServidor" name="test_export_carries_what_matters_but_never_secrets" time="0.167" /><testcase classname="tests.test_alertas_transparencia.TestMudancaDeServidor" name="test_import_restores_on_a_fresh_server" time="0.158"><failure message="ValueError: desfecho duplicado — a mesma operação não conta duas vezes">self = &lt;tests.test_alertas_transparencia.TestMudancaDeServidor object at 0x000002650E00F650&gt;
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-quant03-regressao-3-9xtzk4jf/tmp/pytest-of-unknown/pytest-0/test_import_restores_on_a_fres0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x0000026510542510&gt;
+
+    def test_import_restores_on_a_fresh_server(self, tmp_path, monkeypatch):
+        from decimal import Decimal as D
+    
+        from tradingagents.desk.learning import Desfecho
+        from tradingagents.desk.models import utcnow as agora
+        m, c, h = self._app(tmp_path, monkeypatch)
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        c.post("/v1/config", headers=h, json={"vars": {"GROQ_API_KEY": "gsk-teste-0000000002"}})
+        c.get("/v1/desk/status", headers=h)
+        mem = m._DESKS["legacy"]["memoria"]
+        for _ in range(12):
+&gt;           mem.registrar(Desfecho("trend_following", "tendencia_alta", "BTC/USDT",
+                                   D("0.02"), agora(), 0.8))
+
+tests\test_alertas_transparencia.py:187: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = &lt;tradingagents.desk.learning.MemoriaDeDesempenho object at 0x000002650E21E2A0&gt;
+desfecho = Desfecho(estrategia='trend_following', regime='tendencia_alta', instrumento='BTC/USDT', retorno=Decimal('0.02'), fecha... tzinfo=datetime.timezone.utc), forca_do_sinal=0.8, exchange='', versao='1', agente='', horizonte='1h', aberta_em=None)
+
+    def registrar(self, desfecho: Desfecho) -&gt; None:
+        validar_desfecho(desfecho)
+        if desfecho in self._desfechos:
+&gt;           raise ValueError("desfecho duplicado — a mesma operação não "
+                             "conta duas vezes")
+E           ValueError: desfecho duplicado — a mesma operação não conta duas vezes
+
+tradingagents\desk\learning.py:199: ValueError</failure></testcase><testcase classname="tests.test_alertas_transparencia.TestMudancaDeServidor" name="test_legacy_package_secrets_are_discarded_not_restored" time="0.183" /><testcase classname="tests.test_alertas_transparencia.TestMudancaDeServidor" name="test_unknown_package_is_refused" time="0.121" /><testcase classname="tests.test_alertas_transparencia.TestMudancaDeServidor" name="test_importing_twice_does_not_duplicate" time="0.208" /><testcase classname="tests.test_auditoria_blockers.TestTimeoutAmbiguoNaoLiberaCapital" name="test_ambiguous_errors_keep_the_reservation[RequestTimeout]" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestTimeoutAmbiguoNaoLiberaCapital" name="test_ambiguous_errors_keep_the_reservation[ReadTimeout]" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestTimeoutAmbiguoNaoLiberaCapital" name="test_ambiguous_errors_keep_the_reservation[ConnectionResetError]" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestTimeoutAmbiguoNaoLiberaCapital" name="test_ambiguous_errors_keep_the_reservation[NetworkError]" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestTimeoutAmbiguoNaoLiberaCapital" name="test_ambiguous_errors_keep_the_reservation[ExchangeNotAvailable]" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestTimeoutAmbiguoNaoLiberaCapital" name="test_ambiguous_errors_keep_the_reservation[ErroQueAindaNaoExiste]" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestTimeoutAmbiguoNaoLiberaCapital" name="test_unknown_exception_class_is_treated_as_ambiguous" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestTimeoutAmbiguoNaoLiberaCapital" name="test_errors_that_prove_no_order_are_still_rejections" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestTimeoutAmbiguoNaoLiberaCapital" name="test_rejection_releases_capital_as_it_should" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestFreioDiarioVemDoLivro" name="test_closing_at_a_loss_feeds_the_daily_brake" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestFreioDiarioVemDoLivro" name="test_losses_accumulate" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestFreioDiarioVemDoLivro" name="test_profit_reduces_the_accumulated_loss" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestFreioDiarioVemDoLivro" name="test_daily_state_survives_a_restart_within_the_same_day" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestFreioDiarioVemDoLivro" name="test_yesterday_loss_does_not_block_today" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestFreioDiarioVemDoLivro" name="test_the_bridge_receives_the_value_from_the_ledger" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestProcedenciaRealChegaNaCorretora" name="test_empty_state_is_still_refused_by_the_gate" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestProcedenciaRealChegaNaCorretora" name="test_desk_builds_provenance_that_the_gate_accepts" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestProcedenciaRealChegaNaCorretora" name="test_provenance_without_the_originating_data_is_refused" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestProcedenciaRealChegaNaCorretora" name="test_insecure_source_is_refused_before_any_send" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestProcedenciaRealChegaNaCorretora" name="test_cycle_attaches_provenance_to_every_intent" time="0.002" /><testcase classname="tests.test_auditoria_blockers.TestProcedenciaRealChegaNaCorretora" name="test_the_order_reaches_the_broker_with_its_provenance" time="0.003" /><testcase classname="tests.test_auditoria_blockers.TestProcedenciaRealChegaNaCorretora" name="test_paper_and_real_brokers_share_the_same_contract" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestSegredoNaoVazaPelaApi" name="test_telegram_token_never_returns_in_cleartext" time="0.213" /><testcase classname="tests.test_auditoria_blockers.TestSegredoNaoVazaPelaApi" name="test_webhook_url_is_treated_as_secret" time="0.147" /><testcase classname="tests.test_auditoria_blockers.TestSegredoNaoVazaPelaApi" name="test_secret_classification_is_declared_not_guessed" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestSegredoNaoVazaPelaApi" name="test_non_secret_config_is_still_visible" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestParadaDeEmergenciaSobreviveAoReinicio" name="test_engaged_switch_survives_a_restart" time="0.020" /><testcase classname="tests.test_auditoria_blockers.TestParadaDeEmergenciaSobreviveAoReinicio" name="test_unreadable_state_blocks_instead_of_releasing" time="0.003" /><testcase classname="tests.test_auditoria_blockers.TestParadaDeEmergenciaSobreviveAoReinicio" name="test_release_requires_phrase_and_reconciliation" time="0.006" /><testcase classname="tests.test_auditoria_blockers.TestParadaDeEmergenciaSobreviveAoReinicio" name="test_tenants_have_independent_switches" time="0.005" /><testcase classname="tests.test_auditoria_blockers.TestEstadoFinanceiroSobreviveAoReinicio" name="test_snapshot_carries_the_financial_truth" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestEstadoFinanceiroSobreviveAoReinicio" name="test_restored_state_blocks_new_risk_until_reconciled" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestEstadoFinanceiroSobreviveAoReinicio" name="test_open_position_from_previous_run_also_blocks" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestEstadoFinanceiroSobreviveAoReinicio" name="test_clean_state_does_not_block" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestEstadoFinanceiroSobreviveAoReinicio" name="test_only_reconciliation_can_release_the_gate" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestNomesDeEstadoExistem" name="test_every_referenced_state_exists" time="0.021" /><testcase classname="tests.test_auditoria_blockers.TestCredencialDeInquilinoNaoVazaPorAmbiente" name="test_desk_llm_call_is_not_an_unlocked_env_mutation" time="0.004" /><testcase classname="tests.test_auditoria_blockers.TestCredencialDeInquilinoNaoVazaPorAmbiente" name="test_job_path_still_holds_the_lock" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestCredencialDeInquilinoNaoVazaPorAmbiente" name="test_no_env_mutation_escapes_without_restore" time="0.002" /><testcase classname="tests.test_auditoria_blockers.TestBacktestMedeOQueOperaDeVerdade" name="test_backtest_and_production_share_the_same_policy_object" time="0.003" /><testcase classname="tests.test_auditoria_blockers.TestBacktestMedeOQueOperaDeVerdade" name="test_production_exit_uses_the_policy_too" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestBacktestMedeOQueOperaDeVerdade" name="test_payoff_below_one_is_a_house_policy_not_a_math_law" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestBacktestMedeOQueOperaDeVerdade" name="test_policy_reports_the_break_even_hit_rate" time="0.001" /><testcase classname="tests.test_auditoria_blockers.TestBacktestMedeOQueOperaDeVerdade" name="test_same_policy_decides_in_both_environments" time="0.001" /></testsuite></testsuites>

@@ -1,0 +1,25 @@
+{
+  "artefato": "v9-test03-probe-pos.log",
+  "artefato_sha256": "7bcf43ffedda0111e6b0a8acf0ff42d5e7d7fc1ea87b6ccefdc41c55a41d8ff4",
+  "data_utc": "2026-10-15",
+  "head": "2b7754a94cc1e4233ad95ac6fa377be4078e5055",
+  "branch": "audit/v9-rc-20261015",
+  "executor": "Qoder (missão V9) — executado FORA do executor hermético DE PROPÓSITO (mesma justificativa da sonda pré-correção): semântica real do NTFS, sem rede, sem credenciais.",
+  "comandos": [
+    {
+      "passo": "sonda PÓS-correção (após retentativa espelhada no carregar + prova reforçada do teste)",
+      "cwd": "worktree de auditoria (dz23-v9-audit)",
+      "comando": "PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe tools/v9_probe_escrita_windows.py > docs/mission/evidence/v9-baseline/v9-test03-probe-pos.log 2>&1",
+      "exit": 0
+    }
+  ],
+  "saida": [
+    {"fase1_leitor_ingenuo": {"ciclos": 500, "leitor": {"ok": 32960, "negada_pelo_so": 387, "recuperou_imediato": 224, "recuperou_apos_1ms": 160, "nao_recuperou_2_tentativas": 3}, "erros_de_escrita": 2, "thread_encerrou": true, "final_valido": true}},
+    {"fase2_carregar_producao": {"ciclos": 500, "carregar": {"ok": 9577, "vazio": 36}, "erros_de_salvar": 0, "thread_encerrou": true}}
+  ],
+  "notas": [
+    "Contraprova da correção V9-STO-01: com a mesma corrida, o carregar corrigido teve ZERO escapes de PermissionError (era 629 na sonda pré-correção) — a negação transitória é absorvida pela retentativa.",
+    "Fase 1 confirma de novo a invariante: 0 JSON rasgado, 0 arquivo ausente; negações transitórias (387) todas recuperáveis por nova tentativa.",
+    "erros_de_escrita=2 na fase 1 permanece a condição patológica já registrada (leitor sem pausa esgotando o orçamento de retentativas do escritor); a Fase 2 com salvar+carregar em produção terminou com erros_de_salvar=0."
+  ]
+}

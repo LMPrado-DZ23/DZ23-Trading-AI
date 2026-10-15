@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from .execution import BrokerTimeout
+from .execution import BrokerTimeout, ExecutionCoordinator
 
 
 def _e_ordem_inexistente(exc: BaseException) -> bool:
@@ -165,7 +165,16 @@ class CCXTDeskBroker:
                 # unicidade é o caminho para contabilizar duas vezes.
                 raise BrokerConsultaIndisponivel(
                     "execução sem identificador: impossível deduplicar")
-            taxa = t.get("fee") or {}
+            # Mesma normalização canônica do caminho de resposta direta: lê
+            # `fee` E `fees[]`, preserva a MOEDA de cada componente. Ler só
+            # `t['fee']` fazia a taxa em moeda nativa sumir no caminho remoto.
+            componentes = ExecutionCoordinator._componentes_de_taxa(t)
+            invalida = any(c.get("invalida") for c in componentes)
+            ambigua = next((c["ambigua"] for c in componentes
+                            if c.get("ambigua")), None)
+            componentes = [c for c in componentes if not c.get("ambigua")]
+            principal = componentes[0] if componentes else {
+                "cost": Decimal("0"), "currency": ""}
             saida.append({
                 "fill_id": str(fid),
                 "exchange_order_id": t.get("order") or "",
@@ -174,8 +183,12 @@ class CCXTDeskBroker:
                 "side": (t.get("side") or "").lower(),
                 "quantity": Decimal(str(t.get("amount") or 0)),
                 "price": Decimal(str(t.get("price") or 0)),
-                "fee": Decimal(str(taxa.get("cost") or 0)),
-                "fee_currency": taxa.get("currency") or "",
+                "fee": principal["cost"],
+                "fee_currency": principal["currency"],
+                "fees": [{"cost": c["cost"], "currency": c["currency"]}
+                         for c in componentes],
+                "fee_invalida": invalida,
+                "fee_ambigua": ambigua,
                 "timestamp": t.get("timestamp"),
             })
         return saida
@@ -233,6 +246,39 @@ class CCXTDeskBroker:
             if qtd != 0:
                 posicoes[f"{moeda}/{cotacao}"] = qtd
         return posicoes
+
+    def fetch_cash(self) -> Decimal:
+        """Caixa na MOEDA DE COTAÇÃO — a que `fetch_positions` descarta.
+
+        É nesta moeda que vivem taxa debitada, transferência externa e
+        qualquer movimento que o sistema não viu; sem confrontá-la com o
+        livro, uma divergência APENAS de cotação passava como SAFE.
+        Ausência da moeda no saldo é DESCONHECIDO, nunca zero — assumir
+        zero declararia "bate" sobre um valor que ninguém leu.
+        """
+        ex = self.bridge._ex
+        if not hasattr(ex, "fetch_balance"):
+            raise BrokerConsultaIndisponivel(
+                "corretora não expõe consulta de saldo/posição")
+        try:
+            saldo = ex.fetch_balance()
+        except Exception as exc:
+            raise BrokerConsultaIndisponivel(
+                f"consulta de caixa falhou ({type(exc).__name__})") from exc
+        if not isinstance(saldo, dict):
+            raise BrokerConsultaIndisponivel("resposta de saldo malformada")
+        total = saldo.get("total")
+        if not isinstance(total, dict):
+            raise BrokerConsultaIndisponivel("saldo sem a seção 'total'")
+        cotacao = self._moeda_de_cotacao()
+        if cotacao not in total:
+            raise BrokerConsultaIndisponivel(
+                f"saldo sem a moeda de cotação {cotacao}")
+        try:
+            return Decimal(str(total[cotacao]))
+        except (TypeError, ValueError, ArithmeticError):
+            raise BrokerConsultaIndisponivel(
+                f"caixa inválido para {cotacao}: {total[cotacao]!r}") from None
 
     def _moeda_de_cotacao(self) -> str:
         for instrumento in getattr(self, "universe", ()) or ():

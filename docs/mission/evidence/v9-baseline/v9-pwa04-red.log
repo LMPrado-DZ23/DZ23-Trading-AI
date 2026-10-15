@@ -1,0 +1,137 @@
+......................FFF................F........F...                   [100%]
+================================== FAILURES ===================================
+_ TestEntregaHonesta.test_entrega_parcial_e_explicita_e_conta_o_aparelho_que_falhou _
+
+self = <tests.test_pwa_push.TestEntregaHonesta object at 0x000001C8F8EE9850>
+
+    def test_entrega_parcial_e_explicita_e_conta_o_aparelho_que_falhou(self):
+        # V9-PWA-04: entrega em 1 de 2 NÃO pode parecer entrega total — o
+        # resultado carrega "parcial" e o detalhe mostra a lacuna; o aparelho
+        # que falhou acumula a falha real.
+        a_bom, a_ruim = _assinatura_valida(), _assinatura_valida(
+            endpoint="https://fcm.googleapis.com/fcm/send/ruim")
+    
+        def seletivo(a, p, ttl, u):
+            if "ruim" in a.endpoint:
+                raise TimeoutError("sem rede")
+        r = EntregadorPush([a_bom, a_ruim], vapid_privada="pem",
+                           remetente=seletivo).enviar(AlertaFalso())
+        assert r["ok"] and r["entregues"] == 1 and r["erros"] == 1
+>       assert r.get("parcial") is True
+E       AssertionError: assert None is True
+E        +  where None = <built-in method get of dict object at 0x000001C8F9435A80>('parcial')
+E        +    where <built-in method get of dict object at 0x000001C8F9435A80> = {'entregues': 1, 'expiradas': [], 'erros': 1, 'ok': True, ...}.get
+
+tests\test_pwa_push.py:197: AssertionError
+______ TestEntregaHonesta.test_entrega_total_nao_e_marcada_como_parcial _______
+
+self = <tests.test_pwa_push.TestEntregaHonesta object at 0x000001C8F8EE9670>
+
+    def test_entrega_total_nao_e_marcada_como_parcial(self):
+        a1, a2 = _assinatura_valida(), _assinatura_valida(
+            endpoint="https://fcm.googleapis.com/fcm/send/outro")
+    
+        r = EntregadorPush([a1, a2], vapid_privada="pem",
+                           remetente=lambda a, p, ttl, u: None).enviar(
+                               AlertaFalso())
+        assert r["ok"] and r["entregues"] == 2
+>       assert r.get("parcial") is False
+E       AssertionError: assert None is False
+E        +  where None = <built-in method get of dict object at 0x000001C8F94DD1C0>('parcial')
+E        +    where <built-in method get of dict object at 0x000001C8F94DD1C0> = {'entregues': 2, 'expiradas': [], 'erros': 0, 'ok': True, ...}.get
+
+tests\test_pwa_push.py:210: AssertionError
+___________ TestEntregaHonesta.test_expirada_e_podada_com_callback ____________
+
+self = <tests.test_pwa_push.TestEntregaHonesta object at 0x000001C8F8EE8770>
+
+    def test_expirada_e_podada_com_callback(self):
+        class Resposta:
+            status_code = 410
+            reason = "Gone"
+            text = "expired"
+    
+        import pywebpush
+        a_viva, a_morta = _assinatura_valida(), _assinatura_valida(
+            endpoint="https://fcm.googleapis.com/fcm/send/morto")
+    
+        def seletivo(assinatura, payload, ttl, urgencia):
+            if "morto" in assinatura.endpoint:
+                raise pywebpush.WebPushException("expirou", response=Resposta())
+        podadas = []
+        e = EntregadorPush([a_viva, a_morta], vapid_privada="pem",
+                           remetente=seletivo, podar=podadas.extend)
+        r = e.enviar(AlertaFalso())
+        assert r["ok"] and r["entregues"] == 1
+        assert [a.identificador() for a in podadas] == [a_morta.identificador()]
+        assert a_morta.identificador() in r["expiradas"]
+        # V9-PWA-04: 1 entregue + 1 expirada é uma lacuna — parcial, não total.
+>       assert r.get("parcial") is True
+E       AssertionError: assert None is True
+E        +  where None = <built-in method get of dict object at 0x000001C8F92F22C0>('parcial')
+E        +    where <built-in method get of dict object at 0x000001C8F92F22C0> = {'entregues': 1, 'expiradas': ['44d3956983'], 'erros': 0, 'ok': True, ...}.get
+
+tests\test_pwa_push.py:233: AssertionError
+_ TestRotasPush.test_teste_parcial_do_webpush_declara_a_lacuna_e_mostra_a_falha _
+
+self = <tests.test_pwa_push.TestRotasPush object at 0x000001C8F8F89340>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-pwa04-red-9pc1t9b2/tmp/pytest-of-unknown/pytest-0/test_teste_parcial_do_webpush_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001C8F9BC3140>
+
+    @pytest.mark.skipif(not _TEM_PY_VAPID, reason="py_vapid ausente")
+    def test_teste_parcial_do_webpush_declara_a_lacuna_e_mostra_a_falha(
+            self, tmp_path, monkeypatch):
+        # V9-PWA-04: o teste do canal webpush com 1 de 2 aparelhos servidos
+        # não pode responder como sucesso total: a rota declara "parcial",
+        # o diagnóstico mostra o aparelho que falhou e a caixa de entrada
+        # registra a lacuna na auditoria da entrega.
+        m, c, h = self._app(tmp_path, monkeypatch)
+        self._preparar_push(c, h)                      # aparelho bom ("tok")
+        r2 = c.post("/v1/push/assinar", headers=h, json=self._corpo("ruim"))
+        assert r2.status_code == 200
+        assert c.get("/v1/push/estado", headers=h).json()["total"] == 2
+    
+        def remetente(a, p, ttl, u):
+            if a.endpoint.endswith("tokruim"):
+                raise TimeoutError("sem resposta do serviço de push")
+            return None
+    
+        original = m._push_do_tenant
+    
+        def push_fake(tid):
+            assinaturas, entregador = original(tid)
+            entregador._remetente = remetente
+            return assinaturas, entregador
+    
+        monkeypatch.setattr(m, "_push_do_tenant", push_fake)
+        r = c.post("/v1/notificacoes/testar", headers=h,
+                   json={"canal": "webpush"})
+        assert r.status_code == 200
+        body = r.json()
+>       assert body.get("parcial") is True, \
+            "1 de 2 aparelhos servidos precisa ser declarado parcial"
+E       AssertionError: 1 de 2 aparelhos servidos precisa ser declarado parcial
+E       assert None is True
+E        +  where None = <built-in method get of dict object at 0x000001C8FB10AB80>('parcial')
+E        +    where <built-in method get of dict object at 0x000001C8FB10AB80> = {'ok': True, 'canal': 'webpush', 'detalhe': 'push entregue a 1/2 dispositivo(s)', 'latencia_ms': 0, ...}.get
+
+tests\test_pwa_push.py:628: AssertionError
+_ TestPainelPwa.test_toast_do_teste_de_canal_declara_a_lacuna_quando_parcial __
+
+self = <tests.test_pwa_static.TestPainelPwa object at 0x000001C8F8F89C10>
+
+    def test_toast_do_teste_de_canal_declara_a_lacuna_quando_parcial(self):
+        # V9-PWA-04: entrega parcial (1 de N aparelhos) não pode virar toast
+        # de "entrega confirmada" sem declarar a lacuna que o backend expõe.
+        html = self._html()
+>       assert "r.data.parcial" in html
+E       assert 'r.data.parcial' in '<!doctype html>\n<html lang="pt-BR">\n<head>\n<meta charset="utf-8"><meta name="viewport" content="width=device-width.../[&<>"]/g,c=>({\'&\':\'&amp;\',\'<\':\'&lt;\',\'>\':\'&gt;\',\'"\':\'&quot;\'}[c]))}boot();\n</script></body></html>\n'
+
+tests\test_pwa_static.py:92: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_pwa_push.py::TestEntregaHonesta::test_entrega_parcial_e_explicita_e_conta_o_aparelho_que_falhou
+FAILED tests/test_pwa_push.py::TestEntregaHonesta::test_entrega_total_nao_e_marcada_como_parcial
+FAILED tests/test_pwa_push.py::TestEntregaHonesta::test_expirada_e_podada_com_callback
+FAILED tests/test_pwa_push.py::TestRotasPush::test_teste_parcial_do_webpush_declara_a_lacuna_e_mostra_a_falha
+FAILED tests/test_pwa_static.py::TestPainelPwa::test_toast_do_teste_de_canal_declara_a_lacuna_quando_parcial
+5 failed, 49 passed in 5.84s

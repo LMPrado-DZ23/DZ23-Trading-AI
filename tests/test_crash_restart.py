@@ -175,7 +175,8 @@ class TestCrashDepoisDeEnviarComRespostaAmbigua:
             consultar,
             consultar_posicoes=lambda: {"BTC/USDT": Decimal("1.5")},
             consultar_ordens_abertas=lambda: [],
-            consultar_fills=consultar_fills)
+            consultar_fills=consultar_fills,
+            consultar_caixa=lambda: coord2.ledger.cash())
         assert relatorio["ordens_conferidas"] == 1
         assert relatorio["seguro"] is True, relatorio["divergencias"]
         # 5. e SÓ agora o portão libera
@@ -201,7 +202,8 @@ class TestCrashDepoisDeEnviarComRespostaAmbigua:
 
         relatorio = coord2.reconciliar(
             lambda coid: {"resultado": "CONFIRMED_NOT_FOUND", "ordem": None},
-            consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
+            consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [],
+            consultar_caixa=lambda: coord2.ledger.cash())
         assert relatorio["seguro"] is True, relatorio["divergencias"]
         assert risco2.available == Decimal("1000"), (
             "ordem inexistente na corretora deve devolver o capital")
@@ -431,6 +433,7 @@ class TestSaidaPassaPeloOms:
                 "id": "ex-sell", "status": "filled", "filled": "1",
                 "average": "110", "fee": "0"}},
             consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [],
+            consultar_caixa=lambda: coord2.ledger.cash(),
             consultar_fills=lambda coid, exid="": [{"fill_id": "s-crash", "quantity": Decimal("1"), "price": Decimal("110"), "fee": Decimal("0"), "side": "sell"}],)
         # o restore substitui o livro pelo reconstruído dos lançamentos
         assert coord2.ledger.position_quantity("BTC/USDT") == Decimal("0"), (

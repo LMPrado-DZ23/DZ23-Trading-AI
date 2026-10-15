@@ -63,8 +63,9 @@ def _ctx(corretora="binance", conta="paper-1", mercado="spot", modo="paper",
 
 
 def _certificado(corretora="binance", mercado="spot", ativo=ATIVO,
-                 horizonte="1h"):
-    return ContextoDeCertificacao(corretora, mercado, ativo, horizonte)
+                 horizonte="1h", conta="paper-1", modo="paper", payout=None):
+    return ContextoDeCertificacao(corretora, mercado, ativo, horizonte,
+                                  conta, modo, payout)
 
 
 def _desfechos(estrategia, retornos, *, inicio=BASE, versao="1",
@@ -185,7 +186,7 @@ class TestSalasIsolamentoFinanceiro:
         sala_o = reg.abrir_sala(_ctx(corretora="okx"))
 
         sala_b.registrar_entrada(ATIVO, 1, Decimal("100"), agente="t1",
-                                 estrategia=ESTRATEGIA)
+                                 estrategia=ESTRATEGIA, quando=BASE)
         sala_o.registrar_entrada(ATIVO, 1, Decimal("100"), agente="t1",
                                  estrategia=ESTRATEGIA)
         sala_b.registrar_saida(ATIVO, Decimal("105"), quando=BASE)
@@ -203,7 +204,7 @@ class TestSalasIsolamentoFinanceiro:
         reg = RegistroDeSalas(armazem=ArmazemFake())
         sala = reg.abrir_sala(_ctx(corretora="binance"))
         sala.registrar_entrada(ATIVO, 1, Decimal("100"), agente="t1",
-                               estrategia=ESTRATEGIA)
+                               estrategia=ESTRATEGIA, quando=BASE)
         r = sala.registrar_saida(ATIVO, Decimal("105"), quando=BASE)
 
         custo = custo_de_operar(ATIVO, "binance", Decimal("100"))
@@ -258,7 +259,7 @@ class TestSalasIsolamentoFinanceiro:
         sala_b = reg.abrir_sala(_ctx(corretora="binance"))
         sala_o = reg.abrir_sala(_ctx(corretora="okx"))
         sala_b.registrar_entrada(ATIVO, 1, Decimal("100"), agente="t1",
-                                 estrategia=ESTRATEGIA)
+                                 estrategia=ESTRATEGIA, quando=BASE)
         sala_b.registrar_saida(ATIVO, Decimal("105"), quando=BASE)
         sala_o.registrar_entrada("ETH/USDT", 2, Decimal("50"))
 
@@ -324,7 +325,8 @@ class TestCertificacaoPorContexto:
         sala = RegistroDeSalas(armazem=armazem).abrir_sala(
             _ctx(corretora="binance"))
         _formar(central, sala)
-        assert ("legacy", "escola::binance|spot|BTC/USDT|1h") in armazem.dados
+        assert ("legacy", "escola::binance|paper-1|spot|paper|BTC/USDT|1h") \
+            in armazem.dados
 
         reaberta = EscolaCentral(armazem=armazem)     # reinício
         ok, _ = reaberta.elegivel_para_live(
@@ -333,7 +335,7 @@ class TestCertificacaoPorContexto:
         rel = reaberta.relatorio()
         assert rel["total_contextos"] == 1
         linha = rel["certificados"][0]
-        assert linha["contexto"] == "binance|spot|BTC/USDT|1h"
+        assert linha["contexto"] == "binance|paper-1|spot|paper|BTC/USDT|1h"
         assert linha["estado"] == "formada"
         assert "proprietário" in rel["aviso"]
 

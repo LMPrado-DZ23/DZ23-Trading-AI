@@ -102,7 +102,7 @@
           <div id="iniMesaEstado" class="muted" style="margin-top:8px">Carregando...</div>
           <div id="iniPendencias" class="muted"></div></div>
         <div class="card span-12" id="capacidadesCard"><h3>Todas as capacidades — estado honesto e caminho para cada tela</h3><p class="muted">Estados derivados da sua configuração real, nunca de selo fixo: <span class="ok">disponível</span> funciona agora · <span class="warn">configuração necessária</span> pede uma chave ou ajuste seu · <span class="bad">bloqueado por segurança</span> é trava inegociável, não falha · <span class="muted">ainda não implementado</span> está fora da operação. O botão "Abrir" leva à tela — se ela estiver fora do Simples, o clique liga o Modo Avançado para você e abre. Nada é escondido por acidente.</p><div id="capacidadesLista"><div class="muted">Carregando...</div></div></div>
-        <div class="card span-12" id="preparoRealCard"><h3>Dinheiro real (REAL) — preparação visível, ativação BLOQUEADA</h3><p class="muted">Item por item, o que falta para operar dinheiro real e por que o sistema recusa hoje. Conferir aqui <b>não ativa nada</b>: a liberação é trava de código no servidor (ADR-006), nunca um botão de tela.</p><div class="actions"><button class="btn secondary" onclick="preparoRealLoad()">Ver preparação para dinheiro real (não ativa nada)</button></div><div id="preparoReal" class="muted">Clique para ler o checklist real do servidor (6 itens).</div></div>
+        <div class="card span-12" id="preparoRealCard"><h3>Dinheiro real (REAL) — preparação visível, ativação BLOQUEADA</h3><p class="muted">Item por item, o que falta para operar dinheiro real e por que o sistema recusa hoje. Conferir aqui <b>não ativa nada</b>: a liberação é trava de código no servidor (ADR-006), nunca um botão de tela.</p><div class="actions"><button class="btn secondary" onclick="preparoRealLoad()">Ver preparação para dinheiro real (não ativa nada)</button></div><div id="preparoReal" class="muted">Clique para ler o checklist real do servidor (item por item).</div></div>
       </div></section>
     <section id="page-overview" class="page active"><div class="page-head"><div><h2>Command Center</h2><p>Estado consolidado da agência, execução e infraestrutura.</p></div><button class="btn secondary" onclick="refreshOverview()">Atualizar</button></div><div class="grid">
       <div class="card span-3 metric"><h3>Aplicação</h3><strong id="appStatus">—</strong><small id="appDetail">verificando</small></div><div class="card span-3 metric"><h3>Job Ledger</h3><strong id="jobBackend">—</strong><small>persistência operacional</small></div><div class="card span-3 metric"><h3>Agentes</h3><strong id="agentCount">—</strong><small>registrados no runtime</small></div><div class="card span-3 metric"><h3>Execução</h3><strong class="ok">PAPER</strong><small>Live bloqueado</small></div>
@@ -216,18 +216,37 @@ const opReal=(so.ok&&so.data&&so.data.operacao_real)?so.data.operacao_real:{};
 const temIA=['OPENAI_API_KEY','ANTHROPIC_API_KEY','GOOGLE_API_KEY','DEEPSEEK_API_KEY','GROQ_API_KEY','MISTRAL_API_KEY','OPENROUTER_API_KEY','OPENAI_COMPATIBLE_API_KEY'].some(sta)||val('TRADINGAGENTS_LLM_PROVIDER')==='ollama';
 const temCorretora=sta('EXCHANGE_API_KEY')&&sta('EXCHANGE_API_SECRET');
 const temTelegram=sta('ALERTA_TELEGRAM_TOKEN')&&sta('ALERTA_TELEGRAM_CHAT');
-const https=location.protocol==='https:';
+const cn=await api('/v1/notificacoes/canais');
+const canais=(cn.ok&&cn.data&&Array.isArray(cn.data.canais))?cn.data.canais:[];
+const canal=n=>canais.find(c=>c.nome===n)||null;
+const teste=c=>(c&&c.ultimo_teste)?(' Último teste do canal: '+String(c.ultimo_teste).slice(0,16)+(c.ultimo_teste_ok===false?' (falhou)':'')+'.'):'';
+const perm='permissão de notificação '+pwaPermissaoTexto();
+const seguro=!!window.isSecureContext,temSW='serviceWorker' in navigator,temPush='PushManager' in window&&'Notification' in window;
+const win=canal('windows'),painel=canal('painel'),wp=canal('webpush');
+const externos=['telegram','discord','whatsapp'].map(canal).filter(Boolean);
+const externosConf=externos.filter(c=>c.configurado);
+let pcCab,pushCab,extCab;
+if(!win)pcCab=['warn','estado indisponível','não foi possível ler o estado dos alertas no PC agora — confira em Configuração › Notificações.'];
+else if(!win.disponivel)pcCab=['warn','só no Windows',win.detalhe+' — este servidor não é Windows; a Caixa de entrada do painel continua recebendo os alertas.'+(painel?(' '+painel.detalhe+'.'):'')];
+else if(!win.configurado)pcCab=['warn','configuração necessária',win.detalhe+' — ligue o canal em Configuração › Notificações.'];
+else pcCab=['ok','disponível',win.detalhe+' — teste a entrega em Configuração › Notificações para confirmar.'+teste(win)];
+if(!wp)pushCab=['warn','configuração necessária','não foi possível ler o estado do push agora — abra Configuração › Aplicativo para conferir.'];
+else if(!seguro||!temSW||!temPush)pushCab=['warn','navegador sem suporte',(!seguro?'push e instalação exigem HTTPS ou localhost — neste endereço o navegador não permite.':'este navegador não suporta Service Worker + Push.')+' '+wp.detalhe+'.'];
+else if(wp.configurado)pushCab=['ok','ativo',wp.detalhe+' — '+perm+'.'+teste(wp)];
+else pushCab=['warn','configuração necessária',wp.detalhe+' — '+perm+'. Inscreva o aparelho em Configuração › Aplicativo.'];
+if(externos.length)extCab=externosConf.length?['ok','configurado',externosConf.map(c=>c.nome).join(', ')+' configurado(s) — confirme a entrega com Testar em Configuração › Notificações.'+externosConf.map(teste).join('')]:['warn','configuração necessária',externos.map(c=>c.nome+': '+c.detalhe).join('; ')+'.'];
+else extCab=temTelegram?['ok','configurado','Telegram configurado — use Testar em Configuração › Notificações para confirmar a entrega.']:['warn','configuração necessária','Telegram é o canal principal: token + chat em Configuração › Notificações.'];
 const cap=(nome,classe,estado,detalhe,pagina)=>'<div class="event"><b>'+escapeHtml(nome)+' — <span class="'+classe+'">'+escapeHtml(estado)+'</span></b><small>'+escapeHtml(detalhe)+'</small>'+(pagina?'<div class="actions"><button class="btn secondary" data-abrir="'+pagina+'" onclick="abrirPagina(\''+pagina+'\')">Abrir</button></div>':'')+'</div>';
 const itens=[
 ['Mesa de Agentes (PAPER)','ok','disponível','10 traders + Maestro em ciclos simulados; nada sai para corretora. Ligar/pausar no passo 3 acima.','mesa'],
-['Análises multiagente',temIA?'ok':'warn',temIA?'disponível':'configuração necessária',temIA?'Pesquisas com IA multiagente — provedor configurado.':'Pede uma chave de IA (ou Ollama local) em Configuração; o Testar valida de verdade.','analysis'],
-['Corretora (TESTNET)',temCorretora?'ok':'warn',temCorretora?'disponível':'configuração necessária',temCorretora?'Chaves Testnet salvas — valide em Configuração › Corretora sandbox.':'Cole as chaves Testnet em Configuração; esta versão NÃO aceita LIVE.','config'],
+['Análises multiagente',temIA?'ok':'warn',temIA?'configurada':'configuração necessária',temIA?'Provedor de IA configurado — use Testar em Configuração para confirmar que a chave responde de verdade.':'Pede uma chave de IA (ou Ollama local) em Configuração; o Testar valida de verdade.','analysis'],
+['Corretora (TESTNET)',temCorretora?'ok':'warn',temCorretora?'configurada':'configuração necessária',temCorretora?'Chaves Testnet salvas — valide com o teste de conexão em Configuração › Corretora sandbox; esta versão NÃO aceita LIVE.':'Cole as chaves Testnet em Configuração; esta versão NÃO aceita LIVE.','config'],
 ['Copiloto de sinais (Minhas Operações)','ok','disponível','Registre o que você JÁ executou: ele acompanha, calcula e alerta — nunca envia ordens.','manual'],
 ['Risco e execução','ok','disponível','KillSwitch e shadow trading; limites aplicados por código no servidor, nunca pela IA.','risk'],
 ['Trading Floor','ok','disponível','Read model de agentes, desks, reuniões e eventos da mesa.','floor'],
-['Alertas no PC','ok','disponível','Toast nativo do Windows e Caixa de entrada funcionam agora, sem configuração.','config'],
-['Alertas externos (Telegram/Discord/WhatsApp/e-mail)',temTelegram?'ok':'warn',temTelegram?'disponível':'configuração necessária',temTelegram?'Telegram configurado; Discord/WhatsApp/e-mail são opcionais.':'Telegram é o canal principal: token + chat em Configuração › Notificações.','config'],
-['Aplicativo no celular e push',https?'ok':'warn',https?'disponível':'configuração necessária',https?'HTTPS ativo: instalação e push liberados neste endereço.':'Push e instalação no celular exigem HTTPS público (infra externa pendente); neste PC tudo funciona agora.','config'],
+['Alertas no PC',pcCab[0],pcCab[1],pcCab[2],'config'],
+['Alertas externos (Telegram/Discord/WhatsApp/e-mail)',extCab[0],extCab[1],extCab[2],'config'],
+['Aplicativo no celular e push',pushCab[0],pushCab[1],pushCab[2],'config'],
 ['Dinheiro real (LIVE)','bad','bloqueado por segurança','Servidor: '+(opReal.estado||'—')+(opReal.motivo?(' — '+opReal.motivo):'')+'. Só destrava com homologação e autorização explícita do proprietário.','mesa'],
 ['IQ Option e corretoras fora do catálogo','muted','ainda não implementado','Conector experimental, não validado e sem CCXT — fora da operação até ser construído e passar por revisão independente.',null],
 ];
@@ -336,7 +355,7 @@ async function carregarEstadoOperacional(){
 
 async function boot(){renderNav();$('tradeDate').value=new Date(Date.now()-864e5).toISOString().slice(0,10);carregarEstadoDoPortao();let status=null;try{const r=await fetch('/v1/auth/status');if(r.ok)status=await r.json()}catch(e){}if(!status){showAuth('Não foi possível falar com o servidor local. Tente novamente em instantes.');return}if(status.multi_tenant===false){ownerMode=true;$('quitAppBtn').classList.remove('hide')}else{showAuth('Este aplicativo roda em modo Dono Único — use o instalador do Windows.')}if(status.setup_required){mostrarSetup();return}if(token()){const me=await api('/v1/auth/me');if(me.ok)return enterApp(me.data)}showAuth()}
 async function login(){const senha=$('loginPassword').value;if(!senha)return msgAuth('Informe a senha do dono.');await comCarregando($('btnEntrar'),'Entrando…',async()=>{let r;try{r=await fetch('/v1/auth/me',{headers:{'Authorization':'Bearer '+senha}})}catch{r=null}if(!r)return msgAuth('Não foi possível falar com o servidor local. Tente novamente.');if(r.status===409)return mostrarSetup();if(r.status===401)return msgAuth('Senha incorreta. Confira e tente de novo — maiúsculas e acentos contam.');if(r.status===429){const d=await r.json().catch(()=>({}));return msgAuth(d.detail||'Muitas tentativas. Aguarde alguns minutos.','warn')}if(!r.ok)return msgAuth('Falha ao entrar (código '+r.status+').');sessionStorage.setItem('dz23_token',senha);const me=await api('/v1/auth/me');if(me.ok){$('loginPassword').value='';return enterApp(me.data)}msgAuth('Falha ao carregar a sessão. Tente novamente.')})}
-function enterApp(me){pwaRegistrarSW();carregarEstadoOperacional();principal=me;$('authGate').classList.add('hide');$('app').classList.remove('hide');$('userEmail').textContent=me.email;$('tenantId').textContent=me.tenant_id;$('roleBadge').textContent=me.role.toUpperCase();showPage(uiModoAtual()==='simples'?'inicio':'overview')}
+function enterApp(me){pwaRegistrarSW();carregarEstadoOperacional();principal=me;$('authGate').classList.add('hide');$('app').classList.remove('hide');$('userEmail').textContent=me.email;$('tenantId').textContent=me.tenant_id;$('roleBadge').textContent=me.role.toUpperCase();showPage(uiModoAtual()==='simples'?'inicio':'overview');consumirHashNotificacao()}
 async function logout(){await api('/v1/auth/logout',{method:'POST'});sessionStorage.removeItem('dz23_token');location.reload()}
 async function quitApp(){if(!confirm('Encerrar o aplicativo DZ23? O servidor local será desligado; depois você pode fechar esta aba.'))return;const r=await fetch('/v1/app/quit',{method:'POST',headers:{'Authorization':'Bearer '+token()}});if(!r.ok){const d=await r.json().catch(()=>({}));return toast(d.detail||'Falha ao encerrar','bad')}document.body.innerHTML='<main style="padding:48px;font-family:system-ui,sans-serif"><h1>DZ23 Trading AI encerrado</h1><p>O servidor local foi desligado. Você já pode fechar esta aba do navegador.</p></main>'}
 async function refreshOverview(){const [ready,agency,jobs,events]=await Promise.all([fetch('/readyz').then(r=>r.json()).catch(()=>({status:'offline'})),api('/v1/agency/health'),api('/v1/jobs/health'),api('/v1/agency/events')]);$('appStatus').textContent=ready.status.toUpperCase();$('appStatus').className=ready.status==='ready'?'ok':'warn';$('appDetail').textContent='API e execução';$('jobBackend').textContent=(jobs.data.backend||'—').toUpperCase();$('agentCount').textContent=agency.data.agents??'—';loadChecklist();$('healthList').innerHTML=[['API',ready.status],['Job ledger',jobs.data.status],['Agência',agency.data.status||'ready'],['Live trading','blocked']].map(([k,v])=>`<div class="metric-line"><span>${k}</span><b><i class="status-dot ${['ready','ok'].includes(v)?'good':v==='blocked'?'fail':''}"></i>${String(v).toUpperCase()}</b></div>`).join('');renderEvents(events.data.events||[],'overviewEvents')}
@@ -387,10 +406,10 @@ const prov=Object.entries(d.por_provedor||{});
 if(prov.length)html+='<h3 style="margin-top:14px">Por provedor</h3>'+prov.map(([p,v])=>'<div class="metric-line"><span>'+escapeHtml(p)+'</span><b>'+v.chamadas+' chamadas · '+(v.tokens_entrada+v.tokens_saida)+' tokens · '+v.custo_estimado_usd+' USD</b></div>').join('');
 alvo.innerHTML=(t.chamadas||prov.length||o.definido)?html:'<div class="muted">Nenhuma chamada de IA registrada ainda.</div>'}
 async function notifLoad(){const[c,i,m]=await Promise.all([api('/v1/notificacoes/canais'),api('/v1/notificacoes/inbox'),api('/v1/notificacoes/matriz')]);
-if(c.ok)$('notifCanais').innerHTML=c.data.canais.map(x=>`<div class="metric-line"><span>${escapeHtml(x.nome)} ${x.configurado?'<b class="ok">configurado</b>':'<small class="muted">'+escapeHtml(x.detalhe||'não configurado')+'</small>'}</span><span>${x.ultimo_teste?'<small class="muted">testado '+escapeHtml(String(x.ultimo_teste).slice(0,16))+'</small> ':''}<button class="btn secondary" onclick="notifTestar('${x.nome}')">Testar</button></span></div>`).join('');
+if(c.ok)$('notifCanais').innerHTML=c.data.canais.map(x=>`<div class="metric-line"><span>${escapeHtml(x.nome)} ${x.configurado?'<b class="ok">configurado</b>':'<small class="muted">'+escapeHtml(x.detalhe||'não configurado')+'</small>'}</span><span>${x.ultimo_teste?'<small class="muted">'+(x.ultimo_teste_ok===false?'último teste falhou '+'('+escapeHtml(String(x.ultimo_teste).slice(0,16))+')':'testado '+escapeHtml(String(x.ultimo_teste).slice(0,16)))+'</small> ':''}<button class="btn secondary" onclick="notifTestar('${x.nome}')">Testar</button></span></div>`).join('');
 if(i.ok)$('notifInbox').innerHTML=(i.data.historico||[]).slice(0,12).map(a=>`<div class="metric-line"><span>${a.vencido?'⚠️ ':''}<b>${escapeHtml(a.titulo)}</b> <small class="muted">${escapeHtml(a.tipo)}</small></span><span><small class="muted">${escapeHtml(String(a.criado_em||'').slice(0,16))}</small> ${a.lido_em?'<b class="ok">lido</b>':`<button class="btn secondary" onclick="notifAck('${a.id}')">Marcar lido</button>`}</span></div>`).join('')||'<div class="muted">Caixa de entrada vazia.</div>';
 if(m.ok&&!$('notifMatriz').value)$('notifMatriz').value=JSON.stringify(m.data.regras||[])}
-async function notifTestar(canal){const r=await api('/v1/notificacoes/testar',{method:'POST',body:JSON.stringify({canal})});toast(r.ok?`${canal}: entrega confirmada (${r.data.latencia_ms??0} ms)`:r.data.detail||'Falha no teste',r.ok?'ok':'bad');notifLoad()}
+async function notifTestar(canal){const r=await api('/v1/notificacoes/testar',{method:'POST',body:JSON.stringify({canal})});toast(r.ok?(`${canal}: entrega confirmada (${r.data.latencia_ms??0} ms)`+(r.data.parcial&&r.data.detalhe?` — ${r.data.detalhe}`:'')):r.data.detail||'Falha no teste',r.ok?'ok':'bad');notifLoad()}
 async function notifAck(id){const r=await api('/v1/notificacoes/'+id+'/ack',{method:'POST'});if(!r.ok)return toast(r.data.detail||'Falha ao marcar lido','bad');notifLoad()}
 async function notifMatrizSalvar(){let regras;try{regras=JSON.parse($('notifMatriz').value||'[]')}catch{return toast('Matriz inválida: JSON com erro de sintaxe','warn')}if(!Array.isArray(regras))return toast('Matriz precisa ser uma lista JSON','warn');const r=await api('/v1/notificacoes/matriz',{method:'PUT',body:JSON.stringify({regras})});toast(r.ok?'Matriz de roteamento salva':r.data.detail||'Falha ao salvar matriz',r.ok?'ok':'bad');if(r.ok)notifLoad()}
 async function brokerTest(){const vars={};for(const k of ['TRADINGAGENTS_EXCHANGE','TRADINGAGENTS_BROKER_MODE','EXCHANGE_API_KEY','EXCHANGE_API_SECRET']){const el=$(k);if(el&&el.value.trim())vars[k]=el.value.trim()}if(Object.keys(vars).length){const saved=await api('/v1/config',{method:'POST',body:JSON.stringify({vars})});if(!saved.ok)return toast(saved.data.detail||'Falha ao salvar sandbox','bad')}const r=await api('/v1/broker/status');const d=r.data||{};const el=$('brokerDetalhe');if(el){el.innerHTML=d.ready?('<div><b>'+escapeHtml(String(d.exchange||'—'))+'</b> ('+escapeHtml(String(d.ccxt_id||'—'))+') — modo '+escapeHtml(String(d.mode||'—'))+(d.sandbox?' · sandbox':'')+' · chaves: '+(d.keys_set?'salvas':'ausentes')+'</div><div>teto por ordem: '+escapeHtml(String(d.teto_por_ordem||'—'))+' · perda máxima/dia: '+escapeHtml(String(d.perda_maxima_dia||'—'))+' · perda hoje: '+escapeHtml(String(d.perda_hoje||'—'))+' · parada de emergência: '+(d.parada_emergencia?'ATIVA':'inativa')+'</div><div class="muted">'+escapeHtml(String(d.aviso||''))+'</div>'):('<div class="warn">não pronta: '+escapeHtml(String(d.erro||'configure as chaves Testnet de testnet.binance.vision'))+'</div>')}
@@ -685,7 +704,7 @@ async function viabilidade(){const r=await api('/v1/desk/viabilidade');if(!r.ok)
 $('deskMsg').innerHTML=`<div class="muted">Corretora: <b>${escapeHtml(d.exchange)}</b></div><table class="table"><thead><tr><th>Estratégia</th><th>Custo/op</th><th>Sobra por op</th><th>Acerto mínimo</th><th>Veredito</th></tr></thead><tbody>`+
 d.estrategias.map(e=>`<tr><td>${escapeHtml(e.estrategia)}</td><td>${escapeHtml(e.custo_por_operacao)}</td><td class="${e.viavel?'ok':'bad'}">${escapeHtml(e.esperanca_liquida)}</td><td>${escapeHtml(e.acerto_minimo)}</td><td>${e.viavel?'<b class="ok">viável</b>':'<b class="bad">inviável</b>'}<br><small class="muted">${escapeHtml(e.origem)}</small></td></tr>`).join('')+
 `</tbody></table><div class="muted">${escapeHtml(d.como_ler)}</div><div class="warn">${escapeHtml(d.aviso)}</div>`}
-async function escolaCentral(){const [ce,sa,pi]=await Promise.all([api('/v1/escola/central'),api('/v1/escola/salas'),api('/v1/escola/pilotos')]);if(!ce.ok||!sa.ok||!pi.ok)return toast((ce.data||{}).detail||'falhou','bad');const c=ce.data,s=sa.data,p=pi.data;
+async function escolaCentral(){const out=$('deskMsg');out.innerHTML='<div class="muted">Consultando a Escola Central…</div>';let ce,sa,pi;try{[ce,sa,pi]=await Promise.all([api('/v1/escola/central'),api('/v1/escola/salas'),api('/v1/escola/pilotos')])}catch(err){ce=sa=pi={ok:false,data:{detail:String((err&&err.message)||err||'sem conexão')}}}if(!ce.ok||!sa.ok||!pi.ok){const partes=[['central',ce],['salas',sa],['pilotos',pi]].filter(([,r])=>!r.ok);const det=partes.map(([,r])=>(r.data||{}).detail).filter(Boolean)[0]||'sem detalhe';out.innerHTML=`<h3>Escola Central</h3><div class="bad"><b>A Escola Central não respondeu (${partes.map(([n])=>n).join(', ')}).</b><br>Motivo reportado: ${escapeHtml(String(det))}<br><small class="muted">Nada foi alterado — isto é só leitura. Você pode tentar de novo.</small></div><button class="btn secondary" onclick="escolaCentral()">Tentar de novo</button>`;toast('Escola Central: falha ao consultar','bad');return}const c=ce.data,s=sa.data,p=pi.data;
 const cert=c.certificados.length?`<table class="table"><thead><tr><th>Contexto</th><th>Estratégia</th><th>Estado</th><th>Amostras</th><th>Justificativa</th></tr></thead><tbody>`+c.certificados.map(x=>`<tr><td>${escapeHtml(x.contexto)}</td><td>${escapeHtml(x.estrategia)}@${escapeHtml(x.versao||'1')}</td><td><span class="pill">${escapeHtml(x.estado)}</span></td><td>${escapeHtml(String(x.amostras??0))}</td><td><small>${escapeHtml(x.motivo||'—')}</small></td></tr>`).join('')+'</tbody></table>':'<div class="muted">Nenhuma certificação ainda — a escola só certifica com evidência própria de cada contexto.</div>';
 const salas=s.salas.length?`<table class="table"><thead><tr><th>Sala</th><th>Saldo realizado</th><th>Taxas</th><th>Posições</th><th>Desfechos</th><th>Priors</th></tr></thead><tbody>`+s.salas.map(x=>`<tr><td>${escapeHtml(x.chave)}${x.laboratorio?' <span class="pill">laboratório</span>':''}</td><td class="${Number(x.saldo_realizado)>=0?'ok':'bad'}">${escapeHtml(x.saldo_realizado)}</td><td>${escapeHtml(x.taxas_acumuladas)}</td><td>${Object.keys(x.posicoes_abertas||{}).length}</td><td>${x.desfechos}</td><td>${x.priors_conhecimento}</td></tr>`).join('')+'</tbody></table>':'<div class="muted">Nenhuma sala aberta — cada corretora/conta/mercado ganha sala própria e isolada.</div>';
 const ma=s.maestro||{},pa=ma.pausa_global||{},ex=ma.exposicao||{};
@@ -736,11 +755,43 @@ async function manualHealth(){const r=await api('/v1/manual/monitor/health');if(
 function manualFecharDetalhe(){manualSel=null;manualVer=null;$('manualDetalheCard').classList.add('hide')}
 let pwaPrompt=null;
 window.addEventListener('beforeinstallprompt',evento=>{evento.preventDefault();pwaPrompt=evento;const b=$('btnPwaInstalar');if(b)b.classList.remove('hide')});
+// V9-PWA-05: o SW avisa quando o navegador TROCOU a inscrição de push sem a
+// página aberta (pushsubscriptionchange). O SW não tem token para registrar
+// no servidor — só o painel autenticado pode. Ao receber o aviso, o painel
+// consome o marcador persistente e registra o destino novo.
+if('serviceWorker' in navigator){navigator.serviceWorker.addEventListener('message',evento=>{if(evento.data&&evento.data.tipo==='push-reinscrito'){pwaProcessarPendente().then(()=>pwaLoad())}})}
+// O push abre /app#notificacoes (sw.js e URL_DO_TOQUE do backend); sem este
+// consumidor o fragmento morre em silêncio. replaceState limpa o hash para
+// que um novo toque no MESMO alerta dispare hashchange de novo e reabra a
+// Caixa de entrada (Configuração › área autenticada já existente).
+function consumirHashNotificacao(){if(location.hash!=='#notificacoes')return;history.replaceState(null,'',location.pathname+location.search);abrirPagina('config');const alvo=$('notifInbox');if(alvo&&alvo.scrollIntoView)alvo.scrollIntoView({block:'center'})}
+window.addEventListener('hashchange',consumirHashNotificacao);
 function pwaB64u(valor){const b64=(valor+'='.repeat((4-valor.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/');const cru=atob(b64);return Uint8Array.from(cru,c=>c.charCodeAt(0))}
+function pwaB64uDe(buffer){const bytes=new Uint8Array(buffer);let cru='';for(const b of bytes)cru+=String.fromCharCode(b);return btoa(cru).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
 function pwaRegistrarSW(){if(!('serviceWorker' in navigator)||!window.isSecureContext)return Promise.resolve(null);return navigator.serviceWorker.register('/sw.js',{updateViaCache:'none'}).catch(()=>null)}
+// V9-PWA-05: mesmo identificador curto do servidor (sha256[:10] do endpoint).
+async function pwaIdCurto(endpoint){if(!crypto.subtle)return '';const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(endpoint));return [...new Uint8Array(d)].map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,10)}
+// V9-PWA-05: marcador deixado pelo SW quando ele reinscreveu o push sem a
+// página aberta. Só o painel autenticado (que tem token) registra no servidor.
+async function pwaProcessarPendente(){
+  if(!('caches' in window))return;
+  let cache=null;
+  try{cache=await caches.open('dz23-push-pendente')}catch(erro){return}
+  const resposta=await cache.match('/pendente');
+  if(!resposta)return;
+  let dados=null;
+  try{dados=await resposta.json()}catch(erro){dados=null}
+  if(!dados||!dados.endpoint||!(dados.keys||{}).p256dh)return;
+  const rotulo=(/iPhone|iPad|iPod/.test(navigator.userAgent)?'iPhone/iPad':/Android/.test(navigator.userAgent)?'Android':'Computador')+' — '+new Date().toLocaleDateString('pt-BR');
+  const salvo=await api('/v1/push/assinar',{method:'POST',body:JSON.stringify({endpoint:dados.endpoint,keys:dados.keys,rotulo})});
+  if(!salvo.ok)return;
+  await cache.delete('/pendente');
+  toast('O navegador renovou a inscrição de push deste aparelho — registro atualizado no servidor.','ok');
+}
 async function pwaInstalar(){if(!pwaPrompt)return;await pwaPrompt.prompt();pwaPrompt=null;const b=$('btnPwaInstalar');if(b)b.classList.add('hide')}
 function pwaPermissaoTexto(){if(!('Notification' in window))return 'sem suporte a notificações do navegador';return {granted:'ativada',denied:'bloqueada pelo navegador',default:'ainda não pedida'}[Notification.permission]||String(Notification.permission)}
 async function pwaLoad(){
+  await pwaProcessarPendente();
   const linhas=[];
   const seguro=!!window.isSecureContext,temSW='serviceWorker' in navigator,temPush='PushManager' in window&&'Notification' in window;
   if(!seguro)linhas.push('<b class="warn">endereço inseguro</b> — push e instalação exigem HTTPS ou localhost; neste endereço o navegador não permite');
@@ -770,6 +821,13 @@ async function pwaAtivar(){
   if(await Notification.requestPermission()!=='granted')return toast('Permissão bloqueada — libere as notificações deste site nas configurações do navegador.','warn');
   const r=await api('/v1/push/estado');if(!r.ok)return toast(r.data.detail||'Falha ao ler o estado do push','bad');
   if(!r.data.vapid_publica)return toast('Gere as chaves VAPID primeiro e tente de novo.','warn');
+  // V9-PWA-05: se as chaves VAPID foram trocadas, a inscrição antiga continua
+  // local e o subscribe() com a chave nova é recusado (InvalidStateError) —
+  // sem descartar a obsoleta o aparelho nunca volta a receber. O servidor já
+  // zerou as assinaturas ao forçar chaves novas; aqui limpamos o lado do
+  // navegador para reinscrever com a chave atual.
+  const anterior=await reg.pushManager.getSubscription();
+  if(anterior){const chaveAntiga=(anterior.options&&anterior.options.applicationServerKey)?pwaB64uDe(anterior.options.applicationServerKey):'';if(chaveAntiga&&chaveAntiga!==r.data.vapid_publica){try{await anterior.unsubscribe()}catch(erro){}}}
   let assinatura;
   try{assinatura=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:pwaB64u(r.data.vapid_publica)})}
   catch(erro){return toast('O navegador recusou a inscrição: '+(erro&&erro.message||erro),'bad')}
@@ -794,10 +852,14 @@ async function pwaGerarChaves(){
   toast('Chaves VAPID geradas. Agora toque em Ativar notificações neste aparelho.','ok');
   pwaLoad();
 }
+// V9-PWA-05: remover o aparelho no painel cancelava só o registro remoto —
+// a inscrição local continuava viva e o próximo teste mentia sobre o estado.
+async function pwaCortarLocalRemovido(id){try{const reg=await navigator.serviceWorker.getRegistration('/');const local=reg?await reg.pushManager.getSubscription():null;if(local&&await pwaIdCurto(local.endpoint)===id)await local.unsubscribe()}catch(erro){}}
 async function pwaCancelar(id){
   if(!confirm('Remover este aparelho das notificações?'))return;
   const r=await api('/v1/push/cancelar',{method:'POST',body:JSON.stringify({id})});
   if(!r.ok)return toast(r.data.detail||'Falha ao remover o aparelho','bad');
+  await pwaCortarLocalRemovido(id);
   toast('Aparelho removido.','ok');
   pwaLoad();
 }

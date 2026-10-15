@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="6" skipped="0" tests="6" time="1.538" timestamp="2026-10-15T10:36:40.546657-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_v9_quant02_contexto.TestChaveDeCertificacao" name="test_chave_inclui_conta_modo_e_payout" time="0.002"><failure message="AssertionError: assert 'binance|spot|BTC/USDT|1h' == 'binance|cont...r|BTC/USDT|1h'&#10;  &#10;  - binance|conta-a|spot|paper|BTC/USDT|1h&#10;  ?         --------    ------&#10;  + binance|spot|BTC/USDT|1h">self = &lt;tests.test_v9_quant02_contexto.TestChaveDeCertificacao object at 0x0000027F02D5CC50&gt;
+
+    def test_chave_inclui_conta_modo_e_payout(self):
+        c = _cert(conta="conta-a", modo="paper")
+&gt;       assert c.chave == "binance|conta-a|spot|paper|BTC/USDT|1h"
+E       AssertionError: assert 'binance|spot|BTC/USDT|1h' == 'binance|cont...r|BTC/USDT|1h'
+E         
+E         - binance|conta-a|spot|paper|BTC/USDT|1h
+E         ?         --------    ------
+E         + binance|spot|BTC/USDT|1h
+
+tests\test_v9_quant02_contexto.py:97: AssertionError</failure></testcase><testcase classname="tests.test_v9_quant02_contexto.TestChaveDeCertificacao" name="test_construtor_aceita_conta_modo_payout_por_nome" time="0.001"><failure message="TypeError: ContextoDeCertificacao.__init__() got an unexpected keyword argument 'conta'">self = &lt;tests.test_v9_quant02_contexto.TestChaveDeCertificacao object at 0x0000027F02BDF1A0&gt;
+
+    def test_construtor_aceita_conta_modo_payout_por_nome(self):
+&gt;       direto = ContextoDeCertificacao("binance", "spot", ATIVO, "1h",
+                                        conta="conta-a", modo="paper")
+E       TypeError: ContextoDeCertificacao.__init__() got an unexpected keyword argument 'conta'
+
+tests\test_v9_quant02_contexto.py:109: TypeError</failure></testcase><testcase classname="tests.test_v9_quant02_contexto.TestIsolamentoPorContextoCompleto" name="test_evidencia_de_outra_conta_nao_certifica" time="0.451"><failure message="assert (True is False)">self = &lt;tests.test_v9_quant02_contexto.TestIsolamentoPorContextoCompleto object at 0x0000027F02D5D370&gt;
+
+    def test_evidencia_de_outra_conta_nao_certifica(self):
+        armazem = ArmazemFake()
+        central = EscolaCentral(armazem=armazem)
+        sala = RegistroDeSalas(armazem=armazem).abrir_sala(
+            ContextoDaSala("binance", "conta-a", "spot", "paper"))
+        _formar(central, sala)
+    
+        ok, motivo = central.elegivel_para_live(
+            ESTRATEGIA, "1", contexto=_cert(conta="conta-a"))
+        assert ok is True and "formada" in motivo
+        assert central.estado_de(ESTRATEGIA, "1",
+                                 contexto=_cert(conta="conta-a")) == "formada"
+    
+        outra, motivo = central.elegivel_para_live(
+            ESTRATEGIA, "1", contexto=_cert(conta="conta-b"))
+&gt;       assert outra is False and "nenhuma evidência" in motivo
+E       assert (True is False)
+
+tests\test_v9_quant02_contexto.py:130: AssertionError</failure></testcase><testcase classname="tests.test_v9_quant02_contexto.TestIsolamentoPorContextoCompleto" name="test_evidencia_de_outro_modo_nao_certifica" time="0.442"><failure message="assert (True is False)">self = &lt;tests.test_v9_quant02_contexto.TestIsolamentoPorContextoCompleto object at 0x0000027F02D5D6A0&gt;
+
+    def test_evidencia_de_outro_modo_nao_certifica(self):
+        armazem = ArmazemFake()
+        central = EscolaCentral(armazem=armazem)
+        sala = RegistroDeSalas(armazem=armazem).abrir_sala(
+            ContextoDaSala("binance", "conta-a", "spot", "paper"))
+        _formar(central, sala)
+    
+        outro, motivo = central.elegivel_para_live(
+            ESTRATEGIA, "1", contexto=_cert(conta="conta-a", modo="testnet"))
+&gt;       assert outro is False and "nenhuma evidência" in motivo
+E       assert (True is False)
+
+tests\test_v9_quant02_contexto.py:143: AssertionError</failure></testcase><testcase classname="tests.test_v9_quant02_contexto.TestIsolamentoPorContextoCompleto" name="test_payout_diferente_nao_certifica_no_laboratorio" time="0.434"><failure message="AssertionError: assert 'formada' == 'coletando'&#10;  &#10;  - coletando&#10;  + formada">self = &lt;tests.test_v9_quant02_contexto.TestIsolamentoPorContextoCompleto object at 0x0000027F02D5D9A0&gt;
+
+    def test_payout_diferente_nao_certifica_no_laboratorio(self):
+        armazem = ArmazemFake()
+        central = EscolaCentral(armazem=armazem)
+        sala = RegistroDeSalas(armazem=armazem).abrir_sala(
+            ContextoDaSala("iq_option", "lab-1", "opcoes_binarias",
+                           "paper", "0.85"))
+        _formar(central, sala)
+    
+        igual = _cert(corretora="iq_option", conta="lab-1",
+                      mercado="opcoes_binarias", ativo=ATIVO, payout="0.85")
+        assert central.estado_de(ESTRATEGIA, "1", contexto=igual) == "formada"
+        outro = _cert(corretora="iq_option", conta="lab-1",
+                      mercado="opcoes_binarias", ativo=ATIVO, payout="0.92")
+&gt;       assert central.estado_de(ESTRATEGIA, "1",
+                                 contexto=outro) == "coletando"
+E       AssertionError: assert 'formada' == 'coletando'
+E         
+E         - coletando
+E         + formada
+
+tests\test_v9_quant02_contexto.py:161: AssertionError</failure></testcase><testcase classname="tests.test_v9_quant02_contexto.TestLegadoFailClosed" name="test_entrada_legada_nao_certifica_contexto_novo" time="0.001"><failure message="assert (True is False)">self = &lt;tests.test_v9_quant02_contexto.TestLegadoFailClosed object at 0x0000027F02D5DCA0&gt;
+
+    def test_entrada_legada_nao_certifica_contexto_novo(self):
+        armazem = ArmazemFake()
+        doc_legado = {"corretora": "binance", "mercado": "spot",
+                      "ativo": ATIVO, "horizonte": "1h",
+                      "criada_em": "2026-01-01T00:00:00+00:00"}
+        armazem.salvar("legacy", "escola_central",
+                       {"contextos": {CHAVE_LEGADA: doc_legado}})
+        armazem.salvar("legacy", f"escola::{CHAVE_LEGADA}", {"matriculas": {
+            f"{ESTRATEGIA}@1": {"estado": "formada", "motivo": "legado",
+                                "formado_em": "2026-01-01T00:00:00+00:00"}}})
+        central = EscolaCentral(armazem=armazem)
+    
+        # Consulta reconstruída da própria entrada legada: sem conta/modo o
+        # contexto nunca casa com a chave legada — evidência velha não
+        # certifica nada no contrato novo (fail-closed).
+        legado = ContextoDeCertificacao.de_dict(doc_legado)
+        ok, motivo = central.elegivel_para_live(ESTRATEGIA, "1",
+                                                contexto=legado)
+&gt;       assert ok is False and "nenhuma evidência" in motivo
+E       assert (True is False)
+
+tests\test_v9_quant02_contexto.py:184: AssertionError</failure></testcase></testsuite></testsuites>

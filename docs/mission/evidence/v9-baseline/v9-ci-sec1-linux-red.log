@@ -1,0 +1,27 @@
+........Fs.....                                                          [100%]
+=================================== FAILURES ===================================
+______ TestMigracaoDoConfigLegado.test_recolar_o_segredo_recupera_o_cofre ______
+
+self = <tests.test_auditoria_sec1_segredos_em_repouso.TestMigracaoDoConfigLegado object at 0x737a74373a40>
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_recolar_o_segredo_recuper0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x737a71cb20c0>
+
+    def test_recolar_o_segredo_recupera_o_cofre(self, tmp_path, monkeypatch):
+        m, c = _app(tmp_path, monkeypatch)
+        (tmp_path / "config.json").write_text(json.dumps({
+            "ALERTA_TELEGRAM_TOKEN": TOKEN_ILEGIVEL,
+        }), encoding="utf-8")
+        c.post("/v1/config", headers=H,
+               json={"vars": {"ALERTA_TELEGRAM_TOKEN": "999:BBB-fresco"}})
+        assert m.load_cfg("legacy")["ALERTA_TELEGRAM_TOKEN"] == "999:BBB-fresco"
+        d = c.get("/v1/config", headers=H).json()
+>       assert "ALERTA_TELEGRAM_TOKEN" not in d["segredos_em_repouso"]["ilegiveis"]
+E       AssertionError: assert 'ALERTA_TELEGRAM_TOKEN' not in {'ALERTA_TELEGRAM_TOKEN': 'segredo cifrado com a DPAPI do Windows não é decifrável nesta plataforma — re-colar o segredo, ou abrir na máquina/usuário que o cifrou (o valor cifrado continua no arquivo)'}
+
+tests/test_auditoria_sec1_segredos_em_repouso.py:185: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  tradingagents.service:app.py:710 segredo ALERTA_TELEGRAM_TOKEN ilegível neste contexto
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_auditoria_sec1_segredos_em_repouso.py:191: sem DPAPI não há blob válido-de-outra-máquina a forjar
+FAILED tests/test_auditoria_sec1_segredos_em_repouso.py::TestMigracaoDoConfigLegado::test_recolar_o_segredo_recupera_o_cofre
+1 failed, 13 passed, 1 skipped in 6.45s

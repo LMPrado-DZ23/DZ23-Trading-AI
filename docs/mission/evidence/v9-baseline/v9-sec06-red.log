@@ -1,0 +1,30 @@
+FF..                                                                     [100%]
+================================== FAILURES ===================================
+__________________ test_diagnostics_run_removido_retorna_404 __________________
+
+    def test_diagnostics_run_removido_retorna_404():
+        # V9-SEC-06/F7.2: stub de resposta fixa e sem auth eliminado. Estado real
+        # de saúde já é exposto por /healthz e /readyz. Trava a remoção contra
+        # remontagem acidental da superfície.
+        resp = client.post("/v1/diagnostics/run")
+>       assert resp.status_code == 404
+E       assert 200 == 404
+E        +  where 200 = <Response [200 OK]>.status_code
+
+tests\unit\test_diagnostics.py:13: AssertionError
+_____________ test_security_incident_center_removido_retorna_404 ______________
+
+    def test_security_incident_center_removido_retorna_404():
+        # V9-SEC-06/F7.2: stub de resposta fixa e sem auth eliminado. Estado real
+        # de kill-switch já é exposto por /readyz e /v1/execution/kill-switch
+        # (autenticado). Trava a remoção contra remontagem acidental.
+        resp = client.get("/v1/security/incident-center")
+>       assert resp.status_code == 404
+E       assert 200 == 404
+E        +  where 200 = <Response [200 OK]>.status_code
+
+tests\unit\test_security_center.py:13: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/unit/test_diagnostics.py::test_diagnostics_run_removido_retorna_404
+FAILED tests/unit/test_security_center.py::test_security_incident_center_removido_retorna_404
+2 failed, 2 passed in 0.78s

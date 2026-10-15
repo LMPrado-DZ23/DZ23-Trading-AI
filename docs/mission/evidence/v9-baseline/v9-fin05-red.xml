@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="0.334" timestamp="2026-10-15T01:13:57.054336-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_v9_financial_regressions" name="test_fin05_ack_then_fill_enters_the_management_book" time="0.017"><failure message="KeyError: 'BTC/USDT'">tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-fin05-red-ir7yx_gx/tmp/pytest-of-unknown/pytest-0/test_fin05_ack_then_fill_enter0')
+
+    def test_fin05_ack_then_fill_enters_the_management_book(tmp_path):
+        """Catch an ACK→fill reconciled order that never reaches the Smart Exit.
+    
+        O financeiro fica DONO da posição; o ciclo seguinte precisa levá-la ao
+        livro de gestão — sem isso nenhuma saída jamais a considera."""
+        sched, orch, coord, ledger = _painel_de_gestao(tmp_path)
+        rec = _buy_order(coord, notional="100", price="100", agent="trader-trend")
+        assert rec.state is OrderState.ACKNOWLEDGED
+        assert orch.book == {}
+        _fill(coord, rec, "fin05-late-fill", price="100", quantity="1")
+        assert rec.state is OrderState.FILLED
+        assert ledger.position_quantity(INSTRUMENT) == D("1")
+        assert orch.book == {}   # o defeito: dinheiro na mesa, gestão cega
+    
+        out = sched.run_once()
+    
+&gt;       pos = orch.book[INSTRUMENT]
+              ^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'BTC/USDT'
+
+tests\test_v9_financial_regressions.py:777: KeyError</failure></testcase><testcase classname="tests.test_v9_financial_regressions" name="test_fin05_ack_then_fill_position_receives_stop_evaluation" time="0.006"><failure message="AssertionError: {'descartados': [], 'ordens': [], 'encerradas': [], 'resumo': '10 propostas, nenhuma operação: critérios não atendidos (9 abstenções)', ...}&#10;assert []">tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-fin05-red-ir7yx_gx/tmp/pytest-of-unknown/pytest-0/test_fin05_ack_then_fill_posit0')
+
+    def test_fin05_ack_then_fill_position_receives_stop_evaluation(tmp_path):
+        """Catch a reconciled position that never receives a stop decision.
+    
+        Mercado desaba para 60 com entrada em 100: o Smart Exit precisa emitir
+        STOP_CONDITION e a ordem de saída precisa sair pelo coordenador."""
+        sched, orch, coord, ledger = _painel_de_gestao(
+            tmp_path, fechamento="60", preco="60")
+        rec = _buy_order(coord, notional="100", price="100", agent="trader-trend")
+        _fill(coord, rec, "fin05-crash-fill", price="100", quantity="1")
+        assert rec.state is OrderState.FILLED and orch.book == {}
+        assert ledger.position_quantity(INSTRUMENT) == D("1")
+    
+        out = sched.run_once()
+    
+&gt;       assert out["encerradas"], out
+E       AssertionError: {'descartados': [], 'ordens': [], 'encerradas': [], 'resumo': '10 propostas, nenhuma operação: critérios não atendidos (9 abstenções)', ...}
+E       assert []
+
+tests\test_v9_financial_regressions.py:800: AssertionError</failure></testcase></testsuite></testsuites>

@@ -1,0 +1,51 @@
+== V9 E2E Playwright — execução final (app real, navegador real) — 2026-10-15T09:55Z ==
+comando: uv run --with playwright pytest tests/e2e -v --junitxml=<temp>/v9-e2e-final.xml
+         [raiz do worktree; DZ23_E2E_EVIDENCE_DIR=<worktree>/docs/mission/evidence/v9-baseline/v9-e2e-final]
+método: fixtures de tests/e2e/conftest.py — cada teste sobe uvicorn REAL de service.app:app numa porta livre
+        com DATA_DIR temporário (gate /healthz 200); instalação e dados do proprietário intocados; navegador
+        real (canal Chrome/Edge; fallback chromium do Playwright); a instalação nova do assistente roda em
+        servidor próprio efêmero
+resultado: 31 passed in 53.60s (exit 0) — 0 falhas, 0 puladas; 43 capturas de tela em
+           docs/mission/evidence/v9-baseline/v9-e2e-final/ (14 painel + 13 aceite TD-5 + 4 FM-6)
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit
+configfile: pyproject.toml
+plugins: anyio-4.15.1, langsmith-0.14.0
+collecting ... collected 31 items
+
+tests/e2e/test_aceite_td5.py::test_aceite_td5_01_inicio_assistente_conectar_modo_play PASSED [  3%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_02_painel_global_maestro PASSED [  6%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_03_sala_do_trader_com_grafico PASSED [  9%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_04_analise_do_copiloto PASSED [ 12%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_05_botao_acompanhar_visivel_com_prefill PASSED [ 16%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_06_registro_posicao_e_diario PASSED [ 19%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_07_monitor_alerta_de_stop_objetivo PASSED [ 22%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_08_centro_de_alertas PASSED [ 25%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_09_config_ia_provedores_modelos_consumo PASSED [ 29%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_10_mesa_dez_traders PASSED [ 32%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_11_pwa_instalacao_e_push_ui PASSED [ 35%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_12_responsivo_mobile_sem_corte PASSED [ 38%]
+tests/e2e/test_aceite_td5.py::test_aceite_td5_13_fluxo_iniciante_dez_passos PASSED [ 41%]
+tests/e2e/test_fm6_app_isolado.py::test_fm6_01_modo_avancado_todas_as_paginas PASSED [ 45%]
+tests/e2e/test_fm6_app_isolado.py::test_fm6_02_corretoras_catalogo_capacidades_reconciliacao PASSED [ 48%]
+tests/e2e/test_fm6_app_isolado.py::test_fm6_03_escola_central_no_painel PASSED [ 51%]
+tests/e2e/test_fm6_app_isolado.py::test_fm6_04_dashboard_lc_mercado_e_portfolio PASSED [ 54%]
+tests/e2e/test_panel_e2e.py::test_dono_entra_e_visao_geral_paper PASSED  [ 58%]
+tests/e2e/test_panel_e2e.py::test_dono_entra_mesmo_demorando_no_portao PASSED [ 61%]
+tests/e2e/test_panel_e2e.py::test_menu_completo_formularios_e_sem_erro_5xx PASSED [ 64%]
+tests/e2e/test_panel_e2e.py::test_mesa_camada_quant_mostra_governanca PASSED [ 67%]
+tests/e2e/test_panel_e2e.py::test_floor_embutido_same_origin PASSED      [ 70%]
+tests/e2e/test_panel_e2e.py::test_rotas_saas_bloqueadas_e_login_dono_por_bearer PASSED [ 74%]
+tests/e2e/test_panel_e2e.py::test_login_premium_desktop_identidade_e_estado PASSED [ 77%]
+tests/e2e/test_panel_e2e.py::test_primeira_execucao_assistente_cria_senha_e_codigo PASSED [ 80%]
+tests/e2e/test_panel_e2e.py::test_login_mobile_390x844 PASSED            [ 83%]
+tests/e2e/test_panel_e2e.py::test_login_responsivo_sem_corte_nem_rolagem_horizontal PASSED [ 87%]
+tests/e2e/test_panel_e2e.py::test_pwa_service_worker_ativo_e_estado_honesto PASSED [ 90%]
+tests/e2e/test_panel_e2e.py::test_minhas_operacoes_copiloto_manual_ponta_a_ponta PASSED [ 93%]
+tests/e2e/test_panel_e2e.py::test_modo_simples_assistente_conectar_modo_play PASSED [ 96%]
+tests/e2e/test_panel_e2e.py::test_fm3_corretora_catalogo_capacidades_e_preparo_real PASSED [100%]
+
+---- generated xml file: C:\Users\DZ23\AppData\Local\Temp\v9-e2e-final.xml ----
+============================= 31 passed in 53.60s =============================

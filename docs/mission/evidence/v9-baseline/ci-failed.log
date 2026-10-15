@@ -1,0 +1,672 @@
+tests (py3.10)	Run test suite	﻿2026-10-15T00:34:20.7251651Z ##[group]Run uv run pytest -q
+tests (py3.10)	Run test suite	2026-10-15T00:34:20.7252148Z ^[[36;1muv run pytest -q^[[0m
+tests (py3.10)	Run test suite	2026-10-15T00:34:20.7296013Z shell: /usr/bin/bash -e {0}
+tests (py3.10)	Run test suite	2026-10-15T00:34:20.7296294Z env:
+tests (py3.10)	Run test suite	2026-10-15T00:34:20.7296547Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+tests (py3.10)	Run test suite	2026-10-15T00:34:20.7296915Z   pythonLocation: /opt/hostedtoolcache/Python/3.10.22/x64
+tests (py3.10)	Run test suite	2026-10-15T00:34:20.7297321Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.10.22/x64/lib/pkgconfig
+tests (py3.10)	Run test suite	2026-10-15T00:34:20.7297719Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.10.22/x64
+tests (py3.10)	Run test suite	2026-10-15T00:34:20.7298080Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.10.22/x64
+tests (py3.10)	Run test suite	2026-10-15T00:34:20.7298436Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.10.22/x64
+tests (py3.10)	Run test suite	2026-10-15T00:34:20.7298812Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.10.22/x64/lib
+tests (py3.10)	Run test suite	2026-10-15T00:34:20.7299122Z   OPENAI_BASE_URL: 
+tests (py3.10)	Run test suite	2026-10-15T00:34:20.7299324Z   OPENAI_API_BASE: 
+tests (py3.10)	Run test suite	2026-10-15T00:34:20.7299517Z ##[endgroup]
+tests (py3.10)	Run test suite	2026-10-15T00:34:39.8127184Z ........................................................................ [  2%]
+tests (py3.10)	Run test suite	2026-10-15T00:34:39.9370084Z ........................................................................ [  4%]
+tests (py3.10)	Run test suite	2026-10-15T00:34:42.7583272Z ........................................................................ [  6%]
+tests (py3.10)	Run test suite	2026-10-15T00:34:44.5156382Z .........................................Fs..........s.................. [  9%]
+tests (py3.10)	Run test suite	2026-10-15T00:34:44.8447211Z ........................................................................ [ 11%]
+tests (py3.10)	Run test suite	2026-10-15T00:34:48.0141937Z ........................................................................ [ 13%]
+tests (py3.10)	Run test suite	2026-10-15T00:34:49.2651014Z ........................................................................ [ 16%]
+tests (py3.10)	Run test suite	2026-10-15T00:34:50.2768905Z ........................................................................ [ 18%]
+tests (py3.10)	Run test suite	2026-10-15T00:34:52.5014948Z ........................................................................ [ 20%]
+tests (py3.10)	Run test suite	2026-10-15T00:34:52.9804155Z ........................................................................ [ 23%]
+tests (py3.10)	Run test suite	2026-10-15T00:34:53.3593281Z ..s..................................................................... [ 25%]
+tests (py3.10)	Run test suite	2026-10-15T00:34:53.8963815Z ........................................................................ [ 27%]
+tests (py3.10)	Run test suite	2026-10-15T00:34:54.5731760Z ........................................................................ [ 29%]
+tests (py3.10)	Run test suite	2026-10-15T00:34:55.8618492Z ........................................................................ [ 32%]
+tests (py3.10)	Run test suite	2026-10-15T00:34:57.3002698Z ........................................................................ [ 34%]
+tests (py3.10)	Run test suite	2026-10-15T00:34:57.4253232Z ........................................................................ [ 36%]
+tests (py3.10)	Run test suite	2026-10-15T00:34:57.5278181Z ........................................................................ [ 39%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:00.5731868Z ........................................................................ [ 41%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:00.6726004Z ..................................................................... [ 43%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:02.8077930Z ........................................................................ [ 45%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:03.8810897Z ........................................................................ [ 48%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:08.2514239Z ........................................................................ [ 50%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:08.4209187Z ........................................................................ [ 52%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:09.5626984Z ..........................................................s................. [ 55%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:09.8580983Z ........................................................................ [ 57%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:11.2936467Z ........................................................................ [ 59%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:13.8745874Z ........................................................................ [ 62%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:14.0148318Z ........................................................................ [ 64%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:15.9303135Z ......................................................................s. [ 66%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:16.2198920Z ........................................................................ [ 69%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:16.3478555Z ........................................................................ [ 71%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:16.4441259Z ........................................................................ [ 73%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:21.6570191Z ........................................................................ [ 75%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:21.7820498Z ........................................................................ [ 78%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:22.3231549Z ........................................................................ [ 80%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:30.8242234Z ........................................................................ [ 82%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:36.0003480Z ........................................................................ [ 85%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:40.3087763Z ........................................................................ [ 87%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:42.1248507Z ........................................................................ [ 89%]
+tests (py3.10)	Run test suite	2026-10-15T00:35:45.5035721Z ........................................................................ [ 92%]
+tests (py3.10)	Run test suite	2026-10-15T00:37:07.1114029Z ........................................................................ [ 94%]
+tests (py3.10)	Run test suite	2026-10-15T00:37:08.6334450Z ........................................................................ [ 96%]
+tests (py3.10)	Run test suite	2026-10-15T00:37:11.2141368Z ........................................................................ [ 99%]
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8599459Z ..............ss.............s.                                          [100%]
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8600375Z =================================== FAILURES ===================================
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8601236Z ______ TestMigracaoDoConfigLegado.test_recolar_o_segredo_recupera_o_cofre ______
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8601797Z 
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8602346Z self = <tests.test_auditoria_sec1_segredos_em_repouso.TestMigracaoDoConfigLegado object at 0x7f6ab01bac20>
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8603453Z tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-0/test_recolar_o_segredo_recuper0')
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8604342Z monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f6a9abff520>
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8604845Z 
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8605389Z     def test_recolar_o_segredo_recupera_o_cofre(self, tmp_path, monkeypatch):
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8606077Z         m, c = _app(tmp_path, monkeypatch)
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8606611Z         (tmp_path / "config.json").write_text(json.dumps({
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8607147Z             "ALERTA_TELEGRAM_TOKEN": TOKEN_ILEGIVEL,
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8607627Z         }), encoding="utf-8")
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8608361Z         c.post("/v1/config", headers=H,
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8608892Z                json={"vars": {"ALERTA_TELEGRAM_TOKEN": "999:BBB-fresco"}})
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8609530Z         assert m.load_cfg("legacy")["ALERTA_TELEGRAM_TOKEN"] == "999:BBB-fresco"
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8610094Z         d = c.get("/v1/config", headers=H).json()
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8611028Z >       assert "ALERTA_TELEGRAM_TOKEN" not in d["segredos_em_repouso"]["ilegiveis"]
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8615555Z E       AssertionError: assert 'ALERTA_TELEGRAM_TOKEN' not in {'ALERTA_TELEGRAM_TOKEN': 'segredo cifrado com a DPAPI do Windows não é decifrável nesta plataforma — re-colar o segredo, ou abrir na máquina/usuário que o cifrou (o valor cifrado continua no arquivo)'}
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8618602Z 
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8619180Z tests/test_auditoria_sec1_segredos_em_repouso.py:185: AssertionError
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8620542Z ------------------------------ Captured log call -------------------------------
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8622515Z WARNING  tradingagents.service:app.py:710 segredo ALERTA_TELEGRAM_TOKEN ilegível neste contexto
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8624085Z =============================== warnings summary ===============================
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8626035Z tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-haiku-5-0]
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8629913Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-haiku-5-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8632724Z     self.warn_if_unknown_model()
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8633207Z 
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8634361Z tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-haiku-4-7-preview]
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8638306Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-haiku-4-7-preview' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8641191Z     self.warn_if_unknown_model()
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8641681Z 
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8642776Z tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-sonnet-4-5]
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8646434Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-4-5' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8649347Z     self.warn_if_unknown_model()
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8649854Z 
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8650925Z tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-sonnet-4-0]
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8654384Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-4-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8657310Z     self.warn_if_unknown_model()
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8657795Z 
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8658804Z tests/test_anthropic_effort.py::TestEffortGate::test_current_opus_and_sonnet_receive_effort[claude-opus-4-5]
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8662176Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-opus-4-5' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8664957Z     self.warn_if_unknown_model()
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8665608Z 
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8666576Z tests/test_anthropic_effort.py::TestEffortGate::test_current_opus_and_sonnet_receive_effort[claude-opus-4-6]
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8670147Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-opus-4-6' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8673021Z     self.warn_if_unknown_model()
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8673741Z 
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8674775Z tests/test_anthropic_effort.py::TestEffortGate::test_current_opus_and_sonnet_receive_effort[claude-sonnet-4-6]
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8678530Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-4-6' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8681351Z     self.warn_if_unknown_model()
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8681840Z 
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8682935Z tests/test_anthropic_effort.py::TestEffortGate::test_future_opus_sonnet_inherit_effort_via_pattern[claude-opus-5-0]
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8686600Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-opus-5-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8689357Z     self.warn_if_unknown_model()
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8689858Z 
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8690896Z tests/test_anthropic_effort.py::TestEffortGate::test_future_opus_sonnet_inherit_effort_via_pattern[claude-sonnet-5-0]
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8694436Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-5-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8697633Z     self.warn_if_unknown_model()
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8698121Z 
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8699086Z tests/test_anthropic_effort.py::TestEffortGate::test_claude_5_family_receives_effort[claude-mythos-5]
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8702548Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-mythos-5' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8705306Z     self.warn_if_unknown_model()
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8705804Z 
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8706510Z tests/test_anthropic_effort.py::TestEffortGate::test_mythos_preview_receives_effort
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8709665Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-mythos-preview' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8712587Z     self.warn_if_unknown_model()
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8713056Z 
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8713952Z tests/test_anthropic_effort.py::TestEffortGate::test_unknown_anthropic_model_does_not_receive_effort
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8717553Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-experimental-x' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8720413Z     self.warn_if_unknown_model()
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8720903Z 
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8721771Z tests/test_llm_transport_timeouts.py::TestConstrucaoGoogle::test_modelo_carrega_timeout_finito
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8723715Z tests/test_llm_transport_timeouts.py::TestConstrucaoGoogle::test_timeout_do_usuario_prevalece
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8726988Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/google_client.py:35: RuntimeWarning: Model 'gemini-3-pro' is not in the known model list for provider 'google'. Continuing anyway.
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8729497Z     self.warn_if_unknown_model()
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8729962Z 
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8730541Z tests/test_ollama_base_url.py::test_resolver_does_not_affect_other_providers
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8733240Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/openai_client.py:284: RuntimeWarning: Model 'm' is not in the known model list for provider 'xai'. Continuing anyway.
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8735805Z     self.warn_if_unknown_model()
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8736334Z 
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8736958Z tests/test_ollama_base_url.py::test_resolver_does_not_affect_other_providers
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8739823Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/openai_client.py:284: RuntimeWarning: Model 'm' is not in the known model list for provider 'deepseek'. Continuing anyway.
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8742552Z     self.warn_if_unknown_model()
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8743015Z 
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8743640Z tests/test_openai_reasoning_effort.py::test_non_reasoning_model_drops_effort
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8746084Z tests/test_temperature_config.py::TestTemperatureForwarding::test_temperature_reaches_client_when_set[openai-gpt-4.1]
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8747291Z tests/test_temperature_config.py::TestTemperatureForwarding::test_temperature_omitted_leaves_provider_default
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8748487Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/openai_client.py:284: RuntimeWarning: Model 'gpt-4.1' is not in the known model list for provider 'openai'. Continuing anyway.
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8749406Z     self.warn_if_unknown_model()
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8749598Z 
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8750060Z tests/test_temperature_config.py::TestTemperatureForwarding::test_temperature_reaches_client_when_set[deepseek-deepseek-chat]
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8751335Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/openai_client.py:284: RuntimeWarning: Model 'deepseek-chat' is not in the known model list for provider 'deepseek'. Continuing anyway.
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8752261Z     self.warn_if_unknown_model()
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8752677Z 
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8752926Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+tests (py3.10)	Run test suite	2026-10-15T00:37:14.8753436Z =========================== short test summary info ============================
+tests (py3.10)	Run test suite	2026-10-15T00:37:15.4115809Z SKIPPED [1] tests/e2e/test_aceite_td5.py:34: playwright não instalado; rode: uv run --with playwright pytest tests/e2e -q
+tests (py3.10)	Run test suite	2026-10-15T00:37:15.4116915Z SKIPPED [1] tests/e2e/test_fm6_app_isolado.py:31: playwright não instalado; rode: uv run --with playwright pytest tests/e2e -q
+tests (py3.10)	Run test suite	2026-10-15T00:37:15.4117882Z SKIPPED [1] tests/e2e/test_panel_e2e.py:14: playwright não instalado; rode: uv run --with playwright pytest tests/e2e -v
+tests (py3.10)	Run test suite	2026-10-15T00:37:15.4119162Z SKIPPED [1] tests/test_auditoria_sec1_segredos_em_repouso.py:191: sem DPAPI não há blob válido-de-outra-máquina a forjar
+tests (py3.10)	Run test suite	2026-10-15T00:37:15.4120438Z SKIPPED [1] tests/test_bedrock_provider.py:74: could not import 'langchain_aws': No module named 'langchain_aws'
+tests (py3.10)	Run test suite	2026-10-15T00:37:15.4121761Z SKIPPED [1] tests/test_deepseek_reasoning.py:209: DEEPSEEK_API_KEY not set (or placeholder); skipping live API call
+tests (py3.10)	Run test suite	2026-10-15T00:37:15.4123341Z SKIPPED [1] tests/test_modo_da_mesa.py:161: sem DATABASE_URL — caminho postgres roda no CI
+tests (py3.10)	Run test suite	2026-10-15T00:37:15.4124601Z SKIPPED [1] tests/test_quant_intelligence.py:74: could not import 'lightgbm': No module named 'lightgbm'
+tests (py3.10)	Run test suite	2026-10-15T00:37:15.4125935Z SKIPPED [1] tests/windows/test_desktop_launcher.py:710: objetos nomeados do Windows
+tests (py3.10)	Run test suite	2026-10-15T00:37:15.4126988Z SKIPPED [1] tests/windows/test_desktop_launcher.py:727: objetos nomeados do Windows
+tests (py3.10)	Run test suite	2026-10-15T00:37:15.4128197Z SKIPPED [1] tests/windows/test_notificacoes_identidade_win.py:54: registro é do Windows
+tests (py3.10)	Run test suite	2026-10-15T00:37:15.4131976Z FAILED tests/test_auditoria_sec1_segredos_em_repouso.py::TestMigracaoDoConfigLegado::test_recolar_o_segredo_recupera_o_cofre - AssertionError: assert 'ALERTA_TELEGRAM_TOKEN' not in {'ALERTA_TELEGRAM_TOKEN': 'segredo cifrado com a DPAPI do Windows não é decifrável nesta plataforma — re-colar o segredo, ou abrir na máquina/usuário que o cifrou (o valor cifrado continua no arquivo)'}
+tests (py3.10)	Run test suite	2026-10-15T00:37:15.4134866Z 1 failed, 3119 passed, 11 skipped, 20 warnings, 71 subtests passed in 170.31s (0:02:50)
+tests (py3.10)	Run test suite	2026-10-15T00:37:16.6728464Z ##[error]Process completed with exit code 1.
+tests (py3.12)	Run test suite	﻿2026-10-15T00:34:19.0473257Z ##[group]Run uv run pytest -q
+tests (py3.12)	Run test suite	2026-10-15T00:34:19.0473629Z ^[[36;1muv run pytest -q^[[0m
+tests (py3.12)	Run test suite	2026-10-15T00:34:19.0540257Z shell: /usr/bin/bash -e {0}
+tests (py3.12)	Run test suite	2026-10-15T00:34:19.0540529Z env:
+tests (py3.12)	Run test suite	2026-10-15T00:34:19.0540806Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+tests (py3.12)	Run test suite	2026-10-15T00:34:19.0541203Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.15/x64
+tests (py3.12)	Run test suite	2026-10-15T00:34:19.0541631Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib/pkgconfig
+tests (py3.12)	Run test suite	2026-10-15T00:34:19.0542058Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+tests (py3.12)	Run test suite	2026-10-15T00:34:19.0542441Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+tests (py3.12)	Run test suite	2026-10-15T00:34:19.0542833Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.15/x64
+tests (py3.12)	Run test suite	2026-10-15T00:34:19.0543218Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.15/x64/lib
+tests (py3.12)	Run test suite	2026-10-15T00:34:19.0543544Z   OPENAI_BASE_URL: 
+tests (py3.12)	Run test suite	2026-10-15T00:34:19.0543752Z   OPENAI_API_BASE: 
+tests (py3.12)	Run test suite	2026-10-15T00:34:19.0543970Z ##[endgroup]
+tests (py3.12)	Run test suite	2026-10-15T00:34:40.5604136Z ........................................................................ [  2%]
+tests (py3.12)	Run test suite	2026-10-15T00:34:40.6840263Z ........................................................................ [  4%]
+tests (py3.12)	Run test suite	2026-10-15T00:34:44.2903459Z ........................................................................ [  6%]
+tests (py3.12)	Run test suite	2026-10-15T00:34:46.1169026Z .........................................Fs..........s.................. [  9%]
+tests (py3.12)	Run test suite	2026-10-15T00:34:46.4431836Z ........................................................................ [ 11%]
+tests (py3.12)	Run test suite	2026-10-15T00:34:49.5914916Z ........................................................................ [ 13%]
+tests (py3.12)	Run test suite	2026-10-15T00:34:50.9053630Z ........................................................................ [ 16%]
+tests (py3.12)	Run test suite	2026-10-15T00:34:52.3260903Z ........................................................................ [ 18%]
+tests (py3.12)	Run test suite	2026-10-15T00:34:54.3780902Z ........................................................................ [ 20%]
+tests (py3.12)	Run test suite	2026-10-15T00:34:54.9130940Z ........................................................................ [ 23%]
+tests (py3.12)	Run test suite	2026-10-15T00:34:55.2957487Z ..s..................................................................... [ 25%]
+tests (py3.12)	Run test suite	2026-10-15T00:34:55.5612901Z ........................................................................ [ 27%]
+tests (py3.12)	Run test suite	2026-10-15T00:34:56.6566668Z ........................................................................ [ 29%]
+tests (py3.12)	Run test suite	2026-10-15T00:34:57.9525513Z ........................................................................ [ 32%]
+tests (py3.12)	Run test suite	2026-10-15T00:34:59.5544224Z ........................................................................ [ 34%]
+tests (py3.12)	Run test suite	2026-10-15T00:34:59.6775535Z ........................................................................ [ 36%]
+tests (py3.12)	Run test suite	2026-10-15T00:34:59.7773968Z ........................................................................ [ 39%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:01.8345668Z ........................................................................ [ 41%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:01.9314544Z ..................................................................... [ 43%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:04.4823072Z ........................................................................ [ 45%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:05.2556579Z ........................................................................ [ 48%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:09.4282655Z ........................................................................ [ 50%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:09.6075890Z ........................................................................ [ 52%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:11.2155707Z ..........................................................s................. [ 55%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:11.5173674Z ........................................................................ [ 57%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:12.6234528Z ........................................................................ [ 59%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:14.8809329Z ........................................................................ [ 62%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:15.0050554Z ........................................................................ [ 64%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:17.1557290Z ......................................................................s. [ 66%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:17.8882024Z ........................................................................ [ 69%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:18.0108454Z ........................................................................ [ 71%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:18.1040770Z ........................................................................ [ 73%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:22.8244911Z ........................................................................ [ 75%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:22.9447669Z ........................................................................ [ 78%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:23.5044190Z ........................................................................ [ 80%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:31.7887372Z ........................................................................ [ 82%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:37.7140467Z ........................................................................ [ 85%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:42.5802332Z ........................................................................ [ 87%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:44.5651000Z ........................................................................ [ 89%]
+tests (py3.12)	Run test suite	2026-10-15T00:35:48.3740579Z ........................................................................ [ 92%]
+tests (py3.12)	Run test suite	2026-10-15T00:37:08.1276639Z ........................................................................ [ 94%]
+tests (py3.12)	Run test suite	2026-10-15T00:37:09.3872298Z ........................................................................ [ 96%]
+tests (py3.12)	Run test suite	2026-10-15T00:37:11.8906732Z ........................................................................ [ 99%]
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5362960Z ..............ss.............s.                                          [100%]
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5363731Z =================================== FAILURES ===================================
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5364524Z ______ TestMigracaoDoConfigLegado.test_recolar_o_segredo_recupera_o_cofre ______
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5365088Z 
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5365657Z self = <tests.test_auditoria_sec1_segredos_em_repouso.TestMigracaoDoConfigLegado object at 0x7fdd6544b1a0>
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5367141Z tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-0/test_recolar_o_segredo_recuper0')
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5368046Z monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fdd5c2ed0a0>
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5368557Z 
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5368906Z     def test_recolar_o_segredo_recupera_o_cofre(self, tmp_path, monkeypatch):
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5369567Z         m, c = _app(tmp_path, monkeypatch)
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5370071Z         (tmp_path / "config.json").write_text(json.dumps({
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5370622Z             "ALERTA_TELEGRAM_TOKEN": TOKEN_ILEGIVEL,
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5371097Z         }), encoding="utf-8")
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5371679Z         c.post("/v1/config", headers=H,
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5372270Z                json={"vars": {"ALERTA_TELEGRAM_TOKEN": "999:BBB-fresco"}})
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5373077Z         assert m.load_cfg("legacy")["ALERTA_TELEGRAM_TOKEN"] == "999:BBB-fresco"
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5374132Z         d = c.get("/v1/config", headers=H).json()
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5374805Z >       assert "ALERTA_TELEGRAM_TOKEN" not in d["segredos_em_repouso"]["ilegiveis"]
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5377603Z E       AssertionError: assert 'ALERTA_TELEGRAM_TOKEN' not in {'ALERTA_TELEGRAM_TOKEN': 'segredo cifrado com a DPAPI do Windows não é decifrável nesta plataforma — re-colar o segredo, ou abrir na máquina/usuário que o cifrou (o valor cifrado continua no arquivo)'}
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5379299Z 
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5379599Z tests/test_auditoria_sec1_segredos_em_repouso.py:185: AssertionError
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5380317Z ------------------------------ Captured log call -------------------------------
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5381480Z WARNING  tradingagents.service:app.py:710 segredo ALERTA_TELEGRAM_TOKEN ilegível neste contexto
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5382301Z =============================== warnings summary ===============================
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5383232Z tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-haiku-5-0]
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5385392Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-haiku-5-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5387050Z     self.warn_if_unknown_model()
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5387315Z 
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5387944Z tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-haiku-4-7-preview]
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5389892Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-haiku-4-7-preview' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5391426Z     self.warn_if_unknown_model()
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5391687Z 
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5392245Z tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-sonnet-4-5]
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5394103Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-4-5' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5395522Z     self.warn_if_unknown_model()
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5395771Z 
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5396493Z tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-sonnet-4-0]
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5398331Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-4-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5399729Z     self.warn_if_unknown_model()
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5399974Z 
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5400497Z tests/test_anthropic_effort.py::TestEffortGate::test_current_opus_and_sonnet_receive_effort[claude-opus-4-5]
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5402250Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-opus-4-5' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5403665Z     self.warn_if_unknown_model()
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5403918Z 
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5404435Z tests/test_anthropic_effort.py::TestEffortGate::test_current_opus_and_sonnet_receive_effort[claude-opus-4-6]
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5406366Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-opus-4-6' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5407792Z     self.warn_if_unknown_model()
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5408037Z 
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5408554Z tests/test_anthropic_effort.py::TestEffortGate::test_current_opus_and_sonnet_receive_effort[claude-sonnet-4-6]
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5410361Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-4-6' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5411994Z     self.warn_if_unknown_model()
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5412247Z 
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5412803Z tests/test_anthropic_effort.py::TestEffortGate::test_future_opus_sonnet_inherit_effort_via_pattern[claude-opus-5-0]
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5414584Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-opus-5-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5415995Z     self.warn_if_unknown_model()
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5416427Z 
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5416991Z tests/test_anthropic_effort.py::TestEffortGate::test_future_opus_sonnet_inherit_effort_via_pattern[claude-sonnet-5-0]
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5418801Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-5-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5420394Z     self.warn_if_unknown_model()
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5420637Z 
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5421099Z tests/test_anthropic_effort.py::TestEffortGate::test_claude_5_family_receives_effort[claude-mythos-5]
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5422810Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-mythos-5' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5424199Z     self.warn_if_unknown_model()
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5424441Z 
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5424820Z tests/test_anthropic_effort.py::TestEffortGate::test_mythos_preview_receives_effort
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5426671Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-mythos-preview' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5428130Z     self.warn_if_unknown_model()
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5428381Z 
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5428849Z tests/test_anthropic_effort.py::TestEffortGate::test_unknown_anthropic_model_does_not_receive_effort
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5430670Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-experimental-x' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5432164Z     self.warn_if_unknown_model()
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5432424Z 
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5432869Z tests/test_llm_transport_timeouts.py::TestConstrucaoGoogle::test_modelo_carrega_timeout_finito
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5433934Z tests/test_llm_transport_timeouts.py::TestConstrucaoGoogle::test_timeout_do_usuario_prevalece
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5435638Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/google_client.py:35: RuntimeWarning: Model 'gemini-3-pro' is not in the known model list for provider 'google'. Continuing anyway.
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5437204Z     self.warn_if_unknown_model()
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5437469Z 
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5437812Z tests/test_ollama_base_url.py::test_resolver_does_not_affect_other_providers
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5439317Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/openai_client.py:284: RuntimeWarning: Model 'm' is not in the known model list for provider 'xai'. Continuing anyway.
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5440604Z     self.warn_if_unknown_model()
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5440858Z 
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5441194Z tests/test_ollama_base_url.py::test_resolver_does_not_affect_other_providers
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5442700Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/openai_client.py:284: RuntimeWarning: Model 'm' is not in the known model list for provider 'deepseek'. Continuing anyway.
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5444023Z     self.warn_if_unknown_model()
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5444275Z 
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5444607Z tests/test_openai_reasoning_effort.py::test_non_reasoning_model_drops_effort
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5445892Z tests/test_temperature_config.py::TestTemperatureForwarding::test_temperature_reaches_client_when_set[openai-gpt-4.1]
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5447357Z tests/test_temperature_config.py::TestTemperatureForwarding::test_temperature_omitted_leaves_provider_default
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5449093Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/openai_client.py:284: RuntimeWarning: Model 'gpt-4.1' is not in the known model list for provider 'openai'. Continuing anyway.
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5450420Z     self.warn_if_unknown_model()
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5450671Z 
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5451310Z tests/test_temperature_config.py::TestTemperatureForwarding::test_temperature_reaches_client_when_set[deepseek-deepseek-chat]
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5453215Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/openai_client.py:284: RuntimeWarning: Model 'deepseek-chat' is not in the known model list for provider 'deepseek'. Continuing anyway.
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5454599Z     self.warn_if_unknown_model()
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5455041Z 
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5455363Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+tests (py3.12)	Run test suite	2026-10-15T00:37:15.5456039Z =========================== short test summary info ============================
+tests (py3.12)	Run test suite	2026-10-15T00:37:16.2064821Z SKIPPED [1] tests/e2e/test_aceite_td5.py:34: playwright não instalado; rode: uv run --with playwright pytest tests/e2e -q
+tests (py3.12)	Run test suite	2026-10-15T00:37:16.2066622Z SKIPPED [1] tests/e2e/test_fm6_app_isolado.py:31: playwright não instalado; rode: uv run --with playwright pytest tests/e2e -q
+tests (py3.12)	Run test suite	2026-10-15T00:37:16.2068045Z SKIPPED [1] tests/e2e/test_panel_e2e.py:14: playwright não instalado; rode: uv run --with playwright pytest tests/e2e -v
+tests (py3.12)	Run test suite	2026-10-15T00:37:16.2069332Z SKIPPED [1] tests/test_auditoria_sec1_segredos_em_repouso.py:191: sem DPAPI não há blob válido-de-outra-máquina a forjar
+tests (py3.12)	Run test suite	2026-10-15T00:37:16.2071061Z SKIPPED [1] tests/test_bedrock_provider.py:74: could not import 'langchain_aws': No module named 'langchain_aws'
+tests (py3.12)	Run test suite	2026-10-15T00:37:16.2072526Z SKIPPED [1] tests/test_deepseek_reasoning.py:209: DEEPSEEK_API_KEY not set (or placeholder); skipping live API call
+tests (py3.12)	Run test suite	2026-10-15T00:37:16.2074098Z SKIPPED [1] tests/test_modo_da_mesa.py:161: sem DATABASE_URL — caminho postgres roda no CI
+tests (py3.12)	Run test suite	2026-10-15T00:37:16.2075438Z SKIPPED [1] tests/test_quant_intelligence.py:74: could not import 'lightgbm': No module named 'lightgbm'
+tests (py3.12)	Run test suite	2026-10-15T00:37:16.2076914Z SKIPPED [1] tests/windows/test_desktop_launcher.py:710: objetos nomeados do Windows
+tests (py3.12)	Run test suite	2026-10-15T00:37:16.2078007Z SKIPPED [1] tests/windows/test_desktop_launcher.py:727: objetos nomeados do Windows
+tests (py3.12)	Run test suite	2026-10-15T00:37:16.2079295Z SKIPPED [1] tests/windows/test_notificacoes_identidade_win.py:54: registro é do Windows
+tests (py3.12)	Run test suite	2026-10-15T00:37:16.2082988Z FAILED tests/test_auditoria_sec1_segredos_em_repouso.py::TestMigracaoDoConfigLegado::test_recolar_o_segredo_recupera_o_cofre - AssertionError: assert 'ALERTA_TELEGRAM_TOKEN' not in {'ALERTA_TELEGRAM_TOKEN': 'segredo cifrado com a DPAPI do Windows não é decifrável nesta plataforma — re-colar o segredo, ou abrir na máquina/usuário que o cifrou (o valor cifrado continua no arquivo)'}
+tests (py3.12)	Run test suite	2026-10-15T00:37:16.2086515Z 1 failed, 3119 passed, 11 skipped, 20 warnings, 71 subtests passed in 172.73s (0:02:52)
+tests (py3.12)	Run test suite	2026-10-15T00:37:17.7281638Z ##[error]Process completed with exit code 1.
+tests (py3.13)	Run test suite	﻿2026-10-15T00:34:18.8648259Z ##[group]Run uv run pytest -q
+tests (py3.13)	Run test suite	2026-10-15T00:34:18.8648593Z ^[[36;1muv run pytest -q^[[0m
+tests (py3.13)	Run test suite	2026-10-15T00:34:18.8702769Z shell: /usr/bin/bash -e {0}
+tests (py3.13)	Run test suite	2026-10-15T00:34:18.8702913Z env:
+tests (py3.13)	Run test suite	2026-10-15T00:34:18.8703052Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+tests (py3.13)	Run test suite	2026-10-15T00:34:18.8703270Z   pythonLocation: /opt/hostedtoolcache/Python/3.13.16/x64
+tests (py3.13)	Run test suite	2026-10-15T00:34:18.8703500Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib/pkgconfig
+tests (py3.13)	Run test suite	2026-10-15T00:34:18.8703734Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+tests (py3.13)	Run test suite	2026-10-15T00:34:18.8703945Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+tests (py3.13)	Run test suite	2026-10-15T00:34:18.8704154Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.13.16/x64
+tests (py3.13)	Run test suite	2026-10-15T00:34:18.8704363Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.13.16/x64/lib
+tests (py3.13)	Run test suite	2026-10-15T00:34:18.8704539Z   OPENAI_BASE_URL: 
+tests (py3.13)	Run test suite	2026-10-15T00:34:18.8704651Z   OPENAI_API_BASE: 
+tests (py3.13)	Run test suite	2026-10-15T00:34:18.8704778Z ##[endgroup]
+tests (py3.13)	Run test suite	2026-10-15T00:34:30.8019731Z ........................................................................ [  2%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:30.8694154Z ........................................................................ [  4%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:33.4927883Z ........................................................................ [  6%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:34.9864119Z .........................................Fs..........s.................. [  9%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:35.1828764Z ........................................................................ [ 11%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:38.2404738Z ........................................................................ [ 13%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:38.7871182Z ........................................................................ [ 16%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:39.3707050Z ........................................................................ [ 18%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:41.9806450Z ........................................................................ [ 20%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:42.9279063Z ........................................................................ [ 23%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:43.1874651Z ..s..................................................................... [ 25%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:43.3198193Z ........................................................................ [ 27%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:44.2338231Z ........................................................................ [ 29%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:45.4014741Z ........................................................................ [ 32%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:46.3171797Z ........................................................................ [ 34%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:46.3784956Z ........................................................................ [ 36%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:46.4277433Z ........................................................................ [ 39%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:47.3663047Z ........................................................................ [ 41%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:47.4160304Z ..................................................................... [ 43%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:49.0311369Z ........................................................................ [ 45%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:49.4998408Z ........................................................................ [ 48%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:52.1693081Z ........................................................................ [ 50%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:52.6727016Z ........................................................................ [ 52%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:53.4624427Z ..........................................................s................. [ 55%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:53.6668384Z ........................................................................ [ 57%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:54.3168197Z ........................................................................ [ 59%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:56.4863526Z ........................................................................ [ 62%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:56.5387643Z ........................................................................ [ 64%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:57.9455648Z ......................................................................s. [ 66%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:58.1101400Z ........................................................................ [ 69%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:58.1758249Z ........................................................................ [ 71%]
+tests (py3.13)	Run test suite	2026-10-15T00:34:58.2229295Z ........................................................................ [ 73%]
+tests (py3.13)	Run test suite	2026-10-15T00:35:00.7693821Z ........................................................................ [ 75%]
+tests (py3.13)	Run test suite	2026-10-15T00:35:00.8281422Z ........................................................................ [ 78%]
+tests (py3.13)	Run test suite	2026-10-15T00:35:01.1512277Z ........................................................................ [ 80%]
+tests (py3.13)	Run test suite	2026-10-15T00:35:06.1970595Z ........................................................................ [ 82%]
+tests (py3.13)	Run test suite	2026-10-15T00:35:10.2221123Z ........................................................................ [ 85%]
+tests (py3.13)	Run test suite	2026-10-15T00:35:13.1177646Z ........................................................................ [ 87%]
+tests (py3.13)	Run test suite	2026-10-15T00:35:14.7451594Z ........................................................................ [ 89%]
+tests (py3.13)	Run test suite	2026-10-15T00:35:16.7669784Z ........................................................................ [ 92%]
+tests (py3.13)	Run test suite	2026-10-15T00:36:38.5613951Z ........................................................................ [ 94%]
+tests (py3.13)	Run test suite	2026-10-15T00:36:39.3407499Z ........................................................................ [ 96%]
+tests (py3.13)	Run test suite	2026-10-15T00:36:41.7086319Z ........................................................................ [ 99%]
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2908774Z ..............ss.............s.                                          [100%]
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2910395Z =================================== FAILURES ===================================
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2911073Z ______ TestMigracaoDoConfigLegado.test_recolar_o_segredo_recupera_o_cofre ______
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2911413Z 
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2911704Z self = <tests.test_auditoria_sec1_segredos_em_repouso.TestMigracaoDoConfigLegado object at 0x7fabead1b6f0>
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2912369Z tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-0/test_recolar_o_segredo_recuper0')
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2912859Z monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fabe68afa10>
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2913121Z 
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2913299Z     def test_recolar_o_segredo_recupera_o_cofre(self, tmp_path, monkeypatch):
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2913646Z         m, c = _app(tmp_path, monkeypatch)
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2913930Z         (tmp_path / "config.json").write_text(json.dumps({
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2914224Z             "ALERTA_TELEGRAM_TOKEN": TOKEN_ILEGIVEL,
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2914476Z         }), encoding="utf-8")
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2914709Z         c.post("/v1/config", headers=H,
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2914990Z                json={"vars": {"ALERTA_TELEGRAM_TOKEN": "999:BBB-fresco"}})
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2915373Z         assert m.load_cfg("legacy")["ALERTA_TELEGRAM_TOKEN"] == "999:BBB-fresco"
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2915978Z         d = c.get("/v1/config", headers=H).json()
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2916333Z >       assert "ALERTA_TELEGRAM_TOKEN" not in d["segredos_em_repouso"]["ilegiveis"]
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2917783Z E       AssertionError: assert 'ALERTA_TELEGRAM_TOKEN' not in {'ALERTA_TELEGRAM_TOKEN': 'segredo cifrado com a DPAPI do Windows não é decifrável nesta plataforma — re-colar o segredo, ou abrir na máquina/usuário que o cifrou (o valor cifrado continua no arquivo)'}
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2918878Z 
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2919042Z tests/test_auditoria_sec1_segredos_em_repouso.py:185: AssertionError
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2919455Z ------------------------------ Captured log call -------------------------------
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2920053Z WARNING  tradingagents.service:app.py:710 segredo ALERTA_TELEGRAM_TOKEN ilegível neste contexto
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2920503Z =============================== warnings summary ===============================
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2921089Z tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-haiku-5-0]
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2922294Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-haiku-5-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2923048Z     self.warn_if_unknown_model()
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2923186Z 
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2923502Z tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-haiku-4-7-preview]
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2924538Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-haiku-4-7-preview' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2925367Z     self.warn_if_unknown_model()
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2925504Z 
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2925787Z tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-sonnet-4-5]
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2926767Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-4-5' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2927534Z     self.warn_if_unknown_model()
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2927666Z 
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2927954Z tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-sonnet-4-0]
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2929019Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-4-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2929756Z     self.warn_if_unknown_model()
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2929903Z 
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2930188Z tests/test_anthropic_effort.py::TestEffortGate::test_current_opus_and_sonnet_receive_effort[claude-opus-4-5]
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2931110Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-opus-4-5' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2931845Z     self.warn_if_unknown_model()
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2931978Z 
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2932248Z tests/test_anthropic_effort.py::TestEffortGate::test_current_opus_and_sonnet_receive_effort[claude-opus-4-6]
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2933169Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-opus-4-6' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2933894Z     self.warn_if_unknown_model()
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2934032Z 
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2934311Z tests/test_anthropic_effort.py::TestEffortGate::test_current_opus_and_sonnet_receive_effort[claude-sonnet-4-6]
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2935255Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-4-6' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2936134Z     self.warn_if_unknown_model()
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2936267Z 
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2936558Z tests/test_anthropic_effort.py::TestEffortGate::test_future_opus_sonnet_inherit_effort_via_pattern[claude-opus-5-0]
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2937506Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-opus-5-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2938230Z     self.warn_if_unknown_model()
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2938363Z 
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2938769Z tests/test_anthropic_effort.py::TestEffortGate::test_future_opus_sonnet_inherit_effort_via_pattern[claude-sonnet-5-0]
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2939722Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-5-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2940572Z     self.warn_if_unknown_model()
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2940703Z 
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2940951Z tests/test_anthropic_effort.py::TestEffortGate::test_claude_5_family_receives_effort[claude-mythos-5]
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2941848Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-mythos-5' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2942584Z     self.warn_if_unknown_model()
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2942720Z 
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2942922Z tests/test_anthropic_effort.py::TestEffortGate::test_mythos_preview_receives_effort
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2943789Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-mythos-preview' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2944546Z     self.warn_if_unknown_model()
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2944679Z 
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2944926Z tests/test_anthropic_effort.py::TestEffortGate::test_unknown_anthropic_model_does_not_receive_effort
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2945841Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-experimental-x' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2946583Z     self.warn_if_unknown_model()
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2946721Z 
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2946953Z tests/test_llm_transport_timeouts.py::TestConstrucaoGoogle::test_modelo_carrega_timeout_finito
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2947495Z tests/test_llm_transport_timeouts.py::TestConstrucaoGoogle::test_timeout_do_usuario_prevalece
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2948349Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/google_client.py:35: RuntimeWarning: Model 'gemini-3-pro' is not in the known model list for provider 'google'. Continuing anyway.
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2949182Z     self.warn_if_unknown_model()
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2949318Z 
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2949488Z tests/test_ollama_base_url.py::test_resolver_does_not_affect_other_providers
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2950237Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/openai_client.py:284: RuntimeWarning: Model 'm' is not in the known model list for provider 'xai'. Continuing anyway.
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2950881Z     self.warn_if_unknown_model()
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2951010Z 
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2951183Z tests/test_ollama_base_url.py::test_resolver_does_not_affect_other_providers
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2951942Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/openai_client.py:284: RuntimeWarning: Model 'm' is not in the known model list for provider 'deepseek'. Continuing anyway.
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2952608Z     self.warn_if_unknown_model()
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2952743Z 
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2952914Z tests/test_openai_reasoning_effort.py::test_non_reasoning_model_drops_effort
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2953613Z tests/test_temperature_config.py::TestTemperatureForwarding::test_temperature_reaches_client_when_set[openai-gpt-4.1]
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2954277Z tests/test_temperature_config.py::TestTemperatureForwarding::test_temperature_omitted_leaves_provider_default
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2955165Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/openai_client.py:284: RuntimeWarning: Model 'gpt-4.1' is not in the known model list for provider 'openai'. Continuing anyway.
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2955852Z     self.warn_if_unknown_model()
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2955986Z 
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2956324Z tests/test_temperature_config.py::TestTemperatureForwarding::test_temperature_reaches_client_when_set[deepseek-deepseek-chat]
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2957308Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/openai_client.py:284: RuntimeWarning: Model 'deepseek-chat' is not in the known model list for provider 'deepseek'. Continuing anyway.
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2958020Z     self.warn_if_unknown_model()
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2958256Z 
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2958586Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+tests (py3.13)	Run test suite	2026-10-15T00:36:45.2958960Z =========================== short test summary info ============================
+tests (py3.13)	Run test suite	2026-10-15T00:36:46.0847633Z SKIPPED [1] tests/e2e/test_aceite_td5.py:34: playwright não instalado; rode: uv run --with playwright pytest tests/e2e -q
+tests (py3.13)	Run test suite	2026-10-15T00:36:46.0848341Z SKIPPED [1] tests/e2e/test_fm6_app_isolado.py:31: playwright não instalado; rode: uv run --with playwright pytest tests/e2e -q
+tests (py3.13)	Run test suite	2026-10-15T00:36:46.0849149Z SKIPPED [1] tests/e2e/test_panel_e2e.py:14: playwright não instalado; rode: uv run --with playwright pytest tests/e2e -v
+tests (py3.13)	Run test suite	2026-10-15T00:36:46.0849867Z SKIPPED [1] tests/test_auditoria_sec1_segredos_em_repouso.py:191: sem DPAPI não há blob válido-de-outra-máquina a forjar
+tests (py3.13)	Run test suite	2026-10-15T00:36:46.0850615Z SKIPPED [1] tests/test_bedrock_provider.py:74: could not import 'langchain_aws': No module named 'langchain_aws'
+tests (py3.13)	Run test suite	2026-10-15T00:36:46.0851303Z SKIPPED [1] tests/test_deepseek_reasoning.py:209: DEEPSEEK_API_KEY not set (or placeholder); skipping live API call
+tests (py3.13)	Run test suite	2026-10-15T00:36:46.0851953Z SKIPPED [1] tests/test_modo_da_mesa.py:161: sem DATABASE_URL — caminho postgres roda no CI
+tests (py3.13)	Run test suite	2026-10-15T00:36:46.0852482Z SKIPPED [1] tests/test_quant_intelligence.py:74: could not import 'lightgbm': No module named 'lightgbm'
+tests (py3.13)	Run test suite	2026-10-15T00:36:46.0853018Z SKIPPED [1] tests/windows/test_desktop_launcher.py:710: objetos nomeados do Windows
+tests (py3.13)	Run test suite	2026-10-15T00:36:46.0853475Z SKIPPED [1] tests/windows/test_desktop_launcher.py:727: objetos nomeados do Windows
+tests (py3.13)	Run test suite	2026-10-15T00:36:46.0854004Z SKIPPED [1] tests/windows/test_notificacoes_identidade_win.py:54: registro é do Windows
+tests (py3.13)	Run test suite	2026-10-15T00:36:46.0855646Z FAILED tests/test_auditoria_sec1_segredos_em_repouso.py::TestMigracaoDoConfigLegado::test_recolar_o_segredo_recupera_o_cofre - AssertionError: assert 'ALERTA_TELEGRAM_TOKEN' not in {'ALERTA_TELEGRAM_TOKEN': 'segredo cifrado com a DPAPI do Windows não é decifrável nesta plataforma — re-colar o segredo, ou abrir na máquina/usuário que o cifrou (o valor cifrado continua no arquivo)'}
+tests (py3.13)	Run test suite	2026-10-15T00:36:46.0857006Z 1 failed, 3119 passed, 11 skipped, 20 warnings, 71 subtests passed in 144.39s (0:02:24)
+tests (py3.13)	Run test suite	2026-10-15T00:36:47.9555215Z ##[error]Process completed with exit code 1.
+tests (py3.11)	Run test suite	﻿2026-10-15T00:34:19.3646290Z ##[group]Run uv run pytest -q
+tests (py3.11)	Run test suite	2026-10-15T00:34:19.3646638Z ^[[36;1muv run pytest -q^[[0m
+tests (py3.11)	Run test suite	2026-10-15T00:34:19.3719951Z shell: /usr/bin/bash -e {0}
+tests (py3.11)	Run test suite	2026-10-15T00:34:19.3720229Z env:
+tests (py3.11)	Run test suite	2026-10-15T00:34:19.3720517Z   UV_CACHE_DIR: /home/runner/work/_temp/setup-uv-cache
+tests (py3.11)	Run test suite	2026-10-15T00:34:19.3720925Z   pythonLocation: /opt/hostedtoolcache/Python/3.11.17/x64
+tests (py3.11)	Run test suite	2026-10-15T00:34:19.3721362Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.11.17/x64/lib/pkgconfig
+tests (py3.11)	Run test suite	2026-10-15T00:34:19.3721788Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.17/x64
+tests (py3.11)	Run test suite	2026-10-15T00:34:19.3722172Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.17/x64
+tests (py3.11)	Run test suite	2026-10-15T00:34:19.3722565Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.11.17/x64
+tests (py3.11)	Run test suite	2026-10-15T00:34:19.3722945Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.11.17/x64/lib
+tests (py3.11)	Run test suite	2026-10-15T00:34:19.3723274Z   OPENAI_BASE_URL: 
+tests (py3.11)	Run test suite	2026-10-15T00:34:19.3723494Z   OPENAI_API_BASE: 
+tests (py3.11)	Run test suite	2026-10-15T00:34:19.3723729Z ##[endgroup]
+tests (py3.11)	Run test suite	2026-10-15T00:34:39.1033794Z ........................................................................ [  2%]
+tests (py3.11)	Run test suite	2026-10-15T00:34:39.2088232Z ........................................................................ [  4%]
+tests (py3.11)	Run test suite	2026-10-15T00:34:42.3966950Z ........................................................................ [  6%]
+tests (py3.11)	Run test suite	2026-10-15T00:34:44.4245084Z .........................................Fs..........s.................. [  9%]
+tests (py3.11)	Run test suite	2026-10-15T00:34:44.6996877Z ........................................................................ [ 11%]
+tests (py3.11)	Run test suite	2026-10-15T00:34:47.8507552Z ........................................................................ [ 13%]
+tests (py3.11)	Run test suite	2026-10-15T00:34:49.0300921Z ........................................................................ [ 16%]
+tests (py3.11)	Run test suite	2026-10-15T00:34:50.2662087Z ........................................................................ [ 18%]
+tests (py3.11)	Run test suite	2026-10-15T00:34:52.4408524Z ........................................................................ [ 20%]
+tests (py3.11)	Run test suite	2026-10-15T00:34:52.8862487Z ........................................................................ [ 23%]
+tests (py3.11)	Run test suite	2026-10-15T00:34:53.2357025Z ..s..................................................................... [ 25%]
+tests (py3.11)	Run test suite	2026-10-15T00:34:53.4481629Z ........................................................................ [ 27%]
+tests (py3.11)	Run test suite	2026-10-15T00:34:54.0292111Z ........................................................................ [ 29%]
+tests (py3.11)	Run test suite	2026-10-15T00:34:55.2805201Z ........................................................................ [ 32%]
+tests (py3.11)	Run test suite	2026-10-15T00:34:56.4904820Z ........................................................................ [ 34%]
+tests (py3.11)	Run test suite	2026-10-15T00:34:56.5982781Z ........................................................................ [ 36%]
+tests (py3.11)	Run test suite	2026-10-15T00:34:56.6833615Z ........................................................................ [ 39%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:01.5006741Z ........................................................................ [ 41%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:01.5832673Z ..................................................................... [ 43%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:03.5282272Z ........................................................................ [ 45%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:04.1574044Z ........................................................................ [ 48%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:08.2070201Z ........................................................................ [ 50%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:08.3641516Z ........................................................................ [ 52%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:09.8501189Z ..........................................................s................. [ 55%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:10.1100114Z ........................................................................ [ 57%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:11.0695467Z ........................................................................ [ 59%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:13.7543944Z ........................................................................ [ 62%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:13.8741642Z ........................................................................ [ 64%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:15.6740575Z ......................................................................s. [ 66%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:15.9149246Z ........................................................................ [ 69%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:16.0251409Z ........................................................................ [ 71%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:16.1030525Z ........................................................................ [ 73%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:20.4951670Z ........................................................................ [ 75%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:20.5946727Z ........................................................................ [ 78%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:21.0933729Z ........................................................................ [ 80%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:29.0548051Z ........................................................................ [ 82%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:34.3004079Z ........................................................................ [ 85%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:38.4747757Z ........................................................................ [ 87%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:40.1434774Z ........................................................................ [ 89%]
+tests (py3.11)	Run test suite	2026-10-15T00:35:43.4452200Z ........................................................................ [ 92%]
+tests (py3.11)	Run test suite	2026-10-15T00:37:04.4027501Z ........................................................................ [ 94%]
+tests (py3.11)	Run test suite	2026-10-15T00:37:05.9930803Z ........................................................................ [ 96%]
+tests (py3.11)	Run test suite	2026-10-15T00:37:08.4941872Z ........................................................................ [ 99%]
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1262286Z ..............ss.............s.                                          [100%]
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1264276Z =================================== FAILURES ===================================
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1265301Z ______ TestMigracaoDoConfigLegado.test_recolar_o_segredo_recupera_o_cofre ______
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1265847Z 
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1266432Z self = <tests.test_auditoria_sec1_segredos_em_repouso.TestMigracaoDoConfigLegado object at 0x7f5b7e9c7a10>
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1267555Z tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-0/test_recolar_o_segredo_recuper0')
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1268309Z monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5b69537690>
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1268613Z 
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1268832Z     def test_recolar_o_segredo_recupera_o_cofre(self, tmp_path, monkeypatch):
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1269239Z         m, c = _app(tmp_path, monkeypatch)
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1269566Z         (tmp_path / "config.json").write_text(json.dumps({
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1269908Z             "ALERTA_TELEGRAM_TOKEN": TOKEN_ILEGIVEL,
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1270220Z         }), encoding="utf-8")
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1270511Z         c.post("/v1/config", headers=H,
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1270849Z                json={"vars": {"ALERTA_TELEGRAM_TOKEN": "999:BBB-fresco"}})
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1271302Z         assert m.load_cfg("legacy")["ALERTA_TELEGRAM_TOKEN"] == "999:BBB-fresco"
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1271990Z         d = c.get("/v1/config", headers=H).json()
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1272415Z >       assert "ALERTA_TELEGRAM_TOKEN" not in d["segredos_em_repouso"]["ilegiveis"]
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1273989Z E       AssertionError: assert 'ALERTA_TELEGRAM_TOKEN' not in {'ALERTA_TELEGRAM_TOKEN': 'segredo cifrado com a DPAPI do Windows não é decifrável nesta plataforma — re-colar o segredo, ou abrir na máquina/usuário que o cifrou (o valor cifrado continua no arquivo)'}
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1275238Z 
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1275446Z tests/test_auditoria_sec1_segredos_em_repouso.py:185: AssertionError
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1275916Z ------------------------------ Captured log call -------------------------------
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1276578Z WARNING  tradingagents.service:app.py:710 segredo ALERTA_TELEGRAM_TOKEN ilegível neste contexto
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1277082Z =============================== warnings summary ===============================
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1277686Z tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-haiku-5-0]
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1279030Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-haiku-5-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1279872Z     self.warn_if_unknown_model()
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1280042Z 
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1280410Z tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-haiku-4-7-preview]
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1281547Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-haiku-4-7-preview' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1282412Z     self.warn_if_unknown_model()
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1282576Z 
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1282909Z tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-sonnet-4-5]
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1283978Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-4-5' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1285017Z     self.warn_if_unknown_model()
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1285188Z 
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1285526Z tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-sonnet-4-0]
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1286608Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-4-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1287431Z     self.warn_if_unknown_model()
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1287583Z 
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1287903Z tests/test_anthropic_effort.py::TestEffortGate::test_current_opus_and_sonnet_receive_effort[claude-opus-4-5]
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1288965Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-opus-4-5' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1289795Z     self.warn_if_unknown_model()
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1289953Z 
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1290257Z tests/test_anthropic_effort.py::TestEffortGate::test_current_opus_and_sonnet_receive_effort[claude-opus-4-6]
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1291272Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-opus-4-6' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1292070Z     self.warn_if_unknown_model()
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1292219Z 
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1292536Z tests/test_anthropic_effort.py::TestEffortGate::test_current_opus_and_sonnet_receive_effort[claude-sonnet-4-6]
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1293565Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-4-6' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1294703Z     self.warn_if_unknown_model()
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1294862Z 
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1295200Z tests/test_anthropic_effort.py::TestEffortGate::test_future_opus_sonnet_inherit_effort_via_pattern[claude-opus-5-0]
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1296245Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-opus-5-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1297047Z     self.warn_if_unknown_model()
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1297197Z 
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1297542Z tests/test_anthropic_effort.py::TestEffortGate::test_future_opus_sonnet_inherit_effort_via_pattern[claude-sonnet-5-0]
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1298590Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-5-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1299573Z     self.warn_if_unknown_model()
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1299730Z 
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1300024Z tests/test_anthropic_effort.py::TestEffortGate::test_claude_5_family_receives_effort[claude-mythos-5]
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1301025Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-mythos-5' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1301870Z     self.warn_if_unknown_model()
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1302031Z 
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1302275Z tests/test_anthropic_effort.py::TestEffortGate::test_mythos_preview_receives_effort
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1303277Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-mythos-preview' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1304128Z     self.warn_if_unknown_model()
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1304285Z 
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1304776Z tests/test_anthropic_effort.py::TestEffortGate::test_unknown_anthropic_model_does_not_receive_effort
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1305812Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-experimental-x' is not in the known model list for provider 'anthropic'. Continuing anyway.
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1306638Z     self.warn_if_unknown_model()
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1306791Z 
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1307079Z tests/test_llm_transport_timeouts.py::TestConstrucaoGoogle::test_modelo_carrega_timeout_finito
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1307695Z tests/test_llm_transport_timeouts.py::TestConstrucaoGoogle::test_timeout_do_usuario_prevalece
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1308657Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/google_client.py:35: RuntimeWarning: Model 'gemini-3-pro' is not in the known model list for provider 'google'. Continuing anyway.
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1309450Z     self.warn_if_unknown_model()
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1309611Z 
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1309824Z tests/test_ollama_base_url.py::test_resolver_does_not_affect_other_providers
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1310679Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/openai_client.py:284: RuntimeWarning: Model 'm' is not in the known model list for provider 'xai'. Continuing anyway.
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1311420Z     self.warn_if_unknown_model()
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1311571Z 
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1311770Z tests/test_ollama_base_url.py::test_resolver_does_not_affect_other_providers
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1312619Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/openai_client.py:284: RuntimeWarning: Model 'm' is not in the known model list for provider 'deepseek'. Continuing anyway.
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1313368Z     self.warn_if_unknown_model()
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1313522Z 
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1313882Z tests/test_openai_reasoning_effort.py::test_non_reasoning_model_drops_effort
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1314738Z tests/test_temperature_config.py::TestTemperatureForwarding::test_temperature_reaches_client_when_set[openai-gpt-4.1]
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1315511Z tests/test_temperature_config.py::TestTemperatureForwarding::test_temperature_omitted_leaves_provider_default
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1316514Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/openai_client.py:284: RuntimeWarning: Model 'gpt-4.1' is not in the known model list for provider 'openai'. Continuing anyway.
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1317276Z     self.warn_if_unknown_model()
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1317431Z 
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1317817Z tests/test_temperature_config.py::TestTemperatureForwarding::test_temperature_reaches_client_when_set[deepseek-deepseek-chat]
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1318912Z   /home/runner/work/DZ23-Trading-AI/DZ23-Trading-AI/tradingagents/llm_clients/openai_client.py:284: RuntimeWarning: Model 'deepseek-chat' is not in the known model list for provider 'deepseek'. Continuing anyway.
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1319755Z     self.warn_if_unknown_model()
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1320052Z 
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1320282Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.1320743Z =========================== short test summary info ============================
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.9070543Z SKIPPED [1] tests/e2e/test_aceite_td5.py:34: playwright não instalado; rode: uv run --with playwright pytest tests/e2e -q
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.9072095Z SKIPPED [1] tests/e2e/test_fm6_app_isolado.py:31: playwright não instalado; rode: uv run --with playwright pytest tests/e2e -q
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.9073556Z SKIPPED [1] tests/e2e/test_panel_e2e.py:14: playwright não instalado; rode: uv run --with playwright pytest tests/e2e -v
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.9075290Z SKIPPED [1] tests/test_auditoria_sec1_segredos_em_repouso.py:191: sem DPAPI não há blob válido-de-outra-máquina a forjar
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.9076515Z SKIPPED [1] tests/test_bedrock_provider.py:74: could not import 'langchain_aws': No module named 'langchain_aws'
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.9077665Z SKIPPED [1] tests/test_deepseek_reasoning.py:209: DEEPSEEK_API_KEY not set (or placeholder); skipping live API call
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.9078821Z SKIPPED [1] tests/test_modo_da_mesa.py:161: sem DATABASE_URL — caminho postgres roda no CI
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.9079810Z SKIPPED [1] tests/test_quant_intelligence.py:74: could not import 'lightgbm': No module named 'lightgbm'
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.9080725Z SKIPPED [1] tests/windows/test_desktop_launcher.py:710: objetos nomeados do Windows
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.9081533Z SKIPPED [1] tests/windows/test_desktop_launcher.py:727: objetos nomeados do Windows
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.9082453Z SKIPPED [1] tests/windows/test_notificacoes_identidade_win.py:54: registro é do Windows
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.9085621Z FAILED tests/test_auditoria_sec1_segredos_em_repouso.py::TestMigracaoDoConfigLegado::test_recolar_o_segredo_recupera_o_cofre - AssertionError: assert 'ALERTA_TELEGRAM_TOKEN' not in {'ALERTA_TELEGRAM_TOKEN': 'segredo cifrado com a DPAPI do Windows não é decifrável nesta plataforma — re-colar o segredo, ou abrir na máquina/usuário que o cifrou (o valor cifrado continua no arquivo)'}
+tests (py3.11)	Run test suite	2026-10-15T00:37:12.9088151Z 1 failed, 3119 passed, 11 skipped, 20 warnings, 71 subtests passed in 169.59s (0:02:49)
+tests (py3.11)	Run test suite	2026-10-15T00:37:14.6405922Z ##[error]Process completed with exit code 1.

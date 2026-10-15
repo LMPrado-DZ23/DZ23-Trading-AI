@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="0.244" timestamp="2026-10-15T00:42:44.944440-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_v9_financial_regressions" name="test_fin09_daily_brake_counts_the_entry_fee" time="0.004"><failure message="AssertionError: a taxa paga na entrada não entrou no freio diário&#10;assert Decimal('1.00000000') == Decimal('2')&#10; +  where Decimal('1.00000000') = &lt;tradingagents.desk.execution.ExecutionCoordinator object at 0x00000258CF5F0650&gt;.perda_do_dia&#10; +  and   Decimal('2') = D('2')">desk = &lt;tradingagents.desk.execution.ExecutionCoordinator object at 0x00000258CF5F0650&gt;
+
+    def test_fin09_daily_brake_counts_the_entry_fee(desk):
+        """Catch the realized-loss meter ignoring the fee paid on the ENTRY.
+    
+        O freio diário é alimentado só na SAÍDA. Como a taxa de entrada fica
+        lançada em FEES (fora do custo da posição), o resultado realizado
+        contava apenas a taxa da saída. Comprar e vender 1@100 pagando taxa 1 em
+        cada ponta registrava perda 1 no freio, quando a perda real é 2 —
+        liberando mais risco diário do que o permitido.
+        """
+        desk.ledger.fill_buy(INSTRUMENT, D("1"), D("100"), D("1"),
+                             reserved=D("0"), agent_id="trader-A",
+                             ref="fin09-entry")
+        assert desk.ledger.balance("FEES:USDT") == D("1")
+        saida = desk.close_position(
+            instrument=INSTRUMENT, quantity=D("1"), price=D("100"),
+            cost_basis=D("100"), agent_id="trader-A",
+            client_order_id="fin09-sell")
+        _fill(desk, desk.orders[saida["order_id"]], "fin09-sell",
+              price="100", fee="1")
+&gt;       assert desk.perda_do_dia == D("2"), (
+            "a taxa paga na entrada não entrou no freio diário")
+E       AssertionError: a taxa paga na entrada não entrou no freio diário
+E       assert Decimal('1.00000000') == Decimal('2')
+E        +  where Decimal('1.00000000') = &lt;tradingagents.desk.execution.ExecutionCoordinator object at 0x00000258CF5F0650&gt;.perda_do_dia
+E        +  and   Decimal('2') = D('2')
+
+tests\test_v9_financial_regressions.py:588: AssertionError</failure></testcase></testsuite></testsuites>

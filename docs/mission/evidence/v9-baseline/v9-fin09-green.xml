@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="1" time="0.168" timestamp="2026-10-15T00:44:48.053260-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_v9_financial_regressions" name="test_fin09_daily_brake_counts_the_entry_fee" time="0.004" /></testsuite></testsuites>

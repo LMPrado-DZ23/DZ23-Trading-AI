@@ -8,6 +8,7 @@ from tradingagents.workers import WorkerSupervisor
 
 
 class FakeMT5:
+    ACCOUNT_TRADE_MODE_DEMO = 0
     TRADE_ACTION_DEAL = 1
     TRADE_ACTION_REMOVE = 8
     ORDER_TYPE_BUY = 0
@@ -39,7 +40,7 @@ class FakeMT5:
         return []
 
     def account_info(self):
-        return SimpleNamespace(equity=10000, balance=10000, margin=0, margin_free=10000)
+        return SimpleNamespace(equity=10000, balance=10000, margin=0, margin_free=10000, trade_mode=0)
 
 
 def test_mt5_demo_checks_and_sends_order():

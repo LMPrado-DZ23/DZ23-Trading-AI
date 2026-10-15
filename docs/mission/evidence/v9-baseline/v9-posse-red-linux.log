@@ -1,0 +1,53 @@
+F.F                                                                      [100%]
+=================================== FAILURES ===================================
+_____________ test_corrida_entre_dois_processos_um_unico_vencedor ______________
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_corrida_entre_dois_proces0')
+
+    def test_corrida_entre_dois_processos_um_unico_vencedor(tmp_path):
+        estado = tmp_path / "estado"
+        marcador = str(tmp_path / "janela.p1")
+        p1 = _iniciar(_cfg(tmp_path, "pc-dono", atraso=8.0, marcador=marcador,
+                           estado=estado))
+        limite = time.monotonic() + 60
+        while not Path(marcador).exists():
+            assert time.monotonic() < limite, (
+                "P1 não chegou à janela leitura->escrita")
+            time.sleep(0.05)
+        p2 = _iniciar(_cfg(tmp_path, "oracle-01", atraso=0.0,
+                           marcador=marcador, estado=estado))
+        r2 = _colher(p2)
+        r1 = _colher(p1)
+    
+        ganhadores = _vencedores([r1, r2])
+>       assert len(ganhadores) == 1, (
+            f"os DOIS processos acreditaram ter a posse da mesma mesa "
+            f"(dois executores): {r1} | {r2}")
+E       AssertionError: os DOIS processos acreditaram ter a posse da mesma mesa (dois executores): {'dono': 'pc-dono', 'ok': True, 'motivo': ''} | {'dono': 'oracle-01', 'ok': True, 'motivo': ''}
+E       assert 2 == 1
+E        +  where 2 = len([{'dono': 'pc-dono', 'ok': True, 'motivo': ''}, {'dono': 'oracle-01', 'ok': True, 'motivo': ''}])
+
+tests/test_v9_posse_dois_processos.py:111: AssertionError
+_________ test_partida_simultanea_sem_hooks_tem_um_vencedor_por_rodada _________
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-3/test_partida_simultanea_sem_ho0')
+
+    def test_partida_simultanea_sem_hooks_tem_um_vencedor_por_rodada(tmp_path):
+        for rodada in range(3):
+            estado = tmp_path / f"estado-{rodada}"
+            p1 = _iniciar(_cfg(tmp_path, "pc-dono", estado=estado))
+            p2 = _iniciar(_cfg(tmp_path, "oracle-01", estado=estado))
+            resultados = [_colher(p1), _colher(p2)]
+            ganhadores = _vencedores(resultados)
+>           assert len(ganhadores) == 1, (
+                f"rodada {rodada}: um único vencedor esperado, veio "
+                f"{[r['dono'] for r in ganhadores]}: {resultados}")
+E           AssertionError: rodada 0: um único vencedor esperado, veio ['pc-dono', 'oracle-01']: [{'dono': 'pc-dono', 'ok': True, 'motivo': ''}, {'dono': 'oracle-01', 'ok': True, 'motivo': ''}]
+E           assert 2 == 1
+E            +  where 2 = len([{'dono': 'pc-dono', 'ok': True, 'motivo': ''}, {'dono': 'oracle-01', 'ok': True, 'motivo': ''}])
+
+tests/test_v9_posse_dois_processos.py:144: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_v9_posse_dois_processos.py::test_corrida_entre_dois_processos_um_unico_vencedor
+FAILED tests/test_v9_posse_dois_processos.py::test_partida_simultanea_sem_hooks_tem_um_vencedor_por_rodada
+2 failed, 1 passed in 19.85s

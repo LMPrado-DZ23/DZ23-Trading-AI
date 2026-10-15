@@ -1,0 +1,734 @@
+{
+  "rodada": "FQ-2 rodada 1 — BTC/USDT 1h — SMA 10/30 — 2026-02-01..2026-07-01 UTC",
+  "velas_arquivo": "BTC_USDT-1h.json",
+  "velas_sha256": "bd5b1a736374ca5afd70dcbdbbeda5ead55a4e4c18b247324cf331d9bc1e570c",
+  "velas_total": 4999,
+  "zip_export": "backtest-result-2026-10-15_11-37-48.zip",
+  "zip_sha256": "d15296b711f67381175a695ce5b357528e207e001af6528bda925a23b219061c",
+  "sinais": {
+    "cruzamentos_entrada_arquivo": 96,
+    "cruzamentos_saida_arquivo": 95,
+    "entradas_de_sinal_na_janela": 66,
+    "entradas_de_fill_no_export": 66,
+    "entrada_ts_iguais_ao_export": true,
+    "saidas_de_fill_no_export": 66
+  },
+  "parte_a_motor_contabil": {
+    "trades_simulados": 66,
+    "trades_freqtrade": 66,
+    "carteira_final_sim": "989.1910209104",
+    "carteira_final_export": "989.19102087",
+    "divergencias": [],
+    "veredito": "EQUIVALENTE",
+    "trades": [
+      {
+        "entrada_ts": "2026-02-02T16:00:00+00:00",
+        "saida_ts": "2026-02-03T15:00:00+00:00",
+        "entrada_preco": "78850.06",
+        "saida_preco": "77201.21",
+        "quantidade": "0.00126",
+        "taxa_total": "0.1966246002",
+        "lucro_abs": "-2.2741756002",
+        "carteira_apos": "997.7258243998"
+      },
+      {
+        "entrada_ts": "2026-02-06T16:00:00+00:00",
+        "saida_ts": "2026-02-07T14:00:00+00:00",
+        "entrada_preco": "68625.99",
+        "saida_preco": "69093.98",
+        "quantidade": "0.00145",
+        "taxa_total": "0.1996939565",
+        "lucro_abs": "0.4788915435",
+        "carteira_apos": "998.2047159433"
+      },
+      {
+        "entrada_ts": "2026-02-08T05:00:00+00:00",
+        "saida_ts": "2026-02-09T10:00:00+00:00",
+        "entrada_preco": "69340.15",
+        "saida_preco": "69630.35",
+        "quantidade": "0.00144",
+        "taxa_total": "0.2001175200",
+        "lucro_abs": "0.2177704800",
+        "carteira_apos": "998.4224864233"
+      },
+      {
+        "entrada_ts": "2026-02-10T01:00:00+00:00",
+        "saida_ts": "2026-02-10T06:00:00+00:00",
+        "entrada_preco": "69827.34",
+        "saida_preco": "69447.63",
+        "quantidade": "0.00143",
+        "taxa_total": "0.1991632071",
+        "lucro_abs": "-0.7421485071",
+        "carteira_apos": "997.6803379162"
+      },
+      {
+        "entrada_ts": "2026-02-12T04:00:00+00:00",
+        "saida_ts": "2026-02-12T19:00:00+00:00",
+        "entrada_preco": "67581.0",
+        "saida_preco": "65590.95",
+        "quantidade": "0.00147",
+        "taxa_total": "0.1957627665",
+        "lucro_abs": "-3.1211362665",
+        "carteira_apos": "994.5592016497"
+      },
+      {
+        "entrada_ts": "2026-02-13T14:00:00+00:00",
+        "saida_ts": "2026-02-15T17:00:00+00:00",
+        "entrada_preco": "67274.14",
+        "saida_preco": "69017.76",
+        "quantidade": "0.00148",
+        "taxa_total": "0.2017120120",
+        "lucro_abs": "2.3788455880",
+        "carteira_apos": "996.9380472377"
+      },
+      {
+        "entrada_ts": "2026-02-17T05:00:00+00:00",
+        "saida_ts": "2026-02-17T10:00:00+00:00",
+        "entrada_preco": "68481.68",
+        "saida_preco": "68126.29",
+        "quantidade": "0.00146",
+        "taxa_total": "0.1994476362",
+        "lucro_abs": "-0.7183170362",
+        "carteira_apos": "996.2197302015"
+      },
+      {
+        "entrada_ts": "2026-02-18T12:00:00+00:00",
+        "saida_ts": "2026-02-18T18:00:00+00:00",
+        "entrada_preco": "67369.75",
+        "saida_preco": "67187.4",
+        "quantidade": "0.00148",
+        "taxa_total": "0.1991445820",
+        "lucro_abs": "-0.4690225820",
+        "carteira_apos": "995.7507076195"
+      },
+      {
+        "entrada_ts": "2026-02-20T00:00:00+00:00",
+        "saida_ts": "2026-02-22T06:00:00+00:00",
+        "entrada_preco": "67003.73",
+        "saida_preco": "67977.52",
+        "quantidade": "0.00149",
+        "taxa_total": "0.2011220625",
+        "lucro_abs": "1.2498250375",
+        "carteira_apos": "997.0005326570"
+      },
+      {
+        "entrada_ts": "2026-02-24T23:00:00+00:00",
+        "saida_ts": "2026-02-26T17:00:00+00:00",
+        "entrada_preco": "64120.96",
+        "saida_preco": "66643.56",
+        "quantidade": "0.00155",
+        "taxa_total": "0.2026850060",
+        "lucro_abs": "3.7073449940",
+        "carteira_apos": "1000.7078776510"
+      },
+      {
+        "entrada_ts": "2026-02-28T21:00:00+00:00",
+        "saida_ts": "2026-03-01T19:00:00+00:00",
+        "entrada_preco": "66959.63",
+        "saida_preco": "66316.84",
+        "quantidade": "0.00149",
+        "taxa_total": "0.1985819403",
+        "lucro_abs": "-1.1563390403",
+        "carteira_apos": "999.5515386107"
+      },
+      {
+        "entrada_ts": "2026-03-02T10:00:00+00:00",
+        "saida_ts": "2026-03-02T14:00:00+00:00",
+        "entrada_preco": "66168.61",
+        "saida_preco": "65440.01",
+        "quantidade": "0.00151",
+        "taxa_total": "0.1987290162",
+        "lucro_abs": "-1.2989150162",
+        "carteira_apos": "998.2526235945"
+      },
+      {
+        "entrada_ts": "2026-03-02T16:00:00+00:00",
+        "saida_ts": "2026-03-03T12:00:00+00:00",
+        "entrada_preco": "69130.2",
+        "saida_preco": "67026.6",
+        "quantidade": "0.00144",
+        "taxa_total": "0.196065792",
+        "lucro_abs": "-3.225249792",
+        "carteira_apos": "995.0273738025"
+      },
+      {
+        "entrada_ts": "2026-03-04T01:00:00+00:00",
+        "saida_ts": "2026-03-05T16:00:00+00:00",
+        "entrada_preco": "68093.2",
+        "saida_preco": "71652.77",
+        "quantidade": "0.00146",
+        "taxa_total": "0.2040291162",
+        "lucro_abs": "4.9929430838",
+        "carteira_apos": "1000.0203168863"
+      },
+      {
+        "entrada_ts": "2026-03-09T10:00:00+00:00",
+        "saida_ts": "2026-03-11T03:00:00+00:00",
+        "entrada_preco": "67981.03",
+        "saida_preco": "69810.73",
+        "quantidade": "0.00147",
+        "taxa_total": "0.2025538872",
+        "lucro_abs": "2.4871051128",
+        "carteira_apos": "1002.5074219991"
+      },
+      {
+        "entrada_ts": "2026-03-11T20:00:00+00:00",
+        "saida_ts": "2026-03-12T06:00:00+00:00",
+        "entrada_preco": "70641.81",
+        "saida_preco": "69480.54",
+        "quantidade": "0.00141",
+        "taxa_total": "0.1975725135",
+        "lucro_abs": "-1.8349632135",
+        "carteira_apos": "1000.6724587856"
+      },
+      {
+        "entrada_ts": "2026-03-12T17:00:00+00:00",
+        "saida_ts": "2026-03-14T00:00:00+00:00",
+        "entrada_preco": "70381.15",
+        "saida_preco": "70930.01",
+        "quantidade": "0.00142",
+        "taxa_total": "0.2006618472",
+        "lucro_abs": "0.5787193528",
+        "carteira_apos": "1001.2511781384"
+      },
+      {
+        "entrada_ts": "2026-03-15T02:00:00+00:00",
+        "saida_ts": "2026-03-17T13:00:00+00:00",
+        "entrada_preco": "70985.84",
+        "saida_preco": "73739.74",
+        "quantidade": "0.00140",
+        "taxa_total": "0.2026158120",
+        "lucro_abs": "3.6528441880",
+        "carteira_apos": "1004.9040223264"
+      },
+      {
+        "entrada_ts": "2026-03-18T00:00:00+00:00",
+        "saida_ts": "2026-03-18T01:00:00+00:00",
+        "entrada_preco": "73909.37",
+        "saida_preco": "73867.88",
+        "quantidade": "0.00135",
+        "taxa_total": "0.1994992875",
+        "lucro_abs": "-0.2555107875",
+        "carteira_apos": "1004.6485115389"
+      },
+      {
+        "entrada_ts": "2026-03-20T05:00:00+00:00",
+        "saida_ts": "2026-03-20T19:00:00+00:00",
+        "entrada_preco": "70783.7",
+        "saida_preco": "69770.01",
+        "quantidade": "0.00141",
+        "taxa_total": "0.1981807311",
+        "lucro_abs": "-1.6274836311",
+        "carteira_apos": "1003.0210279078"
+      },
+      {
+        "entrada_ts": "2026-03-21T03:00:00+00:00",
+        "saida_ts": "2026-03-21T23:00:00+00:00",
+        "entrada_preco": "70737.6",
+        "saida_preco": "70277.21",
+        "quantidade": "0.00141",
+        "taxa_total": "0.1988308821",
+        "lucro_abs": "-0.8479807821",
+        "carteira_apos": "1002.1730471257"
+      },
+      {
+        "entrada_ts": "2026-03-23T12:00:00+00:00",
+        "saida_ts": "2026-03-24T17:00:00+00:00",
+        "entrada_preco": "70122.15",
+        "saida_preco": "69476.88",
+        "quantidade": "0.00142",
+        "taxa_total": "0.1982306226",
+        "lucro_abs": "-1.1145140226",
+        "carteira_apos": "1001.0585331031"
+      },
+      {
+        "entrada_ts": "2026-03-25T06:00:00+00:00",
+        "saida_ts": "2026-03-26T06:00:00+00:00",
+        "entrada_preco": "71117.65",
+        "saida_preco": "70016.97",
+        "quantidade": "0.00140",
+        "taxa_total": "0.1975884680",
+        "lucro_abs": "-1.7385404680",
+        "carteira_apos": "999.3199926351"
+      },
+      {
+        "entrada_ts": "2026-03-28T14:00:00+00:00",
+        "saida_ts": "2026-03-29T16:00:00+00:00",
+        "entrada_preco": "66835.1",
+        "saida_preco": "66523.01",
+        "quantidade": "0.00149",
+        "taxa_total": "0.1987035839",
+        "lucro_abs": "-0.6637176839",
+        "carteira_apos": "998.6562749512"
+      },
+      {
+        "entrada_ts": "2026-03-30T05:00:00+00:00",
+        "saida_ts": "2026-03-31T00:00:00+00:00",
+        "entrada_preco": "67616.28",
+        "saida_preco": "66797.38",
+        "quantidade": "0.00147",
+        "taxa_total": "0.1975880802",
+        "lucro_abs": "-1.4013710802",
+        "carteira_apos": "997.2549038710"
+      },
+      {
+        "entrada_ts": "2026-03-31T06:00:00+00:00",
+        "saida_ts": "2026-03-31T12:00:00+00:00",
+        "entrada_preco": "67681.69",
+        "saida_preco": "66685.69",
+        "quantidade": "0.00147",
+        "taxa_total": "0.1975200486",
+        "lucro_abs": "-1.6616400486",
+        "carteira_apos": "995.5932638224"
+      },
+      {
+        "entrada_ts": "2026-03-31T21:00:00+00:00",
+        "saida_ts": "2026-04-02T02:00:00+00:00",
+        "entrada_preco": "68265.53",
+        "saida_preco": "67359.27",
+        "quantidade": "0.00146",
+        "taxa_total": "0.1980122080",
+        "lucro_abs": "-1.5211518080",
+        "carteira_apos": "994.0721120144"
+      },
+      {
+        "entrada_ts": "2026-04-03T07:00:00+00:00",
+        "saida_ts": "2026-04-05T08:00:00+00:00",
+        "entrada_preco": "66796.8",
+        "saida_preco": "66820.64",
+        "quantidade": "0.00149",
+        "taxa_total": "0.1990899856",
+        "lucro_abs": "-0.1635683856",
+        "carteira_apos": "993.9085436288"
+      },
+      {
+        "entrada_ts": "2026-04-05T21:00:00+00:00",
+        "saida_ts": "2026-04-07T03:00:00+00:00",
+        "entrada_preco": "67658.35",
+        "saida_preco": "68674.01",
+        "quantidade": "0.00147",
+        "taxa_total": "0.2004085692",
+        "lucro_abs": "1.2926116308",
+        "carteira_apos": "995.2011552596"
+      },
+      {
+        "entrada_ts": "2026-04-07T23:00:00+00:00",
+        "saida_ts": "2026-04-09T02:00:00+00:00",
+        "entrada_preco": "71514.1",
+        "saida_preco": "70928.9",
+        "quantidade": "0.00139",
+        "taxa_total": "0.197995770",
+        "lucro_abs": "-1.011423770",
+        "carteira_apos": "994.1897314896"
+      },
+      {
+        "entrada_ts": "2026-04-09T17:00:00+00:00",
+        "saida_ts": "2026-04-11T17:00:00+00:00",
+        "entrada_preco": "72080.86",
+        "saida_preco": "73034.34",
+        "quantidade": "0.00138",
+        "taxa_total": "0.2002589760",
+        "lucro_abs": "1.1155434240",
+        "carteira_apos": "995.3052749136"
+      },
+      {
+        "entrada_ts": "2026-04-11T19:00:00+00:00",
+        "saida_ts": "2026-04-12T04:00:00+00:00",
+        "entrada_preco": "73547.9",
+        "saida_preco": "71593.18",
+        "quantidade": "0.00135",
+        "taxa_total": "0.1959404580",
+        "lucro_abs": "-2.8348124580",
+        "carteira_apos": "992.4704624556"
+      },
+      {
+        "entrada_ts": "2026-04-13T16:00:00+00:00",
+        "saida_ts": "2026-04-15T02:00:00+00:00",
+        "entrada_preco": "71866.59",
+        "saida_preco": "74613.28",
+        "quantidade": "0.00139",
+        "taxa_total": "0.2036070193",
+        "lucro_abs": "3.6142920807",
+        "carteira_apos": "996.0847545363"
+      },
+      {
+        "entrada_ts": "2026-04-15T21:00:00+00:00",
+        "saida_ts": "2026-04-16T16:00:00+00:00",
+        "entrada_preco": "74841.67",
+        "saida_preco": "74697.2",
+        "quantidade": "0.00133",
+        "taxa_total": "0.1988866971",
+        "lucro_abs": "-0.3910317971",
+        "carteira_apos": "995.6937227392"
+      },
+      {
+        "entrada_ts": "2026-04-17T00:00:00+00:00",
+        "saida_ts": "2026-04-18T13:00:00+00:00",
+        "entrada_preco": "75154.28",
+        "saida_preco": "76206.98",
+        "quantidade": "0.00133",
+        "taxa_total": "0.2013104758",
+        "lucro_abs": "1.1987805242",
+        "carteira_apos": "996.8925032634"
+      },
+      {
+        "entrada_ts": "2026-04-20T15:00:00+00:00",
+        "saida_ts": "2026-04-21T20:00:00+00:00",
+        "entrada_preco": "75034.79",
+        "saida_preco": "75023.43",
+        "quantidade": "0.00133",
+        "taxa_total": "0.1995774326",
+        "lucro_abs": "-0.2146862326",
+        "carteira_apos": "996.6778170308"
+      },
+      {
+        "entrada_ts": "2026-04-22T04:00:00+00:00",
+        "saida_ts": "2026-04-23T07:00:00+00:00",
+        "entrada_preco": "77521.47",
+        "saida_preco": "78211.43",
+        "quantidade": "0.00128",
+        "taxa_total": "0.1993381120",
+        "lucro_abs": "0.6838106880",
+        "carteira_apos": "997.3616277188"
+      },
+      {
+        "entrada_ts": "2026-04-24T04:00:00+00:00",
+        "saida_ts": "2026-04-24T10:00:00+00:00",
+        "entrada_preco": "77737.84",
+        "saida_preco": "77527.7",
+        "quantidade": "0.00128",
+        "taxa_total": "0.1987398912",
+        "lucro_abs": "-0.4677190912",
+        "carteira_apos": "996.8939086276"
+      },
+      {
+        "entrada_ts": "2026-04-26T06:00:00+00:00",
+        "saida_ts": "2026-04-27T12:00:00+00:00",
+        "entrada_preco": "77983.31",
+        "saida_preco": "77844.25",
+        "quantidade": "0.00128",
+        "taxa_total": "0.1994592768",
+        "lucro_abs": "-0.3774560768",
+        "carteira_apos": "996.5164525508"
+      },
+      {
+        "entrada_ts": "2026-04-29T06:00:00+00:00",
+        "saida_ts": "2026-04-29T20:00:00+00:00",
+        "entrada_preco": "77288.39",
+        "saida_preco": "75563.87",
+        "quantidade": "0.00129",
+        "taxa_total": "0.1971794154",
+        "lucro_abs": "-2.4218102154",
+        "carteira_apos": "994.0946423354"
+      },
+      {
+        "entrada_ts": "2026-04-30T16:00:00+00:00",
+        "saida_ts": "2026-05-03T09:00:00+00:00",
+        "entrada_preco": "76473.6",
+        "saida_preco": "78387.87",
+        "quantidade": "0.00130",
+        "taxa_total": "0.2013199110",
+        "lucro_abs": "2.2872310890",
+        "carteira_apos": "996.3818734244"
+      },
+      {
+        "entrada_ts": "2026-05-03T14:00:00+00:00",
+        "saida_ts": "2026-05-06T23:00:00+00:00",
+        "entrada_preco": "78670.01",
+        "saida_preco": "81342.39",
+        "quantidade": "0.00127",
+        "taxa_total": "0.2032157480",
+        "lucro_abs": "3.1907068520",
+        "carteira_apos": "999.5725802764"
+      },
+      {
+        "entrada_ts": "2026-05-08T18:00:00+00:00",
+        "saida_ts": "2026-05-11T10:00:00+00:00",
+        "entrada_preco": "80060.0",
+        "saida_preco": "80966.58",
+        "quantidade": "0.00124",
+        "taxa_total": "0.1996729592",
+        "lucro_abs": "0.9244862408",
+        "carteira_apos": "1000.4970665172"
+      },
+      {
+        "entrada_ts": "2026-05-11T18:00:00+00:00",
+        "saida_ts": "2026-05-12T09:00:00+00:00",
+        "entrada_preco": "81941.09",
+        "saida_preco": "80843.3",
+        "quantidade": "0.00122",
+        "taxa_total": "0.1985969558",
+        "lucro_abs": "-1.5379007558",
+        "carteira_apos": "998.9591657614"
+      },
+      {
+        "entrada_ts": "2026-05-13T06:00:00+00:00",
+        "saida_ts": "2026-05-13T15:00:00+00:00",
+        "entrada_preco": "81020.0",
+        "saida_preco": "79756.02",
+        "quantidade": "0.00123",
+        "taxa_total": "0.1977545046",
+        "lucro_abs": "-1.7524499046",
+        "carteira_apos": "997.2067158568"
+      },
+      {
+        "entrada_ts": "2026-05-14T15:00:00+00:00",
+        "saida_ts": "2026-05-15T13:00:00+00:00",
+        "entrada_preco": "80964.84",
+        "saida_preco": "80385.1",
+        "quantidade": "0.00123",
+        "taxa_total": "0.1984604262",
+        "lucro_abs": "-0.9115406262",
+        "carteira_apos": "996.2951752306"
+      },
+      {
+        "entrada_ts": "2026-05-17T12:00:00+00:00",
+        "saida_ts": "2026-05-18T00:00:00+00:00",
+        "entrada_preco": "78415.99",
+        "saida_preco": "77457.67",
+        "quantidade": "0.00127",
+        "taxa_total": "0.1979595482",
+        "lucro_abs": "-1.4150259482",
+        "carteira_apos": "994.8801492824"
+      },
+      {
+        "entrada_ts": "2026-05-19T05:00:00+00:00",
+        "saida_ts": "2026-05-19T17:00:00+00:00",
+        "entrada_preco": "76927.25",
+        "saida_preco": "76894.59",
+        "quantidade": "0.00129",
+        "taxa_total": "0.1984301736",
+        "lucro_abs": "-0.2405615736",
+        "carteira_apos": "994.6395877088"
+      },
+      {
+        "entrada_ts": "2026-05-20T06:00:00+00:00",
+        "saida_ts": "2026-05-21T14:00:00+00:00",
+        "entrada_preco": "77196.99",
+        "saida_preco": "77122.67",
+        "quantidade": "0.00129",
+        "taxa_total": "0.1990723614",
+        "lucro_abs": "-0.2949451614",
+        "carteira_apos": "994.3446425474"
+      },
+      {
+        "entrada_ts": "2026-05-22T03:00:00+00:00",
+        "saida_ts": "2026-05-22T08:00:00+00:00",
+        "entrada_preco": "77673.37",
+        "saida_preco": "77408.07",
+        "quantidade": "0.00128",
+        "taxa_total": "0.1985042432",
+        "lucro_abs": "-0.5380882432",
+        "carteira_apos": "993.8065543042"
+      },
+      {
+        "entrada_ts": "2026-05-23T22:00:00+00:00",
+        "saida_ts": "2026-05-24T22:00:00+00:00",
+        "entrada_preco": "76805.0",
+        "saida_preco": "76151.14",
+        "quantidade": "0.00130",
+        "taxa_total": "0.1988429820",
+        "lucro_abs": "-1.0488609820",
+        "carteira_apos": "992.7576933222"
+      },
+      {
+        "entrada_ts": "2026-05-25T04:00:00+00:00",
+        "saida_ts": "2026-05-26T03:00:00+00:00",
+        "entrada_preco": "77026.68",
+        "saida_preco": "76660.0",
+        "quantidade": "0.00129",
+        "taxa_total": "0.1982558172",
+        "lucro_abs": "-0.6712730172",
+        "carteira_apos": "992.0864203050"
+      },
+      {
+        "entrada_ts": "2026-05-29T06:00:00+00:00",
+        "saida_ts": "2026-05-29T21:00:00+00:00",
+        "entrada_preco": "73706.0",
+        "saida_preco": "73673.62",
+        "quantidade": "0.00135",
+        "taxa_total": "0.1989624870",
+        "lucro_abs": "-0.2426754870",
+        "carteira_apos": "991.8437448180"
+      },
+      {
+        "entrada_ts": "2026-05-30T00:00:00+00:00",
+        "saida_ts": "2026-05-30T04:00:00+00:00",
+        "entrada_preco": "73460.78",
+        "saida_preco": "73524.01",
+        "quantidade": "0.00136",
+        "taxa_total": "0.1998993144",
+        "lucro_abs": "-0.1139065144",
+        "carteira_apos": "991.7298383036"
+      },
+      {
+        "entrada_ts": "2026-05-30T08:00:00+00:00",
+        "saida_ts": "2026-05-31T15:00:00+00:00",
+        "entrada_preco": "73548.6",
+        "saida_preco": "73602.18",
+        "quantidade": "0.00135",
+        "taxa_total": "0.1986535530",
+        "lucro_abs": "-0.1263205530",
+        "carteira_apos": "991.6035177506"
+      },
+      {
+        "entrada_ts": "2026-06-07T04:00:00+00:00",
+        "saida_ts": "2026-06-09T03:00:00+00:00",
+        "entrada_preco": "61701.06",
+        "saida_preco": "62867.99",
+        "quantidade": "0.00162",
+        "taxa_total": "0.2018018610",
+        "lucro_abs": "1.6886247390",
+        "carteira_apos": "993.2921424896"
+      },
+      {
+        "entrada_ts": "2026-06-10T18:00:00+00:00",
+        "saida_ts": "2026-06-13T05:00:00+00:00",
+        "entrada_preco": "61969.99",
+        "saida_preco": "63512.01",
+        "quantidade": "0.00161",
+        "taxa_total": "0.2020260200",
+        "lucro_abs": "2.2806261800",
+        "carteira_apos": "995.5727686696"
+      },
+      {
+        "entrada_ts": "2026-06-13T07:00:00+00:00",
+        "saida_ts": "2026-06-14T18:00:00+00:00",
+        "entrada_preco": "63736.0",
+        "saida_preco": "63732.65",
+        "quantidade": "0.00156",
+        "taxa_total": "0.1988510940",
+        "lucro_abs": "-0.2040770940",
+        "carteira_apos": "995.3686915756"
+      },
+      {
+        "entrada_ts": "2026-06-15T01:00:00+00:00",
+        "saida_ts": "2026-06-16T07:00:00+00:00",
+        "entrada_preco": "65626.0",
+        "saida_preco": "66446.01",
+        "quantidade": "0.00152",
+        "taxa_total": "0.2007494552",
+        "lucro_abs": "1.0456657448",
+        "carteira_apos": "996.4143573204"
+      },
+      {
+        "entrada_ts": "2026-06-16T13:00:00+00:00",
+        "saida_ts": "2026-06-16T14:00:00+00:00",
+        "entrada_preco": "66429.84",
+        "saida_preco": "66052.01",
+        "quantidade": "0.00150",
+        "taxa_total": "0.1987227750",
+        "lucro_abs": "-0.7654677750",
+        "carteira_apos": "995.6488895454"
+      },
+      {
+        "entrada_ts": "2026-06-19T19:00:00+00:00",
+        "saida_ts": "2026-06-21T21:00:00+00:00",
+        "entrada_preco": "63110.01",
+        "saida_preco": "63848.0",
+        "quantidade": "0.00158",
+        "taxa_total": "0.2005936558",
+        "lucro_abs": "0.9654305442",
+        "carteira_apos": "996.6143200896"
+      },
+      {
+        "entrada_ts": "2026-06-22T10:00:00+00:00",
+        "saida_ts": "2026-06-23T03:00:00+00:00",
+        "entrada_preco": "64145.4",
+        "saida_preco": "64204.01",
+        "quantidade": "0.00155",
+        "taxa_total": "0.1989415855",
+        "lucro_abs": "-0.1080960855",
+        "carteira_apos": "996.5062240041"
+      },
+      {
+        "entrada_ts": "2026-06-24T08:00:00+00:00",
+        "saida_ts": "2026-06-24T15:00:00+00:00",
+        "entrada_preco": "62658.0",
+        "saida_preco": "61113.1",
+        "quantidade": "0.00159",
+        "taxa_total": "0.196796049",
+        "lucro_abs": "-2.653187049",
+        "carteira_apos": "993.8530369551"
+      },
+      {
+        "entrada_ts": "2026-06-25T12:00:00+00:00",
+        "saida_ts": "2026-06-25T15:00:00+00:00",
+        "entrada_preco": "61282.0",
+        "saida_preco": "59471.49",
+        "quantidade": "0.00163",
+        "taxa_total": "0.1968281887",
+        "lucro_abs": "-3.1479594887",
+        "carteira_apos": "990.7050774664"
+      },
+      {
+        "entrada_ts": "2026-06-26T16:00:00+00:00",
+        "saida_ts": "2026-06-28T03:00:00+00:00",
+        "entrada_preco": "60328.18",
+        "saida_preco": "60150.46",
+        "quantidade": "0.00165",
+        "taxa_total": "0.1987897560",
+        "lucro_abs": "-0.4920277560",
+        "carteira_apos": "990.2130497104"
+      },
+      {
+        "entrada_ts": "2026-06-29T11:00:00+00:00",
+        "saida_ts": "2026-06-30T07:00:00+00:00",
+        "entrada_preco": "60088.0",
+        "saida_preco": "59592.0",
+        "quantidade": "0.00166",
+        "taxa_total": "0.198668800",
+        "lucro_abs": "-1.022028800",
+        "carteira_apos": "989.1910209104"
+      }
+    ]
+  },
+  "parte_b_motor_laboratorio_dz23": {
+    "code_revision": "2b7754a94cc1e4233ad95ac6fa377be4078e5055-dirty",
+    "modelo_execucao": "one_bar_round_trip;entry=next_open;exit=same_close;short=synthetic",
+    "modelo_custos": "per_leg_notional;fee_bps=10;slippage_bps=0",
+    "modelo_liquidez": "shared_two_leg_bar_volume;max_participacao=1",
+    "trades": 66,
+    "carteira_final": "991.0428702416923441043799000",
+    "retorno_total": "-0.0089571297583076558956201",
+    "max_drawdown": "0.01057147111512901739595103618",
+    "fills_limitados": 0,
+    "fills_rejeitados_por_liquidez": 0,
+    "dataset_hash": "afd77b1668eef4072f8a5490d51e88709d9be2fad0e4ebb2f4ca08d123146c9c"
+  },
+  "freqtrade_resumo": {
+    "total_trades": 66,
+    "carteira_final": 989.19102087,
+    "lucro_total_abs": -10.808979130000003,
+    "max_drawdown_conta": 0.015636320575053597,
+    "winrate": 0.3181818181818182,
+    "left_open_trades": [
+      {
+        "key": "TOTAL",
+        "trades": 0,
+        "profit_mean": 0.0,
+        "profit_mean_pct": 0.0,
+        "profit_total_abs": 0.0,
+        "profit_total": 0.0,
+        "profit_total_pct": 0.0,
+        "duration_avg": "0:00",
+        "wins": 0,
+        "draws": 0,
+        "losses": 0,
+        "winrate": 0.0,
+        "cagr": 0.0,
+        "expectancy": 0.0,
+        "expectancy_ratio": 100.0,
+        "sortino": 0,
+        "sharpe": 0,
+        "calmar": 0.0,
+        "sqn": 0.0,
+        "p_value": 1.0,
+        "profit_factor": 0.0,
+        "max_drawdown_account": 0.0,
+        "max_drawdown_abs": 0.0
+      }
+    ]
+  },
+  "aviso": "Instrumento de auditoria da rodada FQ-2; nao aprova estrategia, nao promove a LIVE, nao e previsao. Freqtrade = ferramenta isolada de validacao (GPL, processo separado)."
+}

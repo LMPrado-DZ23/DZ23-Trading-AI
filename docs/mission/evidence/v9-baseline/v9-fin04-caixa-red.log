@@ -1,0 +1,455 @@
+FFFFFFFFFFFFFFFFF                                                        [100%]
+================================== FAILURES ===================================
+_______ TestCaixaNaReconciliacao.test_only_cash_divergence_blocks_safe ________
+
+self = <tests.test_v9_fin04_caixa.TestCaixaNaReconciliacao object at 0x0000016DA617F170>
+
+    def test_only_cash_divergence_blocks_safe(self):
+        m, risco, livro, coord = sistema()
+>       rel = reconciliar(coord, caixa=lambda: Decimal("9999"))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_v9_fin04_caixa.py:55: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+coord = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000016DA6181B50>
+caixa = <function TestCaixaNaReconciliacao.test_only_cash_divergence_blocks_safe.<locals>.<lambda> at 0x0000016DA634B880>
+posicoes = None, fills = None, ordens_abertas = None, corretora = None
+
+    def reconciliar(coord, *, caixa, posicoes=None, fills=None,
+                    ordens_abertas=None, corretora=None):
+        """Wiring igual ao da rota: só passa consultar_caixa quando pedido."""
+        extra = {}
+        if caixa is not None:
+            extra["consultar_caixa"] = caixa
+        if fills is not None:
+            extra["consultar_fills"] = fills
+>       return coord.reconciliar(
+            corretora or (lambda coid: {"resultado": "CONFIRMED_NOT_FOUND",
+                                        "ordem": None}),
+            consultar_posicoes=posicoes if posicoes is not None else (lambda: {}),
+            consultar_ordens_abertas=(ordens_abertas if ordens_abertas is not None
+                                      else (lambda: [])),
+            **extra)
+E       TypeError: ExecutionCoordinator.reconciliar() got an unexpected keyword argument 'consultar_caixa'
+
+tests\test_v9_fin04_caixa.py:41: TypeError
+_______ TestCaixaNaReconciliacao.test_the_divergence_shows_both_values ________
+
+self = <tests.test_v9_fin04_caixa.TestCaixaNaReconciliacao object at 0x0000016DA617F4A0>
+
+    def test_the_divergence_shows_both_values(self):
+        m, risco, livro, coord = sistema()
+>       rel = reconciliar(coord, caixa=lambda: Decimal("9999"))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_v9_fin04_caixa.py:62: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+coord = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000016DA61813A0>
+caixa = <function TestCaixaNaReconciliacao.test_the_divergence_shows_both_values.<locals>.<lambda> at 0x0000016DA634AE80>
+posicoes = None, fills = None, ordens_abertas = None, corretora = None
+
+    def reconciliar(coord, *, caixa, posicoes=None, fills=None,
+                    ordens_abertas=None, corretora=None):
+        """Wiring igual ao da rota: só passa consultar_caixa quando pedido."""
+        extra = {}
+        if caixa is not None:
+            extra["consultar_caixa"] = caixa
+        if fills is not None:
+            extra["consultar_fills"] = fills
+>       return coord.reconciliar(
+            corretora or (lambda coid: {"resultado": "CONFIRMED_NOT_FOUND",
+                                        "ordem": None}),
+            consultar_posicoes=posicoes if posicoes is not None else (lambda: {}),
+            consultar_ordens_abertas=(ordens_abertas if ordens_abertas is not None
+                                      else (lambda: [])),
+            **extra)
+E       TypeError: ExecutionCoordinator.reconciliar() got an unexpected keyword argument 'consultar_caixa'
+
+tests\test_v9_fin04_caixa.py:41: TypeError
+___________ TestCaixaNaReconciliacao.test_matching_cash_allows_safe ___________
+
+self = <tests.test_v9_fin04_caixa.TestCaixaNaReconciliacao object at 0x0000016DA617FAA0>
+
+    def test_matching_cash_allows_safe(self):
+        m, risco, livro, coord = sistema()
+>       rel = reconciliar(coord, caixa=lambda: Decimal("10000"))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_v9_fin04_caixa.py:70: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+coord = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000016DA6180560>
+caixa = <function TestCaixaNaReconciliacao.test_matching_cash_allows_safe.<locals>.<lambda> at 0x0000016DA634A160>
+posicoes = None, fills = None, ordens_abertas = None, corretora = None
+
+    def reconciliar(coord, *, caixa, posicoes=None, fills=None,
+                    ordens_abertas=None, corretora=None):
+        """Wiring igual ao da rota: só passa consultar_caixa quando pedido."""
+        extra = {}
+        if caixa is not None:
+            extra["consultar_caixa"] = caixa
+        if fills is not None:
+            extra["consultar_fills"] = fills
+>       return coord.reconciliar(
+            corretora or (lambda coid: {"resultado": "CONFIRMED_NOT_FOUND",
+                                        "ordem": None}),
+            consultar_posicoes=posicoes if posicoes is not None else (lambda: {}),
+            consultar_ordens_abertas=(ordens_abertas if ordens_abertas is not None
+                                      else (lambda: [])),
+            **extra)
+E       TypeError: ExecutionCoordinator.reconciliar() got an unexpected keyword argument 'consultar_caixa'
+
+tests\test_v9_fin04_caixa.py:41: TypeError
+__ TestCaixaNaReconciliacao.test_cash_is_read_after_remote_fills_are_applied __
+
+self = <tests.test_v9_fin04_caixa.TestCaixaNaReconciliacao object at 0x0000016DA617FDD0>
+
+    def test_cash_is_read_after_remote_fills_are_applied(self):
+        """Ordem de leitura importa: se o caixa for consultado ANTES de os
+        fills remotos entrarem no livro, um preenchimento legítimo viraria
+        'divergência' — e o inverso esconderia a divergência residual."""
+        m, risco, livro, coord = sistema()
+        res = _reserva(risco)
+        coord.restaurar_estado(_doc_com_ordem(res))
+        fills = [
+            {"fill_id": "t-1", "quantity": Decimal("0.5"), "price": Decimal("100"),
+             "fee": Decimal("0.05"), "side": "buy"},
+            {"fill_id": "t-2", "quantity": Decimal("0.5"), "price": Decimal("102"),
+             "fee": Decimal("0.05"), "side": "buy"},
+            {"fill_id": "t-3", "quantity": Decimal("0.5"), "price": Decimal("101"),
+             "fee": Decimal("0.05"), "side": "buy"},
+        ]
+        visto = {}
+    
+        def caixa_spy():
+            visto["livro_no_momento_da_consulta"] = livro.cash()
+            return livro.cash()
+    
+>       rel = reconciliar(
+            coord,
+            corretora=lambda coid: {"resultado": "FOUND", "ordem": {
+                "id": "ex-1", "status": "closed", "filled": "1.5",
+                "average": "100", "fee": "0.15"}},
+            posicoes=lambda: {"BTC/USDT": Decimal("1.5")},
+            fills=lambda coid, exid="": fills,
+            caixa=caixa_spy)
+
+tests\test_v9_fin04_caixa.py:95: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+coord = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000016DA61833B0>
+caixa = <function TestCaixaNaReconciliacao.test_cash_is_read_after_remote_fills_are_applied.<locals>.caixa_spy at 0x0000016DA634AF20>
+posicoes = <function TestCaixaNaReconciliacao.test_cash_is_read_after_remote_fills_are_applied.<locals>.<lambda> at 0x0000016DA634AC00>
+fills = <function TestCaixaNaReconciliacao.test_cash_is_read_after_remote_fills_are_applied.<locals>.<lambda> at 0x0000016DA634ACA0>
+ordens_abertas = None
+corretora = <function TestCaixaNaReconciliacao.test_cash_is_read_after_remote_fills_are_applied.<locals>.<lambda> at 0x0000016DA634A8E0>
+
+    def reconciliar(coord, *, caixa, posicoes=None, fills=None,
+                    ordens_abertas=None, corretora=None):
+        """Wiring igual ao da rota: só passa consultar_caixa quando pedido."""
+        extra = {}
+        if caixa is not None:
+            extra["consultar_caixa"] = caixa
+        if fills is not None:
+            extra["consultar_fills"] = fills
+>       return coord.reconciliar(
+            corretora or (lambda coid: {"resultado": "CONFIRMED_NOT_FOUND",
+                                        "ordem": None}),
+            consultar_posicoes=posicoes if posicoes is not None else (lambda: {}),
+            consultar_ordens_abertas=(ordens_abertas if ordens_abertas is not None
+                                      else (lambda: [])),
+            **extra)
+E       TypeError: ExecutionCoordinator.reconciliar() got an unexpected keyword argument 'consultar_caixa'
+
+tests\test_v9_fin04_caixa.py:41: TypeError
+_____ TestCaixaNaReconciliacao.test_without_a_cash_query_there_is_no_safe _____
+
+self = <tests.test_v9_fin04_caixa.TestCaixaNaReconciliacao object at 0x0000016DA6180050>
+
+    def test_without_a_cash_query_there_is_no_safe(self):
+        """Fail-closed: um chamador que não consulta o caixa nunca libera —
+        'não perguntei' não pode virar 'bate'."""
+        m, risco, livro, coord = sistema()
+        rel = reconciliar(coord, caixa=None)
+>       assert rel["caixa_status"] == "UNKNOWN"
+               ^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'caixa_status'
+
+tests\test_v9_fin04_caixa.py:114: KeyError
+______ TestCaixaNaReconciliacao.test_a_failing_cash_query_stays_unknown _______
+
+self = <tests.test_v9_fin04_caixa.TestCaixaNaReconciliacao object at 0x0000016DA61803B0>
+
+    def test_a_failing_cash_query_stays_unknown(self):
+        m, risco, livro, coord = sistema()
+    
+        def explodir():
+            raise ConnectionError("rede caiu")
+    
+>       rel = reconciliar(coord, caixa=explodir)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_v9_fin04_caixa.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+coord = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000016DA618BD40>
+caixa = <function TestCaixaNaReconciliacao.test_a_failing_cash_query_stays_unknown.<locals>.explodir at 0x0000016DA6392A20>
+posicoes = None, fills = None, ordens_abertas = None, corretora = None
+
+    def reconciliar(coord, *, caixa, posicoes=None, fills=None,
+                    ordens_abertas=None, corretora=None):
+        """Wiring igual ao da rota: só passa consultar_caixa quando pedido."""
+        extra = {}
+        if caixa is not None:
+            extra["consultar_caixa"] = caixa
+        if fills is not None:
+            extra["consultar_fills"] = fills
+>       return coord.reconciliar(
+            corretora or (lambda coid: {"resultado": "CONFIRMED_NOT_FOUND",
+                                        "ordem": None}),
+            consultar_posicoes=posicoes if posicoes is not None else (lambda: {}),
+            consultar_ordens_abertas=(ordens_abertas if ordens_abertas is not None
+                                      else (lambda: [])),
+            **extra)
+E       TypeError: ExecutionCoordinator.reconciliar() got an unexpected keyword argument 'consultar_caixa'
+
+tests\test_v9_fin04_caixa.py:41: TypeError
+_____ TestCaixaNaReconciliacao.test_a_malformed_cash_answer_stays_unknown _____
+
+self = <tests.test_v9_fin04_caixa.TestCaixaNaReconciliacao object at 0x0000016DA6180710>
+
+    def test_a_malformed_cash_answer_stays_unknown(self):
+        m, risco, livro, coord = sistema()
+>       rel = reconciliar(coord, caixa=lambda: "abc")
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_v9_fin04_caixa.py:131: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+coord = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000016DA61887A0>
+caixa = <function TestCaixaNaReconciliacao.test_a_malformed_cash_answer_stays_unknown.<locals>.<lambda> at 0x0000016DA63932E0>
+posicoes = None, fills = None, ordens_abertas = None, corretora = None
+
+    def reconciliar(coord, *, caixa, posicoes=None, fills=None,
+                    ordens_abertas=None, corretora=None):
+        """Wiring igual ao da rota: só passa consultar_caixa quando pedido."""
+        extra = {}
+        if caixa is not None:
+            extra["consultar_caixa"] = caixa
+        if fills is not None:
+            extra["consultar_fills"] = fills
+>       return coord.reconciliar(
+            corretora or (lambda coid: {"resultado": "CONFIRMED_NOT_FOUND",
+                                        "ordem": None}),
+            consultar_posicoes=posicoes if posicoes is not None else (lambda: {}),
+            consultar_ordens_abertas=(ordens_abertas if ordens_abertas is not None
+                                      else (lambda: [])),
+            **extra)
+E       TypeError: ExecutionCoordinator.reconciliar() got an unexpected keyword argument 'consultar_caixa'
+
+tests\test_v9_fin04_caixa.py:41: TypeError
+_ TestRelatorioAntigoSemCaixaNaoAutoriza.test_report_without_caixa_status_is_refused _
+
+self = <tests.test_v9_fin04_caixa.TestRelatorioAntigoSemCaixaNaoAutoriza object at 0x0000016DA617FF80>
+
+    def test_report_without_caixa_status_is_refused(self):
+        m, risco, livro, coord = sistema()
+>       rel = reconciliar(coord, caixa=lambda: Decimal("10000"))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_v9_fin04_caixa.py:144: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+coord = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000016DA618A720>
+caixa = <function TestRelatorioAntigoSemCaixaNaoAutoriza.test_report_without_caixa_status_is_refused.<locals>.<lambda> at 0x0000016DA63931A0>
+posicoes = None, fills = None, ordens_abertas = None, corretora = None
+
+    def reconciliar(coord, *, caixa, posicoes=None, fills=None,
+                    ordens_abertas=None, corretora=None):
+        """Wiring igual ao da rota: só passa consultar_caixa quando pedido."""
+        extra = {}
+        if caixa is not None:
+            extra["consultar_caixa"] = caixa
+        if fills is not None:
+            extra["consultar_fills"] = fills
+>       return coord.reconciliar(
+            corretora or (lambda coid: {"resultado": "CONFIRMED_NOT_FOUND",
+                                        "ordem": None}),
+            consultar_posicoes=posicoes if posicoes is not None else (lambda: {}),
+            consultar_ordens_abertas=(ordens_abertas if ordens_abertas is not None
+                                      else (lambda: [])),
+            **extra)
+E       TypeError: ExecutionCoordinator.reconciliar() got an unexpected keyword argument 'consultar_caixa'
+
+tests\test_v9_fin04_caixa.py:41: TypeError
+_ TestRelatorioAntigoSemCaixaNaoAutoriza.test_report_with_unknown_cash_is_refused _
+
+self = <tests.test_v9_fin04_caixa.TestRelatorioAntigoSemCaixaNaoAutoriza object at 0x0000016DA617F920>
+
+    def test_report_with_unknown_cash_is_refused(self):
+        m, risco, livro, coord = sistema()
+>       rel = reconciliar(coord, caixa=lambda: Decimal("10000"))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_v9_fin04_caixa.py:153: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+coord = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000016DA6188D40>
+caixa = <function TestRelatorioAntigoSemCaixaNaoAutoriza.test_report_with_unknown_cash_is_refused.<locals>.<lambda> at 0x0000016DA6393100>
+posicoes = None, fills = None, ordens_abertas = None, corretora = None
+
+    def reconciliar(coord, *, caixa, posicoes=None, fills=None,
+                    ordens_abertas=None, corretora=None):
+        """Wiring igual ao da rota: só passa consultar_caixa quando pedido."""
+        extra = {}
+        if caixa is not None:
+            extra["consultar_caixa"] = caixa
+        if fills is not None:
+            extra["consultar_fills"] = fills
+>       return coord.reconciliar(
+            corretora or (lambda coid: {"resultado": "CONFIRMED_NOT_FOUND",
+                                        "ordem": None}),
+            consultar_posicoes=posicoes if posicoes is not None else (lambda: {}),
+            consultar_ordens_abertas=(ordens_abertas if ordens_abertas is not None
+                                      else (lambda: [])),
+            **extra)
+E       TypeError: ExecutionCoordinator.reconciliar() got an unexpected keyword argument 'consultar_caixa'
+
+tests\test_v9_fin04_caixa.py:41: TypeError
+_ TestRelatorioAntigoSemCaixaNaoAutoriza.test_restart_with_pre_fix_report_is_refused _
+
+self = <tests.test_v9_fin04_caixa.TestRelatorioAntigoSemCaixaNaoAutoriza object at 0x0000016DA617F740>
+
+    def test_restart_with_pre_fix_report_is_refused(self):
+        m, risco, livro, coord = sistema()
+>       reconciliar(coord, caixa=lambda: Decimal("10000"))
+
+tests\test_v9_fin04_caixa.py:160: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+coord = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000016DA6192AB0>
+caixa = <function TestRelatorioAntigoSemCaixaNaoAutoriza.test_restart_with_pre_fix_report_is_refused.<locals>.<lambda> at 0x0000016DA6393D80>
+posicoes = None, fills = None, ordens_abertas = None, corretora = None
+
+    def reconciliar(coord, *, caixa, posicoes=None, fills=None,
+                    ordens_abertas=None, corretora=None):
+        """Wiring igual ao da rota: só passa consultar_caixa quando pedido."""
+        extra = {}
+        if caixa is not None:
+            extra["consultar_caixa"] = caixa
+        if fills is not None:
+            extra["consultar_fills"] = fills
+>       return coord.reconciliar(
+            corretora or (lambda coid: {"resultado": "CONFIRMED_NOT_FOUND",
+                                        "ordem": None}),
+            consultar_posicoes=posicoes if posicoes is not None else (lambda: {}),
+            consultar_ordens_abertas=(ordens_abertas if ordens_abertas is not None
+                                      else (lambda: [])),
+            **extra)
+E       TypeError: ExecutionCoordinator.reconciliar() got an unexpected keyword argument 'consultar_caixa'
+
+tests\test_v9_fin04_caixa.py:41: TypeError
+_______ TestAdaptadorConsultaCaixa.test_quote_currency_cash_is_returned _______
+
+self = <tests.test_v9_fin04_caixa.TestAdaptadorConsultaCaixa object at 0x0000016DA61808F0>
+
+    def test_quote_currency_cash_is_returned(self):
+        b = _adaptador(_CorretoraFalsa(total={"BTC": "0.5", "USDT": "900.25"}))
+>       assert b.fetch_cash() == Decimal("900.25")
+               ^^^^^^^^^^^^
+E       AttributeError: 'CCXTDeskBroker' object has no attribute 'fetch_cash'
+
+tests\test_v9_fin04_caixa.py:233: AttributeError
+_ TestAdaptadorConsultaCaixa.test_missing_quote_currency_is_unavailable_not_zero _
+
+self = <tests.test_v9_fin04_caixa.TestAdaptadorConsultaCaixa object at 0x0000016DA6180200>
+
+    def test_missing_quote_currency_is_unavailable_not_zero(self):
+        b = _adaptador(_CorretoraFalsa(total={"BTC": "0.5"}))
+        with pytest.raises(BrokerConsultaIndisponivel, match="USDT"):
+>           b.fetch_cash()
+            ^^^^^^^^^^^^
+E           AttributeError: 'CCXTDeskBroker' object has no attribute 'fetch_cash'
+
+tests\test_v9_fin04_caixa.py:238: AttributeError
+_______ TestAdaptadorConsultaCaixa.test_network_failure_is_unavailable ________
+
+self = <tests.test_v9_fin04_caixa.TestAdaptadorConsultaCaixa object at 0x0000016DA6180CB0>
+
+    def test_network_failure_is_unavailable(self):
+        b = _adaptador(_CorretoraFalsa(erro=ConnectionError("x")))
+        with pytest.raises(BrokerConsultaIndisponivel, match="consulta de caixa"):
+>           b.fetch_cash()
+            ^^^^^^^^^^^^
+E           AttributeError: 'CCXTDeskBroker' object has no attribute 'fetch_cash'
+
+tests\test_v9_fin04_caixa.py:243: AttributeError
+_ TestAdaptadorConsultaCaixa.test_response_without_total_section_is_unavailable _
+
+self = <tests.test_v9_fin04_caixa.TestAdaptadorConsultaCaixa object at 0x0000016DA6181010>
+
+    def test_response_without_total_section_is_unavailable(self):
+        b = _adaptador(_CorretoraFalsa(resposta={"free": {}}))
+        with pytest.raises(BrokerConsultaIndisponivel, match="total"):
+>           b.fetch_cash()
+            ^^^^^^^^^^^^
+E           AttributeError: 'CCXTDeskBroker' object has no attribute 'fetch_cash'
+
+tests\test_v9_fin04_caixa.py:248: AttributeError
+______ TestAdaptadorConsultaCaixa.test_non_dict_response_is_unavailable _______
+
+self = <tests.test_v9_fin04_caixa.TestAdaptadorConsultaCaixa object at 0x0000016DA6181370>
+
+    def test_non_dict_response_is_unavailable(self):
+        b = _adaptador(_CorretoraFalsa(resposta="nope"))
+        with pytest.raises(BrokerConsultaIndisponivel, match="malformada"):
+>           b.fetch_cash()
+            ^^^^^^^^^^^^
+E           AttributeError: 'CCXTDeskBroker' object has no attribute 'fetch_cash'
+
+tests\test_v9_fin04_caixa.py:253: AttributeError
+________ TestAdaptadorConsultaCaixa.test_invalid_amount_is_unavailable ________
+
+self = <tests.test_v9_fin04_caixa.TestAdaptadorConsultaCaixa object at 0x0000016DA6181700>
+
+    def test_invalid_amount_is_unavailable(self):
+        b = _adaptador(_CorretoraFalsa(total={"USDT": "abc"}))
+        with pytest.raises(BrokerConsultaIndisponivel, match="USDT"):
+>           b.fetch_cash()
+            ^^^^^^^^^^^^
+E           AttributeError: 'CCXTDeskBroker' object has no attribute 'fetch_cash'
+
+tests\test_v9_fin04_caixa.py:258: AttributeError
+_ TestAdaptadorConsultaCaixa.test_exchange_without_balance_query_is_unavailable _
+
+self = <tests.test_v9_fin04_caixa.TestAdaptadorConsultaCaixa object at 0x0000016DA6181A60>
+
+    def test_exchange_without_balance_query_is_unavailable(self):
+        b = _adaptador(object())
+        with pytest.raises(BrokerConsultaIndisponivel, match="saldo"):
+>           b.fetch_cash()
+            ^^^^^^^^^^^^
+E           AttributeError: 'CCXTDeskBroker' object has no attribute 'fetch_cash'
+
+tests\test_v9_fin04_caixa.py:263: AttributeError
+=========================== short test summary info ===========================
+FAILED tests/test_v9_fin04_caixa.py::TestCaixaNaReconciliacao::test_only_cash_divergence_blocks_safe
+FAILED tests/test_v9_fin04_caixa.py::TestCaixaNaReconciliacao::test_the_divergence_shows_both_values
+FAILED tests/test_v9_fin04_caixa.py::TestCaixaNaReconciliacao::test_matching_cash_allows_safe
+FAILED tests/test_v9_fin04_caixa.py::TestCaixaNaReconciliacao::test_cash_is_read_after_remote_fills_are_applied
+FAILED tests/test_v9_fin04_caixa.py::TestCaixaNaReconciliacao::test_without_a_cash_query_there_is_no_safe
+FAILED tests/test_v9_fin04_caixa.py::TestCaixaNaReconciliacao::test_a_failing_cash_query_stays_unknown
+FAILED tests/test_v9_fin04_caixa.py::TestCaixaNaReconciliacao::test_a_malformed_cash_answer_stays_unknown
+FAILED tests/test_v9_fin04_caixa.py::TestRelatorioAntigoSemCaixaNaoAutoriza::test_report_without_caixa_status_is_refused
+FAILED tests/test_v9_fin04_caixa.py::TestRelatorioAntigoSemCaixaNaoAutoriza::test_report_with_unknown_cash_is_refused
+FAILED tests/test_v9_fin04_caixa.py::TestRelatorioAntigoSemCaixaNaoAutoriza::test_restart_with_pre_fix_report_is_refused
+FAILED tests/test_v9_fin04_caixa.py::TestAdaptadorConsultaCaixa::test_quote_currency_cash_is_returned
+FAILED tests/test_v9_fin04_caixa.py::TestAdaptadorConsultaCaixa::test_missing_quote_currency_is_unavailable_not_zero
+FAILED tests/test_v9_fin04_caixa.py::TestAdaptadorConsultaCaixa::test_network_failure_is_unavailable
+FAILED tests/test_v9_fin04_caixa.py::TestAdaptadorConsultaCaixa::test_response_without_total_section_is_unavailable
+FAILED tests/test_v9_fin04_caixa.py::TestAdaptadorConsultaCaixa::test_non_dict_response_is_unavailable
+FAILED tests/test_v9_fin04_caixa.py::TestAdaptadorConsultaCaixa::test_invalid_amount_is_unavailable
+FAILED tests/test_v9_fin04_caixa.py::TestAdaptadorConsultaCaixa::test_exchange_without_balance_query_is_unavailable
+17 failed in 0.35s

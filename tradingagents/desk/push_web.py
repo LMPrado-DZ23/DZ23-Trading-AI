@@ -255,9 +255,14 @@ class EntregadorPush:
                 # novo; a entrega desta rodada já aconteceu de verdade.
                 self._podar(expiradas)
         total = len(self.assinaturas)
+        # Contrato: ok=True = o alerta alcançou ao menos 1 aparelho (no
+        # despacho, o primeiro canal bem-sucedido vence); parcial=True = há
+        # lacuna visível — os aparelhos contados em erros/expiradas e no
+        # detalhe. Um parcial NUNCA se apresenta como entrega total.
         resultado = {"entregues": entregues,
                      "expiradas": [a.identificador() for a in expiradas],
-                     "erros": erros}
+                     "erros": erros,
+                     "parcial": entregues > 0 and (erros > 0 or bool(expiradas))}
         if entregues:
             resultado.update(ok=True, detalhe=(
                 f"push entregue a {entregues}/{total} dispositivo(s)"

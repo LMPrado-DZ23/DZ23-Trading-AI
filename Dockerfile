@@ -10,8 +10,10 @@ ENV PATH="/opt/venv/bin:$PATH"
 WORKDIR /build
 COPY . .
 # [desk] = painel (fastapi/uvicorn), Postgres e corretoras/feed (ccxt).
+# [push] = Web Push do celular (pywebpush) — este contêiner é o servidor
+# 24/7 com HTTPS que envia as notificações (RUNBOOK.md).
 RUN python -m pip install --no-cache-dir --upgrade pip wheel \
- && pip install --no-cache-dir ".[desk]"
+ && pip install --no-cache-dir ".[desk,push]"
 
 FROM python:3.12-slim
 

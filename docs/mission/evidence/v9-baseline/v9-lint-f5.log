@@ -1,0 +1,11 @@
+# V9-LINT-02 — ruff repo-wide com ferramentas F5 (2026-10-15)
+quando_utc: 2026-10-15T11:20:12Z
+head: 2b7754a94cc1e4233ad95ac6fa377be4078e5055
+comando: ./.venv/Scripts/python.exe -m ruff check .
+All checks passed!
+ruff exit=0
+---
+mudancas cobertas por este log:
+1) tools/v9_f5_probe_conectores.py: E741 corrigido (variavel 'l' -> 'linha' no gerador de probe_yfinance; semantica identica).
+2) pyproject.toml: extend-exclude += docs/mission/evidence — artefatos de evidencia congelados (o runner SEC-06 tem sha256_prefix dd0336333ec00c9d registrado no invocation.json; E402 deliberado: addaudithook antes do import pytest). Codigo de produto segue lintado integralmente.
+3) tools/v9_f5_probe_ia.py: ja estava limpo; re-verificado neste run.

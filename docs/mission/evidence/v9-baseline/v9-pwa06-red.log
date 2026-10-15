@@ -1,0 +1,21 @@
+.F...............                                                        [100%]
+================================== FAILURES ===================================
+_____ TestServiceWorker.test_ativacao_remove_apenas_caches_do_proprio_app _____
+
+self = <tests.test_pwa_static.TestServiceWorker object at 0x0000011AF70B38F0>
+
+    def test_ativacao_remove_apenas_caches_do_proprio_app(self):
+        # V9-PWA-06: a purga de ativação apagava QUALQUER cache que não fosse
+        # o CACHE atual — inclusive caches de outro app no mesmo domínio
+        # (cache sentinela alheio) e o marcador persistente
+        # "dz23-push-pendente" da reinscrição (V9-PWA-05). A purga passa a
+        # ser escopada à família de caches do DZ23 ("dz23-pwa-"): alheios e
+        # o marcador sobrevivem por construção (o marcador não casa o prefixo).
+        fonte = (STATIC / "sw.js").read_text(encoding="utf-8")
+>       assert 'startsWith("dz23-pwa-")' in fonte
+E       assert 'startsWith("dz23-pwa-")' in '/* Service Worker do PWA DZ23 Trading AI — push real + cache MÍNIMO.\n *\n * O QUE ESTE SW FAZ:\n *  - recebe o push ...        return undefined;\n          }\n        }\n        return self.clients.openWindow(url);\n      })\n  );\n});\n'
+
+tests\test_pwa_static.py:39: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_pwa_static.py::TestServiceWorker::test_ativacao_remove_apenas_caches_do_proprio_app
+1 failed, 16 passed in 20.72s

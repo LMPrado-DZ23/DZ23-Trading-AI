@@ -64,3 +64,17 @@ O backtest do freqtrade tem premissas **próprias e declaradas**; um confronto h
 - O freqtrade é GPLv3: a estratégia de confronto escrita para ele é **código separado**, vivendo FORA do repositório do produto (ou em diretório de evidência declarado, sem import do núcleo do produto). Não vira dependência, não vira import.
 - Equivalência de backtest **não** é garantia de resultado real: divergências de microestrutura (livro, latência, fills parciais) existem por construção. O protocolo mede se a **contabilidade** dos dois motores bate dado o mesmo modelo — não prevê o futuro.
 - Esta rodada **ainda não foi executada** (decisão ADIAR da matriz). Registrado em FQ-3 como pendência pontual.
+
+## 5. Atualização 2026-10-15 (missão V9) — rodada 1 executada
+
+Duas afirmações históricas deste documento ficam **superadas** por esta atualização, sem reescrever o texto original: a de §1 ("Nenhum confronto de backtest foi executado ainda") e a do último item de §4 ("Esta rodada **ainda não foi executada**").
+
+**O que foi executado:** rodada 1 completa em ambiente isolado (freqtrade-spike, venv próprio fora do repositório; sem credenciais; sem execução financeira; sem `--live`), com os 11 itens de §2 fixados e os comandos verbatim registrados:
+
+- [Veredito da rodada 1](../evidence/v9-baseline/fq2-round1-veredito.md) — escolhas dos itens 1–11, artefatos congelados com sha256, comandos e resultados.
+- [Invocação](../evidence/v9-baseline/fq2-round1-invocation.json) — comandos, saídas e exit codes brutos.
+- [Comparação](../evidence/v9-baseline/fq2-round1-comparacao.json) + [probe](../evidence/v9-baseline/fq2-round1-probe.log) — veredito por operação.
+
+**Resultado:** Parte A (contabilidade dos dois motores sobre o mesmo modelo) = **EQUIVALENTE** — 66×66 operações, 0 divergências, carteira simulada `989.1910209104` vs export `989.19102087` (diferença 4,04e-8). Parte B (motor do laboratório DZ23) diverge **por desenho documentado**: causa única = round-trip de uma barra (entrada na abertura seguinte, saída no mesmo fechamento) vs manutenção multi-barra até o cruzamento de baixa.
+
+**O que esta atualização NÃO muda:** nenhuma regra do protocolo foi relaxada; a tolerância de §3.5 segue como sugestão declarada por rodada; o veredito **não promove ninguém** (§3.6) — a decisão continua na Escola; GPLv3 respeitada (estratégia do confronto é código separado, sem import do núcleo do produto). Rodadas futuras seguem este mesmo protocolo.

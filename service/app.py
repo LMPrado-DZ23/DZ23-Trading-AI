@@ -11,20 +11,21 @@ import ipaddress
 import json
 import logging
 import os
+import re
 import secrets
 import threading
 import time
 import traceback
 import uuid
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from service.api import diagnostics, security_center, segredos_em_repouso
+from service.api import segredos_em_repouso
 from service.api.ia_uso import RegistroDeUso
 from service.api.owner_credentials import CredenciaisDoDono, erro_de_senha
 from tradingagents.agency import AgencyTask, build_llm_handler
@@ -257,8 +258,6 @@ _DESK_EFFECTIVE_DEFAULTS = {
 }
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
-app.include_router(diagnostics.router)
-app.include_router(security_center.router)
 bearer = HTTPBearer(auto_error=False)
 
 # ── GATE G2 — BLOQUEIO INCONDICIONAL DA SUPERFÍCIE SaaS ─────────────────────
@@ -459,7 +458,9 @@ def auth_status():
         "bootstrap_required": bool(MULTI_TENANT_ENABLED and TENANT_STORE and TENANT_STORE.tenant_count() == 0),
         "live_trading": False,
         # Primeira execução (nenhuma senha criada): o painel abre o assistente.
-        "setup_required": (not OWNER_CREDENTIALS.existe()) and not PASSWORD,
+        # Presença FÍSICA do arquivo (mesmo ilegível) bloqueia o assistente —
+        # storage existente não é instalação nova (V9-SEC-04).
+        "setup_required": (not OWNER_CREDENTIALS.arquivo_presente()) and not PASSWORD,
     }
 
 
@@ -476,7 +477,7 @@ async def owner_setup(req: Request):
     if erro:
         raise HTTPException(422, erro)
     with _SETUP_LOCK:
-        if PASSWORD or OWNER_CREDENTIALS.existe():
+        if PASSWORD or OWNER_CREDENTIALS.arquivo_presente():
             raise HTTPException(409, "senha do dono já configurada")
         codigo = OWNER_CREDENTIALS.criar(senha)
     return {"ok": True, "codigo_recuperacao": codigo}
@@ -648,12 +649,19 @@ def resolve_llm(cfg: dict):
     return conf, env
 
 
+_TENANT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _tenant_id_valido(tenant_id: str) -> bool:
+    return bool(_TENANT_ID_RE.fullmatch(str(tenant_id)))
+
+
 def tenant_cfg_path(tenant_id: str = "legacy") -> Path:
     if tenant_id == "legacy":
         return CFG_PATH
-    path = DATA / "tenants" / tenant_id / "config.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    return path
+    if not _tenant_id_valido(tenant_id):
+        raise ValueError("identificador de inquilino inválido")
+    return DATA / "tenants" / tenant_id / "config.json"
 
 
 # Segredo cifrado que não pôde ser decifrado NESTE contexto (outro usuário
@@ -701,6 +709,8 @@ def _segredos_do_disco(do_disco: dict, tenant_id: str, path: Path) -> None:
     for chave in SECRETish:
         valor = do_disco.get(chave)
         if not segredos_em_repouso.e_cifrado(valor):
+            # Ausente ou legível em claro: o diagnóstico anterior ficou obsoleto.
+            registry.pop(chave, None)
             continue
         try:
             do_disco[chave] = segredos_em_repouso.decifrar(valor)
@@ -742,16 +752,34 @@ _TRADING_AGENT_IDS = (
 _AGENCY_LLM_AGENT_IDS = _GENERAL_AGENT_IDS + _TRADING_AGENT_IDS
 
 
+class _LLMIndisponivelHandler:
+    """Recusa execução quando não há LLM válido — nunca reusa chave removida."""
+
+    def __init__(self, motivo: str):
+        self.motivo = motivo
+
+    def __call__(self, task):
+        raise RuntimeError(f"LLM da agência indisponível — {self.motivo}")
+
+
+def _agencia_llm_fail_closed(runtime, motivo: str) -> None:
+    runtime.agency._agencia_llm_assinatura = None
+    recusa = _LLMIndisponivelHandler(motivo)
+    for agent_id in _AGENCY_LLM_AGENT_IDS:
+        runtime.agency.executor.handlers.pop(agent_id, None)
+        with contextlib.suppress(KeyError):
+            runtime.agency.register_task_handler(agent_id, recusa)
+
+
 def configure_agency_llm(runtime, tenant_id: str) -> str | None:
     """Configura handlers LLM por instância; retorna diagnóstico sem segredo."""
-    if all(agent_id in runtime.agency.executor.handlers for agent_id in _AGENCY_LLM_AGENT_IDS):
-        return None
     try:
         cfg = load_cfg(tenant_id)
         conf, resolved_env = resolve_llm(cfg)
         provider = str(conf.get("llm_provider", "")).strip()
         model = str(conf.get("quick_think_llm") or conf.get("deep_think_llm") or "").strip()
         if not provider or not model:
+            _agencia_llm_fail_closed(runtime, "modo de pensar não configurado")
             return "LLM não configurado para a agência"
         api_key = resolved_env.get("OPENAI_COMPATIBLE_API_KEY")
         if not api_key:
@@ -759,6 +787,13 @@ def configure_agency_llm(runtime, tenant_id: str) -> str | None:
                 if cfg.get(key_name):
                     api_key = cfg[key_name]
                     break
+        assinatura = (provider, model, str(conf.get("backend_url") or ""), api_key or "")
+        handlers = runtime.agency.executor.handlers
+        if (
+            getattr(runtime.agency, "_agencia_llm_assinatura", None) == assinatura
+            and all(agent_id in handlers for agent_id in _AGENCY_LLM_AGENT_IDS)
+        ):
+            return None
         role_by_agent = {
             "research-agent": "pesquisa empresarial",
             "news-agent": "inteligência de notícias",
@@ -784,8 +819,8 @@ def configure_agency_llm(runtime, tenant_id: str) -> str | None:
             "reconciliation-agent": "reconciliação Paper/Testnet",
         }
         for agent_id in _AGENCY_LLM_AGENT_IDS:
-            if agent_id in runtime.agency.executor.handlers:
-                continue
+            handlers.pop(agent_id, None)
+        for agent_id in _AGENCY_LLM_AGENT_IDS:
             runtime.agency.register_task_handler(
                 agent_id,
                 build_llm_handler(
@@ -796,9 +831,11 @@ def configure_agency_llm(runtime, tenant_id: str) -> str | None:
                     api_key=api_key,
                 ),
             )
+        runtime.agency._agencia_llm_assinatura = assinatura
         return None
     except Exception as exc:
         LOGGER.warning("LLM da agência indisponível para tenant %s: %s", tenant_id, type(exc).__name__)
+        _agencia_llm_fail_closed(runtime, type(exc).__name__)
         return f"LLM da agência indisponível ({type(exc).__name__})"
 
 def save_cfg(cfg: dict, tenant_id: str = "legacy"):
@@ -2207,6 +2244,67 @@ def _push_do_tenant(tenant_id: str):
     return assinaturas, entregador
 
 
+def _persistir_diagnostico_push(tenant_id: str, assinaturas) -> None:
+    """Grava no config o diagnóstico REAL da última entrega (sucesso, erro,
+    falhas) — o painel recarrega o estado do armazém, não da memória do
+    processo. Inscrições podadas nesta rodada não voltam (filtro por id)."""
+    from tradingagents.desk import push_web
+    try:
+        cfg = load_cfg(tenant_id)
+        atuais = push_web.carregar_assinaturas(cfg)
+        diag = {a.identificador(): (a.ultimo_ok, a.ultimo_erro, a.falhas)
+                for a in assinaturas}
+        mudou = False
+        for atual in atuais:
+            valores = diag.get(atual.identificador())
+            if valores is None:
+                continue
+            if (atual.ultimo_ok, atual.ultimo_erro, atual.falhas) != valores:
+                atual.ultimo_ok, atual.ultimo_erro, atual.falhas = valores
+                mudou = True
+        if mudou:
+            save_cfg(push_web.salvar_assinaturas(cfg, atuais), tenant_id)
+    except Exception:
+        # Diagnóstico é melhor-esforço: a entrega já aconteceu de verdade.
+        LOGGER.warning("não foi possível persistir o diagnóstico do push")
+
+
+_CHAVE_TESTES_CANAL = "NOTIF_TESTES_CANAL"
+
+
+def _testes_canal_do_cfg(cfg: dict) -> dict:
+    bruto = cfg.get(_CHAVE_TESTES_CANAL)
+    if isinstance(bruto, str) and bruto.strip():
+        try:
+            bruto = json.loads(bruto)
+        except ValueError:
+            return {}
+    if not isinstance(bruto, dict):
+        return {}
+    return {k: v for k, v in bruto.items() if isinstance(v, dict)}
+
+
+def _testes_canal(tenant_id: str) -> dict:
+    return _testes_canal_do_cfg(load_cfg(tenant_id))
+
+
+def _registrar_teste_canal(tenant_id: str, nome: str, resultado: dict) -> None:
+    """Registra o resultado do teste — inclusive FALHA — no config do
+    inquilino: sobrevive ao reinício e nunca vira sucesso silencioso."""
+    from tradingagents.desk.models import utcnow
+    try:
+        cfg = load_cfg(tenant_id)
+        doc = _testes_canal_do_cfg(cfg)
+        doc[nome] = {"em": utcnow().isoformat(),
+                     "ok": bool(resultado.get("ok")),
+                     "detalhe": str(resultado.get("detalhe")
+                                    or resultado.get("erro") or "")[:160]}
+        cfg[_CHAVE_TESTES_CANAL] = json.dumps(doc, ensure_ascii=False)
+        save_cfg(cfg, tenant_id)
+    except Exception:
+        LOGGER.warning("não foi possível registrar o teste do canal")
+
+
 def _despachar_alertas(tenant_id: str) -> dict:
     """Tenta entregar o que está pendente, respeitando backoff e rate limit."""
     from tradingagents.desk.canais_alerta import construir_canais
@@ -2220,6 +2318,7 @@ def _despachar_alertas(tenant_id: str) -> dict:
         entregador_webpush=entregador)
     despachante = Despachante(fila, canais, matriz=_matriz_alertas(tenant_id))
     resultado = despachante.despachar()
+    _persistir_diagnostico_push(tenant_id, assinaturas)
     _persistir_fila_alertas(tenant_id)
     return resultado
 
@@ -2400,6 +2499,11 @@ def _revisor_de_ia(tenant_id: str, cfg: dict):
         motivo_bloqueio = _ia_bloqueio(tenant_id)
         if motivo_bloqueio:
             raise RuntimeError(motivo_bloqueio)
+        # V9-SEC-07: credencial VIVA — a foto do boot não pode ressuscitar
+        # provedor/chave removidos no painel entre a rota e a revisão.
+        cfg_vivo = load_cfg(tenant_id)
+        if not cfg_vivo.get("TRADINGAGENTS_LLM_PROVIDER"):
+            raise RuntimeError("provedor de IA removido — revisão suspensa")
         from service.api.ia_provedores import consultar_ia
 
         prompt = (
@@ -2409,7 +2513,7 @@ def _revisor_de_ia(tenant_id: str, cfg: dict):
             "preço, alvo ou ordem nova e não invente dados que não estão "
             "nos fatos.\n"
             f"Fatos: {json.dumps(fatos, ensure_ascii=False)}")
-        texto, meta = consultar_ia(cfg, prompt)
+        texto, meta = consultar_ia(cfg_vivo, prompt)
         with contextlib.suppress(Exception):
             IA_USO.registrar(tenant_id, meta)
         return texto
@@ -2543,13 +2647,16 @@ def _desk_boot(tenant_id: str) -> dict:
             if motivo_bloqueio:
                 raise RuntimeError(
                     f"IA de contexto suspensa — {motivo_bloqueio}")
+            # V9-SEC-07: lê a credencial VIVA — chave removida no painel não
+            # pode ser ressuscitada pela foto do boot.
+            cfg_vivo = load_cfg(tenant_id)
             from service.api.ia_provedores import consultar_ia
 
             inicio = time.perf_counter()
             ok = False
-            provedor_registrado = cfg.get("TRADINGAGENTS_LLM_PROVIDER")
+            provedor_registrado = cfg_vivo.get("TRADINGAGENTS_LLM_PROVIDER")
             try:
-                texto, meta = consultar_ia(cfg, prompt)
+                texto, meta = consultar_ia(cfg_vivo, prompt)
                 ok = True
                 provedor_registrado = meta.get("provedor") or provedor_registrado
                 # V8 §6: consumo/custo estimado por inquilino (informativo).
@@ -2681,9 +2788,17 @@ def _desk_boot(tenant_id: str) -> dict:
             "ia_modelo": cfg.get("TRADINGAGENTS_LLM_PROVIDER") or "",
             "manual": copiloto, "snaps_fn": snaps_fn}
 
+    def _gravar_oms():
+        armazem.salvar(tenant_id, "oms", coord.snapshot_estado())
+
+    # WAL do OMS (FIN-08): gravação SÍNCRONA ligada ao coordenador. Aqui a
+    # falha LEVANTA de propósito — o coordenador recusa a ordem que a
+    # gravação não conseguiu tornar durável antes do envio.
+    coord.persistencia = _gravar_oms
+
     def _persistir_oms():
         try:
-            armazem.salvar(tenant_id, "oms", coord.snapshot_estado())
+            _gravar_oms()
         except Exception:
             HEALTH["avisos"].append(
                 "não foi possível persistir o estado financeiro da mesa")
@@ -3473,16 +3588,27 @@ async def escola_adotar_conhecimento(req: Request, _=Depends(auth),
 
 @app.get("/v1/escola/certificacao")
 def escola_certificacao(request: Request, estrategia: str, corretora: str,
-                        mercado: str = "spot", ativo: str = "",
+                        conta: str = "", mercado: str = "spot",
+                        modo: str = "", ativo: str = "",
                         horizonte: str = "1h", versao: str = "1",
-                        _=Depends(auth)):
+                        payout: str = "", _=Depends(auth)):
     """Elegibilidade NO CONTEXTO informado. Um trader formado na Binance
-    não é considerado formado na OKX — a resposta diz isso com todas as
+    não é considerado formado na OKX — e nem em outra conta, outro modo
+    (paper/testnet) ou outro payout: a resposta diz isso com todas as
     letras, em vez de fingir equivalência."""
-    from tradingagents.desk.salas import ContextoDeCertificacao
+    from tradingagents.desk.salas import (
+        MODO_PAPER,
+        ContextoDeCertificacao,
+        SalaError,
+    )
     esc = _escola_of(request)
-    contexto = ContextoDeCertificacao(corretora=corretora, mercado=mercado,
-                                      ativo=ativo, horizonte=horizonte)
+    try:
+        contexto = ContextoDeCertificacao(
+            corretora=corretora, conta=conta, mercado=mercado,
+            modo=modo or MODO_PAPER, ativo=ativo, horizonte=horizonte,
+            payout=payout or None)
+    except SalaError as exc:
+        raise HTTPException(422, str(exc)) from exc
     ok, motivo = esc["central"].elegivel_para_live(
         estrategia, versao, contexto=contexto)
     return {"contexto": contexto.chave,
@@ -3688,6 +3814,7 @@ async def escola_piloto_solicitar(req: Request, _=Depends(auth),
 
     from tradingagents.desk.piloto import SupervisorDePiloto
     from tradingagents.desk.salas import (
+        MODO_PAPER,
         ContextoDeCertificacao,
         EscolaDoPiloto,
         SalaError,
@@ -3708,11 +3835,17 @@ async def escola_piloto_solicitar(req: Request, _=Depends(auth),
     except (TypeError, ValueError) as exc:
         raise HTTPException(422, "prazo_dias precisa ser um número inteiro") from exc
     esc = _escola_of(req)
-    contexto = ContextoDeCertificacao(
-        corretora=str(body.get("corretora") or ""),
-        mercado=str(body.get("mercado") or "spot"),
-        ativo=str(body.get("ativo") or ""),
-        horizonte=str(body.get("horizonte") or "1h"))
+    try:
+        contexto = ContextoDeCertificacao(
+            corretora=str(body.get("corretora") or ""),
+            conta=str(body.get("conta") or ""),
+            mercado=str(body.get("mercado") or "spot"),
+            modo=str(body.get("modo") or MODO_PAPER),
+            ativo=str(body.get("ativo") or ""),
+            horizonte=str(body.get("horizonte") or "1h"),
+            payout=body.get("payout") or None)
+    except SalaError as exc:
+        raise HTTPException(422, str(exc)) from exc
     sup = SupervisorDePiloto(
         esc["armazem"], tenant_id=esc["tenant_id"],
         escola=EscolaDoPiloto(esc["central"], contexto))
@@ -3938,6 +4071,37 @@ def _parada(tenant_id: str) -> DeskKillSwitch:
     return DeskKillSwitch(armazem, tenant_id)
 
 
+def _teto_positivo(cfg: dict, chave: str) -> bool:
+    """Teto de dinheiro real só é teto como NÚMERO finito > 0 — a mesma
+    exigência da ponte CCXT (`_decimal_env`). "0", "-5", "abc", "inf" e
+    "NaN" não podem aparecer como pronto no painel."""
+    try:
+        valor = Decimal(str(cfg.get(chave) or ""))
+    except (InvalidOperation, ValueError):
+        return False
+    return valor.is_finite() and valor > 0
+
+
+def _fill_de_corretora_externa(d) -> bool:
+    """Ordem PREENCHIDA com id de exchange de verdade.
+
+    O simulador local grava id `paper-*` (PaperBroker); o id do
+    CCXTDeskBroker é o id opaco devolvido pela corretora externa. Neste
+    lançamento a única corretora externa construível é a testnet (LIVE é
+    selado por código), então um fill com id externo é a evidência honesta
+    de "já operou em testnet". Registro sem id, id do simulador ou estado
+    desconhecido NÃO conta."""
+    if not d:
+        return False
+    for r in d["coordinator"].orders.values():
+        if r.state.value != "filled":
+            continue
+        externo = str(getattr(r, "external_id", "") or "")
+        if externo and not externo.startswith("paper-"):
+            return True
+    return False
+
+
 @app.get("/v1/live/status")
 def live_status(request: Request, _=Depends(auth)):
     """Diz, sem rodeio, se este inquilino pode operar dinheiro real e o que
@@ -3951,19 +4115,28 @@ def live_status(request: Request, _=Depends(auth)):
         {"item": "Chaves da corretora configuradas",
          "pronto": bool(cfg.get("EXCHANGE_API_KEY") and cfg.get("EXCHANGE_API_SECRET")),
          "acao": "Cole a chave e o segredo da sua corretora"},
+        {"item": "Permissões da chave da corretora comprovadas (somente leitura)",
+         "pronto": False,
+         "acao": ("Comprove que a chave só lê (sem saque e sem trade) com uma "
+                  "consulta real autorizada — preparação ainda não registrada")},
+        {"item": "Identidade da conta REAL confirmada",
+         "pronto": False,
+         "acao": ("Confirme, com consulta autorizada, que a conta cadastrada é "
+                  "a conta real pretendida — preparação ainda não registrada")},
         {"item": "Teto por ordem definido",
-         "pronto": bool(cfg.get("LIVE_MAX_ORDER_VALUE")),
-         "acao": "Defina LIVE_MAX_ORDER_VALUE (valor máximo de UMA ordem)"},
+         "pronto": _teto_positivo(cfg, "LIVE_MAX_ORDER_VALUE"),
+         "acao": "Defina LIVE_MAX_ORDER_VALUE (número finito maior que zero)"},
         {"item": "Perda máxima diária definida",
-         "pronto": bool(cfg.get("LIVE_MAX_DAILY_LOSS")),
-         "acao": "Defina LIVE_MAX_DAILY_LOSS (quando parar no vermelho)"},
+         "pronto": _teto_positivo(cfg, "LIVE_MAX_DAILY_LOSS"),
+         "acao": "Defina LIVE_MAX_DAILY_LOSS (número finito maior que zero)"},
         {"item": "Modo da corretora em LIVE",
          "pronto": (cfg.get("TRADINGAGENTS_BROKER_MODE") or "") == "live",
          "acao": "Troque o modo da corretora para LIVE"},
         {"item": "Já operou em testnet",
-         "pronto": bool(d and any(r.state.value == "filled"
-                                  for r in d["coordinator"].orders.values())),
-         "acao": "Rode a mesa em testnet e veja uma ordem preenchida antes"},
+         "pronto": _fill_de_corretora_externa(d),
+         "acao": ("Rode a mesa com a corretora TESTNET (CCXT) e veja uma ordem "
+                  "preenchida de verdade — ordem PAPER (simulada neste PC) "
+                  "não conta")},
         # O selo de CÓDIGO da mesa (ADR-006). Sem ele, mesmo com todos os
         # itens acima verdes, a mesa recusa arrancar em LIVE — e é bom que
         # recuse: o painel nunca é a última fechadura de dinheiro real.
@@ -4205,13 +4378,15 @@ def canais_de_notificacao(request: Request, _=Depends(auth)):
     canais = construir_canais(load_cfg(tid),
                               transportes=_TESTE_CANAL_TRANSPORTES.get(tid),
                               assinaturas_webpush=assinaturas)
-    d = _DESKS.get(tid) or {}
-    ultimos = d.get("testes_canal") or {}
+    ultimos = _testes_canal(tid)
     return {"canais": [{"nome": c.nome, "prioridade": c.prioridade,
                         "configurado": c.configurado(),
                         "disponivel": c.disponivel(),
                         "detalhe": c.detalhe(),
-                        "ultimo_teste": ultimos.get(c.nome, "")}
+                        "ultimo_teste": (ultimos.get(c.nome) or {}).get(
+                            "em", ""),
+                        "ultimo_teste_ok": (ultimos.get(c.nome) or {}).get(
+                            "ok")}
                        for c in canais],
             "aviso": ("sem nenhum canal externo configurado o alerta fica "
                       "na Caixa de entrada do painel — nunca se perde, mas "
@@ -4258,15 +4433,16 @@ async def testar_canal_de_notificacao(req: Request, _=Depends(auth)):
         except Exception as exc:
             resultado = {"ok": False,
                          "erro": f"{type(exc).__name__}: {exc}"[:160]}
-    d = _DESKS.get(tid)
-    if d is not None:
-        d.setdefault("testes_canal", {})[nome] = utcnow().isoformat()
+    if nome == "webpush":
+        _persistir_diagnostico_push(tid, assinaturas)
+    _registrar_teste_canal(tid, nome, resultado)
     if not resultado.get("ok"):
         METRICS.inc("notif.teste_falhou")
         raise HTTPException(502, "entrega falhou: "
                                  + str(resultado.get("erro") or "sem detalhe"))
     return {"ok": True, "canal": nome,
             "detalhe": resultado.get("detalhe", ""),
+            "parcial": bool(resultado.get("parcial")),
             "latencia_ms": resultado.get("latencia_ms", 0),
             "em": utcnow().isoformat(),
             "aviso": ("teste de entrega confirmado — o canal está de pé "
@@ -4750,6 +4926,8 @@ def pagina_publica(tenant_id: str):
     Num mercado cheio de promessa vazia, mostrar o resultado real — com as
     perdas — é o argumento de venda mais forte que existe.
     """
+    if not _tenant_id_valido(tenant_id):
+        raise HTTPException(404, "agência não encontrada")
     cfg = load_cfg(tenant_id)
     if (cfg.get("TRANSPARENCIA_PUBLICA") or "").strip().lower() != "true":
         raise HTTPException(404, "esta agência não publicou seus resultados")
@@ -4904,16 +5082,23 @@ def desk_reconciliar(request: Request, _=Depends(auth)):
             raise RuntimeError("corretora não expõe consulta de ordens abertas")
         return corretora.fetch_open_orders()
 
+    def consultar_caixa():
+        if not hasattr(corretora, "fetch_cash"):
+            raise RuntimeError("corretora não expõe consulta de caixa")
+        return corretora.fetch_cash()
+
     tem_abertas = hasattr(corretora, "fetch_open_orders")
     tem_consulta = hasattr(corretora, "fetch_order_by_client_id")
     tem_posicoes = hasattr(corretora, "fetch_positions")
     tem_fills = hasattr(corretora, "fetch_order_fills")
+    tem_caixa = hasattr(corretora, "fetch_cash")
     resultado = coord.reconciliar(
         consultar if tem_consulta else None,
         consultar_posicoes=consultar_posicoes if tem_posicoes else None,
         consultar_fills=consultar_fills if tem_fills else None,
         consultar_ordens_abertas=(consultar_ordens_abertas if tem_abertas
-                                  else None))
+                                  else None),
+        consultar_caixa=consultar_caixa if tem_caixa else None)
     return {**resultado,
             "acao": ("portão liberado: pode operar" if resultado["seguro"] else
                      "confira as divergências na corretora antes de operar")}

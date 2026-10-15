@@ -222,6 +222,9 @@ def verifica_reinicio(base: str, senha: str, exe: Path, temp: Path,
     env = dict(os.environ)
     env.pop("ACCESS_PASSWORD", None)
     env["APPDATA"] = str(temp)  # o MESMO APPDATA: a persistência está em prova
+    # Mesmo pin hermético do 1º boot (paridade com tools/v9_pytest.py):
+    # nada de toast nativo do Windows durante o aceite.
+    env["ALERTA_WINDOWS"] = "false"
     novo = subprocess.Popen(
         [str(exe)], cwd=str(exe.parent), env=env,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -283,6 +286,12 @@ def main() -> int:
         env = dict(os.environ)
         env.pop("ACCESS_PASSWORD", None)
         env["APPDATA"] = str(temp)  # dados descartáveis; nunca o APPDATA do dono
+        # Paridade hermética com tools/v9_pytest.py e tools/v9_e2e.py, que o
+        # runner de origem já usa: sem toast nativo durante o aceite. O cartão
+        # de capacidades (FM-6 03c) exige o canal desligado no boot — sem o
+        # pin, o exe recém-nascido relata "disponível" e a matriz falha
+        # (red real: Windows Release run 38781679788, aceite-bundle).
+        env["ALERTA_WINDOWS"] = "false"
         proc = subprocess.Popen(
             [str(exe)], cwd=str(exe.parent), env=env,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

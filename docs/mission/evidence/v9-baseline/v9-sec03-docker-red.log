@@ -1,0 +1,72 @@
+Unable to find image 'python:3.12-slim' locally
+3.12-slim: Pulling from library/python
+bbc5a1223747: Pulling fs layer
+75b6a36c64a1: Pulling fs layer
+6912e23eb445: Pulling fs layer
+bbc5a1223747: Download complete
+75b6a36c64a1: Download complete
+75b6a36c64a1: Pull complete
+97c6e8c8dabe: Download complete
+611ca50ea732: Download complete
+6912e23eb445: Download complete
+bbc5a1223747: Pull complete
+6912e23eb445: Pull complete
+Digest: sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
+Status: Downloaded newer image for python:3.12-slim
+[notice] To update, run: pip install --upgrade pip
+...FFF.....                                                              [100%]
+=================================== FAILURES ===================================
+_______ TestArchivePermissions.test_criacao_do_pacote_usa_modo_restrito ________
+
+self = <tests.test_desk_backup.TestArchivePermissions object at 0x7b8d48ffb1a0>
+
+    def test_criacao_do_pacote_usa_modo_restrito(self):
+        fonte = (ROOT / "tradingagents" / "desk" / "backup.py").read_text(encoding="utf-8")
+>       assert "os.open(" in fonte
+E       assert 'os.open(' in '"""Backup e restauração do estado operacional (TA-017).\n\nO que precisa sobreviver a uma máquina nova: configuração ..._em"), "destino": str(data_dir)}\n\n\n__all__ = ["create_backup", "restore_backup", "inspect_backup", "BackupError"]\n'
+
+tests/test_desk_backup.py:61: AssertionError
+__ TestArchivePermissions.test_archive_does_not_widen_secret_read_permissions __
+
+self = <tests.test_desk_backup.TestArchivePermissions object at 0x7b8d48ffb440>
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_archive_does_not_widen_se0')
+
+    def test_archive_does_not_widen_secret_read_permissions(self, tmp_path):
+        _pular_fora_de_posix()
+        anterior = os.umask(0o022)
+        try:
+            data = populate(tmp_path / "data")
+            create_backup(data, tmp_path / "bk.tar.gz")
+        finally:
+            os.umask(anterior)
+>       assert oct((tmp_path / "bk.tar.gz").stat().st_mode)[-3:] == "600"
+E       AssertionError: assert '644' == '600'
+E         
+E         - 600
+E         + 644
+
+tests/test_desk_backup.py:73: AssertionError
+______ TestArchivePermissions.test_preexisting_wide_archive_is_tightened _______
+
+self = <tests.test_desk_backup.TestArchivePermissions object at 0x7b8d48ffb710>
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_preexisting_wide_archive_0')
+
+    def test_preexisting_wide_archive_is_tightened(self, tmp_path):
+        _pular_fora_de_posix()
+        alvo = tmp_path / "bk.tar.gz"
+        alvo.write_bytes(b"lixo antigo")
+        os.chmod(alvo, 0o644)
+        data = populate(tmp_path / "data")
+        create_backup(data, alvo)
+>       assert oct(alvo.stat().st_mode)[-3:] == "600"
+E       AssertionError: assert '644' == '600'
+E         
+E         - 600
+E         + 644
+
+tests/test_desk_backup.py:82: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_desk_backup.py::TestArchivePermissions::test_criacao_do_pacote_usa_modo_restrito
+FAILED tests/test_desk_backup.py::TestArchivePermissions::test_archive_does_not_widen_secret_read_permissions
+FAILED tests/test_desk_backup.py::TestArchivePermissions::test_preexisting_wide_archive_is_tightened
+3 failed, 8 passed in 2.16s

@@ -1,0 +1,23 @@
+Unable to find image 'ghcr.io/gitleaks/gitleaks:latest' locally
+latest: Pulling from gitleaks/gitleaks
+a43ab0c74cc4: Pulling fs layer
+d49a2dee86fb: Pulling fs layer
+61fdfd7c0175: Pulling fs layer
+d92b655ae8e2: Pulling fs layer
+cc89e3f50cd2: Download complete
+a43ab0c74cc4: Download complete
+d92b655ae8e2: Download complete
+d49a2dee86fb: Download complete
+d49a2dee86fb: Pull complete
+d92b655ae8e2: Pull complete
+61fdfd7c0175: Download complete
+a43ab0c74cc4: Pull complete
+61fdfd7c0175: Pull complete
+Digest: sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+Status: Downloaded newer image for ghcr.io/gitleaks/gitleaks:latest
+[90m9:34AM[0m [31mERR[0m [1m[git] fatal: not a git repository: /repo/C:/Users/DZ23/Documents/Qoder/2026-10-12/2f7f19a4/DZ23-Trading-AI/.git/worktrees/dz23-v9-audit[0m
+[90m9:34AM[0m [31mERR[0m [1mskipping finding links: unable to parse remote URL[0m [36merror=[0m[31m[1m"command failed (128): exit status 128, stderr: fatal: not a git repository: /repo/C:/Users/DZ23/Documents/Qoder/2026-10-12/2f7f19a4/DZ23-Trading-AI/.git/worktrees/dz23-v9-audit"[0m[0m
+[90m9:34AM[0m [31mERR[0m [36merror=[0m[31m[1m"stderr is not empty"[0m[0m
+[90m9:34AM[0m [32mINF[0m [1m0 commits scanned.[0m
+[90m9:34AM[0m [32mINF[0m [1mscanned ~0 bytes (0) in 60.6ms[0m
+[90m9:34AM[0m [32mINF[0m [1mno leaks found[0m

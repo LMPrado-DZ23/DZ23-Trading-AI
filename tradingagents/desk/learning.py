@@ -13,12 +13,15 @@ Freios contra autoengano — cada um existe porque o erro oposto é comum:
   exposição livremente, mas aumentar só até o teto que o dono definiu.
 - Estratégia ruim é rebaixada; e rebaixamento exige evidência, não um dia
   ruim.
+- A porta da evidência recusa duplicata e data impossível: a mesma operação
+  não conta duas vezes, e desfecho no futuro não é resultado — é erro de
+  dado.
 """
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -28,6 +31,7 @@ AMOSTRA_MINIMA = 12          # abaixo disso, comportamento é o padrão
 MEIA_VIDA_DIAS = 45.0        # peso de um desfecho cai pela metade em 45 dias
 PISO_CONFIANCA = Decimal("0.20")
 TETO_CONFIANCA = Decimal("1.00")
+TOLERANCIA_FUTURO = timedelta(minutes=5)   # folga de relógio entre máquinas
 
 
 @dataclass(frozen=True)
@@ -49,6 +53,11 @@ class Desfecho:
     # exige (corretora, mercado, ativo, horizonte): formado em 1h não é
     # formado em swing — o mesmo sinal tem estatística diferente em cada um.
     horizonte: str = "1h"
+    # Quando a operação foi ABERTA. É o instante que a prova da escola usa
+    # como fronteira de independência: operação aberta antes da candidatura
+    # não é evidência independente, mesmo que feche depois. Legado sem este
+    # campo mantém o comportamento antigo (vale o fechamento).
+    aberta_em: datetime | None = None
 
     def peso(self, agora: datetime | None = None) -> float:
         agora = agora or datetime.now(timezone.utc)
@@ -61,24 +70,62 @@ class Desfecho:
 
 def desfecho_para_dict(d: Desfecho) -> dict:
     """Formato único de persistência — usado pela memória e pelas salas."""
-    return {"estrategia": d.estrategia, "regime": d.regime,
-            "instrumento": d.instrumento, "retorno": str(d.retorno),
-            "fechado_em": d.fechado_em.isoformat(),
-            "forca_do_sinal": d.forca_do_sinal,
-            "exchange": d.exchange, "versao": d.versao,
-            "agente": d.agente, "horizonte": d.horizonte}
+    campos = {"estrategia": d.estrategia, "regime": d.regime,
+              "instrumento": d.instrumento, "retorno": str(d.retorno),
+              "fechado_em": d.fechado_em.isoformat(),
+              "forca_do_sinal": d.forca_do_sinal,
+              "exchange": d.exchange, "versao": d.versao,
+              "agente": d.agente, "horizonte": d.horizonte}
+    if d.aberta_em is not None:
+        campos["aberta_em"] = d.aberta_em.isoformat()
+    return campos
 
 
 def desfecho_de_dict(d: dict) -> Desfecho:
     """Reconstrói um desfecho persistido. Campos essenciais são exigidos —
     um registro sem estratégia/resultado/data não é evidência utilizável."""
+    aberta = d.get("aberta_em")
     return Desfecho(
         str(d["estrategia"]), str(d["regime"]), str(d["instrumento"]),
         Decimal(str(d["retorno"])),
         datetime.fromisoformat(str(d["fechado_em"])),
         float(d.get("forca_do_sinal", 0.0)),
         str(d.get("exchange", "")), str(d.get("versao", "1")),
-        str(d.get("agente", "")), str(d.get("horizonte", "1h")))
+        str(d.get("agente", "")), str(d.get("horizonte", "1h")),
+        datetime.fromisoformat(str(aberta)) if aberta else None)
+
+
+def validar_desfecho(desfecho: Desfecho, *,
+                     agora: datetime | None = None) -> None:
+    """A porta da evidência: recusa dado impossível ANTES da estatística.
+
+    - Fechamento (ou abertura) no futuro além da tolerância de relógio:
+      a operação ainda não aconteceu — aceitá-la infla a amostra.
+    - Fechamento anterior à abertura: dado corrompido.
+    Legado sem `aberta_em` permanece válido — o fechamento decide.
+    """
+    agora = agora or datetime.now(timezone.utc)
+    if agora.tzinfo is None:
+        agora = agora.replace(tzinfo=timezone.utc)
+    fechado = desfecho.fechado_em
+    if fechado.tzinfo is None:
+        fechado = fechado.replace(tzinfo=timezone.utc)
+    if fechado > agora + TOLERANCIA_FUTURO:
+        raise ValueError(
+            f"desfecho com fechado_em no futuro ({fechado.isoformat()}) — "
+            "operação ainda não aconteceu")
+    aberta = desfecho.aberta_em
+    if aberta is not None:
+        if aberta.tzinfo is None:
+            aberta = aberta.replace(tzinfo=timezone.utc)
+        if aberta > agora + TOLERANCIA_FUTURO:
+            raise ValueError(
+                f"desfecho com aberta_em no futuro ({aberta.isoformat()}) — "
+                "operação ainda não aconteceu")
+        if fechado < aberta:
+            raise ValueError(
+                f"fechamento em {fechado.isoformat()} antes de ser aberto "
+                f"em {aberta.isoformat()}")
 
 
 @dataclass
@@ -147,6 +194,10 @@ class MemoriaDeDesempenho:
 
     # -- aprendizado ---------------------------------------------------
     def registrar(self, desfecho: Desfecho) -> None:
+        validar_desfecho(desfecho)
+        if desfecho in self._desfechos:
+            raise ValueError("desfecho duplicado — a mesma operação não "
+                             "conta duas vezes")
         self._desfechos.append(desfecho)
         self.salvar()
 
@@ -297,4 +348,5 @@ class MemoriaDeDesempenho:
 
 
 __all__ = ["MemoriaDeDesempenho", "Desfecho", "Estatistica", "AMOSTRA_MINIMA",
-           "desfecho_para_dict", "desfecho_de_dict"]
+           "TOLERANCIA_FUTURO", "desfecho_para_dict", "desfecho_de_dict",
+           "validar_desfecho"]

@@ -149,7 +149,8 @@ def afrouxamento(atual: PoliticaDeSaida, proposta: PoliticaDeSaida) -> str | Non
     """Devolve o motivo se a proposta AFROUXA a proteção — ou None.
 
     Afrouxar = permitir perda maior (stop mais largo), exigir mais do mercado
-    (alvo mais distante), dar mais tempo (prazo maior) ou remover o trailing.
+    (alvo mais distante), dar mais tempo (prazo maior), remover o trailing ou
+    alargá-lo (deixa o preço recuar mais antes de proteger o lucro).
     """
     if proposta.stop < atual.stop:
         return (f"stop mais largo ({atual.stop:.2%} → {proposta.stop:.2%}) — "
@@ -161,6 +162,11 @@ def afrouxamento(atual: PoliticaDeSaida, proposta: PoliticaDeSaida) -> str | Non
         return (f"prazo maior ({atual.max_velas} → {proposta.max_velas} velas)")
     if atual.trailing_pct is not None and proposta.trailing_pct is None:
         return "trailing removido — lucro deixa de ser protegido no recuo"
+    if (atual.trailing_pct is not None and proposta.trailing_pct is not None
+            and proposta.trailing_pct > atual.trailing_pct):
+        return (f"trailing mais largo ({atual.trailing_pct:.2%} → "
+                f"{proposta.trailing_pct:.2%}) — recuo maior antes de proteger "
+                "o lucro")
     return None
 
 

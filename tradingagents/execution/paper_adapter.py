@@ -58,6 +58,8 @@ class PaperAdapter:
         slippage = price * self.slippage_bps / Decimal("10000")
         fill_price = price + (direction * slippage)
         position = self.positions.get(request.instrument_id)
+        if position is None and request.side is Side.SELL:
+            raise ValueError("PaperAdapter não permite abrir posição vendida; short não habilitado")
         if position and position.side is not request.side and request.quantity > position.quantity:
             raise ValueError("PaperAdapter não permite fechar além da posição; short não habilitado")
         ack = OrderAck(
@@ -111,7 +113,7 @@ class PaperAdapter:
         for instrument_id, position in self.positions.items():
             price = prices.get(instrument_id)
             if price is None or price <= 0:
-                continue
+                price = position.average_price
             direction = Decimal("1") if position.side is Side.BUY else Decimal("-1")
             unrealized += (price - position.average_price) * position.quantity * direction
             gross += price * position.quantity

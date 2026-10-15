@@ -1,0 +1,16 @@
+{
+  "head": "2b7754a94cc1e4233ad95ac6fa377be4078e5055",
+  "command": [
+    "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\.venv\\Scripts\\python.exe",
+    "-c",
+    "import sys, uuid\nimport desktop.launcher as launcher\nimport pytest\nlauncher.NOME_MUTEX_INSTANCIA = 'Local\\DZ23-V9-TestMutex-' + uuid.uuid4().hex\nlauncher.NOME_EVENTO_SAIDA = 'Local\\DZ23-V9-TestEvento-' + uuid.uuid4().hex\ndef block_registry_writes(event, args):\n    if event in ('winreg.CreateKey', 'winreg.SetValue', 'winreg.DeleteKey', 'winreg.DeleteValue'):\n        raise RuntimeError('V9 local test isolation forbids Windows registry writes')\nsys.addaudithook(block_registry_writes)\nraise SystemExit(pytest.main(sys.argv[1:]))\n",
+    "tests/windows",
+    "--deselect=tests/windows/test_notificacoes_identidade_win.py::test_identidade_registrada_no_windows",
+    "-q",
+    "--junitxml=C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\docs\\mission\\evidence\\v9-baseline\\windows-local.xml"
+  ],
+  "scope": "Windows tests with per-process UUID mutex/event names and registry writes forbidden",
+  "deselected": "test_identidade_registrada_no_windows requires disposable OS; not approved by this run",
+  "temporary_root": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\dz23-v9-win-tests-smmchp21",
+  "exit_code": 0
+}

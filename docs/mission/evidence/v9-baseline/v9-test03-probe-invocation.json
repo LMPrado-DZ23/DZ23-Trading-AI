@@ -1,0 +1,26 @@
+{
+  "artefato": "v9-test03-probe.log",
+  "artefato_sha256": "4c8dc017ef6b69ef52d4e73bd48cde92fd08001fbd8f2af0d702c31943060187",
+  "data_utc": "2026-10-15",
+  "head": "2b7754a94cc1e4233ad95ac6fa377be4078e5055",
+  "branch": "audit/v9-rc-20261015",
+  "executor": "Qoder (missão V9) — executado FORA do executor hermético DE PROPÓSITO: mede a semântica real do sistema de arquivos NTFS, que o executor hermético não substitui. Sem rede, sem credenciais, apenas diretórios temporários.",
+  "comandos": [
+    {
+      "passo": "sonda PRÉ-correção (estado em que ArmazemDeEstado.carregar capturava apenas ValueError)",
+      "cwd": "worktree de auditoria (dz23-v9-audit)",
+      "comando": "PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe tools/v9_probe_escrita_windows.py (stdout capturado em v9-test03-probe.log)",
+      "exit": 0
+    }
+  ],
+  "saida": [
+    {"fase1_leitor_ingenuo": {"ciclos": 500, "leitor": {"ok": 28437, "negada_pelo_so": 420, "recuperou_imediato": 273, "recuperou_apos_1ms": 144, "nao_recuperou_2_tentativas": 3}, "erros_de_escrita": 5, "thread_encerrou": true, "final_valido": true}},
+    {"fase2_carregar_producao": {"ciclos": 500, "carregar": {"ok": 11762, "vazio": 47, "escapou:PermissionError": 629}, "erros_de_salvar": 6, "thread_encerrou": true}}
+  ],
+  "notas": [
+    "Mede três coisas: (1) abrir o arquivo durante o os.replace do escritor pode ser negado pelo SO (PermissionError transitório — 420 negações em ~28,6 mil tentativas de leitura), todas recuperáveis com nova tentativa imediata ou em 1 ms; (2) NENHUM JSON rasgado e NENHUM arquivo ausente em nenhuma das fases — a invariante atômica do escritor se sustenta; (3) o carregar de produção ESCAPOU com PermissionError 629 vezes nas mesmas condições de corrida (defeito de produto V9-STO-01, correlato ao V9-TEST-03).",
+    "erros_de_escrita=5 na fase 1 e erros_de_salvar=6 na fase 2 ocorrem apenas sob leitor em laço apertado sem pausa (milhares de aberturas/s), que esgota o orçamento de retentativas do escritor (10 × 5 ms) — condição patológica não alcançada no uso real; o modo de falha é exceção visível (fail-closed), com o último estado íntegro em disco. Quantificado de novo na sonda pós-correção.",
+    "O defeito medido aqui é reconfirmado de forma hermética e reproduzível em v9-test03-red.log (executor tools/v9_pytest.py, label v9-test03-red, exit=1): carregar propagou PermissionError com a corrida real do Windows.",
+    "A correção do produto (retentativa espelhada no escritor, falha alta se persistir) foi medida depois: v9-test03-probe-pos.log mostra escapou:PermissionError ausente e erros_de_salvar=0."
+  ]
+}

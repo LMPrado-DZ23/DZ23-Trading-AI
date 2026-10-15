@@ -1,0 +1,22 @@
+{
+  "head": "2b7754a94cc1e4233ad95ac6fa377be4078e5055",
+  "command": [
+    "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\.venv\\Scripts\\python.exe",
+    "-m",
+    "pytest",
+    "tests/e2e/test_panel_e2e.py::test_dono_entra_e_visao_geral_paper",
+    "tests/test_security_fase0_r5.py::TestHardenedTransport",
+    "-q"
+  ],
+  "working_directory": "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit",
+  "result": "5 failed, 8 passed, 1 warning in 20.66s",
+  "exit_code": 1,
+  "log": "v9-pw-collision-red.log",
+  "notes": [
+    "RED reproduz a falha da suíte completa em combinação mínima: 1 teste e2e Playwright (que deixa o loop da thread principal 'rodando' durante toda a sessão) + TestHardenedTransport.",
+    "As 5 falhas são exatamente os 5 parâmetros [301, 302, 303, 307, 308] de test_async_client_does_not_follow com RuntimeError: asyncio.run() cannot be called from a running event loop — o único asyncio.run() nu da suíte.",
+    "Árvore em HEAD 2b7754a sem a correção (tests/test_security_fase0_r5.py inalterado, último commit 51cfc0e): defeito pré-existente no main, não introduzido pelas edições V9.",
+    "Suíte auditada (--ignore=tests/e2e) e execução isolada do arquivo passam: por isso o CI (sem navegador → e2e pulado) não via a colisão; a estação Windows do proprietário com Chrome/Edge vê.",
+    "Execução plain (sem runner de audit hook, sem --junitxml); saída completa em docs/mission/evidence/v9-baseline/v9-pw-collision-red.log (sha256 0d6db6fd...)."
+  ]
+}

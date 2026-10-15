@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="12" time="34.697" timestamp="2026-10-15T09:07:40.210921-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_escrita_atomica.TestEscritaAtomica" name="test_concurrent_writes_never_raise" time="8.276" /><testcase classname="tests.test_escrita_atomica.TestEscritaAtomica" name="test_file_is_always_complete_and_valid" time="5.909"><failure message="AssertionError: ([&quot;leitura negada pelo SO: PermissionError(13, 'Permission denied')&quot;], 'negações transitórias: 0')&#10;assert not [&quot;leitura negada pelo SO: PermissionError(13, 'Permission denied')&quot;]">self = &lt;tests.test_escrita_atomica.TestEscritaAtomica object at 0x000001BF4567C2C0&gt;
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-test03-red-ewz_0y0g/tmp/pytest-of-unknown/pytest-0/test_file_is_always_complete_a0')
+
+    def test_file_is_always_complete_and_valid(self, tmp_path):
+        """Nunca deve existir um JSON pela metade — nem durante a escrita."""
+        alvo = tmp_path / "estado.json"
+        escrever_json_atomico(alvo, {"inicial": True})
+        problemas: list[str] = []
+        transitorios: list[str] = []
+        parar = threading.Event()
+        t = threading.Thread(target=_vigiar_leitura,
+                             args=(alvo, parar, problemas, transitorios),
+                             daemon=True)
+        t.start()
+        try:
+            for i in range(150):
+                escrever_json_atomico(alvo, {"ciclo": i, "dados": "x" * 500})
+        finally:
+            parar.set()
+            t.join(timeout=5)
+        assert not t.is_alive(), "a thread leitora não terminou"
+&gt;       assert not problemas, (problemas[:3],
+                               f"negações transitórias: {len(transitorios)}")
+E       AssertionError: (["leitura negada pelo SO: PermissionError(13, 'Permission denied')"], 'negações transitórias: 0')
+E       assert not ["leitura negada pelo SO: PermissionError(13, 'Permission denied')"]
+
+tests\test_escrita_atomica.py:99: AssertionError</failure></testcase><testcase classname="tests.test_escrita_atomica.TestEscritaAtomica" name="test_no_orphan_temp_files_are_left" time="1.149" /><testcase classname="tests.test_escrita_atomica.TestEscritaAtomica" name="test_temp_is_created_in_the_same_directory" time="0.076" /><testcase classname="tests.test_escrita_atomica.TestEscritaAtomica" name="test_content_survives_the_write" time="0.265" /><testcase classname="tests.test_escrita_atomica.TestEscritaAtomica" name="test_creates_missing_directories" time="0.125" /><testcase classname="tests.test_escrita_atomica.TestProvaDeLeituraNuncaMorreEmSilencio" name="test_negacao_transitoria_e_registrada_e_recuperada" time="0.114"><failure message="AssertionError: []&#10;assert 0 == 1&#10; +  where 0 = len([])">self = &lt;tests.test_escrita_atomica.TestProvaDeLeituraNuncaMorreEmSilencio object at 0x000001BF4567D610&gt;
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-test03-red-ewz_0y0g/tmp/pytest-of-unknown/pytest-0/test_negacao_transitoria_e_reg0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001BF4570DEE0&gt;
+
+    def test_negacao_transitoria_e_registrada_e_recuperada(self, tmp_path,
+                                                           monkeypatch):
+        alvo = tmp_path / "estado.json"
+        escrever_json_atomico(alvo, {"ok": True})
+        _injeta_negacoes(monkeypatch, alvo, 1)
+        problemas: list[str] = []
+        transitorios: list[str] = []
+        parar = threading.Event()
+        t = threading.Thread(target=_vigiar_leitura,
+                             args=(alvo, parar, problemas, transitorios),
+                             daemon=True)
+        t.start()
+        limite = time.monotonic() + 2
+        while (t.is_alive() and not transitorios and not problemas
+               and time.monotonic() &lt; limite):
+            time.sleep(0.01)
+        parar.set()
+        t.join(timeout=5)
+        assert not t.is_alive()
+&gt;       assert len(transitorios) == 1, transitorios
+E       AssertionError: []
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests\test_escrita_atomica.py:152: AssertionError</failure></testcase><testcase classname="tests.test_escrita_atomica.TestProvaDeLeituraNuncaMorreEmSilencio" name="test_negacao_persistente_vira_problema_visivel" time="0.122"><failure message="AssertionError: [&quot;leitura negada pelo SO: PermissionError(13, 'Permission denied (injetado)')&quot;]&#10;assert False&#10; +  where False = any(&lt;generator object TestProvaDeLeituraNuncaMorreEmSilencio.test_negacao_persistente_vira_problema_visivel.&lt;locals&gt;.&lt;genexpr&gt; at 0x000001BF4575D970&gt;)">self = &lt;tests.test_escrita_atomica.TestProvaDeLeituraNuncaMorreEmSilencio object at 0x000001BF4567D940&gt;
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-test03-red-ewz_0y0g/tmp/pytest-of-unknown/pytest-0/test_negacao_persistente_vira_0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001BF45712390&gt;
+
+    def test_negacao_persistente_vira_problema_visivel(self, tmp_path,
+                                                       monkeypatch):
+        alvo = tmp_path / "estado.json"
+        escrever_json_atomico(alvo, {"ok": True})
+        _injeta_negacoes(monkeypatch, alvo, 10**9)
+        problemas: list[str] = []
+        transitorios: list[str] = []
+        parar = threading.Event()
+        t = threading.Thread(target=_vigiar_leitura,
+                             args=(alvo, parar, problemas, transitorios),
+                             daemon=True)
+        t.start()
+        t.join(timeout=10)
+        assert not t.is_alive(), "deveria desistir após o teto de negações"
+&gt;       assert any("persistentemente" in p for p in problemas), problemas
+E       AssertionError: ["leitura negada pelo SO: PermissionError(13, 'Permission denied (injetado)')"]
+E       assert False
+E        +  where False = any(&lt;generator object TestProvaDeLeituraNuncaMorreEmSilencio.test_negacao_persistente_vira_problema_visivel.&lt;locals&gt;.&lt;genexpr&gt; at 0x000001BF4575D970&gt;)
+
+tests\test_escrita_atomica.py:169: AssertionError</failure></testcase><testcase classname="tests.test_escrita_atomica.TestLeituraDoArmazemSobDisputa" name="test_negacao_transitoria_ainda_entrega_o_documento" time="0.108"><failure message="PermissionError: [Errno 13] Permission denied (injetado)">self = &lt;tests.test_escrita_atomica.TestLeituraDoArmazemSobDisputa object at 0x000001BF4567DCA0&gt;
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-test03-red-ewz_0y0g/tmp/pytest-of-unknown/pytest-0/test_negacao_transitoria_ainda0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001BF45710200&gt;
+
+    def test_negacao_transitoria_ainda_entrega_o_documento(self, tmp_path,
+                                                           monkeypatch):
+        armazem = ArmazemDeEstado(None, diretorio=tmp_path)
+        armazem.salvar("tenant-1", "mesa", {"ciclo": 7})
+        _injeta_negacoes(monkeypatch, tmp_path / "tenant-1" / "mesa.json", 1)
+&gt;       assert armazem.carregar("tenant-1", "mesa") == {"ciclo": 7}
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_escrita_atomica.py:181: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tradingagents\desk\storage.py:229: in carregar
+    return json.loads(caminho.read_text(encoding="utf-8"))
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-test03-red-ewz_0y0g/tmp/pytest-of-unknown/pytest-0/test_negacao_transitoria_ainda0/tenant-1/mesa.json')
+args = (), kwargs = {'encoding': 'utf-8'}
+
+    def falso(self, *args, **kwargs):
+        if self == alvo and restantes[0] &gt; 0:
+            restantes[0] -= 1
+&gt;           raise PermissionError(13, "Permission denied (injetado)")
+E           PermissionError: [Errno 13] Permission denied (injetado)
+
+tests\test_escrita_atomica.py:60: PermissionError</failure></testcase><testcase classname="tests.test_escrita_atomica.TestLeituraDoArmazemSobDisputa" name="test_negacao_persistente_falha_alto" time="0.110" /><testcase classname="tests.test_escrita_atomica.TestArmazemSobConcorrencia" name="test_store_handles_parallel_tenants" time="4.434" /><testcase classname="tests.test_escrita_atomica.TestAgendadorGravaEmCadaCiclo" name="test_scheduler_persists_repeatedly_without_error" time="4.759" /></testsuite></testsuites>

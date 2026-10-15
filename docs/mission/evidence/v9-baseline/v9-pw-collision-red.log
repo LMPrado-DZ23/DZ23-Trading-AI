@@ -1,0 +1,362 @@
+......FFFFF..                                                            [100%]
+================================== FAILURES ===================================
+________ TestHardenedTransport.test_async_client_does_not_follow[301] _________
+
+self = <tests.test_security_fase0_r5.TestHardenedTransport object at 0x00000264CB3376B0>
+code = 301
+
+    @pytest.mark.parametrize("code", REDIRECT_CODES)
+    def test_async_client_does_not_follow(self, code):
+        hits = []
+    
+        def handler(request):
+            hits.append(request.url.host)
+            if request.url.host == "start.example.com":
+                return httpx.Response(code, headers={"Location": "https://evil.example.com/x"})
+            return httpx.Response(200)
+    
+        from tradingagents.llm_clients.transport import (
+            build_hardened_async_http_client,
+        )
+    
+        async def run():
+            client = build_hardened_async_http_client()
+            client._transport = httpx.MockTransport(handler)
+            return await client.get("https://start.example.com/v1")
+    
+>       resp = asyncio.run(run())
+               ^^^^^^^^^^^^^^^^^^
+
+tests\test_security_fase0_r5.py:110: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+main = <coroutine object TestHardenedTransport.test_async_client_does_not_follow.<locals>.run at 0x00000264CB76DCB0>
+debug = None, loop_factory = None
+
+    def run(main, *, debug=None, loop_factory=None):
+        """Execute the coroutine and return the result.
+    
+        This function runs the passed coroutine, taking care of
+        managing the asyncio event loop, finalizing asynchronous
+        generators and closing the default executor.
+    
+        This function cannot be called when another asyncio event loop is
+        running in the same thread.
+    
+        If debug is True, the event loop will be run in debug mode.
+        If loop_factory is passed, it is used for new event loop creation.
+    
+        This function always creates a new event loop and closes it at the end.
+        It should be used as a main entry point for asyncio programs, and should
+        ideally only be called once.
+    
+        The executor is given a timeout duration of 5 minutes to shutdown.
+        If the executor hasn't finished within that duration, a warning is
+        emitted and the executor is closed.
+    
+        Example:
+    
+            async def main():
+                await asyncio.sleep(1)
+                print('hello')
+    
+            asyncio.run(main())
+        """
+        if events._get_running_loop() is not None:
+            # fail fast with short traceback
+>           raise RuntimeError(
+                "asyncio.run() cannot be called from a running event loop")
+E           RuntimeError: asyncio.run() cannot be called from a running event loop
+
+C:\Program Files\Python312\Lib\asyncio\runners.py:191: RuntimeError
+________ TestHardenedTransport.test_async_client_does_not_follow[302] _________
+
+self = <tests.test_security_fase0_r5.TestHardenedTransport object at 0x00000264CB337980>
+code = 302
+
+    @pytest.mark.parametrize("code", REDIRECT_CODES)
+    def test_async_client_does_not_follow(self, code):
+        hits = []
+    
+        def handler(request):
+            hits.append(request.url.host)
+            if request.url.host == "start.example.com":
+                return httpx.Response(code, headers={"Location": "https://evil.example.com/x"})
+            return httpx.Response(200)
+    
+        from tradingagents.llm_clients.transport import (
+            build_hardened_async_http_client,
+        )
+    
+        async def run():
+            client = build_hardened_async_http_client()
+            client._transport = httpx.MockTransport(handler)
+            return await client.get("https://start.example.com/v1")
+    
+>       resp = asyncio.run(run())
+               ^^^^^^^^^^^^^^^^^^
+
+tests\test_security_fase0_r5.py:110: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+main = <coroutine object TestHardenedTransport.test_async_client_does_not_follow.<locals>.run at 0x00000264CBBAC520>
+debug = None, loop_factory = None
+
+    def run(main, *, debug=None, loop_factory=None):
+        """Execute the coroutine and return the result.
+    
+        This function runs the passed coroutine, taking care of
+        managing the asyncio event loop, finalizing asynchronous
+        generators and closing the default executor.
+    
+        This function cannot be called when another asyncio event loop is
+        running in the same thread.
+    
+        If debug is True, the event loop will be run in debug mode.
+        If loop_factory is passed, it is used for new event loop creation.
+    
+        This function always creates a new event loop and closes it at the end.
+        It should be used as a main entry point for asyncio programs, and should
+        ideally only be called once.
+    
+        The executor is given a timeout duration of 5 minutes to shutdown.
+        If the executor hasn't finished within that duration, a warning is
+        emitted and the executor is closed.
+    
+        Example:
+    
+            async def main():
+                await asyncio.sleep(1)
+                print('hello')
+    
+            asyncio.run(main())
+        """
+        if events._get_running_loop() is not None:
+            # fail fast with short traceback
+>           raise RuntimeError(
+                "asyncio.run() cannot be called from a running event loop")
+E           RuntimeError: asyncio.run() cannot be called from a running event loop
+
+C:\Program Files\Python312\Lib\asyncio\runners.py:191: RuntimeError
+________ TestHardenedTransport.test_async_client_does_not_follow[303] _________
+
+self = <tests.test_security_fase0_r5.TestHardenedTransport object at 0x00000264CB337A40>
+code = 303
+
+    @pytest.mark.parametrize("code", REDIRECT_CODES)
+    def test_async_client_does_not_follow(self, code):
+        hits = []
+    
+        def handler(request):
+            hits.append(request.url.host)
+            if request.url.host == "start.example.com":
+                return httpx.Response(code, headers={"Location": "https://evil.example.com/x"})
+            return httpx.Response(200)
+    
+        from tradingagents.llm_clients.transport import (
+            build_hardened_async_http_client,
+        )
+    
+        async def run():
+            client = build_hardened_async_http_client()
+            client._transport = httpx.MockTransport(handler)
+            return await client.get("https://start.example.com/v1")
+    
+>       resp = asyncio.run(run())
+               ^^^^^^^^^^^^^^^^^^
+
+tests\test_security_fase0_r5.py:110: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+main = <coroutine object TestHardenedTransport.test_async_client_does_not_follow.<locals>.run at 0x00000264CBC80380>
+debug = None, loop_factory = None
+
+    def run(main, *, debug=None, loop_factory=None):
+        """Execute the coroutine and return the result.
+    
+        This function runs the passed coroutine, taking care of
+        managing the asyncio event loop, finalizing asynchronous
+        generators and closing the default executor.
+    
+        This function cannot be called when another asyncio event loop is
+        running in the same thread.
+    
+        If debug is True, the event loop will be run in debug mode.
+        If loop_factory is passed, it is used for new event loop creation.
+    
+        This function always creates a new event loop and closes it at the end.
+        It should be used as a main entry point for asyncio programs, and should
+        ideally only be called once.
+    
+        The executor is given a timeout duration of 5 minutes to shutdown.
+        If the executor hasn't finished within that duration, a warning is
+        emitted and the executor is closed.
+    
+        Example:
+    
+            async def main():
+                await asyncio.sleep(1)
+                print('hello')
+    
+            asyncio.run(main())
+        """
+        if events._get_running_loop() is not None:
+            # fail fast with short traceback
+>           raise RuntimeError(
+                "asyncio.run() cannot be called from a running event loop")
+E           RuntimeError: asyncio.run() cannot be called from a running event loop
+
+C:\Program Files\Python312\Lib\asyncio\runners.py:191: RuntimeError
+________ TestHardenedTransport.test_async_client_does_not_follow[307] _________
+
+self = <tests.test_security_fase0_r5.TestHardenedTransport object at 0x00000264CB337B00>
+code = 307
+
+    @pytest.mark.parametrize("code", REDIRECT_CODES)
+    def test_async_client_does_not_follow(self, code):
+        hits = []
+    
+        def handler(request):
+            hits.append(request.url.host)
+            if request.url.host == "start.example.com":
+                return httpx.Response(code, headers={"Location": "https://evil.example.com/x"})
+            return httpx.Response(200)
+    
+        from tradingagents.llm_clients.transport import (
+            build_hardened_async_http_client,
+        )
+    
+        async def run():
+            client = build_hardened_async_http_client()
+            client._transport = httpx.MockTransport(handler)
+            return await client.get("https://start.example.com/v1")
+    
+>       resp = asyncio.run(run())
+               ^^^^^^^^^^^^^^^^^^
+
+tests\test_security_fase0_r5.py:110: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+main = <coroutine object TestHardenedTransport.test_async_client_does_not_follow.<locals>.run at 0x00000264CBC812F0>
+debug = None, loop_factory = None
+
+    def run(main, *, debug=None, loop_factory=None):
+        """Execute the coroutine and return the result.
+    
+        This function runs the passed coroutine, taking care of
+        managing the asyncio event loop, finalizing asynchronous
+        generators and closing the default executor.
+    
+        This function cannot be called when another asyncio event loop is
+        running in the same thread.
+    
+        If debug is True, the event loop will be run in debug mode.
+        If loop_factory is passed, it is used for new event loop creation.
+    
+        This function always creates a new event loop and closes it at the end.
+        It should be used as a main entry point for asyncio programs, and should
+        ideally only be called once.
+    
+        The executor is given a timeout duration of 5 minutes to shutdown.
+        If the executor hasn't finished within that duration, a warning is
+        emitted and the executor is closed.
+    
+        Example:
+    
+            async def main():
+                await asyncio.sleep(1)
+                print('hello')
+    
+            asyncio.run(main())
+        """
+        if events._get_running_loop() is not None:
+            # fail fast with short traceback
+>           raise RuntimeError(
+                "asyncio.run() cannot be called from a running event loop")
+E           RuntimeError: asyncio.run() cannot be called from a running event loop
+
+C:\Program Files\Python312\Lib\asyncio\runners.py:191: RuntimeError
+________ TestHardenedTransport.test_async_client_does_not_follow[308] _________
+
+self = <tests.test_security_fase0_r5.TestHardenedTransport object at 0x00000264CB337BC0>
+code = 308
+
+    @pytest.mark.parametrize("code", REDIRECT_CODES)
+    def test_async_client_does_not_follow(self, code):
+        hits = []
+    
+        def handler(request):
+            hits.append(request.url.host)
+            if request.url.host == "start.example.com":
+                return httpx.Response(code, headers={"Location": "https://evil.example.com/x"})
+            return httpx.Response(200)
+    
+        from tradingagents.llm_clients.transport import (
+            build_hardened_async_http_client,
+        )
+    
+        async def run():
+            client = build_hardened_async_http_client()
+            client._transport = httpx.MockTransport(handler)
+            return await client.get("https://start.example.com/v1")
+    
+>       resp = asyncio.run(run())
+               ^^^^^^^^^^^^^^^^^^
+
+tests\test_security_fase0_r5.py:110: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+main = <coroutine object TestHardenedTransport.test_async_client_does_not_follow.<locals>.run at 0x00000264CBCB1490>
+debug = None, loop_factory = None
+
+    def run(main, *, debug=None, loop_factory=None):
+        """Execute the coroutine and return the result.
+    
+        This function runs the passed coroutine, taking care of
+        managing the asyncio event loop, finalizing asynchronous
+        generators and closing the default executor.
+    
+        This function cannot be called when another asyncio event loop is
+        running in the same thread.
+    
+        If debug is True, the event loop will be run in debug mode.
+        If loop_factory is passed, it is used for new event loop creation.
+    
+        This function always creates a new event loop and closes it at the end.
+        It should be used as a main entry point for asyncio programs, and should
+        ideally only be called once.
+    
+        The executor is given a timeout duration of 5 minutes to shutdown.
+        If the executor hasn't finished within that duration, a warning is
+        emitted and the executor is closed.
+    
+        Example:
+    
+            async def main():
+                await asyncio.sleep(1)
+                print('hello')
+    
+            asyncio.run(main())
+        """
+        if events._get_running_loop() is not None:
+            # fail fast with short traceback
+>           raise RuntimeError(
+                "asyncio.run() cannot be called from a running event loop")
+E           RuntimeError: asyncio.run() cannot be called from a running event loop
+
+C:\Program Files\Python312\Lib\asyncio\runners.py:191: RuntimeError
+============================== warnings summary ===============================
+tests/test_security_fase0_r5.py::TestHardenedTransport::test_built_llm_clients_carry_hardened_transport
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\typing_extensions.py:892: RuntimeWarning: coroutine 'TestHardenedTransport.test_async_client_does_not_follow.<locals>.run' was never awaited
+    cls._is_protocol = any(b is Protocol for b in cls.__bases__)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_security_fase0_r5.py::TestHardenedTransport::test_async_client_does_not_follow[301]
+FAILED tests/test_security_fase0_r5.py::TestHardenedTransport::test_async_client_does_not_follow[302]
+FAILED tests/test_security_fase0_r5.py::TestHardenedTransport::test_async_client_does_not_follow[303]
+FAILED tests/test_security_fase0_r5.py::TestHardenedTransport::test_async_client_does_not_follow[307]
+FAILED tests/test_security_fase0_r5.py::TestHardenedTransport::test_async_client_does_not_follow[308]
+5 failed, 8 passed, 1 warning in 20.66s

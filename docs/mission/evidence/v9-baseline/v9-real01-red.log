@@ -1,0 +1,346 @@
+FFFFFFFFFF..FFF...FF..                                                   [100%]
+================================== FAILURES ===================================
+_ TestTetoDeDinheiroHonesto.test_valor_invalido_nunca_aparece_como_pronto[0-LIVE_MAX_ORDER_VALUE-Teto por ordem] _
+
+self = <tests.test_v9_live_status_verdade.TestTetoDeDinheiroHonesto object at 0x00000179F7AF7620>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-real01-red-lt64ofzm/tmp/pytest-of-unknown/pytest-0/test_valor_invalido_nunca_apar0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000179F7B7E6F0>
+chave = 'LIVE_MAX_ORDER_VALUE', trecho = 'Teto por ordem', valor = '0'
+
+    @pytest.mark.parametrize("chave,trecho", _TETOS)
+    @pytest.mark.parametrize("valor", ["0", "-5", "abc", "inf", "NaN"])
+    def test_valor_invalido_nunca_aparece_como_pronto(
+            self, tmp_path, monkeypatch, chave, trecho, valor):
+        _, c = _app(tmp_path, monkeypatch)
+        r = c.post("/v1/config", headers=H, json={"vars": {chave: valor}})
+        assert r.status_code == 200, r.text
+        item = _item(_status(c), trecho)
+>       assert item["pronto"] is False, (
+            f"{chave}={valor!r} não é teto (a ponte exige Decimal finito > 0) "
+            f"— o checklist não pode dizer pronto: {item}")
+E       AssertionError: LIVE_MAX_ORDER_VALUE='0' não é teto (a ponte exige Decimal finito > 0) — o checklist não pode dizer pronto: {'item': 'Teto por ordem definido', 'pronto': True, 'acao': 'Defina LIVE_MAX_ORDER_VALUE (valor máximo de UMA ordem)'}
+E       assert True is False
+
+tests\test_v9_live_status_verdade.py:107: AssertionError
+_ TestTetoDeDinheiroHonesto.test_valor_invalido_nunca_aparece_como_pronto[0-LIVE_MAX_DAILY_LOSS-Perda m\xe1xima di\xe1ria] _
+
+self = <tests.test_v9_live_status_verdade.TestTetoDeDinheiroHonesto object at 0x00000179F7AF7740>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-real01-red-lt64ofzm/tmp/pytest-of-unknown/pytest-0/test_valor_invalido_nunca_apar1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000179F7B7F290>
+chave = 'LIVE_MAX_DAILY_LOSS', trecho = 'Perda máxima diária', valor = '0'
+
+    @pytest.mark.parametrize("chave,trecho", _TETOS)
+    @pytest.mark.parametrize("valor", ["0", "-5", "abc", "inf", "NaN"])
+    def test_valor_invalido_nunca_aparece_como_pronto(
+            self, tmp_path, monkeypatch, chave, trecho, valor):
+        _, c = _app(tmp_path, monkeypatch)
+        r = c.post("/v1/config", headers=H, json={"vars": {chave: valor}})
+        assert r.status_code == 200, r.text
+        item = _item(_status(c), trecho)
+>       assert item["pronto"] is False, (
+            f"{chave}={valor!r} não é teto (a ponte exige Decimal finito > 0) "
+            f"— o checklist não pode dizer pronto: {item}")
+E       AssertionError: LIVE_MAX_DAILY_LOSS='0' não é teto (a ponte exige Decimal finito > 0) — o checklist não pode dizer pronto: {'item': 'Perda máxima diária definida', 'pronto': True, 'acao': 'Defina LIVE_MAX_DAILY_LOSS (quando parar no vermelho)'}
+E       assert True is False
+
+tests\test_v9_live_status_verdade.py:107: AssertionError
+_ TestTetoDeDinheiroHonesto.test_valor_invalido_nunca_aparece_como_pronto[-5-LIVE_MAX_ORDER_VALUE-Teto por ordem] _
+
+self = <tests.test_v9_live_status_verdade.TestTetoDeDinheiroHonesto object at 0x00000179F7AF7BF0>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-real01-red-lt64ofzm/tmp/pytest-of-unknown/pytest-0/test_valor_invalido_nunca_apar2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000179F84EE7E0>
+chave = 'LIVE_MAX_ORDER_VALUE', trecho = 'Teto por ordem', valor = '-5'
+
+    @pytest.mark.parametrize("chave,trecho", _TETOS)
+    @pytest.mark.parametrize("valor", ["0", "-5", "abc", "inf", "NaN"])
+    def test_valor_invalido_nunca_aparece_como_pronto(
+            self, tmp_path, monkeypatch, chave, trecho, valor):
+        _, c = _app(tmp_path, monkeypatch)
+        r = c.post("/v1/config", headers=H, json={"vars": {chave: valor}})
+        assert r.status_code == 200, r.text
+        item = _item(_status(c), trecho)
+>       assert item["pronto"] is False, (
+            f"{chave}={valor!r} não é teto (a ponte exige Decimal finito > 0) "
+            f"— o checklist não pode dizer pronto: {item}")
+E       AssertionError: LIVE_MAX_ORDER_VALUE='-5' não é teto (a ponte exige Decimal finito > 0) — o checklist não pode dizer pronto: {'item': 'Teto por ordem definido', 'pronto': True, 'acao': 'Defina LIVE_MAX_ORDER_VALUE (valor máximo de UMA ordem)'}
+E       assert True is False
+
+tests\test_v9_live_status_verdade.py:107: AssertionError
+_ TestTetoDeDinheiroHonesto.test_valor_invalido_nunca_aparece_como_pronto[-5-LIVE_MAX_DAILY_LOSS-Perda m\xe1xima di\xe1ria] _
+
+self = <tests.test_v9_live_status_verdade.TestTetoDeDinheiroHonesto object at 0x00000179F7AF7CE0>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-real01-red-lt64ofzm/tmp/pytest-of-unknown/pytest-0/test_valor_invalido_nunca_apar3')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000179F7F841A0>
+chave = 'LIVE_MAX_DAILY_LOSS', trecho = 'Perda máxima diária', valor = '-5'
+
+    @pytest.mark.parametrize("chave,trecho", _TETOS)
+    @pytest.mark.parametrize("valor", ["0", "-5", "abc", "inf", "NaN"])
+    def test_valor_invalido_nunca_aparece_como_pronto(
+            self, tmp_path, monkeypatch, chave, trecho, valor):
+        _, c = _app(tmp_path, monkeypatch)
+        r = c.post("/v1/config", headers=H, json={"vars": {chave: valor}})
+        assert r.status_code == 200, r.text
+        item = _item(_status(c), trecho)
+>       assert item["pronto"] is False, (
+            f"{chave}={valor!r} não é teto (a ponte exige Decimal finito > 0) "
+            f"— o checklist não pode dizer pronto: {item}")
+E       AssertionError: LIVE_MAX_DAILY_LOSS='-5' não é teto (a ponte exige Decimal finito > 0) — o checklist não pode dizer pronto: {'item': 'Perda máxima diária definida', 'pronto': True, 'acao': 'Defina LIVE_MAX_DAILY_LOSS (quando parar no vermelho)'}
+E       assert True is False
+
+tests\test_v9_live_status_verdade.py:107: AssertionError
+_ TestTetoDeDinheiroHonesto.test_valor_invalido_nunca_aparece_como_pronto[abc-LIVE_MAX_ORDER_VALUE-Teto por ordem] _
+
+self = <tests.test_v9_live_status_verdade.TestTetoDeDinheiroHonesto object at 0x00000179F7AF7D70>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-real01-red-lt64ofzm/tmp/pytest-of-unknown/pytest-0/test_valor_invalido_nunca_apar4')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000179F8643050>
+chave = 'LIVE_MAX_ORDER_VALUE', trecho = 'Teto por ordem', valor = 'abc'
+
+    @pytest.mark.parametrize("chave,trecho", _TETOS)
+    @pytest.mark.parametrize("valor", ["0", "-5", "abc", "inf", "NaN"])
+    def test_valor_invalido_nunca_aparece_como_pronto(
+            self, tmp_path, monkeypatch, chave, trecho, valor):
+        _, c = _app(tmp_path, monkeypatch)
+        r = c.post("/v1/config", headers=H, json={"vars": {chave: valor}})
+        assert r.status_code == 200, r.text
+        item = _item(_status(c), trecho)
+>       assert item["pronto"] is False, (
+            f"{chave}={valor!r} não é teto (a ponte exige Decimal finito > 0) "
+            f"— o checklist não pode dizer pronto: {item}")
+E       AssertionError: LIVE_MAX_ORDER_VALUE='abc' não é teto (a ponte exige Decimal finito > 0) — o checklist não pode dizer pronto: {'item': 'Teto por ordem definido', 'pronto': True, 'acao': 'Defina LIVE_MAX_ORDER_VALUE (valor máximo de UMA ordem)'}
+E       assert True is False
+
+tests\test_v9_live_status_verdade.py:107: AssertionError
+_ TestTetoDeDinheiroHonesto.test_valor_invalido_nunca_aparece_como_pronto[abc-LIVE_MAX_DAILY_LOSS-Perda m\xe1xima di\xe1ria] _
+
+self = <tests.test_v9_live_status_verdade.TestTetoDeDinheiroHonesto object at 0x00000179F7AF7E90>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-real01-red-lt64ofzm/tmp/pytest-of-unknown/pytest-0/test_valor_invalido_nunca_apar5')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000179F9C26C30>
+chave = 'LIVE_MAX_DAILY_LOSS', trecho = 'Perda máxima diária', valor = 'abc'
+
+    @pytest.mark.parametrize("chave,trecho", _TETOS)
+    @pytest.mark.parametrize("valor", ["0", "-5", "abc", "inf", "NaN"])
+    def test_valor_invalido_nunca_aparece_como_pronto(
+            self, tmp_path, monkeypatch, chave, trecho, valor):
+        _, c = _app(tmp_path, monkeypatch)
+        r = c.post("/v1/config", headers=H, json={"vars": {chave: valor}})
+        assert r.status_code == 200, r.text
+        item = _item(_status(c), trecho)
+>       assert item["pronto"] is False, (
+            f"{chave}={valor!r} não é teto (a ponte exige Decimal finito > 0) "
+            f"— o checklist não pode dizer pronto: {item}")
+E       AssertionError: LIVE_MAX_DAILY_LOSS='abc' não é teto (a ponte exige Decimal finito > 0) — o checklist não pode dizer pronto: {'item': 'Perda máxima diária definida', 'pronto': True, 'acao': 'Defina LIVE_MAX_DAILY_LOSS (quando parar no vermelho)'}
+E       assert True is False
+
+tests\test_v9_live_status_verdade.py:107: AssertionError
+_ TestTetoDeDinheiroHonesto.test_valor_invalido_nunca_aparece_como_pronto[inf-LIVE_MAX_ORDER_VALUE-Teto por ordem] _
+
+self = <tests.test_v9_live_status_verdade.TestTetoDeDinheiroHonesto object at 0x00000179F7AF7F50>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-real01-red-lt64ofzm/tmp/pytest-of-unknown/pytest-0/test_valor_invalido_nunca_apar6')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000179F9C27E90>
+chave = 'LIVE_MAX_ORDER_VALUE', trecho = 'Teto por ordem', valor = 'inf'
+
+    @pytest.mark.parametrize("chave,trecho", _TETOS)
+    @pytest.mark.parametrize("valor", ["0", "-5", "abc", "inf", "NaN"])
+    def test_valor_invalido_nunca_aparece_como_pronto(
+            self, tmp_path, monkeypatch, chave, trecho, valor):
+        _, c = _app(tmp_path, monkeypatch)
+        r = c.post("/v1/config", headers=H, json={"vars": {chave: valor}})
+        assert r.status_code == 200, r.text
+        item = _item(_status(c), trecho)
+>       assert item["pronto"] is False, (
+            f"{chave}={valor!r} não é teto (a ponte exige Decimal finito > 0) "
+            f"— o checklist não pode dizer pronto: {item}")
+E       AssertionError: LIVE_MAX_ORDER_VALUE='inf' não é teto (a ponte exige Decimal finito > 0) — o checklist não pode dizer pronto: {'item': 'Teto por ordem definido', 'pronto': True, 'acao': 'Defina LIVE_MAX_ORDER_VALUE (valor máximo de UMA ordem)'}
+E       assert True is False
+
+tests\test_v9_live_status_verdade.py:107: AssertionError
+_ TestTetoDeDinheiroHonesto.test_valor_invalido_nunca_aparece_como_pronto[inf-LIVE_MAX_DAILY_LOSS-Perda m\xe1xima di\xe1ria] _
+
+self = <tests.test_v9_live_status_verdade.TestTetoDeDinheiroHonesto object at 0x00000179F7B7C860>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-real01-red-lt64ofzm/tmp/pytest-of-unknown/pytest-0/test_valor_invalido_nunca_apar7')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000179F9EC34D0>
+chave = 'LIVE_MAX_DAILY_LOSS', trecho = 'Perda máxima diária', valor = 'inf'
+
+    @pytest.mark.parametrize("chave,trecho", _TETOS)
+    @pytest.mark.parametrize("valor", ["0", "-5", "abc", "inf", "NaN"])
+    def test_valor_invalido_nunca_aparece_como_pronto(
+            self, tmp_path, monkeypatch, chave, trecho, valor):
+        _, c = _app(tmp_path, monkeypatch)
+        r = c.post("/v1/config", headers=H, json={"vars": {chave: valor}})
+        assert r.status_code == 200, r.text
+        item = _item(_status(c), trecho)
+>       assert item["pronto"] is False, (
+            f"{chave}={valor!r} não é teto (a ponte exige Decimal finito > 0) "
+            f"— o checklist não pode dizer pronto: {item}")
+E       AssertionError: LIVE_MAX_DAILY_LOSS='inf' não é teto (a ponte exige Decimal finito > 0) — o checklist não pode dizer pronto: {'item': 'Perda máxima diária definida', 'pronto': True, 'acao': 'Defina LIVE_MAX_DAILY_LOSS (quando parar no vermelho)'}
+E       assert True is False
+
+tests\test_v9_live_status_verdade.py:107: AssertionError
+_ TestTetoDeDinheiroHonesto.test_valor_invalido_nunca_aparece_como_pronto[NaN-LIVE_MAX_ORDER_VALUE-Teto por ordem] _
+
+self = <tests.test_v9_live_status_verdade.TestTetoDeDinheiroHonesto object at 0x00000179F7B7CA40>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-real01-red-lt64ofzm/tmp/pytest-of-unknown/pytest-0/test_valor_invalido_nunca_apar8')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000179F9EC28A0>
+chave = 'LIVE_MAX_ORDER_VALUE', trecho = 'Teto por ordem', valor = 'NaN'
+
+    @pytest.mark.parametrize("chave,trecho", _TETOS)
+    @pytest.mark.parametrize("valor", ["0", "-5", "abc", "inf", "NaN"])
+    def test_valor_invalido_nunca_aparece_como_pronto(
+            self, tmp_path, monkeypatch, chave, trecho, valor):
+        _, c = _app(tmp_path, monkeypatch)
+        r = c.post("/v1/config", headers=H, json={"vars": {chave: valor}})
+        assert r.status_code == 200, r.text
+        item = _item(_status(c), trecho)
+>       assert item["pronto"] is False, (
+            f"{chave}={valor!r} não é teto (a ponte exige Decimal finito > 0) "
+            f"— o checklist não pode dizer pronto: {item}")
+E       AssertionError: LIVE_MAX_ORDER_VALUE='NaN' não é teto (a ponte exige Decimal finito > 0) — o checklist não pode dizer pronto: {'item': 'Teto por ordem definido', 'pronto': True, 'acao': 'Defina LIVE_MAX_ORDER_VALUE (valor máximo de UMA ordem)'}
+E       assert True is False
+
+tests\test_v9_live_status_verdade.py:107: AssertionError
+_ TestTetoDeDinheiroHonesto.test_valor_invalido_nunca_aparece_como_pronto[NaN-LIVE_MAX_DAILY_LOSS-Perda m\xe1xima di\xe1ria] _
+
+self = <tests.test_v9_live_status_verdade.TestTetoDeDinheiroHonesto object at 0x00000179F7B7C080>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-real01-red-lt64ofzm/tmp/pytest-of-unknown/pytest-0/test_valor_invalido_nunca_apar9')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000179F974F650>
+chave = 'LIVE_MAX_DAILY_LOSS', trecho = 'Perda máxima diária', valor = 'NaN'
+
+    @pytest.mark.parametrize("chave,trecho", _TETOS)
+    @pytest.mark.parametrize("valor", ["0", "-5", "abc", "inf", "NaN"])
+    def test_valor_invalido_nunca_aparece_como_pronto(
+            self, tmp_path, monkeypatch, chave, trecho, valor):
+        _, c = _app(tmp_path, monkeypatch)
+        r = c.post("/v1/config", headers=H, json={"vars": {chave: valor}})
+        assert r.status_code == 200, r.text
+        item = _item(_status(c), trecho)
+>       assert item["pronto"] is False, (
+            f"{chave}={valor!r} não é teto (a ponte exige Decimal finito > 0) "
+            f"— o checklist não pode dizer pronto: {item}")
+E       AssertionError: LIVE_MAX_DAILY_LOSS='NaN' não é teto (a ponte exige Decimal finito > 0) — o checklist não pode dizer pronto: {'item': 'Perda máxima diária definida', 'pronto': True, 'acao': 'Defina LIVE_MAX_DAILY_LOSS (quando parar no vermelho)'}
+E       assert True is False
+
+tests\test_v9_live_status_verdade.py:107: AssertionError
+___ TestTestnetDeVerdade.test_ordem_paper_preenchida_nao_conta_como_testnet ___
+
+self = <tests.test_v9_live_status_verdade.TestTestnetDeVerdade object at 0x00000179F7AF7230>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-real01-red-lt64ofzm/tmp/pytest-of-unknown/pytest-0/test_ordem_paper_preenchida_na0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000179F9694F80>
+
+    def test_ordem_paper_preenchida_nao_conta_como_testnet(
+            self, tmp_path, monkeypatch):
+        m, c = _app(tmp_path, monkeypatch)
+        c.post("/v1/config", headers=H, json={"vars": CFG_LIVE_COMPLETO})
+        _com_ordem(m, external_id="paper-1")   # fill simulada neste PC
+        item = _item(_status(c), "testnet")
+>       assert item["pronto"] is False, (
+            "ordem PAPER (simulador local, sem corretora) não é evidência "
+            f"de testnet: {item}")
+E       AssertionError: ordem PAPER (simulador local, sem corretora) não é evidência de testnet: {'item': 'Já operou em testnet', 'pronto': True, 'acao': 'Rode a mesa em testnet e veja uma ordem preenchida antes'}
+E       assert True is False
+
+tests\test_v9_live_status_verdade.py:127: AssertionError
+________ TestTestnetDeVerdade.test_ordem_sem_id_externo_nunca_conta[] _________
+
+self = <tests.test_v9_live_status_verdade.TestTestnetDeVerdade object at 0x00000179F7B7C290>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-real01-red-lt64ofzm/tmp/pytest-of-unknown/pytest-0/test_ordem_sem_id_externo_nunc0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000179F9A89970>
+external_id = ''
+
+    @pytest.mark.parametrize("external_id", ["", None])
+    def test_ordem_sem_id_externo_nunca_conta(
+            self, tmp_path, monkeypatch, external_id):
+        m, c = _app(tmp_path, monkeypatch)
+        _com_ordem(m, external_id=external_id)
+>       assert _item(_status(c), "testnet")["pronto"] is False
+E       assert True is False
+
+tests\test_v9_live_status_verdade.py:136: AssertionError
+______ TestTestnetDeVerdade.test_ordem_sem_id_externo_nunca_conta[None] _______
+
+self = <tests.test_v9_live_status_verdade.TestTestnetDeVerdade object at 0x00000179F7B7CCB0>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-real01-red-lt64ofzm/tmp/pytest-of-unknown/pytest-0/test_ordem_sem_id_externo_nunc1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000179F96909B0>
+external_id = None
+
+    @pytest.mark.parametrize("external_id", ["", None])
+    def test_ordem_sem_id_externo_nunca_conta(
+            self, tmp_path, monkeypatch, external_id):
+        m, c = _app(tmp_path, monkeypatch)
+        _com_ordem(m, external_id=external_id)
+>       assert _item(_status(c), "testnet")["pronto"] is False
+E       assert True is False
+
+tests\test_v9_live_status_verdade.py:136: AssertionError
+_ TestPreparacaoExplicita.test_permissoes_da_chave_aparecem_e_nao_estao_prontas _
+
+self = <tests.test_v9_live_status_verdade.TestPreparacaoExplicita object at 0x00000179F7B7DA00>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-real01-red-lt64ofzm/tmp/pytest-of-unknown/pytest-0/test_permissoes_da_chave_apare0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000179F860F6B0>
+
+    def test_permissoes_da_chave_aparecem_e_nao_estao_prontas(
+            self, tmp_path, monkeypatch):
+        m, c = _app(tmp_path, monkeypatch)
+        c.post("/v1/config", headers=H, json={"vars": CFG_LIVE_COMPLETO})
+>       item = _item(_status(c), "permiss")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_v9_live_status_verdade.py:162: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+d = {'pode_operar_real': False, 'checklist': [{'item': 'Frase de autorização digitada', 'pronto': True, 'acao': 'Digite ex...ntes'}, ...], 'pendencias': 2, 'aviso': 'Dinheiro real: perdas são suas e irreversíveis. O sistema não promete lucro.'}
+trecho = 'permiss'
+
+    def _item(d, trecho):
+        alvo = [i for i in d["checklist"] if trecho.lower() in i["item"].lower()]
+>       assert alvo, (
+            f"o checklist não tem item contendo {trecho!r}: "
+            f"{[i['item'] for i in d['checklist']]}")
+E       AssertionError: o checklist não tem item contendo 'permiss': ['Frase de autorização digitada', 'Chaves da corretora configuradas', 'Teto por ordem definido', 'Perda máxima diária definida', 'Modo da corretora em LIVE', 'Já operou em testnet', 'Liberação de código para operar dinheiro real na mesa']
+E       assert []
+
+tests\test_v9_live_status_verdade.py:83: AssertionError
+_ TestPreparacaoExplicita.test_identidade_da_conta_real_aparece_e_nao_esta_pronta _
+
+self = <tests.test_v9_live_status_verdade.TestPreparacaoExplicita object at 0x00000179F7B7DD90>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-real01-red-lt64ofzm/tmp/pytest-of-unknown/pytest-0/test_identidade_da_conta_real_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000179F9A03020>
+
+    def test_identidade_da_conta_real_aparece_e_nao_esta_pronta(
+            self, tmp_path, monkeypatch):
+        m, c = _app(tmp_path, monkeypatch)
+        c.post("/v1/config", headers=H, json={"vars": CFG_LIVE_COMPLETO})
+>       item = _item(_status(c), "identidade")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_v9_live_status_verdade.py:169: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+d = {'pode_operar_real': False, 'checklist': [{'item': 'Frase de autorização digitada', 'pronto': True, 'acao': 'Digite ex...ntes'}, ...], 'pendencias': 2, 'aviso': 'Dinheiro real: perdas são suas e irreversíveis. O sistema não promete lucro.'}
+trecho = 'identidade'
+
+    def _item(d, trecho):
+        alvo = [i for i in d["checklist"] if trecho.lower() in i["item"].lower()]
+>       assert alvo, (
+            f"o checklist não tem item contendo {trecho!r}: "
+            f"{[i['item'] for i in d['checklist']]}")
+E       AssertionError: o checklist não tem item contendo 'identidade': ['Frase de autorização digitada', 'Chaves da corretora configuradas', 'Teto por ordem definido', 'Perda máxima diária definida', 'Modo da corretora em LIVE', 'Já operou em testnet', 'Liberação de código para operar dinheiro real na mesa']
+E       assert []
+
+tests\test_v9_live_status_verdade.py:83: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_v9_live_status_verdade.py::TestTetoDeDinheiroHonesto::test_valor_invalido_nunca_aparece_como_pronto[0-LIVE_MAX_ORDER_VALUE-Teto por ordem]
+FAILED tests/test_v9_live_status_verdade.py::TestTetoDeDinheiroHonesto::test_valor_invalido_nunca_aparece_como_pronto[0-LIVE_MAX_DAILY_LOSS-Perda m\xe1xima di\xe1ria]
+FAILED tests/test_v9_live_status_verdade.py::TestTetoDeDinheiroHonesto::test_valor_invalido_nunca_aparece_como_pronto[-5-LIVE_MAX_ORDER_VALUE-Teto por ordem]
+FAILED tests/test_v9_live_status_verdade.py::TestTetoDeDinheiroHonesto::test_valor_invalido_nunca_aparece_como_pronto[-5-LIVE_MAX_DAILY_LOSS-Perda m\xe1xima di\xe1ria]
+FAILED tests/test_v9_live_status_verdade.py::TestTetoDeDinheiroHonesto::test_valor_invalido_nunca_aparece_como_pronto[abc-LIVE_MAX_ORDER_VALUE-Teto por ordem]
+FAILED tests/test_v9_live_status_verdade.py::TestTetoDeDinheiroHonesto::test_valor_invalido_nunca_aparece_como_pronto[abc-LIVE_MAX_DAILY_LOSS-Perda m\xe1xima di\xe1ria]
+FAILED tests/test_v9_live_status_verdade.py::TestTetoDeDinheiroHonesto::test_valor_invalido_nunca_aparece_como_pronto[inf-LIVE_MAX_ORDER_VALUE-Teto por ordem]
+FAILED tests/test_v9_live_status_verdade.py::TestTetoDeDinheiroHonesto::test_valor_invalido_nunca_aparece_como_pronto[inf-LIVE_MAX_DAILY_LOSS-Perda m\xe1xima di\xe1ria]
+FAILED tests/test_v9_live_status_verdade.py::TestTetoDeDinheiroHonesto::test_valor_invalido_nunca_aparece_como_pronto[NaN-LIVE_MAX_ORDER_VALUE-Teto por ordem]
+FAILED tests/test_v9_live_status_verdade.py::TestTetoDeDinheiroHonesto::test_valor_invalido_nunca_aparece_como_pronto[NaN-LIVE_MAX_DAILY_LOSS-Perda m\xe1xima di\xe1ria]
+FAILED tests/test_v9_live_status_verdade.py::TestTestnetDeVerdade::test_ordem_paper_preenchida_nao_conta_como_testnet
+FAILED tests/test_v9_live_status_verdade.py::TestTestnetDeVerdade::test_ordem_sem_id_externo_nunca_conta[]
+FAILED tests/test_v9_live_status_verdade.py::TestTestnetDeVerdade::test_ordem_sem_id_externo_nunca_conta[None]
+FAILED tests/test_v9_live_status_verdade.py::TestPreparacaoExplicita::test_permissoes_da_chave_aparecem_e_nao_estao_prontas
+FAILED tests/test_v9_live_status_verdade.py::TestPreparacaoExplicita::test_identidade_da_conta_real_aparece_e_nao_esta_pronta
+15 failed, 7 passed in 6.64s

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="13" time="31.631" timestamp="2026-10-15T07:50:36.246941-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_v9_f8_rotas_financeiras_http" name="test_broker_order_legacy_route_is_permanently_gone" time="1.913" /><testcase classname="tests.test_v9_f8_rotas_financeiras_http" name="test_broker_order_requires_auth_before_anything" time="2.281" /><testcase classname="tests.test_v9_f8_rotas_financeiras_http" name="test_reconciliation_runs_and_reports_safe_without_remote" time="1.186"><failure message="assert False is True">api = &lt;starlette.testclient.TestClient object at 0x000001A5FB24B9E0&gt;
+
+    def test_reconciliation_runs_and_reports_safe_without_remote(api):
+        r = api.post("/v1/execution/reconciliation", headers=_auth())
+        assert r.status_code == 200, r.text
+        body = r.json()
+&gt;       assert body["safe"] is True
+E       assert False is True
+
+tests\test_v9_f8_rotas_financeiras_http.py:118: AssertionError</failure></testcase><testcase classname="tests.test_v9_f8_rotas_financeiras_http" name="test_reconciliation_requires_auth" time="0.860" /><testcase classname="tests.test_v9_f8_rotas_financeiras_http" name="test_paper_execution_blocked_by_gate_then_accepted_after_reconciliation" time="0.388"><failure message="AssertionError: {&quot;detail&quot;:&quot;execução bloqueada: reconciliação não está MATCHED&quot;}&#10;assert 423 == 200&#10; +  where 423 = &lt;Response [423 Locked]&gt;.status_code">api = &lt;starlette.testclient.TestClient object at 0x000001A5FB336210&gt;
+
+    def test_paper_execution_blocked_by_gate_then_accepted_after_reconciliation(api):
+        body = _decision_body()
+        blocked = api.post("/v1/execution/paper", headers=_auth(), json=body)
+        assert blocked.status_code == 423, blocked.text
+        assert "reconcilia" in blocked.json()["detail"].lower()
+    
+        assert api.post("/v1/execution/reconciliation",
+                        headers=_auth()).status_code == 200
+    
+        r = api.post("/v1/execution/paper", headers=_auth(), json=body)
+&gt;       assert r.status_code == 200, r.text
+E       AssertionError: {"detail":"execução bloqueada: reconciliação não está MATCHED"}
+E       assert 423 == 200
+E        +  where 423 = &lt;Response [423 Locked]&gt;.status_code
+
+tests\test_v9_f8_rotas_financeiras_http.py:145: AssertionError</failure></testcase><testcase classname="tests.test_v9_f8_rotas_financeiras_http" name="test_paper_execution_rejects_missing_fields" time="0.360" /><testcase classname="tests.test_v9_f8_rotas_financeiras_http" name="test_paper_execution_requires_auth" time="0.322" /><testcase classname="tests.test_v9_f8_rotas_financeiras_http" name="test_paper_execution_blocked_by_kill_switch" time="0.646" /><testcase classname="tests.test_v9_f8_rotas_financeiras_http" name="test_shadow_starts_empty_and_never_counts_orders" time="2.340" /><testcase classname="tests.test_v9_f8_rotas_financeiras_http" name="test_shadow_execution_rejects_invalid_side" time="2.468" /><testcase classname="tests.test_v9_f8_rotas_financeiras_http" name="test_shadow_routes_require_auth" time="2.604" /><testcase classname="tests.test_v9_f8_rotas_financeiras_http" name="test_readyz_reports_real_state_and_never_dies" time="2.314"><failure message="AssertionError: assert 'PAPER' == 'paper'&#10;  &#10;  - paper&#10;  + PAPER">api = &lt;starlette.testclient.TestClient object at 0x000001A5FB822330&gt;
+
+    def test_readyz_reports_real_state_and_never_dies(api):
+        r = api.get("/readyz")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["status"] == "ready"
+        assert body["kill_switch"] is False
+        assert body["paper"]["status"] == "READY"
+&gt;       assert body["paper"]["environment"] == "paper"
+E       AssertionError: assert 'PAPER' == 'paper'
+E         
+E         - paper
+E         + PAPER
+
+tests\test_v9_f8_rotas_financeiras_http.py:226: AssertionError</failure></testcase><testcase classname="tests.test_v9_f8_rotas_financeiras_http" name="test_metrics_requires_auth_and_returns_snapshot" time="2.412" /></testsuite></testsuites>

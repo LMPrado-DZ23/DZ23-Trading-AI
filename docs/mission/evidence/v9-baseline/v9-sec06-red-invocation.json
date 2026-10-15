@@ -1,0 +1,21 @@
+{
+  "head": "2b7754a94cc1e4233ad95ac6fa377be4078e5055",
+  "command": [
+    "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\.venv\\Scripts\\python.exe",
+    "-m",
+    "pytest",
+    "tests/unit/test_diagnostics.py",
+    "tests/unit/test_security_center.py",
+    "tests/windows/test_installer_and_packaging.py::TestSettingsAndPaperHomologation",
+    "-q"
+  ],
+  "working_directory": "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit",
+  "result": "2 failed, 2 passed in 0.78s",
+  "exit_code": 1,
+  "log": "v9-sec06-red.log",
+  "notes": [
+    "RED capturado ANTES da remoção dos stubs: árvore com os testes novos (assert 404) e as rotas /v1/diagnostics/run e /v1/security/incident-center ainda montadas em service/app.py; ambos os testes novos falham com assert 200 == 404.",
+    "Execução plain (sem runner de audit hook, sem --junitxml, sem DATA_DIR temporário dedicado e sem allowlist de ambiente registrada) — limitação registrada; a contraprova GREEN auditada cobre o rigor adicional no mesmo par de arquivos.",
+    "Saída completa em docs/mission/evidence/v9-baseline/v9-sec06-red.log (sha256 8dd66290...)."
+  ]
+}

@@ -9,7 +9,7 @@ from tradingagents.domain.contracts import (
     RiskDecision,
     TradeDecision,
 )
-from tradingagents.domain.enums import RiskStatus
+from tradingagents.domain.enums import RiskStatus, Side
 
 from .limits import RiskLimits
 
@@ -36,7 +36,13 @@ class RiskEngine:
             if spread_pct > self.limits.max_spread_pct:
                 reasons.append("SPREAD_TOO_WIDE")
         checked.extend(["risk_pct_trade", "daily_loss", "drawdown", "exposure", "positions", "risk_reward"])
-        if decision.risk_pct_equity > self.limits.max_risk_pct_trade:
+        # Risco por trade: o declarado E o EFETIVO pela distância ao stop. Só a
+        # entrada (BUY) abre risco novo; saída não é barrada por este teto.
+        risk_ok = decision.risk_pct_equity <= self.limits.max_risk_pct_trade
+        if decision.side is Side.BUY and portfolio.equity > 0:
+            risk_by_stop = decision.quantity * abs(decision.entry_price_reference - decision.stop_loss)
+            risk_ok = risk_ok and (risk_by_stop / portfolio.equity) <= self.limits.max_risk_pct_trade
+        if not risk_ok:
             reasons.append("TRADE_RISK_LIMIT")
         if portfolio.equity <= 0:
             reasons.append("NO_EQUITY")
@@ -50,7 +56,13 @@ class RiskEngine:
         target_distance = abs(decision.take_profit - decision.entry_price_reference)
         if stop_distance <= 0 or target_distance / stop_distance < self.limits.min_risk_reward:
             reasons.append("RISK_REWARD_TOO_LOW")
-        if portfolio.gross_exposure >= portfolio.equity * self.limits.max_gross_exposure_pct:
+        # Exposição PROJETADA: a ordem em aprovação entra na conta. Só a entrada
+        # (BUY) aumenta exposição; saída usa a exposição atual para nunca bloquear
+        # a redução de risco.
+        projected_gross = portfolio.gross_exposure + (
+            decision.quantity * decision.entry_price_reference
+            if decision.side is Side.BUY else Decimal("0"))
+        if projected_gross >= portfolio.equity * self.limits.max_gross_exposure_pct:
             reasons.append("GROSS_EXPOSURE_LIMIT")
         status = RiskStatus.REJECT if reasons else RiskStatus.APPROVE
         quantity = Decimal("0") if reasons else decision.quantity

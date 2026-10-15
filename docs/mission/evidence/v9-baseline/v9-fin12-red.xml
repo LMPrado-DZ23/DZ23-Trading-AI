@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="8" skipped="0" tests="8" time="0.564" timestamp="2026-10-15T05:50:41.993932-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_v9_financial_regressions" name="test_fin12_taxa_na_moeda_funcional_e_recusada_na_valoracao" time="0.004"><failure message="Failed: DID NOT RAISE ValueError">def test_fin12_taxa_na_moeda_funcional_e_recusada_na_valoracao():
+        """A taxa cobrada em USDT já foi despesada no fill (FEES:USDT).
+    
+        Valorar a MESMA taxa como se fosse moeda estrangeira soma a despesa duas
+        vezes e fabrica um passivo sem lastro algum: nenhuma cobrança em USDT
+        esperando conversão existe."""
+        livro = Ledger(opening_cash=D("1000"))
+        livro.reserve(D("100"), ref="r", reservation_id="R1")
+        livro.fill_buy(INSTRUMENT, D("1"), D("90"), D("2"),
+                       reserved=D("100"), ref="o1", agent_id="A",
+                       reservation_id="R1")
+        assert livro.balance("FEES:USDT") == D("2")
+    
+&gt;       with pytest.raises(ValueError, match="moeda funcional|dupla|já"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_v9_financial_regressions.py:1097: Failed</failure></testcase><testcase classname="tests.test_v9_financial_regressions.TestFin12AporteQuitaOPassivo" name="test_o_aporte_quita_o_passivo_da_taxa_valorada" time="0.002"><failure message="AssertionError: o aporte cobriu o ativo descoberto mas a dívida da taxa ficou de pé para sempre&#10;assert Decimal('-600.00000000') == Decimal('0')&#10; +  where Decimal('-600.00000000') = balance('LIABILITY:FEE_FUNDING')&#10; +    where balance = &lt;tradingagents.desk.ledger.Ledger object at 0x000002529EFB46B0&gt;.balance&#10; +  and   Decimal('0') = D('0')">self = &lt;tests.test_v9_financial_regressions.TestFin12AporteQuitaOPassivo object at 0x000002529EFB2F90&gt;
+
+    def test_o_aporte_quita_o_passivo_da_taxa_valorada(self):
+        livro = _fin12_com_taxa_valorada()
+        assert livro.balance("LIABILITY:FEE_FUNDING") == D("-600")
+        _fin12_aportar(livro, "2", em="2026-09-14T23:05:00+00:00")
+&gt;       assert livro.balance("LIABILITY:FEE_FUNDING") == D("0"), (
+            "o aporte cobriu o ativo descoberto mas a dívida da taxa ficou "
+            "de pé para sempre")
+E       AssertionError: o aporte cobriu o ativo descoberto mas a dívida da taxa ficou de pé para sempre
+E       assert Decimal('-600.00000000') == Decimal('0')
+E        +  where Decimal('-600.00000000') = balance('LIABILITY:FEE_FUNDING')
+E        +    where balance = &lt;tradingagents.desk.ledger.Ledger object at 0x000002529EFB46B0&gt;.balance
+E        +  and   Decimal('0') = D('0')
+
+tests\test_v9_financial_regressions.py:1116: AssertionError</failure></testcase><testcase classname="tests.test_v9_financial_regressions.TestFin12AporteQuitaOPassivo" name="test_aportes_parciais_quitam_proporcionalmente" time="0.001"><failure message="AssertionError: assert Decimal('-600.00000000') == Decimal('-300')&#10; +  where Decimal('-600.00000000') = balance('LIABILITY:FEE_FUNDING')&#10; +    where balance = &lt;tradingagents.desk.ledger.Ledger object at 0x000002529EFA4DD0&gt;.balance&#10; +  and   Decimal('-300') = D('-300')">self = &lt;tests.test_v9_financial_regressions.TestFin12AporteQuitaOPassivo object at 0x000002529EFA5190&gt;
+
+    def test_aportes_parciais_quitam_proporcionalmente(self):
+        livro = _fin12_com_taxa_valorada()
+        _fin12_aportar(livro, "1", em="2026-09-14T23:05:00+00:00")
+&gt;       assert livro.balance("LIABILITY:FEE_FUNDING") == D("-300")
+E       AssertionError: assert Decimal('-600.00000000') == Decimal('-300')
+E        +  where Decimal('-600.00000000') = balance('LIABILITY:FEE_FUNDING')
+E        +    where balance = &lt;tradingagents.desk.ledger.Ledger object at 0x000002529EFA4DD0&gt;.balance
+E        +  and   Decimal('-300') = D('-300')
+
+tests\test_v9_financial_regressions.py:1128: AssertionError</failure></testcase><testcase classname="tests.test_v9_financial_regressions.TestFin12AporteQuitaOPassivo" name="test_aporte_alem_do_necessario_quita_uma_vez_so" time="0.001"><failure message="AssertionError: assert Decimal('-600.00000000') == Decimal('0')&#10; +  where Decimal('-600.00000000') = balance('LIABILITY:FEE_FUNDING')&#10; +    where balance = &lt;tradingagents.desk.ledger.Ledger object at 0x000002529EEC5BB0&gt;.balance&#10; +  and   Decimal('0') = D('0')">self = &lt;tests.test_v9_financial_regressions.TestFin12AporteQuitaOPassivo object at 0x000002529EFA6420&gt;
+
+    def test_aporte_alem_do_necessario_quita_uma_vez_so(self):
+        livro = _fin12_com_taxa_valorada()
+        _fin12_aportar(livro, "3", em="2026-09-14T23:05:00+00:00")
+&gt;       assert livro.balance("LIABILITY:FEE_FUNDING") == D("0")
+E       AssertionError: assert Decimal('-600.00000000') == Decimal('0')
+E        +  where Decimal('-600.00000000') = balance('LIABILITY:FEE_FUNDING')
+E        +    where balance = &lt;tradingagents.desk.ledger.Ledger object at 0x000002529EEC5BB0&gt;.balance
+E        +  and   Decimal('0') = D('0')
+
+tests\test_v9_financial_regressions.py:1137: AssertionError</failure></testcase><testcase classname="tests.test_v9_financial_regressions.TestFin12AporteQuitaOPassivo" name="test_aporte_feito_antes_da_valoracao_quita_na_valoracao" time="0.002"><failure message="AssertionError: a valoração de uma taxa JÁ coberta reviveu a dívida&#10;assert Decimal('-600.00000000') == Decimal('0')&#10; +  where Decimal('-600.00000000') = balance('LIABILITY:FEE_FUNDING')&#10; +    where balance = &lt;tradingagents.desk.ledger.Ledger object at 0x000002529EEC7650&gt;.balance&#10; +  and   Decimal('0') = D('0')">self = &lt;tests.test_v9_financial_regressions.TestFin12AporteQuitaOPassivo object at 0x000002529EFA75F0&gt;
+
+    def test_aporte_feito_antes_da_valoracao_quita_na_valoracao(self):
+        """A ordem dos fatos não pode mudar a economia: quem já cobriu o
+        ativo não deve ver a dívida renascer quando a cotação chega."""
+        livro = Ledger(opening_cash=D("1000"))
+        livro.reserve(D("100"), ref="r", reservation_id="R1")
+        livro.fill_buy(INSTRUMENT, D("1"), D("90"), D("0"),
+                       reserved=D("100"), ref="o1", agent_id="A",
+                       reservation_id="R1",
+                       fee_in_other_currency=(D("2"), "BNB"))
+        _fin12_aportar(livro, "2", em="2026-09-14T23:01:00+00:00")
+        assert livro.balance("LIABILITY:FEE_FUNDING") == D("0")
+    
+        ids = [c["fee_component_id"]
+               for c in livro.fee_components("BNB", True)]
+        livro.fee_valuation(moeda="BNB", quantidade=D("2"), rate=D("300"),
+                            fonte="binance",
+                            em="2026-09-14T23:02:00+00:00",
+                            fee_component_ids=ids)
+    
+        assert livro.balance("FEES:USDT") == D("600")
+&gt;       assert livro.balance("LIABILITY:FEE_FUNDING") == D("0"), (
+            "a valoração de uma taxa JÁ coberta reviveu a dívida")
+E       AssertionError: a valoração de uma taxa JÁ coberta reviveu a dívida
+E       assert Decimal('-600.00000000') == Decimal('0')
+E        +  where Decimal('-600.00000000') = balance('LIABILITY:FEE_FUNDING')
+E        +    where balance = &lt;tradingagents.desk.ledger.Ledger object at 0x000002529EEC7650&gt;.balance
+E        +  and   Decimal('0') = D('0')
+
+tests\test_v9_financial_regressions.py:1169: AssertionError</failure></testcase><testcase classname="tests.test_v9_financial_regressions.TestFin12AporteQuitaOPassivo" name="test_cada_ocorrencia_quita_pela_propria_cotacao" time="0.001"><failure message="AssertionError: assert Decimal('-950.00000000') == Decimal('0')&#10; +  where Decimal('-950.00000000') = balance('LIABILITY:FEE_FUNDING')&#10; +    where balance = &lt;tradingagents.desk.ledger.Ledger object at 0x000002529F0B5790&gt;.balance&#10; +  and   Decimal('0') = D('0')">self = &lt;tests.test_v9_financial_regressions.TestFin12AporteQuitaOPassivo object at 0x000002529D7C7770&gt;
+
+    def test_cada_ocorrencia_quita_pela_propria_cotacao(self):
+        """Duas ocorrências, duas cotações: o passivo é 600 + 350 = 950.
+    
+        Liquidar pela cotação do aporte (3 × 320 = 960) trataria o passivo
+        como se fosse a quantidade nova — o mesmo erro de somar unidades."""
+        livro = Ledger(opening_cash=D("1000"))
+        for reservation_id, ref, price, qtd in (("R1", "o1", "90", "2"),
+                                                ("R2", "o2", "80", "1")):
+            livro.reserve(D("100"), ref=f"r:{ref}",
+                          reservation_id=reservation_id)
+            livro.fill_buy(INSTRUMENT, D("1"), D(price), D("0"),
+                           reserved=D("100"), ref=ref, agent_id="A",
+                           reservation_id=reservation_id,
+                           fee_in_other_currency=(D(qtd), "BNB"))
+        comps = livro.fee_components("BNB", True)
+        primeira = [c["fee_component_id"] for c in comps if c["amount"] == "2"]
+        segunda = [c["fee_component_id"] for c in comps if c["amount"] == "1"]
+        livro.fee_valuation(moeda="BNB", quantidade=D("2"), rate=D("300"),
+                            fonte="binance",
+                            em="2026-09-14T23:00:00+00:00",
+                            fee_component_ids=primeira)
+        livro.fee_valuation(moeda="BNB", quantidade=D("1"), rate=D("350"),
+                            fonte="binance",
+                            em="2026-09-14T23:10:00+00:00",
+                            fee_component_ids=segunda)
+        assert livro.balance("LIABILITY:FEE_FUNDING") == D("-950")
+    
+        _fin12_aportar(livro, "3", em="2026-09-14T23:15:00+00:00")
+&gt;       assert livro.balance("LIABILITY:FEE_FUNDING") == D("0")
+E       AssertionError: assert Decimal('-950.00000000') == Decimal('0')
+E        +  where Decimal('-950.00000000') = balance('LIABILITY:FEE_FUNDING')
+E        +    where balance = &lt;tradingagents.desk.ledger.Ledger object at 0x000002529F0B5790&gt;.balance
+E        +  and   Decimal('0') = D('0')
+
+tests\test_v9_financial_regressions.py:1202: AssertionError</failure></testcase><testcase classname="tests.test_v9_financial_regressions.TestFin12AporteQuitaOPassivo" name="test_o_aporte_cobre_as_ocorrencias_em_ordem_fifo" time="0.001"><failure message="AssertionError: 2 BNB quitam a PRIMEIRA ocorrência (600); ratear entre as duas faria a ocorrência nova pagar pela antiga&#10;assert Decimal('-950.00000000') == Decimal('-350')&#10; +  where Decimal('-950.00000000') = balance('LIABILITY:FEE_FUNDING')&#10; +    where balance = &lt;tradingagents.desk.ledger.Ledger object at 0x000002529F0B6780&gt;.balance&#10; +  and   Decimal('-350') = D('-350')">self = &lt;tests.test_v9_financial_regressions.TestFin12AporteQuitaOPassivo object at 0x000002529EFB26F0&gt;
+
+    def test_o_aporte_cobre_as_ocorrencias_em_ordem_fifo(self):
+        livro = Ledger(opening_cash=D("1000"))
+        for reservation_id, ref, price, qtd in (("R1", "o1", "90", "2"),
+                                                ("R2", "o2", "80", "1")):
+            livro.reserve(D("100"), ref=f"r:{ref}",
+                          reservation_id=reservation_id)
+            livro.fill_buy(INSTRUMENT, D("1"), D(price), D("0"),
+                           reserved=D("100"), ref=ref, agent_id="A",
+                           reservation_id=reservation_id,
+                           fee_in_other_currency=(D(qtd), "BNB"))
+        comps = livro.fee_components("BNB", True)
+        primeira = [c["fee_component_id"] for c in comps if c["amount"] == "2"]
+        segunda = [c["fee_component_id"] for c in comps if c["amount"] == "1"]
+        livro.fee_valuation(moeda="BNB", quantidade=D("2"), rate=D("300"),
+                            fonte="binance",
+                            em="2026-09-14T23:00:00+00:00",
+                            fee_component_ids=primeira)
+        livro.fee_valuation(moeda="BNB", quantidade=D("1"), rate=D("350"),
+                            fonte="binance",
+                            em="2026-09-14T23:10:00+00:00",
+                            fee_component_ids=segunda)
+    
+        _fin12_aportar(livro, "2", em="2026-09-14T23:15:00+00:00")
+&gt;       assert livro.balance("LIABILITY:FEE_FUNDING") == D("-350"), (
+            "2 BNB quitam a PRIMEIRA ocorrência (600); ratear entre as duas "
+            "faria a ocorrência nova pagar pela antiga")
+E       AssertionError: 2 BNB quitam a PRIMEIRA ocorrência (600); ratear entre as duas faria a ocorrência nova pagar pela antiga
+E       assert Decimal('-950.00000000') == Decimal('-350')
+E        +  where Decimal('-950.00000000') = balance('LIABILITY:FEE_FUNDING')
+E        +    where balance = &lt;tradingagents.desk.ledger.Ledger object at 0x000002529F0B6780&gt;.balance
+E        +  and   Decimal('-350') = D('-350')
+
+tests\test_v9_financial_regressions.py:1232: AssertionError</failure></testcase><testcase classname="tests.test_v9_financial_regressions.TestFin12AporteQuitaOPassivo" name="test_a_quitacao_sobrevive_ao_restauro_sem_requitar" time="0.001"><failure message="AssertionError: assert Decimal('-600.00000000') == Decimal('0')&#10; +  where Decimal('-600.00000000') = balance('LIABILITY:FEE_FUNDING')&#10; +    where balance = &lt;tradingagents.desk.ledger.Ledger object at 0x000002529F13AB70&gt;.balance&#10; +  and   Decimal('0') = D('0')">self = &lt;tests.test_v9_financial_regressions.TestFin12AporteQuitaOPassivo object at 0x000002529EFB2150&gt;
+
+    def test_a_quitacao_sobrevive_ao_restauro_sem_requitar(self):
+        """O vínculo liquidação→valoração precisa ser durável: sem ele o
+        livro restaurado re-liquidaria o mesmo passivo a cada aporte."""
+        livro = _fin12_com_taxa_valorada()
+        _fin12_aportar(livro, "2", em="2026-09-14T23:05:00+00:00")
+&gt;       assert livro.balance("LIABILITY:FEE_FUNDING") == D("0")
+E       AssertionError: assert Decimal('-600.00000000') == Decimal('0')
+E        +  where Decimal('-600.00000000') = balance('LIABILITY:FEE_FUNDING')
+E        +    where balance = &lt;tradingagents.desk.ledger.Ledger object at 0x000002529F13AB70&gt;.balance
+E        +  and   Decimal('0') = D('0')
+
+tests\test_v9_financial_regressions.py:1245: AssertionError</failure></testcase></testsuite></testsuites>

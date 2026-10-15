@@ -33,9 +33,10 @@ Contas usadas:
 from __future__ import annotations
 
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 
 from .models import utcnow
 
@@ -100,6 +101,10 @@ class Transaction:
     # dado estruturado, não texto de memo. Um memo editado não pode destruir
     # a prova de qual cobrança existiu.
     fee_component_records: tuple = ()
+    lot_consumptions: tuple = ()
+    # Vínculo DURÁVEL liquidação→valoração: sem ele, o livro restaurado não
+    # sabe qual dívida já foi quitada e a liquidaria de novo.
+    funding_of: str = ""
 
     def _moeda_nativa(self, conta: str, funcional: str) -> str:
         for prefixo in ("FEES:", "ASSET:", "CONTRIBUTED_CAPITAL:"):
@@ -149,6 +154,16 @@ class Ledger:
             self._post("opening", [Entry(f"CASH:{currency}", opening_cash, "abertura"),
                                    Entry("EQUITY", -opening_cash, "aporte inicial")])
 
+    @contextmanager
+    def economic_transaction(self):
+        """Descarta somente lançamentos provisórios se a operação falhar."""
+        start = len(self._txs)
+        try:
+            yield
+        except BaseException:
+            del self._txs[start:]
+            raise
+
     # -- núcleo --------------------------------------------------------
     def _post(self, kind: str, entries, ref: str = "", *, instrument: str = "",
               quantity: Decimal = ZERO, agent_id: str = "", purpose: str = "",
@@ -159,6 +174,8 @@ class Ledger:
               native_amount: Decimal = ZERO, native_currency: str = "",
               functional_amount: Decimal = ZERO, functional_currency: str = "",
               fee_component_records: list | None = None,
+              lot_consumptions: list | None = None,
+              funding_of: str = "",
               at=None) -> Transaction:
         tx = Transaction(uuid.uuid4().hex[:16], tuple(entries), kind, ref=ref,
                          instrument=instrument, quantity=quantity,
@@ -174,6 +191,8 @@ class Ledger:
                          functional_currency=functional_currency,
                          fee_component_records=tuple(
                              fee_component_records or ()),
+                         lot_consumptions=tuple(lot_consumptions or ()),
+                         funding_of=funding_of,
                          **({"at": at} if at is not None else {}))
         tx.validate()
         tx.validar_dimensoes(self.currency)
@@ -315,7 +334,7 @@ class Ledger:
                   ref: str = "",
                   native_fees: list | tuple | None = None,
                   fee_in_other_currency: tuple | None = None,
-                  fill_id: str = "") -> Transaction:
+                  fill_id: str = "", lot_consumptions: list | None = None) -> Transaction:
         """Venda executada: baixa a posição pelo custo e atribui o resultado.
 
         A conta PNL:<agente> carrega o resultado BRUTO (venda − custo); a
@@ -327,15 +346,30 @@ class Ledger:
         bruto = proceeds - cost_basis
         entries = [Entry(f"CASH:{self.currency}", proceeds - fee, "caixa da venda"),
                    Entry(f"FEES:{self.currency}", fee, "corretagem da saída"),
-                   Entry(f"POSITION:{instrument}", -cost_basis, "baixa ao custo"),
-                   Entry(f"PNL:{agent_id}", -bruto, "resultado bruto atribuído")]
+                   Entry(f"POSITION:{instrument}", -cost_basis, "baixa ao custo")]
+        if lot_consumptions:
+            if (sum((Decimal(c["quantity"]) for c in lot_consumptions), ZERO) != quantity
+                    or sum((Decimal(c["cost_basis"]) for c in lot_consumptions), ZERO) != cost_basis):
+                raise LedgerError("consumo de lotes diverge da venda")
+            restante = proceeds
+            for index, consumed in enumerate(lot_consumptions):
+                parcela = (restante if index == len(lot_consumptions) - 1 else
+                           (proceeds * Decimal(consumed["quantity"]) / quantity).quantize(
+                               Decimal("0.00000001")))
+                restante -= parcela
+                entries.append(Entry(f"PNL:{consumed['agent_id']}",
+                                     Decimal(consumed["cost_basis"]) - parcela,
+                                     "resultado bruto do dono do lote"))
+        else:
+            entries.append(Entry(f"PNL:{agent_id}", -bruto, "resultado bruto atribuído"))
         pernas, registros = self._pernas_nativas(
             self._um_parametro_de_taxa(native_fees, fee_in_other_currency),
             "corretagem da saída em outra moeda", fill_id=fill_id or ref)
         entries.extend(pernas)
         return self._post("fill_sell", entries, ref, instrument=instrument,
                           quantity=quantity, agent_id=agent_id,
-                          fee_component_records=registros)
+                          fee_component_records=registros,
+                          lot_consumptions=lot_consumptions)
 
     def ai_cost(self, amount: Decimal, agent_id: str, ref: str = "") -> Transaction:
         """Custo de IA é custo real — entra na conta, não some."""
@@ -494,6 +528,15 @@ class Ledger:
         original e o custo real em cotação é desconhecido. A procedência da
         cotação vai no memo: sem ela, ninguém audita de onde saiu o número.
         """
+        if moeda == self.currency:
+            # A moeda funcional não tem "conversão": a taxa cobrada nela já
+            # foi despesada no fill (FEES:{moeda}). Valorá-la de novo somaria
+            # a despesa duas vezes e criaria um passivo sem ocorrência.
+            raise ValueError(
+                f"valoração recusada: {moeda} é a moeda funcional do livro; "
+                "a taxa na própria cotação já foi despesada no fill. Valorar "
+                "de novo contaria a despesa duas vezes e criaria um passivo "
+                "fantasma sem lastro a converter")
         if quantidade <= ZERO or rate <= ZERO:
             raise ValueError("valoração exige quantidade e cotação positivas")
         ids = list(fee_component_ids or [])
@@ -511,7 +554,7 @@ class Ledger:
         # deve esse valor até alguém aportar o ativo ou comprá-lo.
         entradas = [Entry(f"FEES:{self.currency}", valor, memo),
                     Entry("LIABILITY:FEE_FUNDING", -valor, memo)]
-        return self._post("fee_valuation", entradas,
+        tx = self._post("fee_valuation", entradas,
                           incident_id or f"valoracao:{moeda}",
                           incident_id=incident_id,
                           fee_component_ids=ids,
@@ -527,6 +570,11 @@ class Ledger:
                           native_amount=quantidade, native_currency=moeda,
                           functional_amount=valor,
                           functional_currency=self.currency)
+        # A valoração abriu a dívida funcional. Se o ativo já foi aportado
+        # antes dela, a ocorrência nasce coberta — a ordem dos fatos não
+        # pode mudar a economia, então a quitação acontece agora.
+        self._liquidar_funding_de_taxa(moeda)
+        return tx
 
     def asset_contribution(self, moeda: str, quantidade: Decimal, *,
                            reason: str, actor: str, rate: Decimal,
@@ -579,13 +627,117 @@ class Ledger:
         #
         # Debitar FEES:<moeda> aqui seria pior: reduziria a DESPESA, como se
         # aportar o ativo desfizesse a taxa que já foi cobrada.
-        return self._post(
+        tx = self._post(
             kind,
             [Entry(f"ASSET:{moeda}", quantidade, memo),
              Entry(f"CONTRIBUTED_CAPITAL:{moeda}", -quantidade, memo)],
             external_reference or reason, purpose=purpose,
             native_amount=abs(quantidade), native_currency=moeda,
             functional_amount=valor, functional_currency=self.currency)
+        if kind == "asset_contribution":
+            # Cobrir o ativo descoberto é o que quita o passivo funcional da
+            # taxa valorada que ele financiou (FIFO por ocorrência).
+            self._liquidar_funding_de_taxa(moeda)
+        return tx
+
+    def _liquidar_funding_de_taxa(self, moeda: str) -> None:
+        """Quita o passivo funcional das valorações cobertas pelo aporte.
+
+        O aporte cobre o ativo descoberto em ORDEM FIFO de ocorrência: os
+        primeiros componentes de taxa da moeda são financiados primeiro.
+        Cada valoração carrega o valor funcional da SUA ocorrência — liquidar
+        pela cotação do aporte trataria quantidades de moedas diferentes como
+        um número só e cobriria um passivo de 950 com 960.
+
+        A quitação é DURÁVEL: o vínculo `funding_of` grava qual valoração foi
+        quitada, e o já liquidado vem do histórico — nunca de memória. Chamar
+        de novo sem aporte novo não repete o lançamento.
+        """
+        documentos = self.export_transactions()
+        # Posição FIFO de cada componente entre os componentes da moeda, na
+        # ordem em que as ocorrências nasceram.
+        posicoes: dict = {}
+        inicio = ZERO
+        for componente in self.fee_components(moeda):
+            cid = componente.get("fee_component_id", "")
+            if not cid:
+                continue
+            try:
+                qtd = Decimal(str(componente.get("amount") or 0))
+            except (ArithmeticError, ValueError, TypeError) as exc:
+                raise ValueError(
+                    f"componente de taxa com quantidade inválida: "
+                    f"{componente!r}") from exc
+            posicoes[cid] = (inicio, qtd)
+            inicio += qtd
+
+        # Cobertura viva: aportes menos retiradas, nesta moeda. Retirada não
+        # desfaz quitação já feita (o descoberto reabre o gate por si só).
+        coberto = ZERO
+        for doc in documentos:
+            if doc.get("native_currency") != moeda:
+                continue
+            if doc.get("kind") == "asset_contribution":
+                coberto += Decimal(str(doc.get("native_amount") or 0))
+            elif doc.get("kind") == "asset_withdrawal":
+                coberto -= Decimal(str(doc.get("native_amount") or 0))
+        if coberto <= ZERO:
+            return
+
+        for doc in documentos:
+            if (doc.get("kind") != "fee_valuation"
+                    or doc.get("native_currency") != moeda):
+                continue
+            ids = [c for c in (doc.get("fee_component_ids") or [])
+                   if c in posicoes]
+            if not ids:
+                # Porta compat (sem lastro): sem ocorrência não há como
+                # atribuir a cobertura na FIFO — fica fora, conservador.
+                continue
+            alvo_n = ZERO
+            total_n = ZERO
+            for cid in ids:
+                ini, qtd = posicoes[cid]
+                total_n += qtd
+                alvo_n += max(ZERO, min(coberto, ini + qtd) - ini)
+            if total_n <= ZERO:
+                continue
+            valor = Decimal(str(doc.get("functional_amount") or 0))
+            quitado_n = ZERO
+            quitado_f = ZERO
+            for liquidacao in documentos:
+                if (liquidacao.get("kind") == "fee_funding_settlement"
+                        and liquidacao.get("funding_of") == doc.get("tx_id")):
+                    quitado_n += Decimal(
+                        str(liquidacao.get("native_amount") or 0))
+                    quitado_f += Decimal(
+                        str(liquidacao.get("functional_amount") or 0))
+            delta_n = alvo_n - quitado_n
+            disponivel = valor - quitado_f
+            if delta_n <= ZERO or disponivel <= ZERO:
+                continue
+            if alvo_n >= total_n:
+                # Cobertura completa: quita o restante do valor EXATO da
+                # ocorrência, sem resíduo de arredondamento para trás.
+                delta_f = disponivel
+            else:
+                parcial = (valor * delta_n / total_n).quantize(
+                    Decimal("0.00000001"), ROUND_DOWN)
+                delta_f = min(parcial, disponivel)
+            if delta_f <= ZERO:
+                continue
+            memo = (f"liquidação do passivo da taxa {moeda} | ocorrência "
+                    f"{doc.get('tx_id')} coberta pelo aporte "
+                    f"({delta_n} {moeda})")
+            self._post(
+                "fee_funding_settlement",
+                [Entry("LIABILITY:FEE_FUNDING", delta_f, memo),
+                 Entry("CONTRIBUTED_CAPITAL", -delta_f, memo)],
+                doc.get("ref") or "", purpose="FEE_FUNDING_SETTLEMENT",
+                funding_of=doc.get("tx_id") or "",
+                native_amount=delta_n, native_currency=moeda,
+                functional_amount=delta_f,
+                functional_currency=self.currency)
 
     def capital_adjustment_asset(self, moeda: str, quantidade: Decimal, *,
                                  reason: str, actor: str,
@@ -939,47 +1091,89 @@ class Ledger:
         """
         return self.cash_available() + self.reserved_cash() + self.invested_cost()
 
-    def position_lots(self, instrument: str) -> list[dict]:
-        """Lotes vivos POR AGENTE, derivados dos lançamentos.
+    @staticmethod
+    def _consume_fifo(lots: list[dict], quantity: Decimal,
+                      agent_id: str | None) -> list[dict]:
+        consumed = []
+        for lot in lots:
+            if quantity <= ZERO:
+                break
+            if lot["quantity"] <= ZERO or (agent_id is not None and lot["agent_id"] != agent_id):
+                continue
+            take = min(quantity, lot["quantity"])
+            cost = (lot["cost"] if take == lot["quantity"] else
+                    (lot["cost"] * take / lot["quantity"]).quantize(Decimal("0.00000001")))
+            consumed.append({"buy_tx_id": lot["buy_tx_id"], "agent_id": lot["agent_id"],
+                             "quantity": str(take), "cost_basis": str(cost)})
+            lot["quantity"] -= take
+            lot["cost"] -= cost
+            quantity -= take
+        return consumed
 
-        O dono da posição era o agente da COMPRA MAIS RECENTE: com dois
-        agentes no mesmo instrumento, o último a comprar podia fechar o lote
-        do outro. Aqui cada agente tem seu lote, e a soma dos lotes é
-        exatamente a posição agregada — não existe segunda verdade, tudo sai
-        do mesmo histórico append-only.
-
-        Saídas consomem FIFO dentro do lote do próprio agente.
-        """
-        compras: dict[str, list[dict]] = {}
+    def _position_fifo(self, instrument: str) -> list[dict]:
+        # A ordem de escrituração é preservada no export/restore, inclusive
+        # quando dois lançamentos têm o mesmo carimbo temporal.
+        lots = []
+        by_id = {}
         for tx in self._txs:
             if tx.instrument != instrument or tx.quantity <= ZERO:
                 continue
-            agente = tx.agent_id or "desconhecido"
+            agent = tx.agent_id or "desconhecido"
             if tx.kind == "fill_buy":
-                custo = sum((e.amount for e in tx.entries
-                             if e.account.startswith("POSITION:")), ZERO)
-                compras.setdefault(agente, []).append(
-                    {"quantidade": tx.quantity, "custo": custo,
-                     "origem": tx.ref, "em": tx.at})
+                lot = {"buy_tx_id": tx.tx_id, "agent_id": agent,
+                       "quantity": tx.quantity,
+                       "cost": sum((e.amount for e in tx.entries
+                                    if e.account == f"POSITION:{instrument}"), ZERO)}
+                lots.append(lot)
+                by_id[tx.tx_id] = lot
             elif tx.kind == "fill_sell":
-                restante = tx.quantity
-                for lote in compras.get(agente, []):
-                    if restante <= ZERO:
-                        break
-                    consome = min(lote["quantidade"], restante)
-                    if lote["quantidade"] > 0:
-                        lote["custo"] -= (lote["custo"] * consome
-                                          / lote["quantidade"])
-                    lote["quantidade"] -= consome
-                    restante -= consome
-        saida = []
-        for agente, lotes in compras.items():
-            viva = sum((lote["quantidade"] for lote in lotes), ZERO)
-            custo = sum((lote["custo"] for lote in lotes), ZERO)
-            saida.append({"agente": agente, "instrumento": instrument,
-                          "quantidade": str(viva), "custo_restante": str(custo),
-                          "origem": "DZ23"})
-        return saida
+                if tx.lot_consumptions:
+                    for consumed in tx.lot_consumptions:
+                        lot = by_id[consumed["buy_tx_id"]]
+                        lot["quantity"] -= Decimal(consumed["quantity"])
+                        lot["cost"] -= Decimal(consumed["cost_basis"])
+                else:
+                    self._consume_fifo(lots, tx.quantity, agent)
+        return lots
+
+    def fifo_consumption(self, instrument: str, quantity: Decimal,
+                         agent_id: str | None) -> list[dict]:
+        """Custo e donos das mesmas fatias FIFO usadas na reconstrução."""
+        consumed = self._consume_fifo(self._position_fifo(instrument), quantity, agent_id)
+        if sum((Decimal(c["quantity"]) for c in consumed), ZERO) != quantity:
+            raise LedgerError("quantidade de saída excede os lotes autorizados")
+        return consumed
+
+    def entry_fee_of_consumptions(self, consumptions: list[dict]) -> Decimal:
+        """Taxa de ENTRADA embutida nas fatias FIFO consumidas.
+
+        A taxa de compra é lançada em `FEES:` — fora do custo da posição — e
+        por isso não aparece em `cost_basis`. Quem mede o resultado round-trip
+        (o freio diário) precisa somá-la de volta, senão a perda registrada
+        fica menor que a real. Proporcional à fatia consumida do lote.
+        """
+        por_id = {tx.tx_id: tx for tx in self._txs if tx.kind == "fill_buy"}
+        total = ZERO
+        for c in consumptions:
+            tx = por_id.get(c["buy_tx_id"])
+            if tx is None or tx.quantity <= ZERO:
+                continue
+            taxa = sum((e.amount for e in tx.entries
+                        if e.account == f"FEES:{self.currency}"), ZERO)
+            fatia = Decimal(c["quantity"])
+            total += taxa if fatia == tx.quantity else (
+                (taxa * fatia / tx.quantity).quantize(Decimal("0.00000001")))
+        return total
+
+    def position_lots(self, instrument: str) -> list[dict]:
+        """Lotes por dono, agregados depois do consumo FIFO cronológico."""
+        owners = {}
+        for lot in self._position_fifo(instrument):
+            quantity, cost = owners.get(lot["agent_id"], (ZERO, ZERO))
+            owners[lot["agent_id"]] = quantity + lot["quantity"], cost + lot["cost"]
+        return [{"agente": agent, "instrumento": instrument,
+                 "quantidade": str(quantity), "custo_restante": str(cost), "origem": "DZ23"}
+                for agent, (quantity, cost) in owners.items()]
 
     def lot_quantity(self, instrument: str, agent_id: str) -> Decimal:
         """Quanto ESTE agente ainda tem — a base para autorizar uma saída."""
@@ -1035,9 +1229,11 @@ class Ledger:
              "fee_component_records": [dict(r) for r in getattr(
                  tx, "fee_component_records", ())],
              "purpose": getattr(tx, "purpose", ""),
+             "funding_of": getattr(tx, "funding_of", ""),
              "instrument": getattr(tx, "instrument", ""),
              "quantity": str(getattr(tx, "quantity", ZERO)),
              "agent_id": getattr(tx, "agent_id", ""),
+             "lot_consumptions": [dict(c) for c in tx.lot_consumptions],
              "entries": [{"account": e.account, "amount": str(e.amount),
                           "memo": e.memo} for e in tx.entries]}
             for tx in self._txs]
@@ -1062,6 +1258,7 @@ class Ledger:
                 instrument=doc.get("instrument", ""),
                 quantity=Decimal(str(doc.get("quantity") or 0)),
                 agent_id=doc.get("agent_id", ""),
+                lot_consumptions=tuple(doc.get("lot_consumptions") or ()),
                 purpose=doc.get("purpose", ""),
                 incident_id=doc.get("incident_id", ""),
                 settlement_id=doc.get("settlement_id", ""),
@@ -1076,6 +1273,7 @@ class Ledger:
                 functional_currency=doc.get("functional_currency", ""),
                 fee_component_records=tuple(
                     doc.get("fee_component_records") or ()),
+                funding_of=doc.get("funding_of", ""),
                 # O instante ORIGINAL, não o de agora: substituir por utcnow
                 # reescreveria a data de todo o histórico a cada reinício.
                 **({"at": _instante(doc["at"])} if doc.get("at") else {}))

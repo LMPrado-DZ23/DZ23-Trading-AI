@@ -81,3 +81,6 @@ def test_amostra_curta_nao_produz_corte():
     r = detectar_lookahead(serie(2), fabrica_causal)
     assert r["cortes"] == []
     assert "sem corte aplicável" in r["aviso"]
+    # V9-QUANT-04: sem corte NÃO há evidência — o veredito é fail-closed;
+    # "não produzido" jamais pode ser lido como "sem vazamento".
+    assert r["ok"] is False

@@ -2,11 +2,21 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
 import tarfile
+from pathlib import Path
 
 import pytest
 
 from tradingagents.desk.backup import BackupError, create_backup, inspect_backup, restore_backup
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _pular_fora_de_posix():
+    if sys.platform == "win32":
+        pytest.skip("POSIX permissions (600) are not natively supported on Windows NTFS")
 
 
 def populate(d):
@@ -39,6 +49,37 @@ class TestBackup:
         (tmp_path / "vazio").mkdir()
         with pytest.raises(BackupError, match="nada a salvar"):
             create_backup(tmp_path / "vazio", tmp_path / "bk.tar.gz")
+
+
+class TestArchivePermissions:
+    """V9-SEC-03 (metade backup): o pacote carrega config.json com segredos;
+    ele não pode nascer legível para o mundo (umask) nem ficar largo se já
+    existir no disco."""
+
+    def test_criacao_do_pacote_usa_modo_restrito(self):
+        fonte = (ROOT / "tradingagents" / "desk" / "backup.py").read_text(encoding="utf-8")
+        assert "os.open(" in fonte
+        assert "0o600" in fonte
+        assert "fchmod" in fonte
+
+    def test_archive_does_not_widen_secret_read_permissions(self, tmp_path):
+        _pular_fora_de_posix()
+        anterior = os.umask(0o022)
+        try:
+            data = populate(tmp_path / "data")
+            create_backup(data, tmp_path / "bk.tar.gz")
+        finally:
+            os.umask(anterior)
+        assert oct((tmp_path / "bk.tar.gz").stat().st_mode)[-3:] == "600"
+
+    def test_preexisting_wide_archive_is_tightened(self, tmp_path):
+        _pular_fora_de_posix()
+        alvo = tmp_path / "bk.tar.gz"
+        alvo.write_bytes(b"lixo antigo")
+        os.chmod(alvo, 0o644)
+        data = populate(tmp_path / "data")
+        create_backup(data, alvo)
+        assert oct(alvo.stat().st_mode)[-3:] == "600"
 
 
 class TestRestore:

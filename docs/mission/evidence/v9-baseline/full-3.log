@@ -1,0 +1,464 @@
+........................................................................ [  2%]
+........................................................................ [  4%]
+........................................................................ [  6%]
+.......................................................s................ [  9%]
+........................................................................ [ 11%]
+........................................................................ [ 13%]
+........................................................................ [ 15%]
+........................................................................ [ 18%]
+........................................................................ [ 20%]
+........................................................................ [ 22%]
+.....s..............................s................................... [ 24%]
+........................................................................ [ 27%]
+........................................................................ [ 29%]
+........................................................................ [ 31%]
+........................................................................ [ 34%]
+........................................................................ [ 36%]
+........................................................................ [ 38%]
+........................................................................ [ 40%]
+..................................................................... [ 43%]
+........................................................................ [ 45%]
+........................................................................ [ 47%]
+........................................................................ [ 49%]
+........................................................................ [ 52%]
+.............................................................s.............. [ 54%]
+........................................................................ [ 56%]
+........................................................................ [ 59%]
+........................................................................ [ 61%]
+........................................................................ [ 63%]
+........................................................................ [ 65%]
+..s..................................................................... [ 68%]
+........................................................................ [ 70%]
+........................................................................ [ 72%]
+........................................................................ [ 74%]
+........................................................................ [ 77%]
+........................................................................ [ 79%]
+........................................................................ [ 81%]
+........................................................................ [ 84%]
+........................................................................ [ 86%]
+........................................................................ [ 88%]
+........................................................................ [ 90%]
+....................................................FFFFF............... [ 93%]
+........................................................................ [ 95%]
+........................................................................ [ 97%]
+........................................................................ [ 99%]
+...                                                                      [100%]
+================================== FAILURES ===================================
+__ TestSentimentAnalystAgent.test_structured_path_produces_rendered_markdown __
+
+self = <tests.test_structured_agents.TestSentimentAnalystAgent object at 0x0000019066CAF320>
+
+    def test_structured_path_produces_rendered_markdown(self):
+        captured = {}
+        report = SentimentReport(
+            overall_band=SentimentBand.MILDLY_BEARISH, overall_score=4.0,
+            confidence="medium", narrative="Mixed signals across sources.",
+        )
+        analyst = create_sentiment_analyst(_structured_sentiment_llm(captured, report))
+>       sr = analyst(_make_sentiment_state())["sentiment_report"]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_structured_agents.py:403: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tradingagents\agents\analysts\sentiment_analyst.py:74: in sentiment_analyst_node
+    stocktwits_block = fetch_stocktwits_messages(
+tradingagents\dataflows\stocktwits.py:89: in fetch_stocktwits_messages
+    with urlopen(req, timeout=timeout) as resp:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\urllib\request.py:215: in urlopen
+    return opener.open(url, data, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\urllib\request.py:515: in open
+    response = self._open(req, data)
+               ^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\urllib\request.py:532: in _open
+    result = self._call_chain(self.handle_open, protocol, protocol +
+C:\Program Files\Python312\Lib\urllib\request.py:492: in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+C:\Program Files\Python312\Lib\urllib\request.py:1392: in https_open
+    return self.do_open(http.client.HTTPSConnection, req,
+C:\Program Files\Python312\Lib\urllib\request.py:1344: in do_open
+    h.request(req.get_method(), req.selector, req.data, headers,
+C:\Program Files\Python312\Lib\http\client.py:1338: in request
+    self._send_request(method, url, body, headers, encode_chunked)
+C:\Program Files\Python312\Lib\http\client.py:1384: in _send_request
+    self.endheaders(body, encode_chunked=encode_chunked)
+C:\Program Files\Python312\Lib\http\client.py:1333: in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+C:\Program Files\Python312\Lib\http\client.py:1093: in _send_output
+    self.send(msg)
+C:\Program Files\Python312\Lib\http\client.py:1037: in send
+    self.connect()
+C:\Program Files\Python312\Lib\http\client.py:1472: in connect
+    super().connect()
+C:\Program Files\Python312\Lib\http\client.py:1003: in connect
+    self.sock = self._create_connection(
+C:\Program Files\Python312\Lib\socket.py:841: in create_connection
+    for res in getaddrinfo(host, port, 0, SOCK_STREAM):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\socket.py:978: in getaddrinfo
+    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+event = 'socket.getaddrinfo', args = ('api.stocktwits.com', 443, 0, 1, 0)
+
+>   ???
+E   RuntimeError: audit permits loopback network only
+
+<string>:18: RuntimeError
+______ TestSentimentAnalystAgent.test_sentiment_report_also_in_messages _______
+
+self = <tests.test_structured_agents.TestSentimentAnalystAgent object at 0x0000019066CAF680>
+
+    def test_sentiment_report_also_in_messages(self):
+        captured = {}
+        analyst = create_sentiment_analyst(_structured_sentiment_llm(captured))
+>       result = analyst(_make_sentiment_state())
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_structured_agents.py:411: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tradingagents\agents\analysts\sentiment_analyst.py:74: in sentiment_analyst_node
+    stocktwits_block = fetch_stocktwits_messages(
+tradingagents\dataflows\stocktwits.py:89: in fetch_stocktwits_messages
+    with urlopen(req, timeout=timeout) as resp:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\urllib\request.py:215: in urlopen
+    return opener.open(url, data, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\urllib\request.py:515: in open
+    response = self._open(req, data)
+               ^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\urllib\request.py:532: in _open
+    result = self._call_chain(self.handle_open, protocol, protocol +
+C:\Program Files\Python312\Lib\urllib\request.py:492: in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+C:\Program Files\Python312\Lib\urllib\request.py:1392: in https_open
+    return self.do_open(http.client.HTTPSConnection, req,
+C:\Program Files\Python312\Lib\urllib\request.py:1344: in do_open
+    h.request(req.get_method(), req.selector, req.data, headers,
+C:\Program Files\Python312\Lib\http\client.py:1338: in request
+    self._send_request(method, url, body, headers, encode_chunked)
+C:\Program Files\Python312\Lib\http\client.py:1384: in _send_request
+    self.endheaders(body, encode_chunked=encode_chunked)
+C:\Program Files\Python312\Lib\http\client.py:1333: in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+C:\Program Files\Python312\Lib\http\client.py:1093: in _send_output
+    self.send(msg)
+C:\Program Files\Python312\Lib\http\client.py:1037: in send
+    self.connect()
+C:\Program Files\Python312\Lib\http\client.py:1472: in connect
+    super().connect()
+C:\Program Files\Python312\Lib\http\client.py:1003: in connect
+    self.sock = self._create_connection(
+C:\Program Files\Python312\Lib\socket.py:841: in create_connection
+    for res in getaddrinfo(host, port, 0, SOCK_STREAM):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\socket.py:978: in getaddrinfo
+    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+event = 'socket.getaddrinfo', args = ('api.stocktwits.com', 443, 0, 1, 0)
+
+>   ???
+E   RuntimeError: audit permits loopback network only
+
+<string>:18: RuntimeError
+____________ TestSentimentAnalystAgent.test_prompt_contains_ticker ____________
+
+self = <tests.test_structured_agents.TestSentimentAnalystAgent object at 0x0000019066CAF9E0>
+
+    def test_prompt_contains_ticker(self):
+        captured = {}
+>       create_sentiment_analyst(_structured_sentiment_llm(captured))(_make_sentiment_state())
+
+tests\test_structured_agents.py:417: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tradingagents\agents\analysts\sentiment_analyst.py:74: in sentiment_analyst_node
+    stocktwits_block = fetch_stocktwits_messages(
+tradingagents\dataflows\stocktwits.py:89: in fetch_stocktwits_messages
+    with urlopen(req, timeout=timeout) as resp:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\urllib\request.py:215: in urlopen
+    return opener.open(url, data, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\urllib\request.py:515: in open
+    response = self._open(req, data)
+               ^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\urllib\request.py:532: in _open
+    result = self._call_chain(self.handle_open, protocol, protocol +
+C:\Program Files\Python312\Lib\urllib\request.py:492: in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+C:\Program Files\Python312\Lib\urllib\request.py:1392: in https_open
+    return self.do_open(http.client.HTTPSConnection, req,
+C:\Program Files\Python312\Lib\urllib\request.py:1344: in do_open
+    h.request(req.get_method(), req.selector, req.data, headers,
+C:\Program Files\Python312\Lib\http\client.py:1338: in request
+    self._send_request(method, url, body, headers, encode_chunked)
+C:\Program Files\Python312\Lib\http\client.py:1384: in _send_request
+    self.endheaders(body, encode_chunked=encode_chunked)
+C:\Program Files\Python312\Lib\http\client.py:1333: in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+C:\Program Files\Python312\Lib\http\client.py:1093: in _send_output
+    self.send(msg)
+C:\Program Files\Python312\Lib\http\client.py:1037: in send
+    self.connect()
+C:\Program Files\Python312\Lib\http\client.py:1472: in connect
+    super().connect()
+C:\Program Files\Python312\Lib\http\client.py:1003: in connect
+    self.sock = self._create_connection(
+C:\Program Files\Python312\Lib\socket.py:841: in create_connection
+    for res in getaddrinfo(host, port, 0, SOCK_STREAM):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\socket.py:978: in getaddrinfo
+    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+event = 'socket.getaddrinfo', args = ('api.stocktwits.com', 443, 0, 1, 0)
+
+>   ???
+E   RuntimeError: audit permits loopback network only
+
+<string>:18: RuntimeError
+_ TestSentimentAnalystAgent.test_falls_back_to_freetext_when_structured_unavailable _
+
+self = <tests.test_structured_agents.TestSentimentAnalystAgent object at 0x0000019066CAFD40>
+
+    def test_falls_back_to_freetext_when_structured_unavailable(self):
+        plain = "**Overall Sentiment:** **Bearish** (Score: 3.0/10)\n**Confidence:** Low\n\nLimited data."
+        llm = MagicMock()
+        llm.with_structured_output.side_effect = NotImplementedError("provider unsupported")
+        llm.invoke.return_value = MagicMock(content=plain)
+>       assert create_sentiment_analyst(llm)(_make_sentiment_state())["sentiment_report"] == plain
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_structured_agents.py:425: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tradingagents\agents\analysts\sentiment_analyst.py:74: in sentiment_analyst_node
+    stocktwits_block = fetch_stocktwits_messages(
+tradingagents\dataflows\stocktwits.py:89: in fetch_stocktwits_messages
+    with urlopen(req, timeout=timeout) as resp:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\urllib\request.py:215: in urlopen
+    return opener.open(url, data, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\urllib\request.py:515: in open
+    response = self._open(req, data)
+               ^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\urllib\request.py:532: in _open
+    result = self._call_chain(self.handle_open, protocol, protocol +
+C:\Program Files\Python312\Lib\urllib\request.py:492: in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+C:\Program Files\Python312\Lib\urllib\request.py:1392: in https_open
+    return self.do_open(http.client.HTTPSConnection, req,
+C:\Program Files\Python312\Lib\urllib\request.py:1344: in do_open
+    h.request(req.get_method(), req.selector, req.data, headers,
+C:\Program Files\Python312\Lib\http\client.py:1338: in request
+    self._send_request(method, url, body, headers, encode_chunked)
+C:\Program Files\Python312\Lib\http\client.py:1384: in _send_request
+    self.endheaders(body, encode_chunked=encode_chunked)
+C:\Program Files\Python312\Lib\http\client.py:1333: in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+C:\Program Files\Python312\Lib\http\client.py:1093: in _send_output
+    self.send(msg)
+C:\Program Files\Python312\Lib\http\client.py:1037: in send
+    self.connect()
+C:\Program Files\Python312\Lib\http\client.py:1472: in connect
+    super().connect()
+C:\Program Files\Python312\Lib\http\client.py:1003: in connect
+    self.sock = self._create_connection(
+C:\Program Files\Python312\Lib\socket.py:841: in create_connection
+    for res in getaddrinfo(host, port, 0, SOCK_STREAM):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\socket.py:978: in getaddrinfo
+    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+event = 'socket.getaddrinfo', args = ('api.stocktwits.com', 443, 0, 1, 0)
+
+>   ???
+E   RuntimeError: audit permits loopback network only
+
+<string>:18: RuntimeError
+------------------------------ Captured log call ------------------------------
+WARNING  tradingagents.agents.utils.structured:structured.py:51 Sentiment Analyst: provider does not support with_structured_output (provider unsupported); falling back to free-text generation
+_ TestSentimentAnalystAgent.test_falls_back_to_freetext_when_structured_call_fails _
+
+self = <tests.test_structured_agents.TestSentimentAnalystAgent object at 0x0000019066CC00E0>
+
+    def test_falls_back_to_freetext_when_structured_call_fails(self):
+        plain = "Fallback free-text sentiment."
+        structured = MagicMock()
+        structured.invoke.side_effect = ValueError("bad JSON from model")
+        llm = MagicMock()
+        llm.with_structured_output.return_value = structured
+        llm.invoke.return_value = MagicMock(content=plain)
+>       assert create_sentiment_analyst(llm)(_make_sentiment_state())["sentiment_report"] == plain
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_structured_agents.py:434: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tradingagents\agents\analysts\sentiment_analyst.py:74: in sentiment_analyst_node
+    stocktwits_block = fetch_stocktwits_messages(
+tradingagents\dataflows\stocktwits.py:89: in fetch_stocktwits_messages
+    with urlopen(req, timeout=timeout) as resp:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\urllib\request.py:215: in urlopen
+    return opener.open(url, data, timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\urllib\request.py:515: in open
+    response = self._open(req, data)
+               ^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\urllib\request.py:532: in _open
+    result = self._call_chain(self.handle_open, protocol, protocol +
+C:\Program Files\Python312\Lib\urllib\request.py:492: in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+C:\Program Files\Python312\Lib\urllib\request.py:1392: in https_open
+    return self.do_open(http.client.HTTPSConnection, req,
+C:\Program Files\Python312\Lib\urllib\request.py:1344: in do_open
+    h.request(req.get_method(), req.selector, req.data, headers,
+C:\Program Files\Python312\Lib\http\client.py:1338: in request
+    self._send_request(method, url, body, headers, encode_chunked)
+C:\Program Files\Python312\Lib\http\client.py:1384: in _send_request
+    self.endheaders(body, encode_chunked=encode_chunked)
+C:\Program Files\Python312\Lib\http\client.py:1333: in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+C:\Program Files\Python312\Lib\http\client.py:1093: in _send_output
+    self.send(msg)
+C:\Program Files\Python312\Lib\http\client.py:1037: in send
+    self.connect()
+C:\Program Files\Python312\Lib\http\client.py:1472: in connect
+    super().connect()
+C:\Program Files\Python312\Lib\http\client.py:1003: in connect
+    self.sock = self._create_connection(
+C:\Program Files\Python312\Lib\socket.py:841: in create_connection
+    for res in getaddrinfo(host, port, 0, SOCK_STREAM):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\socket.py:978: in getaddrinfo
+    for res in _socket.getaddrinfo(host, port, family, type, proto, flags):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+event = 'socket.getaddrinfo', args = ('api.stocktwits.com', 443, 0, 1, 0)
+
+>   ???
+E   RuntimeError: audit permits loopback network only
+
+<string>:18: RuntimeError
+============================== warnings summary ===============================
+tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-haiku-5-0]
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-haiku-5-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-haiku-4-7-preview]
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-haiku-4-7-preview' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-sonnet-4-5]
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-4-5' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-sonnet-4-0]
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-4-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_current_opus_and_sonnet_receive_effort[claude-opus-4-5]
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-opus-4-5' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_current_opus_and_sonnet_receive_effort[claude-opus-4-6]
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-opus-4-6' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_current_opus_and_sonnet_receive_effort[claude-sonnet-4-6]
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-4-6' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_future_opus_sonnet_inherit_effort_via_pattern[claude-opus-5-0]
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-opus-5-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_future_opus_sonnet_inherit_effort_via_pattern[claude-sonnet-5-0]
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-5-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_claude_5_family_receives_effort[claude-mythos-5]
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-mythos-5' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_mythos_preview_receives_effort
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-mythos-preview' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_unknown_anthropic_model_does_not_receive_effort
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\anthropic_client.py:68: RuntimeWarning: Model 'claude-experimental-x' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_escrita_atomica.py::TestEscritaAtomica::test_file_is_always_complete_and_valid
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-205 (leitor)
+  
+  Traceback (most recent call last):
+    File "C:\Program Files\Python312\Lib\threading.py", line 1075, in _bootstrap_inner
+      self.run()
+    File "C:\Program Files\Python312\Lib\threading.py", line 1012, in run
+      self._target(*self._args, **self._kwargs)
+    File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_escrita_atomica.py", line 45, in leitor
+      json.loads(alvo.read_text())
+                 ^^^^^^^^^^^^^^^^
+    File "C:\Program Files\Python312\Lib\pathlib.py", line 1027, in read_text
+      with self.open(mode='r', encoding=encoding, errors=errors) as f:
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "C:\Program Files\Python312\Lib\pathlib.py", line 1013, in open
+      return io.open(self, mode, buffering, encoding, errors, newline)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  PermissionError: [Errno 13] Permission denied: 'C:\\Users\\DZ23\\AppData\\Local\\Temp\\dz23-v9-full-3-qv9lyym3\\tmp\\pytest-of-unknown\\pytest-0\\test_file_is_always_complete_a0\\estado.json'
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+tests/test_llm_transport_timeouts.py::TestConstrucaoGoogle::test_modelo_carrega_timeout_finito
+tests/test_llm_transport_timeouts.py::TestConstrucaoGoogle::test_timeout_do_usuario_prevalece
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\google_client.py:35: RuntimeWarning: Model 'gemini-3-pro' is not in the known model list for provider 'google'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_ollama_base_url.py::test_resolver_does_not_affect_other_providers
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\openai_client.py:284: RuntimeWarning: Model 'm' is not in the known model list for provider 'xai'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_ollama_base_url.py::test_resolver_does_not_affect_other_providers
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\openai_client.py:284: RuntimeWarning: Model 'm' is not in the known model list for provider 'deepseek'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_openai_reasoning_effort.py::test_non_reasoning_model_drops_effort
+tests/test_temperature_config.py::TestTemperatureForwarding::test_temperature_reaches_client_when_set[openai-gpt-4.1]
+tests/test_temperature_config.py::TestTemperatureForwarding::test_temperature_omitted_leaves_provider_default
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\openai_client.py:284: RuntimeWarning: Model 'gpt-4.1' is not in the known model list for provider 'openai'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_temperature_config.py::TestTemperatureForwarding::test_temperature_reaches_client_when_set[deepseek-deepseek-chat]
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tradingagents\llm_clients\openai_client.py:284: RuntimeWarning: Model 'deepseek-chat' is not in the known model list for provider 'deepseek'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_bedrock_provider.py:74: could not import 'langchain_aws': No module named 'langchain_aws'
+SKIPPED [1] tests\test_deepseek_reasoning.py:209: DEEPSEEK_API_KEY not set (or placeholder); skipping live API call
+SKIPPED [1] tests\test_desk_backup.py:58: POSIX permissions (600) are not natively supported on Windows NTFS
+SKIPPED [1] tests\test_modo_da_mesa.py:161: sem DATABASE_URL — caminho postgres roda no CI
+SKIPPED [1] tests\test_quant_intelligence.py:74: could not import 'lightgbm': No module named 'lightgbm'
+FAILED tests/test_structured_agents.py::TestSentimentAnalystAgent::test_structured_path_produces_rendered_markdown
+FAILED tests/test_structured_agents.py::TestSentimentAnalystAgent::test_sentiment_report_also_in_messages
+FAILED tests/test_structured_agents.py::TestSentimentAnalystAgent::test_prompt_contains_ticker
+FAILED tests/test_structured_agents.py::TestSentimentAnalystAgent::test_falls_back_to_freetext_when_structured_unavailable
+FAILED tests/test_structured_agents.py::TestSentimentAnalystAgent::test_falls_back_to_freetext_when_structured_call_fails
+5 failed, 3162 passed, 5 skipped, 21 warnings, 71 subtests passed in 519.83s (0:08:39)

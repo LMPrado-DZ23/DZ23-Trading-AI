@@ -1,0 +1,4 @@
+No known vulnerabilities found
+Name          Skip Reason
+------------- ----------------------------------------------------------------------------
+tradingagents Dependency not found on PyPI and could not be audited: tradingagents (0.5.0)

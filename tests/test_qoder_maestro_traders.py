@@ -10,7 +10,7 @@ O que o mandato QODER-TEN-TRADERS exige e este arquivo prova:
 from __future__ import annotations
 
 import importlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -39,11 +39,14 @@ def alta(n=40):
 
 def _memoria_com(tmp_path, estrategia, retornos):
     mem = MemoriaDeDesempenho(tmp_path / "aprendizado.json")
-    for r in retornos:
+    for _i, r in enumerate(retornos):
+        # Carimbo distinto por operação: registros idênticos são a
+        # MESMA operação e a porta da evidência os recusa.
         mem.registrar(Desfecho(
             estrategia=estrategia, regime="tendencia_alta",
             instrumento="BTC/USDT", retorno=Decimal(str(r)),
-            fechado_em=datetime.now(timezone.utc)))
+            fechado_em=datetime.now(timezone.utc)
+            - timedelta(seconds=len(retornos) - _i)))
     return mem
 
 
@@ -182,11 +185,14 @@ class TestBootETiersDaMesa:
         c, m = _client(tmp_path, monkeypatch)
         c.get("/v1/desk/status", headers=H)
         d = m._DESKS["legacy"]
-        for _ in range(14):
+        for _i in range(14):
+            # Carimbo distinto por operação: registros idênticos são a
+            # MESMA operação e a porta da evidência os recusa.
             d["memoria"].registrar(Desfecho(
                 estrategia="scalping", regime="lateral",
                 instrumento="BTC/USDT", retorno=Decimal("0.004"),
-                fechado_em=datetime.now(timezone.utc)))
+                fechado_em=datetime.now(timezone.utc)
+                - timedelta(seconds=14 - _i)))
         r = c.post("/v1/desk/traders/trader-scalping/promover", headers=H)
         assert r.status_code == 200
         assert r.json()["stage"] == "paper_enabled"

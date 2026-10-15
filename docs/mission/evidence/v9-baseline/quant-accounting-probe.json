@@ -1,0 +1,62 @@
+{
+  "head": "2b7754a94cc1e4233ad95ac6fa377be4078e5055",
+  "temporary_root": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\dz23-v9-quant-probe-l7f3eh0i",
+  "environment_names": [
+    "ALERTA_WINDOWS",
+    "APPDATA",
+    "COMSPEC",
+    "DATA_DIR",
+    "HOME",
+    "LOCALAPPDATA",
+    "MULTI_TENANT_ENABLED",
+    "NUMBER_OF_PROCESSORS",
+    "PATH",
+    "PATHEXT",
+    "PROCESSOR_ARCHITECTURE",
+    "PROGRAMFILES",
+    "PROGRAMFILES(X86)",
+    "PROGRAMW6432",
+    "PYTHONIOENCODING",
+    "PYTHONUNBUFFERED",
+    "PYTHON_DOTENV_DISABLED",
+    "REAL_MONEY_EXECUTION",
+    "SYSTEMDRIVE",
+    "SYSTEMROOT",
+    "TEMP",
+    "TMP",
+    "TRADINGAGENTS_CACHE_DIR",
+    "TRADINGAGENTS_MEMORY_LOG_PATH",
+    "TRADINGAGENTS_RESULTS_DIR",
+    "USERPROFILE",
+    "WINDIR",
+    "XDG_CACHE_HOME",
+    "XDG_CONFIG_HOME"
+  ],
+  "network": "blocked via audit hook",
+  "runs": [
+    {
+      "name": "dz23",
+      "command": [
+        "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\.venv\\Scripts\\python.exe",
+        "-B",
+        "-c",
+        "import sys\ndef offline(event,args):\n if event in ('socket.connect','socket.getaddrinfo'): raise RuntimeError('offline audit forbids network')\nsys.addaudithook(offline)\nimport json\nfrom datetime import datetime,timedelta,timezone\nfrom decimal import Decimal as D\nfrom tradingagents.research import Bar,BacktestConfig,run_backtest\nfrom tradingagents.desk.costs import ModeloDeCusto,retorno_liquido\nstart=datetime(2026,1,1,tzinfo=timezone.utc)\nbars=[Bar(start+timedelta(hours=i),start+timedelta(hours=i),D(100),D(100),D(100),D(100),D(10000)) for i in range(3)]\nr=run_backtest(bars,lambda history: 1 if len(history)==1 else 0,BacktestConfig(initial_equity=D(1000),fee_bps=D(0),slippage_bps=D(0)))\nprint(json.dumps({'constant_price_equity':list(map(str,r.equity_curve)),'constant_price_expected_final':'1000','return':str(r.total_return),'cost_comparison_net':str(D(100)*retorno_liquido(D('.1'),ModeloDeCusto('binance',D('.001'),D(0),D(0))))}))\n"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"constant_price_equity\": [\"1000\", \"1010.0\", \"1010.0\"], \"constant_price_expected_final\": \"1000\", \"return\": \"0.01\", \"cost_comparison_net\": \"9.800\"}\n",
+      "stderr": ""
+    },
+    {
+      "name": "freqtrade",
+      "command": [
+        "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\freqtrade-spike\\.venv\\Scripts\\python.exe",
+        "-B",
+        "-c",
+        "import sys\ndef offline(event,args):\n if event in ('socket.connect','socket.getaddrinfo'): raise RuntimeError('offline audit forbids network')\nsys.addaudithook(offline)\nimport json,importlib.metadata\nfrom freqtrade.persistence import LocalTrade\nt=LocalTrade(pair='TEST/USDT',exchange='offline',amount=1.0,open_rate=100.0,stake_amount=100.0,fee_open=.001,fee_close=.001)\nt.recalc_open_trade_value()\nprint(json.dumps({'freqtrade_version':importlib.metadata.version('freqtrade'),'net_profit':t.calculate_profit(110.).profit_abs,'amount':1,'entry':100,'exit':110,'fee_per_side':.001,'scope':'accounting only, not strategy backtest'}))\n"
+      ],
+      "exit_code": 0,
+      "stdout": "{\"freqtrade_version\": \"2026.9\", \"net_profit\": 9.79, \"amount\": 1, \"entry\": 100, \"exit\": 110, \"fee_per_side\": 0.001, \"scope\": \"accounting only, not strategy backtest\"}\n",
+      "stderr": ""
+    }
+  ]
+}

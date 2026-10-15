@@ -1,0 +1,685 @@
+== gitleaks version ==
+v8.30.1
+== gitleaks detect: histórico completo (--all), checkout principal, config padrão (paridade com o job supply-chain do CI) ==
+Finding:     ....dict(os.environ, {"OPENAI_API_KEY": "[1;3;mREDACTED[0m"}):
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.734522
+File:        tests/test_llm_transport_timeouts.py
+Line:        57
+Commit:      929ebd4aee7ba7b2f2703f94f965f597889140f4
+Author:      LMPrado-DZ23
+Email:       291177257+LMPrado-DZ23@users.noreply.github.com
+Date:        2026-10-14T18:33:17Z
+Fingerprint: 929ebd4aee7ba7b2f2703f94f965f597889140f4:tests/test_llm_transport_timeouts.py:generic-api-key:57
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/929ebd4aee7ba7b2f2703f94f965f597889140f4/tests/test_llm_transport_timeouts.py#L57
+
+Finding:     "AZURE_OPENAI_API_KEY": "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.906891
+File:        tests/test_llm_transport_timeouts.py
+Line:        78
+Commit:      929ebd4aee7ba7b2f2703f94f965f597889140f4
+Author:      LMPrado-DZ23
+Email:       291177257+LMPrado-DZ23@users.noreply.github.com
+Date:        2026-10-14T18:33:17Z
+Fingerprint: 929ebd4aee7ba7b2f2703f94f965f597889140f4:tests/test_llm_transport_timeouts.py:generic-api-key:78
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/929ebd4aee7ba7b2f2703f94f965f597889140f4/tests/test_llm_transport_timeouts.py#L78
+
+Finding:     ...ent("gemini-3-pro", api_key="[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.932138
+File:        tests/test_llm_transport_timeouts.py
+Line:        126
+Commit:      929ebd4aee7ba7b2f2703f94f965f597889140f4
+Author:      LMPrado-DZ23
+Email:       291177257+LMPrado-DZ23@users.noreply.github.com
+Date:        2026-10-14T18:33:17Z
+Fingerprint: 929ebd4aee7ba7b2f2703f94f965f597889140f4:tests/test_llm_transport_timeouts.py:generic-api-key:126
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/929ebd4aee7ba7b2f2703f94f965f597889140f4/tests/test_llm_transport_timeouts.py#L126
+
+Finding:     "GROQ_API_KEY": "[1;3;mREDACTED[0m", "EXCHANGE_API_SECR...
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.506891
+File:        tests/test_alertas_transparencia.py
+Line:        158
+Commit:      977adce3cd5e07c461a51505acdf2d465cf338ab
+Author:      LMPrado-DZ23
+Email:       291177257+LMPrado-DZ23@users.noreply.github.com
+Date:        2026-10-13T21:46:34Z
+Fingerprint: 977adce3cd5e07c461a51505acdf2d465cf338ab:tests/test_alertas_transparencia.py:generic-api-key:158
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/977adce3cd5e07c461a51505acdf2d465cf338ab/tests/test_alertas_transparencia.py#L158
+
+Finding:     "password": "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.720176
+File:        tests/test_billing_woovi.py
+Line:        172
+Commit:      2562bd6f6afd6d9aa5e60bdfa9d5d1188f9aea82
+Author:      LMPrado-DZ23
+Email:       291177257+LMPrado-DZ23@users.noreply.github.com
+Date:        2026-10-13T17:13:18Z
+Fingerprint: 2562bd6f6afd6d9aa5e60bdfa9d5d1188f9aea82:tests/test_billing_woovi.py:generic-api-key:172
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/2562bd6f6afd6d9aa5e60bdfa9d5d1188f9aea82/tests/test_billing_woovi.py#L172
+
+Finding:     - Commit of API integration: `[1;3;mREDACTED[0m`
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.684184
+File:        docs/mission/TRADING-MISSION-STATE.md
+Line:        45
+Commit:      62ad0ce61a4459e2de8f56ed6ff26d098e25d0cf
+Author:      Leandro Prado
+Email:       lmprado.dz23@gmail.com
+Date:        2026-10-12T20:51:39Z
+Fingerprint: 62ad0ce61a4459e2de8f56ed6ff26d098e25d0cf:docs/mission/TRADING-MISSION-STATE.md:generic-api-key:45
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/62ad0ce61a4459e2de8f56ed6ff26d098e25d0cf/docs/mission/TRADING-MISSION-STATE.md?plain=1#L45
+
+Finding:     "password": "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.720176
+File:        tests/test_bootstrap_fallback.py
+Line:        28
+Commit:      ad2e8ec9656ad265576ec904b39ed50ddaf0f092
+Author:      LMPrado-DZ23
+Email:       zodyprado@gmail.com
+Date:        2026-09-26T00:35:02Z
+Fingerprint: ad2e8ec9656ad265576ec904b39ed50ddaf0f092:tests/test_bootstrap_fallback.py:generic-api-key:28
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/ad2e8ec9656ad265576ec904b39ed50ddaf0f092/tests/test_bootstrap_fallback.py#L28
+
+Finding:     TENANT_TOKEN_SIGNING_KEY=
+                         [1;3;mREDACTED[0m
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     4.037401
+File:        .env.example
+Line:        14
+Commit:      574165a4566484248cbbdb0aecf654eb1479a07d
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-14T12:29:14Z
+Fingerprint: 574165a4566484248cbbdb0aecf654eb1479a07d:.env.example:generic-api-key:14
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/574165a4566484248cbbdb0aecf654eb1479a07d/.env.example#L14-L15
+
+Finding:     ACCESS_PASSWORD=[1;3;mREDACTED[0m
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.791831
+File:        .env.example
+Line:        5
+Commit:      f87055216354ee00de278cef545548c880be109a
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-14T12:13:39Z
+Fingerprint: f87055216354ee00de278cef545548c880be109a:.env.example:generic-api-key:5
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/f87055216354ee00de278cef545548c880be109a/.env.example#L5
+
+Finding:     c = WooviClient(token="[1;3;mREDACTED[0m", transport=explode)
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     4.168296
+File:        tests/test_billing_woovi.py
+Line:        127
+Commit:      f87055216354ee00de278cef545548c880be109a
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-14T12:13:39Z
+Fingerprint: f87055216354ee00de278cef545548c880be109a:tests/test_billing_woovi.py:generic-api-key:127
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/f87055216354ee00de278cef545548c880be109a/tests/test_billing_woovi.py#L127
+
+Finding:     ACCESS_PASSWORD=[1;3;mREDACTED[0m
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.722538
+File:        DEPLOY.md
+Line:        14
+Commit:      6429899564979cb5190b3feeb709866db32d17ba
+Author:      LMPrado-DZ23
+Email:       2.91177257e+08+LMPrado-DZ23@users.noreply.github.com
+Date:        2026-09-13T23:23:46Z
+Fingerprint: 6429899564979cb5190b3feeb709866db32d17ba:DEPLOY.md:generic-api-key:14
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/6429899564979cb5190b3feeb709866db32d17ba/DEPLOY.md?plain=1#L14
+
+Finding:     idempotency_key="[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.899714
+File:        tests/test_platform_portfolio_audit.py
+Line:        957
+Commit:      103d830969e33149103a97c1e576418a2a0874fe
+Author:      lmprado.dz23
+Email:       lmprado.dz23@gmail.com
+Date:        2026-09-09T07:45:35Z
+Fingerprint: 103d830969e33149103a97c1e576418a2a0874fe:tests/test_platform_portfolio_audit.py:generic-api-key:957
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/103d830969e33149103a97c1e576418a2a0874fe/tests/test_platform_portfolio_audit.py#L957
+
+Finding:     idempotency_key="[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     4.116265
+File:        tests/test_platform_portfolio_audit.py
+Line:        913
+Commit:      864cb955ebdad5606b8a7a3854daa1f8fc328563
+Author:      lmprado.dz23
+Email:       lmprado.dz23@gmail.com
+Date:        2026-09-09T07:41:05Z
+Fingerprint: 864cb955ebdad5606b8a7a3854daa1f8fc328563:tests/test_platform_portfolio_audit.py:generic-api-key:913
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/864cb955ebdad5606b8a7a3854daa1f8fc328563/tests/test_platform_portfolio_audit.py#L913
+
+Finding:     idempotency_key="[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.899714
+File:        tests/test_platform_portfolio_audit.py
+Line:        944
+Commit:      864cb955ebdad5606b8a7a3854daa1f8fc328563
+Author:      lmprado.dz23
+Email:       lmprado.dz23@gmail.com
+Date:        2026-09-09T07:41:05Z
+Fingerprint: 864cb955ebdad5606b8a7a3854daa1f8fc328563:tests/test_platform_portfolio_audit.py:generic-api-key:944
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/864cb955ebdad5606b8a7a3854daa1f8fc328563/tests/test_platform_portfolio_audit.py#L944
+
+Finding:     idempotency_key="[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.899714
+File:        tests/test_platform_portfolio_audit.py
+Line:        956
+Commit:      864cb955ebdad5606b8a7a3854daa1f8fc328563
+Author:      lmprado.dz23
+Email:       lmprado.dz23@gmail.com
+Date:        2026-09-09T07:41:05Z
+Fingerprint: 864cb955ebdad5606b8a7a3854daa1f8fc328563:tests/test_platform_portfolio_audit.py:generic-api-key:956
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/864cb955ebdad5606b8a7a3854daa1f8fc328563/tests/test_platform_portfolio_audit.py#L956
+
+Finding:     idempotency_key="[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.899714
+File:        tests/test_platform_portfolio_audit.py
+Line:        969
+Commit:      864cb955ebdad5606b8a7a3854daa1f8fc328563
+Author:      lmprado.dz23
+Email:       lmprado.dz23@gmail.com
+Date:        2026-09-09T07:41:05Z
+Fingerprint: 864cb955ebdad5606b8a7a3854daa1f8fc328563:tests/test_platform_portfolio_audit.py:generic-api-key:969
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/864cb955ebdad5606b8a7a3854daa1f8fc328563/tests/test_platform_portfolio_audit.py#L969
+
+Finding:     idempotency_key="[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.855389
+File:        tests/test_platform_portfolio_audit.py
+Line:        455
+Commit:      1cc9584d2e4be987ba11d48ce15dafdb4180b4ce
+Author:      lmprado.dz23
+Email:       lmprado.dz23@gmail.com
+Date:        2026-09-09T02:54:10Z
+Fingerprint: 1cc9584d2e4be987ba11d48ce15dafdb4180b4ce:tests/test_platform_portfolio_audit.py:generic-api-key:455
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/1cc9584d2e4be987ba11d48ce15dafdb4180b4ce/tests/test_platform_portfolio_audit.py#L455
+
+Finding:     idempotency_key="[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.797903
+File:        tests/test_platform_portfolio_audit.py
+Line:        467
+Commit:      1cc9584d2e4be987ba11d48ce15dafdb4180b4ce
+Author:      lmprado.dz23
+Email:       lmprado.dz23@gmail.com
+Date:        2026-09-09T02:54:10Z
+Fingerprint: 1cc9584d2e4be987ba11d48ce15dafdb4180b4ce:tests/test_platform_portfolio_audit.py:generic-api-key:467
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/1cc9584d2e4be987ba11d48ce15dafdb4180b4ce/tests/test_platform_portfolio_audit.py#L467
+
+Finding:     idempotency_key="[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.661226
+File:        tests/test_platform_portfolio_audit.py
+Line:        695
+Commit:      1cc9584d2e4be987ba11d48ce15dafdb4180b4ce
+Author:      lmprado.dz23
+Email:       lmprado.dz23@gmail.com
+Date:        2026-09-09T02:54:10Z
+Fingerprint: 1cc9584d2e4be987ba11d48ce15dafdb4180b4ce:tests/test_platform_portfolio_audit.py:generic-api-key:695
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/1cc9584d2e4be987ba11d48ce15dafdb4180b4ce/tests/test_platform_portfolio_audit.py#L695
+
+Finding:     idempotency_key="[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.661226
+File:        tests/test_platform_portfolio_audit.py
+Line:        708
+Commit:      1cc9584d2e4be987ba11d48ce15dafdb4180b4ce
+Author:      lmprado.dz23
+Email:       lmprado.dz23@gmail.com
+Date:        2026-09-09T02:54:10Z
+Fingerprint: 1cc9584d2e4be987ba11d48ce15dafdb4180b4ce:tests/test_platform_portfolio_audit.py:generic-api-key:708
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/1cc9584d2e4be987ba11d48ce15dafdb4180b4ce/tests/test_platform_portfolio_audit.py#L708
+
+Finding:     idempotency_key="[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.847743
+File:        tests/test_platform_portfolio_audit.py
+Line:        722
+Commit:      1cc9584d2e4be987ba11d48ce15dafdb4180b4ce
+Author:      lmprado.dz23
+Email:       lmprado.dz23@gmail.com
+Date:        2026-09-09T02:54:10Z
+Fingerprint: 1cc9584d2e4be987ba11d48ce15dafdb4180b4ce:tests/test_platform_portfolio_audit.py:generic-api-key:722
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/1cc9584d2e4be987ba11d48ce15dafdb4180b4ce/tests/test_platform_portfolio_audit.py#L722
+
+Finding:     idempotency_key="[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.622580
+File:        tests/test_platform_portfolio_audit.py
+Line:        782
+Commit:      1cc9584d2e4be987ba11d48ce15dafdb4180b4ce
+Author:      lmprado.dz23
+Email:       lmprado.dz23@gmail.com
+Date:        2026-09-09T02:54:10Z
+Fingerprint: 1cc9584d2e4be987ba11d48ce15dafdb4180b4ce:tests/test_platform_portfolio_audit.py:generic-api-key:782
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/1cc9584d2e4be987ba11d48ce15dafdb4180b4ce/tests/test_platform_portfolio_audit.py#L782
+
+Finding:     idempotency_key="[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.621176
+File:        tests/test_platform_portfolio.py
+Line:        251
+Commit:      784d16e0605a49ad146415fc7ee726e76efa716c
+Author:      lmprado.dz23
+Email:       lmprado.dz23@gmail.com
+Date:        2026-09-09T00:10:08Z
+Fingerprint: 784d16e0605a49ad146415fc7ee726e76efa716c:tests/test_platform_portfolio.py:generic-api-key:251
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/784d16e0605a49ad146415fc7ee726e76efa716c/tests/test_platform_portfolio.py#L251
+
+Finding:     idempotency_key="[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.684184
+File:        tests/test_platform_portfolio.py
+Line:        353
+Commit:      784d16e0605a49ad146415fc7ee726e76efa716c
+Author:      lmprado.dz23
+Email:       lmprado.dz23@gmail.com
+Date:        2026-09-09T00:10:08Z
+Fingerprint: 784d16e0605a49ad146415fc7ee726e76efa716c:tests/test_platform_portfolio.py:generic-api-key:353
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/784d16e0605a49ad146415fc7ee726e76efa716c/tests/test_platform_portfolio.py#L353
+
+Finding:     idempotency_key="[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.558519
+File:        tests/test_platform_portfolio.py
+Line:        369
+Commit:      784d16e0605a49ad146415fc7ee726e76efa716c
+Author:      lmprado.dz23
+Email:       lmprado.dz23@gmail.com
+Date:        2026-09-09T00:10:08Z
+Fingerprint: 784d16e0605a49ad146415fc7ee726e76efa716c:tests/test_platform_portfolio.py:generic-api-key:369
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/784d16e0605a49ad146415fc7ee726e76efa716c/tests/test_platform_portfolio.py#L369
+
+Finding:     "prefix api_key=[1;3;mREDACTED[0m suffix",
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.947703
+File:        tests/test_platform_jobs.py
+Line:        145
+Commit:      bfbee33a0bcb42062f8c22a201044a599496f85e
+Author:      lmprado.dz23
+Email:       lmprado.dz23@gmail.com
+Date:        2026-09-08T22:22:29Z
+Fingerprint: bfbee33a0bcb42062f8c22a201044a599496f85e:tests/test_platform_jobs.py:generic-api-key:145
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/bfbee33a0bcb42062f8c22a201044a599496f85e/tests/test_platform_jobs.py#L145
+
+Finding:     'escaped {"api\\u005fkey":"[1;3;mREDACTED[0m"}',
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.947703
+File:        tests/test_platform_jobs.py
+Line:        147
+Commit:      bfbee33a0bcb42062f8c22a201044a599496f85e
+Author:      lmprado.dz23
+Email:       lmprado.dz23@gmail.com
+Date:        2026-09-08T22:22:29Z
+Fingerprint: bfbee33a0bcb42062f8c22a201044a599496f85e:tests/test_platform_jobs.py:generic-api-key:147
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/bfbee33a0bcb42062f8c22a201044a599496f85e/tests/test_platform_jobs.py#L147
+
+Finding:     api_key":"REDACTED"
+Secret:      REDACTED
+RuleID:      generic-api-key
+Entropy:     3.947703
+Tags:        [decoded:unicode decode-depth:1]
+File:        tests/test_platform_jobs.py
+Line:        147
+Commit:      bfbee33a0bcb42062f8c22a201044a599496f85e
+Author:      lmprado.dz23
+Email:       lmprado.dz23@gmail.com
+Date:        2026-09-08T22:22:29Z
+Fingerprint: bfbee33a0bcb42062f8c22a201044a599496f85e:tests/test_platform_jobs.py:generic-api-key:147
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/bfbee33a0bcb42062f8c22a201044a599496f85e/tests/test_platform_jobs.py#L147
+
+Finding:     ...tcome":"delivered","secret":"[1;3;mREDACTED[0m"}\n',
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     4.021928
+File:        tests/test_platform_worker.py
+Line:        683
+Commit:      bfbee33a0bcb42062f8c22a201044a599496f85e
+Author:      lmprado.dz23
+Email:       lmprado.dz23@gmail.com
+Date:        2026-09-08T22:22:29Z
+Fingerprint: bfbee33a0bcb42062f8c22a201044a599496f85e:tests/test_platform_worker.py:generic-api-key:683
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/bfbee33a0bcb42062f8c22a201044a599496f85e/tests/test_platform_worker.py#L683
+
+Finding:     secret = "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.577820
+File:        tests/test_platform_compliance_crypto.py
+Line:        37
+Commit:      85741123a9bfc73aadb9ab5128a2f31a9f4ff09c
+Author:      lmprado.dz23
+Email:       lmprado.dz23@gmail.com
+Date:        2026-09-08T17:32:09Z
+Fingerprint: 85741123a9bfc73aadb9ab5128a2f31a9f4ff09c:tests/test_platform_compliance_crypto.py:generic-api-key:37
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/85741123a9bfc73aadb9ab5128a2f31a9f4ff09c/tests/test_platform_compliance_crypto.py#L37
+
+Finding:     SECRET = "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.916127
+File:        tests/test_security_fase0_r2.py
+Line:        23
+Commit:      48bf8c856e83ffff02c5a677f965b9653e9f9ff0
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-08T13:00:12Z
+Fingerprint: 48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r2.py:generic-api-key:23
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/48bf8c856e83ffff02c5a677f965b9653e9f9ff0/tests/test_security_fase0_r2.py#L23
+
+Finding:     SECRET = "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     4.088779
+File:        tests/test_security_fase0_r3.py
+Line:        19
+Commit:      48bf8c856e83ffff02c5a677f965b9653e9f9ff0
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-08T13:00:12Z
+Fingerprint: 48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r3.py:generic-api-key:19
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/48bf8c856e83ffff02c5a677f965b9653e9f9ff0/tests/test_security_fase0_r3.py#L19
+
+Finding:     ....dict(os.environ, {"X_API_KEY": "[1;3;mREDACTED[0m"}):
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.589898
+File:        tests/test_security_fase0_r11.py
+Line:        144
+Commit:      48bf8c856e83ffff02c5a677f965b9653e9f9ff0
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-08T13:00:12Z
+Fingerprint: 48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r11.py:generic-api-key:144
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/48bf8c856e83ffff02c5a677f965b9653e9f9ff0/tests/test_security_fase0_r11.py#L144
+
+Finding:     ....dict(os.environ, {"OPENAI_API_KEY": "[1;3;mREDACTED[0m"}):
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.734522
+File:        tests/test_security_fase0_r5.py
+Line:        132
+Commit:      48bf8c856e83ffff02c5a677f965b9653e9f9ff0
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-08T13:00:12Z
+Fingerprint: 48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r5.py:generic-api-key:132
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/48bf8c856e83ffff02c5a677f965b9653e9f9ff0/tests/test_security_fase0_r5.py#L132
+
+Finding:     "OPENAI_API_KEY": "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.664498
+File:        tests/test_security_fase0_r7.py
+Line:        46
+Commit:      48bf8c856e83ffff02c5a677f965b9653e9f9ff0
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-08T13:00:12Z
+Fingerprint: 48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r7.py:generic-api-key:46
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/48bf8c856e83ffff02c5a677f965b9653e9f9ff0/tests/test_security_fase0_r7.py#L46
+
+Finding:     "OPENAI_API_KEY": "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.664498
+File:        tests/test_security_fase0_r7.py
+Line:        56
+Commit:      48bf8c856e83ffff02c5a677f965b9653e9f9ff0
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-08T13:00:12Z
+Fingerprint: 48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r7.py:generic-api-key:56
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/48bf8c856e83ffff02c5a677f965b9653e9f9ff0/tests/test_security_fase0_r7.py#L56
+
+Finding:     "AZURE_OPENAI_API_KEY": "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.906891
+File:        tests/test_security_fase0_r7.py
+Line:        70
+Commit:      48bf8c856e83ffff02c5a677f965b9653e9f9ff0
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-08T13:00:12Z
+Fingerprint: 48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r7.py:generic-api-key:70
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/48bf8c856e83ffff02c5a677f965b9653e9f9ff0/tests/test_security_fase0_r7.py#L70
+
+Finding:     "AZURE_OPENAI_API_KEY": "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.906891
+File:        tests/test_security_fase0_r7.py
+Line:        80
+Commit:      48bf8c856e83ffff02c5a677f965b9653e9f9ff0
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-08T13:00:12Z
+Fingerprint: 48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r7.py:generic-api-key:80
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/48bf8c856e83ffff02c5a677f965b9653e9f9ff0/tests/test_security_fase0_r7.py#L80
+
+Finding:     "AZURE_OPENAI_API_KEY": "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.906891
+File:        tests/test_security_fase0_r8.py
+Line:        21
+Commit:      48bf8c856e83ffff02c5a677f965b9653e9f9ff0
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-08T13:00:12Z
+Fingerprint: 48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r8.py:generic-api-key:21
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/48bf8c856e83ffff02c5a677f965b9653e9f9ff0/tests/test_security_fase0_r8.py#L21
+
+Finding:     '{"token": "[1;3;mREDACTED[0m", "password": "hunte...
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     4.000000
+File:        tests/test_security_fase0_r8.py
+Line:        182
+Commit:      48bf8c856e83ffff02c5a677f965b9653e9f9ff0
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-08T13:00:12Z
+Fingerprint: 48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r8.py:generic-api-key:182
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/48bf8c856e83ffff02c5a677f965b9653e9f9ff0/tests/test_security_fase0_r8.py#L182
+
+Finding:     "OPENAI_COMPATIBLE_API_KEY": "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.681881
+File:        tests/test_security_fase0_wiring.py
+Line:        134
+Commit:      48bf8c856e83ffff02c5a677f965b9653e9f9ff0
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-08T13:00:12Z
+Fingerprint: 48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_wiring.py:generic-api-key:134
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/48bf8c856e83ffff02c5a677f965b9653e9f9ff0/tests/test_security_fase0_wiring.py#L134
+
+Finding:     SECRET = "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     4.088779
+File:        tests/test_security_fase0_r3.py
+Line:        19
+Commit:      5e82e303e7303c448c2c7c8a514a9f652774a407
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-08T09:05:39Z
+Fingerprint: 5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r3.py:generic-api-key:19
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/5e82e303e7303c448c2c7c8a514a9f652774a407/tests/test_security_fase0_r3.py#L19
+
+Finding:     ....dict(os.environ, {"X_API_KEY": "[1;3;mREDACTED[0m"}):
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.589898
+File:        tests/test_security_fase0_r11.py
+Line:        144
+Commit:      5e82e303e7303c448c2c7c8a514a9f652774a407
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-08T09:05:39Z
+Fingerprint: 5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r11.py:generic-api-key:144
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/5e82e303e7303c448c2c7c8a514a9f652774a407/tests/test_security_fase0_r11.py#L144
+
+Finding:     SECRET = "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.916127
+File:        tests/test_security_fase0_r2.py
+Line:        23
+Commit:      5e82e303e7303c448c2c7c8a514a9f652774a407
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-08T09:05:39Z
+Fingerprint: 5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r2.py:generic-api-key:23
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/5e82e303e7303c448c2c7c8a514a9f652774a407/tests/test_security_fase0_r2.py#L23
+
+Finding:     "OPENAI_API_KEY": "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.664498
+File:        tests/test_security_fase0_r7.py
+Line:        45
+Commit:      5e82e303e7303c448c2c7c8a514a9f652774a407
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-08T09:05:39Z
+Fingerprint: 5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r7.py:generic-api-key:45
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/5e82e303e7303c448c2c7c8a514a9f652774a407/tests/test_security_fase0_r7.py#L45
+
+Finding:     "OPENAI_API_KEY": "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.664498
+File:        tests/test_security_fase0_r7.py
+Line:        54
+Commit:      5e82e303e7303c448c2c7c8a514a9f652774a407
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-08T09:05:39Z
+Fingerprint: 5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r7.py:generic-api-key:54
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/5e82e303e7303c448c2c7c8a514a9f652774a407/tests/test_security_fase0_r7.py#L54
+
+Finding:     "AZURE_OPENAI_API_KEY": "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.906891
+File:        tests/test_security_fase0_r7.py
+Line:        68
+Commit:      5e82e303e7303c448c2c7c8a514a9f652774a407
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-08T09:05:39Z
+Fingerprint: 5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r7.py:generic-api-key:68
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/5e82e303e7303c448c2c7c8a514a9f652774a407/tests/test_security_fase0_r7.py#L68
+
+Finding:     "AZURE_OPENAI_API_KEY": "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.906891
+File:        tests/test_security_fase0_r7.py
+Line:        78
+Commit:      5e82e303e7303c448c2c7c8a514a9f652774a407
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-08T09:05:39Z
+Fingerprint: 5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r7.py:generic-api-key:78
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/5e82e303e7303c448c2c7c8a514a9f652774a407/tests/test_security_fase0_r7.py#L78
+
+Finding:     ....dict(os.environ, {"OPENAI_API_KEY": "[1;3;mREDACTED[0m"}):
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.734522
+File:        tests/test_security_fase0_r5.py
+Line:        132
+Commit:      5e82e303e7303c448c2c7c8a514a9f652774a407
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-08T09:05:39Z
+Fingerprint: 5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r5.py:generic-api-key:132
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/5e82e303e7303c448c2c7c8a514a9f652774a407/tests/test_security_fase0_r5.py#L132
+
+Finding:     "AZURE_OPENAI_API_KEY": "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.906891
+File:        tests/test_security_fase0_r8.py
+Line:        22
+Commit:      5e82e303e7303c448c2c7c8a514a9f652774a407
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-08T09:05:39Z
+Fingerprint: 5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r8.py:generic-api-key:22
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/5e82e303e7303c448c2c7c8a514a9f652774a407/tests/test_security_fase0_r8.py#L22
+
+Finding:     '{"token": "[1;3;mREDACTED[0m", "password": "hunte...
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     4.000000
+File:        tests/test_security_fase0_r8.py
+Line:        183
+Commit:      5e82e303e7303c448c2c7c8a514a9f652774a407
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-08T09:05:39Z
+Fingerprint: 5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r8.py:generic-api-key:183
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/5e82e303e7303c448c2c7c8a514a9f652774a407/tests/test_security_fase0_r8.py#L183
+
+Finding:     "OPENAI_COMPATIBLE_API_KEY": "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.681881
+File:        tests/test_security_fase0_wiring.py
+Line:        132
+Commit:      5e82e303e7303c448c2c7c8a514a9f652774a407
+Author:      DZ23
+Email:       dev@dz23.online
+Date:        2026-09-08T09:05:39Z
+Fingerprint: 5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_wiring.py:generic-api-key:132
+Link:        https://github.com/LMPrado-DZ23/DZ23-Trading-AI/blob/5e82e303e7303c448c2c7c8a514a9f652774a407/tests/test_security_fase0_wiring.py#L132
+
+[90m9:39AM[0m [32mINF[0m [1m408 commits scanned.[0m
+[90m9:39AM[0m [32mINF[0m [1mscanned ~18399207 bytes (18.40 MB) in 11.3s[0m
+[90m9:39AM[0m [33mWRN[0m [1mleaks found: 52[0m
+EXIT=1

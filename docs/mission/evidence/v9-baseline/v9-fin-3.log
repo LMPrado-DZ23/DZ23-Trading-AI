@@ -1,0 +1,152 @@
+..................FFFF.                                                  [100%]
+================================== FAILURES ===================================
+_ test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement[mismatch] _
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000023270E6C980>
+later = 'mismatch'
+
+    @pytest.mark.parametrize("later", ["mismatch", "unavailable", "not_found", "missing_total"])
+    def test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement(desk, later):
+        rec = _buy_order(desk, notional="220", price="110")
+        report = _reconcile(desk, rec, status="closed", cumulative="1.5",
+                            remote_quantity="2", fills=[_remote_fill("2")])
+        assert report["seguro"] is False
+        desk = _restart(desk)
+        rec = desk.orders[rec.order_id]
+        if later == "not_found":
+            report = desk.reconciliar(
+                lambda key: {"resultado": "CONFIRMED_NOT_FOUND"},
+                consultar_fills=lambda *args: [],
+                consultar_posicoes=lambda: {INSTRUMENT: D("2")},
+                consultar_ordens_abertas=lambda: [],
+            )
+        else:
+            report = _reconcile(
+                desk, rec, status="closed", cumulative=None if later == "missing_total" else "1.5",
+                remote_quantity="2", fills=(RuntimeError("unavailable") if later == "unavailable"
+                                           else [_remote_fill("2")]),
+            )
+        assert report["seguro"] is False
+        assert desk.reconciliacao_pendente is True
+>       assert desk.risk.reserved_total == desk.ledger.reserved_cash() == D("20")
+E       AssertionError: assert Decimal('0') == Decimal('20')
+E        +  where Decimal('0') = reserved_cash()
+E        +    where reserved_cash = <tradingagents.desk.ledger.Ledger object at 0x0000023270E6CC20>.reserved_cash
+E        +      where <tradingagents.desk.ledger.Ledger object at 0x0000023270E6CC20> = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000023270E6C980>.ledger
+E        +  and   Decimal('20') = D('20')
+
+tests\test_v9_financial_regressions.py:494: AssertionError
+_ test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement[unavailable] _
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000023270E6DD60>
+later = 'unavailable'
+
+    @pytest.mark.parametrize("later", ["mismatch", "unavailable", "not_found", "missing_total"])
+    def test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement(desk, later):
+        rec = _buy_order(desk, notional="220", price="110")
+        report = _reconcile(desk, rec, status="closed", cumulative="1.5",
+                            remote_quantity="2", fills=[_remote_fill("2")])
+        assert report["seguro"] is False
+        desk = _restart(desk)
+        rec = desk.orders[rec.order_id]
+        if later == "not_found":
+            report = desk.reconciliar(
+                lambda key: {"resultado": "CONFIRMED_NOT_FOUND"},
+                consultar_fills=lambda *args: [],
+                consultar_posicoes=lambda: {INSTRUMENT: D("2")},
+                consultar_ordens_abertas=lambda: [],
+            )
+        else:
+            report = _reconcile(
+                desk, rec, status="closed", cumulative=None if later == "missing_total" else "1.5",
+                remote_quantity="2", fills=(RuntimeError("unavailable") if later == "unavailable"
+                                           else [_remote_fill("2")]),
+            )
+        assert report["seguro"] is False
+        assert desk.reconciliacao_pendente is True
+>       assert desk.risk.reserved_total == desk.ledger.reserved_cash() == D("20")
+E       AssertionError: assert Decimal('0') == Decimal('20')
+E        +  where Decimal('0') = reserved_cash()
+E        +    where reserved_cash = <tradingagents.desk.ledger.Ledger object at 0x0000023270E6DDF0>.reserved_cash
+E        +      where <tradingagents.desk.ledger.Ledger object at 0x0000023270E6DDF0> = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000023270E6DD60>.ledger
+E        +  and   Decimal('20') = D('20')
+
+tests\test_v9_financial_regressions.py:494: AssertionError
+_ test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement[not_found] _
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000023270E6FA70>
+later = 'not_found'
+
+    @pytest.mark.parametrize("later", ["mismatch", "unavailable", "not_found", "missing_total"])
+    def test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement(desk, later):
+        rec = _buy_order(desk, notional="220", price="110")
+        report = _reconcile(desk, rec, status="closed", cumulative="1.5",
+                            remote_quantity="2", fills=[_remote_fill("2")])
+        assert report["seguro"] is False
+        desk = _restart(desk)
+        rec = desk.orders[rec.order_id]
+        if later == "not_found":
+            report = desk.reconciliar(
+                lambda key: {"resultado": "CONFIRMED_NOT_FOUND"},
+                consultar_fills=lambda *args: [],
+                consultar_posicoes=lambda: {INSTRUMENT: D("2")},
+                consultar_ordens_abertas=lambda: [],
+            )
+        else:
+            report = _reconcile(
+                desk, rec, status="closed", cumulative=None if later == "missing_total" else "1.5",
+                remote_quantity="2", fills=(RuntimeError("unavailable") if later == "unavailable"
+                                           else [_remote_fill("2")]),
+            )
+        assert report["seguro"] is False
+        assert desk.reconciliacao_pendente is True
+>       assert desk.risk.reserved_total == desk.ledger.reserved_cash() == D("20")
+E       AssertionError: assert Decimal('0') == Decimal('20')
+E        +  where Decimal('0') = reserved_cash()
+E        +    where reserved_cash = <tradingagents.desk.ledger.Ledger object at 0x0000023270E6FB90>.reserved_cash
+E        +      where <tradingagents.desk.ledger.Ledger object at 0x0000023270E6FB90> = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000023270E6FA70>.ledger
+E        +  and   Decimal('20') = D('20')
+
+tests\test_v9_financial_regressions.py:494: AssertionError
+_ test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement[missing_total] _
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000023270E708C0>
+later = 'missing_total'
+
+    @pytest.mark.parametrize("later", ["mismatch", "unavailable", "not_found", "missing_total"])
+    def test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement(desk, later):
+        rec = _buy_order(desk, notional="220", price="110")
+        report = _reconcile(desk, rec, status="closed", cumulative="1.5",
+                            remote_quantity="2", fills=[_remote_fill("2")])
+        assert report["seguro"] is False
+        desk = _restart(desk)
+        rec = desk.orders[rec.order_id]
+        if later == "not_found":
+            report = desk.reconciliar(
+                lambda key: {"resultado": "CONFIRMED_NOT_FOUND"},
+                consultar_fills=lambda *args: [],
+                consultar_posicoes=lambda: {INSTRUMENT: D("2")},
+                consultar_ordens_abertas=lambda: [],
+            )
+        else:
+            report = _reconcile(
+                desk, rec, status="closed", cumulative=None if later == "missing_total" else "1.5",
+                remote_quantity="2", fills=(RuntimeError("unavailable") if later == "unavailable"
+                                           else [_remote_fill("2")]),
+            )
+        assert report["seguro"] is False
+        assert desk.reconciliacao_pendente is True
+>       assert desk.risk.reserved_total == desk.ledger.reserved_cash() == D("20")
+E       AssertionError: assert Decimal('0') == Decimal('20')
+E        +  where Decimal('0') = reserved_cash()
+E        +    where reserved_cash = <tradingagents.desk.ledger.Ledger object at 0x0000023270E70980>.reserved_cash
+E        +      where <tradingagents.desk.ledger.Ledger object at 0x0000023270E70980> = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000023270E708C0>.ledger
+E        +  and   Decimal('20') = D('20')
+
+tests\test_v9_financial_regressions.py:494: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_v9_financial_regressions.py::test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement[mismatch]
+FAILED tests/test_v9_financial_regressions.py::test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement[unavailable]
+FAILED tests/test_v9_financial_regressions.py::test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement[not_found]
+FAILED tests/test_v9_financial_regressions.py::test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement[missing_total]
+4 failed, 19 passed in 0.36s

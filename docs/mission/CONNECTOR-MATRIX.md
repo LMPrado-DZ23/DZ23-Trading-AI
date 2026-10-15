@@ -12,3 +12,7 @@
 | **KuCoin** | Spot | Capability Discovery | Supported | DISABLED (FAIL-CLOSED) | PASS |
 | **Gate.io** | Spot | Capability Discovery | Supported | DISABLED (FAIL-CLOSED) | PASS |
 | **IQ Option** | Experimental | Isolated Replay/Paper | Offline Replay | DISABLED | ISOLATED / EXPERIMENTAL |
+
+---
+
+**Correção datada (2026-10-15, MISSÃO V9/F5):** os "Verified"/"PASS" desta tabela indicam apenas que o caminho existe e tem teste com mock — nunca foram homologação contra serviço real, e "Read-Only API Test: Verified" não foi executado com chave autenticada nesta missão. A classificação vinculante por nível de prova (IMPLEMENTADO / TESTADO COM MOCK / TESTADO EM TESTNET / HOMOLOGADO COM SERVIÇO REAL) está em [evidence/v9-baseline/f5-classificacao-conectores.md](evidence/v9-baseline/f5-classificacao-conectores.md): Binance leitura **pública** homologada no serviço real (velas + livro L2), ponte CCXT testnet exercitada de verdade só em leitura (ticker do sandbox, sem chaves; ordens em testnet não executadas por ausência de chaves de testnet), leitura autenticada de saldo/posição ainda pendente de credencial somente-leitura do dono.

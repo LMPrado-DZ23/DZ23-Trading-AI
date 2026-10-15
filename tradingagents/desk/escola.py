@@ -68,6 +68,16 @@ def _consciente(dt: datetime) -> datetime:
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
+def _entrada_de(desfecho) -> datetime:
+    """Instante em que a evidência nasceu: ABERTURA da operação.
+
+    A prova da escola conta pela entrada — operação aberta antes da fronteira
+    não é evidência independente, ainda que feche depois. Legado sem
+    `aberta_em` mantém o comportamento antigo: vale o fechamento.
+    """
+    return _consciente(desfecho.aberta_em or desfecho.fechado_em)
+
+
 @dataclass(frozen=True)
 class PerfilDeMercado:
     """O que muda de um mercado para outro no critério de aprovação.
@@ -348,8 +358,7 @@ class EscolaDeTraders:
         # 2) formada: vigia permanente de revogação.
         if estado is EstadoDaEscola.FORMADA:
             formado_em = _consciente(datetime.fromisoformat(m["formado_em"]))
-            novas = [d for d in desfechos
-                     if _consciente(d.fechado_em) > formado_em]
+            novas = [d for d in desfechos if _entrada_de(d) > formado_em]
             if len(novas) >= AMOSTRA_REVOGACAO:
                 r = perfil.metrica(novas, agora)
                 if r["revogada"]:
@@ -385,10 +394,10 @@ class EscolaDeTraders:
             return self._resumo(chave, estrategia, versao, m, perfil,
                                 desfechos, agora, [])
 
-        # 4) candidata / prova final: só desfechos POSTERIORES à candidatura.
+        # 4) candidata / prova final: só desfechos ABERTOS após a candidatura
+        # (operação aberta antes é treino, não prova — mesmo que feche depois).
         candidatura_em = _consciente(datetime.fromisoformat(m["candidatura_em"]))
-        prova = [d for d in desfechos
-                 if _consciente(d.fechado_em) > candidatura_em]
+        prova = [d for d in desfechos if _entrada_de(d) > candidatura_em]
         if len(prova) >= AMOSTRA_PROVA:
             r = perfil.metrica(prova, agora)
             metricas = metricas_de_formacao(prova, agora)
