@@ -1,0 +1,7 @@
+....ss.s...........................................................s.... [ 67%]
+...................................                                      [100%]
+=========================== short test summary info ===========================
+SKIPPED [2] tests\test_desk_backup.py:19: POSIX permissions (600) are not natively supported on Windows NTFS
+SKIPPED [1] tests\test_desk_backup.py:99: POSIX permissions (600) are not natively supported on Windows NTFS
+SKIPPED [1] tests\test_modo_da_mesa.py:161: sem DATABASE_URL — caminho postgres roda no CI
+103 passed, 4 skipped in 11.45s

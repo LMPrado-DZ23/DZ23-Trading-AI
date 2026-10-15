@@ -11,11 +11,14 @@ Regras:
   nunca "quase restaura" deixando metade.
 - Segredos ficam dentro do backup (é o ponto dele) mas o MANIFEST e os logs
   só carregam nomes e hashes, nunca conteúdo.
+- O pacote nasce com permissão 0600 e nunca é alargado por umask ou por
+  arquivo pré-existente (V9-SEC-03).
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import tarfile
 import tempfile
 from datetime import datetime, timezone
@@ -56,7 +59,12 @@ def create_backup(data_dir: str | Path, out_path: str | Path) -> dict:
     with tempfile.TemporaryDirectory() as tmp:
         manifest_path = Path(tmp) / "MANIFEST.json"
         manifest_path.write_text(json.dumps(meta, indent=2))
-        with tarfile.open(out_path, "w:gz") as tar:
+        # o pacote carrega config.json (segredos): nasce 0600 independente do
+        # umask, e fchmod normaliza um arquivo pré-existente mais largo.
+        fd = os.open(out_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "wb") as fh, tarfile.open(fileobj=fh, mode="w:gz") as tar:
             tar.add(manifest_path, arcname="MANIFEST.json")
             for p in included:
                 tar.add(p, arcname=f"data/{p.name}")

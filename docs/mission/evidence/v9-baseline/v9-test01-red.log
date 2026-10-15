@@ -1,0 +1,18 @@
+RED V9-TEST-01 (2026-10-15) — sem o executor hermetico, um filho pytest comum herda o ambiente da estacao.
+Ambiente do filho reduzido de proposito a PATH/SYSTEMROOT/COMSPEC/TEMP/TMP + canario: nenhum valor real de credencial pode entrar neste log.
+$ python -m pytest .tools/v9_test01_canario.py -q --noconftest -p no:cacheprovider   (V9_CANARY_CREDENCIAL_FALSA=valor-canario-nao-e-credencial)
+F                                                                        [100%]
+================================== FAILURES ===================================
+____________________ test_filho_sem_credenciais_da_estacao ____________________
+
+    def test_filho_sem_credenciais_da_estacao():
+        canario = os.environ.get("V9_CANARY_CREDENCIAL_FALSA")
+>       assert canario is None, f"canario visivel no filho: {canario!r}"
+E       AssertionError: canario visivel no filho: 'valor-canario-nao-e-credencial'
+E       assert 'valor-canario-nao-e-credencial' is None
+
+.tools\v9_test01_canario.py:6: AssertionError
+=========================== short test summary info ===========================
+FAILED .tools/v9_test01_canario.py::test_filho_sem_credenciais_da_estacao - A...
+1 failed in 0.12s
+EXIT=1
