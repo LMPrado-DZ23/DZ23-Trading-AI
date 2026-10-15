@@ -15,6 +15,11 @@ acesso remoto pelo navegador e pelo celular, numa VM Linux ARM64 (Oracle
 Cloud) — preparado neste repositório, com homologação pendente de ambiente
 real.
 
+![Demonstração: portão do dono → painel → Modo Avançado → Mesa de Agentes → ciclo PAPER com os 10 traders → ordens e posições](docs/demo/dz23-demo.gif)
+
+*Gravação real do aplicativo numa instância local isolada (PAPER, dados
+descartáveis) — gerada por `tools/gerar_gif_demo.py`.*
+
 > **Aviso:** software experimental de pesquisa e engenharia. Não é
 > recomendação de investimento, não garante lucro e pode causar perdas.
 > O padrão é **PAPER/SHADOW**. **LIVE (dinheiro real) está bloqueado** por
