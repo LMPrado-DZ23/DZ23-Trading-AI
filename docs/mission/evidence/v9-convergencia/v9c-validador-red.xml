@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="3" skipped="0" tests="8" time="2.435" timestamp="2026-10-15T19:46:18.666092-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_desk_validacao.TestVeredito" name="test_no_trades_is_reported_honestly" time="0.009" /><testcase classname="tests.test_desk_validacao.TestVeredito" name="test_reprovacao_por_amostra_pequena_nao_culpa_os_custos" time="0.005"><failure message="AssertionError: assert 'amostra pequena' in 'REPROVADA: +5.40% líquidos em 6 operações — os custos (0.60%) comeram o resultado'">self = &lt;tests.test_desk_validacao.TestVeredito object at 0x0000029B880E8860&gt;
+
+    def test_reprovacao_por_amostra_pequena_nao_culpa_os_custos(self):
+        """6 operações lucrativas reprovadas por amostra: o resumo cita a
+        amostra, não custos que não causaram a reprovação."""
+        v = self._resultado(6, bruto="0.01", liquido="0.009").veredito()
+        assert v["aprovada"] is False
+&gt;       assert "amostra pequena" in v["resumo"]
+E       AssertionError: assert 'amostra pequena' in 'REPROVADA: +5.40% líquidos em 6 operações — os custos (0.60%) comeram o resultado'
+
+tests\test_desk_validacao.py:84: AssertionError</failure></testcase><testcase classname="tests.test_desk_validacao.TestVeredito" name="test_duas_ressalvas_aparecem_as_duas" time="0.002"><failure message="AssertionError: assert 'amostra pequena' in 'REPROVADA: -2.00% líquidos em 10 operações — os custos (4.50%) comeram o resultado'">self = &lt;tests.test_desk_validacao.TestVeredito object at 0x0000029B880E9100&gt;
+
+    def test_duas_ressalvas_aparecem_as_duas(self):
+        """Custos acima de metade do bruto somados a amostra pequena: o
+        resumo cita as duas ressalvas, não só uma."""
+        v = self._resultado(10, bruto="0.0025", liquido="-0.002").veredito()
+&gt;       assert "amostra pequena" in v["resumo"]
+E       AssertionError: assert 'amostra pequena' in 'REPROVADA: -2.00% líquidos em 10 operações — os custos (4.50%) comeram o resultado'
+
+tests\test_desk_validacao.py:91: AssertionError</failure></testcase><testcase classname="tests.test_desk_validacao.TestVeredito" name="test_prejuizo_sem_culpa_dos_custos_e_dito_sem_invencao" time="0.002"><failure message="AssertionError: assert 'resultado líquido não positivo' in 'REPROVADA: -2.80% líquidos em 25 operações — os custos (0.30%) comeram o resultado'">self = &lt;tests.test_desk_validacao.TestVeredito object at 0x0000029B880E9790&gt;
+
+    def test_prejuizo_sem_culpa_dos_custos_e_dito_sem_invencao(self):
+        """25 operações em prejuízo com custo pequeno: o resumo não pode
+        inventar que os custos causaram o vermelho."""
+        v = self._resultado(25, bruto="-0.001", liquido="-0.00112").veredito()
+        assert v["aprovada"] is False
+&gt;       assert "resultado líquido não positivo" in v["resumo"]
+E       AssertionError: assert 'resultado líquido não positivo' in 'REPROVADA: -2.80% líquidos em 25 operações — os custos (0.30%) comeram o resultado'
+
+tests\test_desk_validacao.py:99: AssertionError</failure></testcase><testcase classname="tests.test_desk_validacao.TestVeredito" name="test_small_sample_is_flagged_not_celebrated" time="0.017" /><testcase classname="tests.test_desk_validacao.TestVeredito" name="test_report_always_warns_about_the_past" time="0.064" /><testcase classname="tests.test_desk_validacao.TestVeredito" name="test_choppy_market_does_not_produce_fake_profit" time="1.439" /><testcase classname="tests.test_desk_validacao.TestVeredito" name="test_worst_streak_is_measured" time="0.051" /></testsuite></testsuites>
