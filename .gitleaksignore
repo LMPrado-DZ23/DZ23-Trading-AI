@@ -1,7 +1,10 @@
 # gitleaks: achados históricos CLASSIFICADOS e BENIGNOS (V9-SEC-05)
-# Formato: commit:arquivo:regra:linha — 61 impressões de varredura --redact do histórico completo.
+# Formato: commit:arquivo:regra:linha — 73 impressões de varredura --redact do histórico completo.
 # Classes: (a) fixtures/placeholders de teste (chaves fake: sk-t..., akze..., gkey..., sentinela);
-# (b) digests sha256 em docs/mission/evidence/.../f8-integridade.json (não são credenciais);
+# (b) digests sha256 do manifesto docs/mission/evidence/.../f8-integridade.json|.log (não são
+#     credenciais) — incluindo as 12 linhas da regeração F9 (commit ca95857, 2026-10-15), cujas
+#     entradas "arquivo": "sha256" com nomes contendo 'auth'/'secret'/'vapid' + hex de alta
+#     entropia disparam a heurística generic-api-key;
 # (c) comentários/placeholders em .env.example e docs; (d) arquivos removidos do HEAD (era SaaS).
 # Nenhuma credencial real: valores de origem foram vistos apenas redigidos (REDACTED).
 
@@ -64,5 +67,17 @@ ad2e8ec9656ad265576ec904b39ed50ddaf0f092:tests/test_bootstrap_fallback.py:generi
 bfbee33a0bcb42062f8c22a201044a599496f85e:tests/test_platform_jobs.py:generic-api-key:145
 bfbee33a0bcb42062f8c22a201044a599496f85e:tests/test_platform_jobs.py:generic-api-key:147
 bfbee33a0bcb42062f8c22a201044a599496f85e:tests/test_platform_worker.py:generic-api-key:683
+ca958579447d8a619d949bc892a2b0879ef77b0e:docs/mission/evidence/v9-baseline/f8-integridade.json:generic-api-key:1774
+ca958579447d8a619d949bc892a2b0879ef77b0e:docs/mission/evidence/v9-baseline/f8-integridade.log:generic-api-key:1598
+ca958579447d8a619d949bc892a2b0879ef77b0e:docs/mission/evidence/v9-baseline/f8-integridade.log:generic-api-key:1599
+ca958579447d8a619d949bc892a2b0879ef77b0e:docs/mission/evidence/v9-baseline/f8-integridade.log:generic-api-key:1600
+ca958579447d8a619d949bc892a2b0879ef77b0e:docs/mission/evidence/v9-baseline/f8-integridade.log:generic-api-key:1603
+ca958579447d8a619d949bc892a2b0879ef77b0e:docs/mission/evidence/v9-baseline/f8-integridade.log:generic-api-key:1604
+ca958579447d8a619d949bc892a2b0879ef77b0e:docs/mission/evidence/v9-baseline/f8-integridade.log:generic-api-key:1606
+ca958579447d8a619d949bc892a2b0879ef77b0e:docs/mission/evidence/v9-baseline/f8-integridade.log:generic-api-key:1607
+ca958579447d8a619d949bc892a2b0879ef77b0e:docs/mission/evidence/v9-baseline/f8-integridade.log:generic-api-key:1620
+ca958579447d8a619d949bc892a2b0879ef77b0e:docs/mission/evidence/v9-baseline/f8-integridade.log:generic-api-key:1621
+ca958579447d8a619d949bc892a2b0879ef77b0e:docs/mission/evidence/v9-baseline/f8-integridade.log:generic-api-key:1622
+ca958579447d8a619d949bc892a2b0879ef77b0e:docs/mission/evidence/v9-baseline/f8-integridade.log:generic-api-key:1774
 f87055216354ee00de278cef545548c880be109a:.env.example:generic-api-key:5
 f87055216354ee00de278cef545548c880be109a:tests/test_billing_woovi.py:generic-api-key:127
