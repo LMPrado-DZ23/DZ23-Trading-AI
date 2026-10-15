@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="8" time="0.186" timestamp="2026-10-15T09:37:21.005642-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_v9_mt5_adapter_gates" name="test_sec08_cancel_live_bloqueado_sem_order_send" time="0.002"><failure message="Failed: DID NOT RAISE PermissionError">def test_sec08_cancel_live_bloqueado_sem_order_send():
+        adapter, fake = _adapter(Environment.LIVE)
+&gt;       with pytest.raises(PermissionError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE PermissionError
+
+tests\test_v9_mt5_adapter_gates.py:82: Failed</failure></testcase><testcase classname="tests.test_v9_mt5_adapter_gates" name="test_sec08_ordem_live_nem_e_construida_no_contrato" time="0.001" /><testcase classname="tests.test_v9_mt5_adapter_gates" name="test_sec08_submit_live_bloqueado_sem_order_send" time="0.001" /><testcase classname="tests.test_v9_mt5_adapter_gates" name="test_sec08_demo_com_conta_real_submit_recusado_sem_order_send" time="0.001"><failure message="Failed: DID NOT RAISE PermissionError">def test_sec08_demo_com_conta_real_submit_recusado_sem_order_send():
+        adapter, fake = _adapter(Environment.DEMO, trade_mode=2)
+&gt;       with pytest.raises(PermissionError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE PermissionError
+
+tests\test_v9_mt5_adapter_gates.py:101: Failed</failure></testcase><testcase classname="tests.test_v9_mt5_adapter_gates" name="test_sec08_demo_com_conta_real_cancel_recusado_sem_order_send" time="0.001"><failure message="Failed: DID NOT RAISE PermissionError">def test_sec08_demo_com_conta_real_cancel_recusado_sem_order_send():
+        adapter, fake = _adapter(Environment.DEMO, trade_mode=2)
+&gt;       with pytest.raises(PermissionError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE PermissionError
+
+tests\test_v9_mt5_adapter_gates.py:109: Failed</failure></testcase><testcase classname="tests.test_v9_mt5_adapter_gates" name="test_sec08_conta_sem_modo_declarado_fail_closed" time="0.001"><failure message="Failed: DID NOT RAISE PermissionError">def test_sec08_conta_sem_modo_declarado_fail_closed():
+        fake = FakeMT5()
+        fake.account_info = lambda: SimpleNamespace(
+            equity=1, balance=1, margin=0, margin_free=1
+        )
+        adapter = MT5Adapter(mode=Environment.DEMO, terminal=fake)
+        assert adapter.initialize()
+&gt;       with pytest.raises(PermissionError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE PermissionError
+
+tests\test_v9_mt5_adapter_gates.py:121: Failed</failure></testcase><testcase classname="tests.test_v9_mt5_adapter_gates" name="test_sec08_demo_com_conta_demo_continua_enviando" time="0.001" /><testcase classname="tests.test_v9_mt5_adapter_gates" name="test_sec08_demo_com_conta_demo_continua_cancelando" time="0.001" /></testsuite></testsuites>

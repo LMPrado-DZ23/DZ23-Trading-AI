@@ -14,8 +14,10 @@ LIVE_CONFIRM_PHRASE = "EU AUTORIZO OPERAR COM DINHEIRO REAL"
 class MT5Adapter:
     """Adapter isolado para a biblioteca MetaTrader5.
 
-    DEMO é permitido quando explicitamente configurado. LIVE possui apenas
-    validação de política nesta fase e recusa qualquer envio de ordem.
+    DEMO é permitido quando explicitamente configurado, desde que a conta do
+    terminal seja DEMO (confrontada antes de qualquer envio). LIVE possui
+    apenas validação de política nesta fase e recusa qualquer envio de ordem
+    — inclusive cancelamento.
     """
 
     def __init__(self, *, mode: Environment = Environment.DEMO, terminal: Any = None,
@@ -74,6 +76,7 @@ class MT5Adapter:
         if request.environment is Environment.LIVE or self.mode is Environment.LIVE:
             raise PermissionError("LIVE bloqueado nesta entrega; use DEMO/PAPER/SHADOW")
         self._require_connected()
+        self._require_demo_terminal("envio")
         tick = self._mt5.symbol_info_tick(request.instrument_id)
         if tick is None:
             raise RuntimeError("tick MT5 indisponível")
@@ -101,7 +104,10 @@ class MT5Adapter:
                         datetime.now(timezone.utc), str(getattr(result, "comment", "")))
 
     def cancel(self, order_id: str) -> OrderAck:
+        if self.mode is Environment.LIVE:
+            raise PermissionError("LIVE bloqueado nesta entrega; use DEMO/PAPER/SHADOW")
         self._require_connected()
+        self._require_demo_terminal("cancelamento")
         result = self._mt5.order_send({"action": getattr(self._mt5, "TRADE_ACTION_REMOVE", 8), "order": int(order_id)})
         if result is None:
             raise RuntimeError("cancelamento MT5 sem resposta")
@@ -129,6 +135,18 @@ class MT5Adapter:
     def _require_connected(self) -> None:
         if not self._connected or self._mt5 is None:
             raise RuntimeError("terminal MT5 desconectado")
+
+    def _require_demo_terminal(self, operacao: str) -> None:
+        info = self._mt5.account_info()
+        if info is None:
+            raise RuntimeError("account_info indisponível")
+        modo_demo = int(getattr(self._mt5, "ACCOUNT_TRADE_MODE_DEMO", 0))
+        try:
+            modo = int(getattr(info, "trade_mode", -1))
+        except (TypeError, ValueError):
+            modo = -1
+        if modo != modo_demo:
+            raise PermissionError(f"conta do terminal não é DEMO (trade_mode={modo}); {operacao} recusado")
 
     @staticmethod
     def _position_from_mt5(row: Any, account_id: str) -> Position:
