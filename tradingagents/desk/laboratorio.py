@@ -258,7 +258,7 @@ class Laboratorio:
             amostras_treino += min(inicio, hipotese.janela_treino_barras)
             bruto_e = []
             for i in range(inicio, n - h):
-                if executor(closes, i, params) > 0:
+                if executor(closes[:i + 1], i, params) > 0:
                     bruto_e.append((closes[i + h] - closes[i]) / closes[i])
             bruto_c = self._controle(hipotese, instrumento, closes, inicio,
                                      len(bruto_e))
