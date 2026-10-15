@@ -1,0 +1,500 @@
+{
+ "origem": ".tools/gitleaks-full.json (varredura local --redact, histórico completo)",
+ "total": 61,
+ "contagem_por_classe": {
+  "digest-sha256-integridade": 10,
+  "fixture-placeholder-teste": 28,
+  "documento-placeholder": 4,
+  "arquivo-removido-do-head": 19
+ },
+ "achados": [
+  {
+   "fingerprint": "f87055216354ee00de278cef545548c880be109a:.env.example:generic-api-key:5",
+   "arquivo": ".env.example",
+   "linha": 5,
+   "regra": "generic-api-key",
+   "classe": "documento-placeholder",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "574165a4566484248cbbdb0aecf654eb1479a07d:.env.example:generic-api-key:14",
+   "arquivo": ".env.example",
+   "linha": 14,
+   "regra": "generic-api-key",
+   "classe": "documento-placeholder",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "6429899564979cb5190b3feeb709866db32d17ba:DEPLOY.md:generic-api-key:14",
+   "arquivo": "DEPLOY.md",
+   "linha": 14,
+   "regra": "generic-api-key",
+   "classe": "documento-placeholder",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "62ad0ce61a4459e2de8f56ed6ff26d098e25d0cf:docs/mission/TRADING-MISSION-STATE.md:generic-api-key:45",
+   "arquivo": "docs/mission/TRADING-MISSION-STATE.md",
+   "linha": 45,
+   "regra": "generic-api-key",
+   "classe": "documento-placeholder",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "11ca67738adf65bb99392e8c5d53fafb78b37e3b:docs/mission/evidence/v9-baseline/f8-integridade.json:generic-api-key:976",
+   "arquivo": "docs/mission/evidence/v9-baseline/f8-integridade.json",
+   "linha": 976,
+   "regra": "generic-api-key",
+   "classe": "digest-sha256-integridade",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "11ca67738adf65bb99392e8c5d53fafb78b37e3b:docs/mission/evidence/v9-baseline/f8-integridade.json:generic-api-key:977",
+   "arquivo": "docs/mission/evidence/v9-baseline/f8-integridade.json",
+   "linha": 977,
+   "regra": "generic-api-key",
+   "classe": "digest-sha256-integridade",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "11ca67738adf65bb99392e8c5d53fafb78b37e3b:docs/mission/evidence/v9-baseline/f8-integridade.json:generic-api-key:978",
+   "arquivo": "docs/mission/evidence/v9-baseline/f8-integridade.json",
+   "linha": 978,
+   "regra": "generic-api-key",
+   "classe": "digest-sha256-integridade",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "11ca67738adf65bb99392e8c5d53fafb78b37e3b:docs/mission/evidence/v9-baseline/f8-integridade.json:generic-api-key:981",
+   "arquivo": "docs/mission/evidence/v9-baseline/f8-integridade.json",
+   "linha": 981,
+   "regra": "generic-api-key",
+   "classe": "digest-sha256-integridade",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "11ca67738adf65bb99392e8c5d53fafb78b37e3b:docs/mission/evidence/v9-baseline/f8-integridade.json:generic-api-key:982",
+   "arquivo": "docs/mission/evidence/v9-baseline/f8-integridade.json",
+   "linha": 982,
+   "regra": "generic-api-key",
+   "classe": "digest-sha256-integridade",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "11ca67738adf65bb99392e8c5d53fafb78b37e3b:docs/mission/evidence/v9-baseline/f8-integridade.json:generic-api-key:984",
+   "arquivo": "docs/mission/evidence/v9-baseline/f8-integridade.json",
+   "linha": 984,
+   "regra": "generic-api-key",
+   "classe": "digest-sha256-integridade",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "11ca67738adf65bb99392e8c5d53fafb78b37e3b:docs/mission/evidence/v9-baseline/f8-integridade.json:generic-api-key:985",
+   "arquivo": "docs/mission/evidence/v9-baseline/f8-integridade.json",
+   "linha": 985,
+   "regra": "generic-api-key",
+   "classe": "digest-sha256-integridade",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "11ca67738adf65bb99392e8c5d53fafb78b37e3b:docs/mission/evidence/v9-baseline/f8-integridade.json:generic-api-key:998",
+   "arquivo": "docs/mission/evidence/v9-baseline/f8-integridade.json",
+   "linha": 998,
+   "regra": "generic-api-key",
+   "classe": "digest-sha256-integridade",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "11ca67738adf65bb99392e8c5d53fafb78b37e3b:docs/mission/evidence/v9-baseline/f8-integridade.json:generic-api-key:999",
+   "arquivo": "docs/mission/evidence/v9-baseline/f8-integridade.json",
+   "linha": 999,
+   "regra": "generic-api-key",
+   "classe": "digest-sha256-integridade",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "11ca67738adf65bb99392e8c5d53fafb78b37e3b:docs/mission/evidence/v9-baseline/f8-integridade.json:generic-api-key:1000",
+   "arquivo": "docs/mission/evidence/v9-baseline/f8-integridade.json",
+   "linha": 1000,
+   "regra": "generic-api-key",
+   "classe": "digest-sha256-integridade",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "977adce3cd5e07c461a51505acdf2d465cf338ab:tests/test_alertas_transparencia.py:generic-api-key:158",
+   "arquivo": "tests/test_alertas_transparencia.py",
+   "linha": 158,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "f87055216354ee00de278cef545548c880be109a:tests/test_billing_woovi.py:generic-api-key:127",
+   "arquivo": "tests/test_billing_woovi.py",
+   "linha": 127,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "2562bd6f6afd6d9aa5e60bdfa9d5d1188f9aea82:tests/test_billing_woovi.py:generic-api-key:172",
+   "arquivo": "tests/test_billing_woovi.py",
+   "linha": 172,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "ad2e8ec9656ad265576ec904b39ed50ddaf0f092:tests/test_bootstrap_fallback.py:generic-api-key:28",
+   "arquivo": "tests/test_bootstrap_fallback.py",
+   "linha": 28,
+   "regra": "generic-api-key",
+   "classe": "arquivo-removido-do-head",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "929ebd4aee7ba7b2f2703f94f965f597889140f4:tests/test_llm_transport_timeouts.py:generic-api-key:57",
+   "arquivo": "tests/test_llm_transport_timeouts.py",
+   "linha": 57,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "929ebd4aee7ba7b2f2703f94f965f597889140f4:tests/test_llm_transport_timeouts.py:generic-api-key:78",
+   "arquivo": "tests/test_llm_transport_timeouts.py",
+   "linha": 78,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "929ebd4aee7ba7b2f2703f94f965f597889140f4:tests/test_llm_transport_timeouts.py:generic-api-key:126",
+   "arquivo": "tests/test_llm_transport_timeouts.py",
+   "linha": 126,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "85741123a9bfc73aadb9ab5128a2f31a9f4ff09c:tests/test_platform_compliance_crypto.py:generic-api-key:37",
+   "arquivo": "tests/test_platform_compliance_crypto.py",
+   "linha": 37,
+   "regra": "generic-api-key",
+   "classe": "arquivo-removido-do-head",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "bfbee33a0bcb42062f8c22a201044a599496f85e:tests/test_platform_jobs.py:generic-api-key:145",
+   "arquivo": "tests/test_platform_jobs.py",
+   "linha": 145,
+   "regra": "generic-api-key",
+   "classe": "arquivo-removido-do-head",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "bfbee33a0bcb42062f8c22a201044a599496f85e:tests/test_platform_jobs.py:generic-api-key:147",
+   "arquivo": "tests/test_platform_jobs.py",
+   "linha": 147,
+   "regra": "generic-api-key",
+   "classe": "arquivo-removido-do-head",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "784d16e0605a49ad146415fc7ee726e76efa716c:tests/test_platform_portfolio.py:generic-api-key:251",
+   "arquivo": "tests/test_platform_portfolio.py",
+   "linha": 251,
+   "regra": "generic-api-key",
+   "classe": "arquivo-removido-do-head",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "784d16e0605a49ad146415fc7ee726e76efa716c:tests/test_platform_portfolio.py:generic-api-key:353",
+   "arquivo": "tests/test_platform_portfolio.py",
+   "linha": 353,
+   "regra": "generic-api-key",
+   "classe": "arquivo-removido-do-head",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "784d16e0605a49ad146415fc7ee726e76efa716c:tests/test_platform_portfolio.py:generic-api-key:369",
+   "arquivo": "tests/test_platform_portfolio.py",
+   "linha": 369,
+   "regra": "generic-api-key",
+   "classe": "arquivo-removido-do-head",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "1cc9584d2e4be987ba11d48ce15dafdb4180b4ce:tests/test_platform_portfolio_audit.py:generic-api-key:455",
+   "arquivo": "tests/test_platform_portfolio_audit.py",
+   "linha": 455,
+   "regra": "generic-api-key",
+   "classe": "arquivo-removido-do-head",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "1cc9584d2e4be987ba11d48ce15dafdb4180b4ce:tests/test_platform_portfolio_audit.py:generic-api-key:467",
+   "arquivo": "tests/test_platform_portfolio_audit.py",
+   "linha": 467,
+   "regra": "generic-api-key",
+   "classe": "arquivo-removido-do-head",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "1cc9584d2e4be987ba11d48ce15dafdb4180b4ce:tests/test_platform_portfolio_audit.py:generic-api-key:695",
+   "arquivo": "tests/test_platform_portfolio_audit.py",
+   "linha": 695,
+   "regra": "generic-api-key",
+   "classe": "arquivo-removido-do-head",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "1cc9584d2e4be987ba11d48ce15dafdb4180b4ce:tests/test_platform_portfolio_audit.py:generic-api-key:708",
+   "arquivo": "tests/test_platform_portfolio_audit.py",
+   "linha": 708,
+   "regra": "generic-api-key",
+   "classe": "arquivo-removido-do-head",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "1cc9584d2e4be987ba11d48ce15dafdb4180b4ce:tests/test_platform_portfolio_audit.py:generic-api-key:722",
+   "arquivo": "tests/test_platform_portfolio_audit.py",
+   "linha": 722,
+   "regra": "generic-api-key",
+   "classe": "arquivo-removido-do-head",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "1cc9584d2e4be987ba11d48ce15dafdb4180b4ce:tests/test_platform_portfolio_audit.py:generic-api-key:782",
+   "arquivo": "tests/test_platform_portfolio_audit.py",
+   "linha": 782,
+   "regra": "generic-api-key",
+   "classe": "arquivo-removido-do-head",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "864cb955ebdad5606b8a7a3854daa1f8fc328563:tests/test_platform_portfolio_audit.py:generic-api-key:913",
+   "arquivo": "tests/test_platform_portfolio_audit.py",
+   "linha": 913,
+   "regra": "generic-api-key",
+   "classe": "arquivo-removido-do-head",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "864cb955ebdad5606b8a7a3854daa1f8fc328563:tests/test_platform_portfolio_audit.py:generic-api-key:944",
+   "arquivo": "tests/test_platform_portfolio_audit.py",
+   "linha": 944,
+   "regra": "generic-api-key",
+   "classe": "arquivo-removido-do-head",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "864cb955ebdad5606b8a7a3854daa1f8fc328563:tests/test_platform_portfolio_audit.py:generic-api-key:956",
+   "arquivo": "tests/test_platform_portfolio_audit.py",
+   "linha": 956,
+   "regra": "generic-api-key",
+   "classe": "arquivo-removido-do-head",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "103d830969e33149103a97c1e576418a2a0874fe:tests/test_platform_portfolio_audit.py:generic-api-key:957",
+   "arquivo": "tests/test_platform_portfolio_audit.py",
+   "linha": 957,
+   "regra": "generic-api-key",
+   "classe": "arquivo-removido-do-head",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "864cb955ebdad5606b8a7a3854daa1f8fc328563:tests/test_platform_portfolio_audit.py:generic-api-key:969",
+   "arquivo": "tests/test_platform_portfolio_audit.py",
+   "linha": 969,
+   "regra": "generic-api-key",
+   "classe": "arquivo-removido-do-head",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "bfbee33a0bcb42062f8c22a201044a599496f85e:tests/test_platform_worker.py:generic-api-key:683",
+   "arquivo": "tests/test_platform_worker.py",
+   "linha": 683,
+   "regra": "generic-api-key",
+   "classe": "arquivo-removido-do-head",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r11.py:generic-api-key:144",
+   "arquivo": "tests/test_security_fase0_r11.py",
+   "linha": 144,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r11.py:generic-api-key:144",
+   "arquivo": "tests/test_security_fase0_r11.py",
+   "linha": 144,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r2.py:generic-api-key:23",
+   "arquivo": "tests/test_security_fase0_r2.py",
+   "linha": 23,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r2.py:generic-api-key:23",
+   "arquivo": "tests/test_security_fase0_r2.py",
+   "linha": 23,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r3.py:generic-api-key:19",
+   "arquivo": "tests/test_security_fase0_r3.py",
+   "linha": 19,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r3.py:generic-api-key:19",
+   "arquivo": "tests/test_security_fase0_r3.py",
+   "linha": 19,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r5.py:generic-api-key:132",
+   "arquivo": "tests/test_security_fase0_r5.py",
+   "linha": 132,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r5.py:generic-api-key:132",
+   "arquivo": "tests/test_security_fase0_r5.py",
+   "linha": 132,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r7.py:generic-api-key:45",
+   "arquivo": "tests/test_security_fase0_r7.py",
+   "linha": 45,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r7.py:generic-api-key:46",
+   "arquivo": "tests/test_security_fase0_r7.py",
+   "linha": 46,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r7.py:generic-api-key:54",
+   "arquivo": "tests/test_security_fase0_r7.py",
+   "linha": 54,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r7.py:generic-api-key:56",
+   "arquivo": "tests/test_security_fase0_r7.py",
+   "linha": 56,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r7.py:generic-api-key:68",
+   "arquivo": "tests/test_security_fase0_r7.py",
+   "linha": 68,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r7.py:generic-api-key:70",
+   "arquivo": "tests/test_security_fase0_r7.py",
+   "linha": 70,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r7.py:generic-api-key:78",
+   "arquivo": "tests/test_security_fase0_r7.py",
+   "linha": 78,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r7.py:generic-api-key:80",
+   "arquivo": "tests/test_security_fase0_r7.py",
+   "linha": 80,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r8.py:generic-api-key:21",
+   "arquivo": "tests/test_security_fase0_r8.py",
+   "linha": 21,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r8.py:generic-api-key:22",
+   "arquivo": "tests/test_security_fase0_r8.py",
+   "linha": 22,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r8.py:generic-api-key:182",
+   "arquivo": "tests/test_security_fase0_r8.py",
+   "linha": 182,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r8.py:generic-api-key:183",
+   "arquivo": "tests/test_security_fase0_r8.py",
+   "linha": 183,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_wiring.py:generic-api-key:132",
+   "arquivo": "tests/test_security_fase0_wiring.py",
+   "linha": 132,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  },
+  {
+   "fingerprint": "48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_wiring.py:generic-api-key:134",
+   "arquivo": "tests/test_security_fase0_wiring.py",
+   "linha": 134,
+   "regra": "generic-api-key",
+   "classe": "fixture-placeholder-teste",
+   "valor": "REDACTED (não persistido)"
+  }
+ ]
+}

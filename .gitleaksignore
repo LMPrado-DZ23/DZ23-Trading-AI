@@ -1,0 +1,68 @@
+# gitleaks: achados históricos CLASSIFICADOS e BENIGNOS (V9-SEC-05)
+# Formato: commit:arquivo:regra:linha — 61 impressões de varredura --redact do histórico completo.
+# Classes: (a) fixtures/placeholders de teste (chaves fake: sk-t..., akze..., gkey..., sentinela);
+# (b) digests sha256 em docs/mission/evidence/.../f8-integridade.json (não são credenciais);
+# (c) comentários/placeholders em .env.example e docs; (d) arquivos removidos do HEAD (era SaaS).
+# Nenhuma credencial real: valores de origem foram vistos apenas redigidos (REDACTED).
+
+103d830969e33149103a97c1e576418a2a0874fe:tests/test_platform_portfolio_audit.py:generic-api-key:957
+11ca67738adf65bb99392e8c5d53fafb78b37e3b:docs/mission/evidence/v9-baseline/f8-integridade.json:generic-api-key:1000
+11ca67738adf65bb99392e8c5d53fafb78b37e3b:docs/mission/evidence/v9-baseline/f8-integridade.json:generic-api-key:976
+11ca67738adf65bb99392e8c5d53fafb78b37e3b:docs/mission/evidence/v9-baseline/f8-integridade.json:generic-api-key:977
+11ca67738adf65bb99392e8c5d53fafb78b37e3b:docs/mission/evidence/v9-baseline/f8-integridade.json:generic-api-key:978
+11ca67738adf65bb99392e8c5d53fafb78b37e3b:docs/mission/evidence/v9-baseline/f8-integridade.json:generic-api-key:981
+11ca67738adf65bb99392e8c5d53fafb78b37e3b:docs/mission/evidence/v9-baseline/f8-integridade.json:generic-api-key:982
+11ca67738adf65bb99392e8c5d53fafb78b37e3b:docs/mission/evidence/v9-baseline/f8-integridade.json:generic-api-key:984
+11ca67738adf65bb99392e8c5d53fafb78b37e3b:docs/mission/evidence/v9-baseline/f8-integridade.json:generic-api-key:985
+11ca67738adf65bb99392e8c5d53fafb78b37e3b:docs/mission/evidence/v9-baseline/f8-integridade.json:generic-api-key:998
+11ca67738adf65bb99392e8c5d53fafb78b37e3b:docs/mission/evidence/v9-baseline/f8-integridade.json:generic-api-key:999
+1cc9584d2e4be987ba11d48ce15dafdb4180b4ce:tests/test_platform_portfolio_audit.py:generic-api-key:455
+1cc9584d2e4be987ba11d48ce15dafdb4180b4ce:tests/test_platform_portfolio_audit.py:generic-api-key:467
+1cc9584d2e4be987ba11d48ce15dafdb4180b4ce:tests/test_platform_portfolio_audit.py:generic-api-key:695
+1cc9584d2e4be987ba11d48ce15dafdb4180b4ce:tests/test_platform_portfolio_audit.py:generic-api-key:708
+1cc9584d2e4be987ba11d48ce15dafdb4180b4ce:tests/test_platform_portfolio_audit.py:generic-api-key:722
+1cc9584d2e4be987ba11d48ce15dafdb4180b4ce:tests/test_platform_portfolio_audit.py:generic-api-key:782
+2562bd6f6afd6d9aa5e60bdfa9d5d1188f9aea82:tests/test_billing_woovi.py:generic-api-key:172
+48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r11.py:generic-api-key:144
+48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r2.py:generic-api-key:23
+48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r3.py:generic-api-key:19
+48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r5.py:generic-api-key:132
+48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r7.py:generic-api-key:46
+48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r7.py:generic-api-key:56
+48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r7.py:generic-api-key:70
+48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r7.py:generic-api-key:80
+48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r8.py:generic-api-key:182
+48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_r8.py:generic-api-key:21
+48bf8c856e83ffff02c5a677f965b9653e9f9ff0:tests/test_security_fase0_wiring.py:generic-api-key:134
+574165a4566484248cbbdb0aecf654eb1479a07d:.env.example:generic-api-key:14
+5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r11.py:generic-api-key:144
+5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r2.py:generic-api-key:23
+5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r3.py:generic-api-key:19
+5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r5.py:generic-api-key:132
+5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r7.py:generic-api-key:45
+5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r7.py:generic-api-key:54
+5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r7.py:generic-api-key:68
+5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r7.py:generic-api-key:78
+5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r8.py:generic-api-key:183
+5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_r8.py:generic-api-key:22
+5e82e303e7303c448c2c7c8a514a9f652774a407:tests/test_security_fase0_wiring.py:generic-api-key:132
+62ad0ce61a4459e2de8f56ed6ff26d098e25d0cf:docs/mission/TRADING-MISSION-STATE.md:generic-api-key:45
+6429899564979cb5190b3feeb709866db32d17ba:DEPLOY.md:generic-api-key:14
+784d16e0605a49ad146415fc7ee726e76efa716c:tests/test_platform_portfolio.py:generic-api-key:251
+784d16e0605a49ad146415fc7ee726e76efa716c:tests/test_platform_portfolio.py:generic-api-key:353
+784d16e0605a49ad146415fc7ee726e76efa716c:tests/test_platform_portfolio.py:generic-api-key:369
+85741123a9bfc73aadb9ab5128a2f31a9f4ff09c:tests/test_platform_compliance_crypto.py:generic-api-key:37
+864cb955ebdad5606b8a7a3854daa1f8fc328563:tests/test_platform_portfolio_audit.py:generic-api-key:913
+864cb955ebdad5606b8a7a3854daa1f8fc328563:tests/test_platform_portfolio_audit.py:generic-api-key:944
+864cb955ebdad5606b8a7a3854daa1f8fc328563:tests/test_platform_portfolio_audit.py:generic-api-key:956
+864cb955ebdad5606b8a7a3854daa1f8fc328563:tests/test_platform_portfolio_audit.py:generic-api-key:969
+929ebd4aee7ba7b2f2703f94f965f597889140f4:tests/test_llm_transport_timeouts.py:generic-api-key:126
+929ebd4aee7ba7b2f2703f94f965f597889140f4:tests/test_llm_transport_timeouts.py:generic-api-key:57
+929ebd4aee7ba7b2f2703f94f965f597889140f4:tests/test_llm_transport_timeouts.py:generic-api-key:78
+977adce3cd5e07c461a51505acdf2d465cf338ab:tests/test_alertas_transparencia.py:generic-api-key:158
+ad2e8ec9656ad265576ec904b39ed50ddaf0f092:tests/test_bootstrap_fallback.py:generic-api-key:28
+bfbee33a0bcb42062f8c22a201044a599496f85e:tests/test_platform_jobs.py:generic-api-key:145
+bfbee33a0bcb42062f8c22a201044a599496f85e:tests/test_platform_jobs.py:generic-api-key:147
+bfbee33a0bcb42062f8c22a201044a599496f85e:tests/test_platform_worker.py:generic-api-key:683
+f87055216354ee00de278cef545548c880be109a:.env.example:generic-api-key:5
+f87055216354ee00de278cef545548c880be109a:tests/test_billing_woovi.py:generic-api-key:127
