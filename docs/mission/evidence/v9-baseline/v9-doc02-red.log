@@ -1,0 +1,63 @@
+FF.FF                                                                    [100%]
+================================== FAILURES ===================================
+________ TestSiteDonoUnico.test_nao_nega_a_existencia_do_codigo_legado ________
+
+self = <tests.test_documentacao_honesta.TestSiteDonoUnico object at 0x0000025396B75580>
+
+    def test_nao_nega_a_existencia_do_codigo_legado(self):
+>       assert "não existem no código" not in SITE, (
+            "alegação falsa: as rotas SaaS existem no repositório, apenas bloqueadas"
+        )
+E       AssertionError: alegação falsa: as rotas SaaS existem no repositório, apenas bloqueadas
+E       assert 'não existem no código' not in '<!doctype h...dy></html>\n'
+E         
+E         'não existem no código' is contained here:
+E         ?           ^^
+E            recursos não existem no código, em vez de estarem apenas escondidos. As
+E         ?           ^^^^^^^^^  ++++++++++++++
+E                 chaves de corretora ficam no seu host e voltam sempre mascaradas.</p></div>
+E             </div>...
+E         
+E         ...Full output truncated (79 lines hidden), use '-vv' to show
+
+tests\test_documentacao_honesta.py:25: AssertionError
+_______________ TestSiteDonoUnico.test_declara_trava_fixa_e_404 _______________
+
+self = <tests.test_documentacao_honesta.TestSiteDonoUnico object at 0x000002539AC29BB0>
+
+    def test_declara_trava_fixa_e_404(self):
+>       assert "respondem 404" in SITE, "o site precisa dizer como o bloqueio acontece"
+E       AssertionError: o site precisa dizer como o bloqueio acontece
+E       assert 'respondem 404' in '<!doctype html>\n<html lang="pt-BR">\n<head>\n<meta charset="utf-8"><meta name="viewport" content="width=device-width...ões em mercado envolvem risco de perda. Não é recomendação de investimento.</div>\n</div></footer>\n\n</body></html>\n'
+
+tests\test_documentacao_honesta.py:30: AssertionError
+______ TestMatrizRequisitosReconexao.test_reconexao_tem_correcao_datada _______
+
+self = <tests.test_documentacao_honesta.TestMatrizRequisitosReconexao object at 0x000002539AC2A1E0>
+
+    def test_reconexao_tem_correcao_datada(self):
+>       assert "Correção datada (2026-10-15, MISSÃO V9/F7)" in MATRIZ, (
+            "a linha de §16 mantém 'reconexão' num HOMOLOGADO amplo sem a correção datada"
+        )
+E       AssertionError: a linha de §16 mantém 'reconexão' num HOMOLOGADO amplo sem a correção datada
+E       assert 'Correção datada (2026-10-15, MISSÃO V9/F7)' in '# DZ23 TRADING AI — MATRIZ COMPLETA DE REQUISITOS (Documento A)\n\n> **Documento A de 3 da entrega final (V8 §19).** ...ada** (V8.1 §13). A validação\n   final é a auditoria independente (ChatGPT + Claude), conforme o desenho da missão.\n'
+
+tests\test_documentacao_honesta.py:41: AssertionError
+_ TestMatrizRequisitosReconexao.test_correcao_declara_o_recorte_e_o_nao_homologado _
+
+self = <tests.test_documentacao_honesta.TestMatrizRequisitosReconexao object at 0x000002539AC2A4E0>
+
+    def test_correcao_declara_o_recorte_e_o_nao_homologado(self):
+>       assert "reconexão contra corretora real" in MATRIZ, (
+            "a correção precisa declarar explicitamente o que NÃO está homologado"
+        )
+E       AssertionError: a correção precisa declarar explicitamente o que NÃO está homologado
+E       assert 'reconexão contra corretora real' in '# DZ23 TRADING AI — MATRIZ COMPLETA DE REQUISITOS (Documento A)\n\n> **Documento A de 3 da entrega final (V8 §19).** ...ada** (V8.1 §13). A validação\n   final é a auditoria independente (ChatGPT + Claude), conforme o desenho da missão.\n'
+
+tests\test_documentacao_honesta.py:46: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_documentacao_honesta.py::TestSiteDonoUnico::test_nao_nega_a_existencia_do_codigo_legado
+FAILED tests/test_documentacao_honesta.py::TestSiteDonoUnico::test_declara_trava_fixa_e_404
+FAILED tests/test_documentacao_honesta.py::TestMatrizRequisitosReconexao::test_reconexao_tem_correcao_datada
+FAILED tests/test_documentacao_honesta.py::TestMatrizRequisitosReconexao::test_correcao_declara_o_recorte_e_o_nao_homologado
+4 failed, 1 passed in 0.28s

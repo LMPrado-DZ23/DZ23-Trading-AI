@@ -218,6 +218,8 @@ Fonte linha a linha: `WINDOWS-RELEASE-EVIDENCE.md` (itens 1–22, todos com evid
 
 *(Os 6 skips da suíte: gates condicionais de ambiente — declarados em `RELATORIO-HOMOLOGACAO-V8.md` §4.)*
 
+**Correção datada (2026-10-15, MISSÃO V9/F7):** a palavra "reconexão" na linha de testes acima agregava um **HOMOLOGADO** mais amplo do que a evidência cobre. O recorte testado desta missão: recuperação pós-crash do processo (item 22 — queda forçada do processo no bundle instalado e retomada sem perda), feed vencido recusando operar (item 16 — "snapshot vencido, não vira ordem"), reconexão de sessão do painel/PWA (e2e + correções V9-PWA-05/06) e inicialização/healthz do launcher (C021). O que **NÃO** está homologado: **reconexão contra corretora real** (restabelecimento de sessão/stream de uma corretora real após queda) segue **BLOQUEADO_EXTERNO** por ausência de credencial de conta real somente-leitura nesta missão; entrega de push em aparelho físico não foi homologada (emulador/navegador não substitui aparelho real). A tabela histórica acima é preservada sem edição; esta correção prevalece para leitura de estado.
+
 ## §17 GitHub e release
 
 | Requisito | Implementação | Evidência | Estado |
