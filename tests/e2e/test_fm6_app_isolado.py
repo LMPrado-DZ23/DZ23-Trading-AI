@@ -208,6 +208,43 @@ def test_fm6_03_escola_central_no_painel(page, mesa_url, senha, evidence_dir):
     page.screenshot(path=str(evidence_dir / "fm6-03-escola.png"))
 
 
+def test_fm6_03b_escola_falha_visivel_e_tentativa_de_novo(page, mesa_url, senha, evidence_dir):
+    # V9-UI-01: o run F0 deixou #deskMsg em branco por 15 s quando uma das
+    # três consultas da Escola falhou (toast efêmero sumia e sobrava painel
+    # vazio — indistinguível de "nunca cliquei"). A falha injetada aqui é
+    # determinística: uma rota responde 500. O painel PRECISA mostrar o que
+    # falhou, sem alterar nada, e "Tentar de novo" deve recuperar o painel
+    # completo quando a consulta volta a funcionar.
+    entrar_como_dono(page, mesa_url, senha)
+    modo_avancado(page)
+    ir_para(page, "mesa")
+    expect(page.locator("#deskOut")).to_contain_text("(10 perfis)", timeout=20000)
+
+    def falhar_pilotos(route):
+        route.fulfill(
+            status=500,
+            content_type="application/json",
+            body='{"detail":"falha injetada no teste (pilotos)"}',
+        )
+
+    page.route("**/v1/escola/pilotos", falhar_pilotos)
+    page.get_by_role("button", name="Escola Central").click()
+    escola = page.locator("#deskMsg")
+    expect(escola).to_contain_text("não respondeu", timeout=15000)
+    expect(escola).to_contain_text("pilotos")
+    expect(escola).to_contain_text("falha injetada no teste")
+    expect(escola).to_contain_text("Nada foi alterado")
+    expect(escola.get_by_role("button", name="Tentar de novo")).to_be_visible()
+    page.screenshot(path=str(evidence_dir / "fm6-03b-escola-erro-visivel.png"))
+
+    page.unroute("**/v1/escola/pilotos", falhar_pilotos)
+    escola.get_by_role("button", name="Tentar de novo").click()
+    expect(escola).to_contain_text("Contextos de certificação", timeout=15000)
+    expect(escola).to_contain_text("Maestro: pausa global")
+    expect(escola).not_to_contain_text("não respondeu")
+    page.screenshot(path=str(evidence_dir / "fm6-03b-escola-retomada.png"))
+
+
 # ------------------------------------------------------------------- item 04
 def test_fm6_04_dashboard_lc_mercado_e_portfolio(page, mesa_url, senha, evidence_dir):
     # §11 "Trading Dashboard" + §6: a biblioteca profissional carrega NO APP

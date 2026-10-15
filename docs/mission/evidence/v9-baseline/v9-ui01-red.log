@@ -1,0 +1,43 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+____________ test_fm6_03b_escola_falha_visivel_e_tentativa_de_novo ____________
+
+page = <Page url='http://127.0.0.1:62130/app'>
+mesa_url = 'http://127.0.0.1:62130', senha = 's3nh4-dz23-e2e'
+evidence_dir = WindowsPath('C:/Users/DZ23/Documents/Qoder/2026-10-12/2f7f19a4/dz23-v9-audit/docs/mission/evidence/v9-baseline/screenshots')
+
+    def test_fm6_03b_escola_falha_visivel_e_tentativa_de_novo(page, mesa_url, senha, evidence_dir):
+        # V9-UI-01: o run F0 deixou #deskMsg em branco por 15 s quando uma das
+        # três consultas da Escola falhou (toast efêmero sumia e sobrava painel
+        # vazio — indistinguível de "nunca cliquei"). A falha injetada aqui é
+        # determinística: uma rota responde 500. O painel PRECISA mostrar o que
+        # falhou, sem alterar nada, e "Tentar de novo" deve recuperar o painel
+        # completo quando a consulta volta a funcionar.
+        entrar_como_dono(page, mesa_url, senha)
+        modo_avancado(page)
+        ir_para(page, "mesa")
+        expect(page.locator("#deskOut")).to_contain_text("(10 perfis)", timeout=20000)
+    
+        def falhar_pilotos(route):
+            route.fulfill(
+                status=500,
+                content_type="application/json",
+                body='{"detail":"falha injetada no teste (pilotos)"}',
+            )
+    
+        page.route("**/v1/escola/pilotos", falhar_pilotos)
+        page.get_by_role("button", name="Escola Central").click()
+        escola = page.locator("#deskMsg")
+>       expect(escola).to_contain_text("não respondeu", timeout=15000)
+E       AssertionError: Locator expected to contain text 'não respondeu'
+E       Actual value:  
+E       Call log:
+E         - Expect "to_contain_text" locator("#deskMsg") with timeout 15000ms
+E         - waiting for locator("#deskMsg")
+E           33 × locator resolved to <div id="deskMsg" class="message"></div>
+E              - unexpected value ""
+
+tests\e2e\test_fm6_app_isolado.py:233: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/e2e/test_fm6_app_isolado.py::test_fm6_03b_escola_falha_visivel_e_tentativa_de_novo
+1 failed in 20.20s
