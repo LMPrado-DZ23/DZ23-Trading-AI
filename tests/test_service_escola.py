@@ -342,12 +342,23 @@ class TestMesaEscolaE2E:
 
         bin_ = c.get("/v1/escola/certificacao", headers=H, params={
             "estrategia": "momentum", "corretora": "binance",
-            "mercado": "spot", "ativo": "BTC/USDT"}).json()
+            "conta": "paper-legacy", "mercado": "spot", "modo": "paper",
+            "ativo": "BTC/USDT"}).json()
         assert bin_["elegivel"] is True and bin_["estado"] == "formada"
         okx = c.get("/v1/escola/certificacao", headers=H, params={
             "estrategia": "momentum", "corretora": "okx",
-            "mercado": "spot", "ativo": "BTC/USDT"}).json()
+            "conta": "paper-legacy", "mercado": "spot", "modo": "paper",
+            "ativo": "BTC/USDT"}).json()
         assert okx["elegivel"] is False and okx["estado"] == "coletando"
+
+        # Outra CONTA da mesma corretora não herda a formação: conta e modo
+        # são dimensões de isolamento, como corretora/ativo/horizonte.
+        outra = c.get("/v1/escola/certificacao", headers=H, params={
+            "estrategia": "momentum", "corretora": "binance",
+            "conta": "outra-conta", "mercado": "spot", "modo": "paper",
+            "ativo": "BTC/USDT"}).json()
+        assert outra["elegivel"] is False and outra["estado"] == "coletando"
+        assert "nenhuma evidência" in outra["motivo"]
 
         assert c.post("/v1/escola/avaliar", headers=H, json={
             "chave": "binance|nao-existe|spot|paper",

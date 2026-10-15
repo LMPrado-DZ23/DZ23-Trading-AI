@@ -3526,16 +3526,27 @@ async def escola_adotar_conhecimento(req: Request, _=Depends(auth),
 
 @app.get("/v1/escola/certificacao")
 def escola_certificacao(request: Request, estrategia: str, corretora: str,
-                        mercado: str = "spot", ativo: str = "",
+                        conta: str = "", mercado: str = "spot",
+                        modo: str = "", ativo: str = "",
                         horizonte: str = "1h", versao: str = "1",
-                        _=Depends(auth)):
+                        payout: str = "", _=Depends(auth)):
     """Elegibilidade NO CONTEXTO informado. Um trader formado na Binance
-    não é considerado formado na OKX — a resposta diz isso com todas as
+    não é considerado formado na OKX — e nem em outra conta, outro modo
+    (paper/testnet) ou outro payout: a resposta diz isso com todas as
     letras, em vez de fingir equivalência."""
-    from tradingagents.desk.salas import ContextoDeCertificacao
+    from tradingagents.desk.salas import (
+        MODO_PAPER,
+        ContextoDeCertificacao,
+        SalaError,
+    )
     esc = _escola_of(request)
-    contexto = ContextoDeCertificacao(corretora=corretora, mercado=mercado,
-                                      ativo=ativo, horizonte=horizonte)
+    try:
+        contexto = ContextoDeCertificacao(
+            corretora=corretora, conta=conta, mercado=mercado,
+            modo=modo or MODO_PAPER, ativo=ativo, horizonte=horizonte,
+            payout=payout or None)
+    except SalaError as exc:
+        raise HTTPException(422, str(exc)) from exc
     ok, motivo = esc["central"].elegivel_para_live(
         estrategia, versao, contexto=contexto)
     return {"contexto": contexto.chave,
@@ -3741,6 +3752,7 @@ async def escola_piloto_solicitar(req: Request, _=Depends(auth),
 
     from tradingagents.desk.piloto import SupervisorDePiloto
     from tradingagents.desk.salas import (
+        MODO_PAPER,
         ContextoDeCertificacao,
         EscolaDoPiloto,
         SalaError,
@@ -3761,11 +3773,17 @@ async def escola_piloto_solicitar(req: Request, _=Depends(auth),
     except (TypeError, ValueError) as exc:
         raise HTTPException(422, "prazo_dias precisa ser um número inteiro") from exc
     esc = _escola_of(req)
-    contexto = ContextoDeCertificacao(
-        corretora=str(body.get("corretora") or ""),
-        mercado=str(body.get("mercado") or "spot"),
-        ativo=str(body.get("ativo") or ""),
-        horizonte=str(body.get("horizonte") or "1h"))
+    try:
+        contexto = ContextoDeCertificacao(
+            corretora=str(body.get("corretora") or ""),
+            conta=str(body.get("conta") or ""),
+            mercado=str(body.get("mercado") or "spot"),
+            modo=str(body.get("modo") or MODO_PAPER),
+            ativo=str(body.get("ativo") or ""),
+            horizonte=str(body.get("horizonte") or "1h"),
+            payout=body.get("payout") or None)
+    except SalaError as exc:
+        raise HTTPException(422, str(exc)) from exc
     sup = SupervisorDePiloto(
         esc["armazem"], tenant_id=esc["tenant_id"],
         escola=EscolaDoPiloto(esc["central"], contexto))

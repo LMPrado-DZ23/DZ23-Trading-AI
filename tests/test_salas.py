@@ -63,8 +63,9 @@ def _ctx(corretora="binance", conta="paper-1", mercado="spot", modo="paper",
 
 
 def _certificado(corretora="binance", mercado="spot", ativo=ATIVO,
-                 horizonte="1h"):
-    return ContextoDeCertificacao(corretora, mercado, ativo, horizonte)
+                 horizonte="1h", conta="paper-1", modo="paper", payout=None):
+    return ContextoDeCertificacao(corretora, mercado, ativo, horizonte,
+                                  conta, modo, payout)
 
 
 def _desfechos(estrategia, retornos, *, inicio=BASE, versao="1",
@@ -324,7 +325,8 @@ class TestCertificacaoPorContexto:
         sala = RegistroDeSalas(armazem=armazem).abrir_sala(
             _ctx(corretora="binance"))
         _formar(central, sala)
-        assert ("legacy", "escola::binance|spot|BTC/USDT|1h") in armazem.dados
+        assert ("legacy", "escola::binance|paper-1|spot|paper|BTC/USDT|1h") \
+            in armazem.dados
 
         reaberta = EscolaCentral(armazem=armazem)     # reinício
         ok, _ = reaberta.elegivel_para_live(
@@ -333,7 +335,7 @@ class TestCertificacaoPorContexto:
         rel = reaberta.relatorio()
         assert rel["total_contextos"] == 1
         linha = rel["certificados"][0]
-        assert linha["contexto"] == "binance|spot|BTC/USDT|1h"
+        assert linha["contexto"] == "binance|paper-1|spot|paper|BTC/USDT|1h"
         assert linha["estado"] == "formada"
         assert "proprietário" in rel["aviso"]
 

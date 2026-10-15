@@ -10,9 +10,13 @@ Arquitetura definitiva do DZ23: **uma escola, muitas salas**.
   livro-razão separados por construção, não por convenção. Resultado
   financeiro de uma corretora NUNCA entra na conta de outra.
 - A certificação é individual por (trader, versão da estratégia, corretora,
-  mercado, ativo, horizonte operacional). Um trader formado na Binance não
-  é considerado formado na OKX: a evidência de uma sala não alimenta a
-  escola de outra.
+  conta, mercado, modo operacional, ativo, horizonte e payout quando
+  aplicável). O "trader" é a identidade da estratégia: a matrícula é
+  `estrategia@versao`. Um trader formado na Binance não é considerado
+  formado na OKX — e nem mesmo em outra conta, outro modo (paper/testnet)
+  ou outro payout: a evidência de uma sala não alimenta a escola de outra.
+  Contextos gravados no formato antigo (sem conta/modo) são LEGADO: nunca
+  certificam um contexto novo — a formatura antiga não se estende.
 - Corretoras novas entram por ADAPTADOR HOMOLOGADO (registro explícito com
   versão e mercados suportados). Sem adaptador, não há sala — nada de
   improviso. IQ Option é registrada como laboratório experimental: métricas
@@ -175,25 +179,63 @@ class ContextoDaSala:
 
 @dataclass(frozen=True)
 class ContextoDeCertificacao:
-    """Chave da formação: corretora, mercado, ativo e horizonte. Formar-se
-    num contexto não forma em nenhum outro."""
+    """Chave da formação: corretora, conta, mercado, modo, ativo e horizonte
+    (payout entra como sétima parte quando a sala declara um). Formar-se num
+    contexto não forma em nenhum outro — conta e modo são dimensões de
+    isolamento, não detalhes.
+
+    Contextos gravados no formato antigo (sem `conta`/`modo`) são LEGADO:
+    sua chave de 4 partes nunca colide com as chaves novas de 6-7 partes,
+    então jamais certificam um contexto novo (fail-closed)."""
     corretora: str
     mercado: str
     ativo: str
     horizonte: str = "1h"
+    conta: str = ""
+    modo: str = ""
+    payout: Decimal | None = None
+
+    def __post_init__(self):
+        object.__setattr__(self, "corretora",
+                           (self.corretora or "").strip().lower())
+        object.__setattr__(self, "conta", (self.conta or "").strip())
+        object.__setattr__(self, "mercado",
+                           (self.mercado or "").strip().lower())
+        modo = getattr(self.modo, "value", self.modo)
+        object.__setattr__(self, "modo", str(modo or "").strip().lower())
+        object.__setattr__(self, "ativo", str(self.ativo or "").strip())
+        object.__setattr__(self, "horizonte",
+                           str(self.horizonte or "").strip().lower())
+        if self.payout is not None:
+            try:
+                object.__setattr__(self, "payout", Decimal(str(self.payout)))
+            except InvalidOperation as exc:
+                raise SalaError(f"payout inválido: {self.payout!r}") from exc
 
     @property
     def chave(self) -> str:
-        return f"{self.corretora}|{self.mercado}|{self.ativo}|{self.horizonte}"
+        """6 partes (corretora|conta|mercado|modo|ativo|horizonte) + payout
+        como sétima quando declarado. Nunca colide com a chave legada de 4
+        partes — a evidência antiga não certifica contexto novo."""
+        base = (f"{self.corretora}|{self.conta}|{self.mercado}|{self.modo}|"
+                f"{self.ativo}|{self.horizonte}")
+        return f"{base}|{self.payout}" if self.payout is not None else base
 
     def como_dict(self) -> dict:
-        return {"corretora": self.corretora, "mercado": self.mercado,
-                "ativo": self.ativo, "horizonte": self.horizonte}
+        return {"corretora": self.corretora, "conta": self.conta,
+                "mercado": self.mercado, "modo": self.modo,
+                "ativo": self.ativo, "horizonte": self.horizonte,
+                "payout": str(self.payout) if self.payout is not None else None}
 
     @classmethod
     def de_dict(cls, doc: dict) -> ContextoDeCertificacao:
-        return cls(str(doc.get("corretora", "")), str(doc.get("mercado", "")),
-                   str(doc.get("ativo", "")), str(doc.get("horizonte", "1h")))
+        return cls(str(doc.get("corretora", "")),
+                   str(doc.get("mercado", "")),
+                   str(doc.get("ativo", "")),
+                   str(doc.get("horizonte", "1h")),
+                   str(doc.get("conta") or ""),
+                   str(doc.get("modo") or ""),
+                   doc.get("payout"))
 
 
 # --------------------------------------------------------------------- sala
@@ -637,17 +679,19 @@ class EscolaCentral:
         self.armazem.salvar(self.tenant_id, self.CHAVE_CATALOGO,
                             {"contextos": self._catalogo})
 
-    def _escola(self, contexto: ContextoDeCertificacao) -> EscolaDeTraders:
-        chave = contexto.chave
+    def _escola_de_chave(self, chave: str, *,
+                         doc: dict | None = None) -> EscolaDeTraders:
+        """Instância da escola para UMA chave de contexto. Quando `doc` é
+        informado e a chave ainda não está no catálogo, ela é registrada —
+        nunca o contrário: consultar não inventa contexto novo."""
         escola = self._escolas.get(chave)
         if escola is None:
             escola = EscolaDeTraders(
                 self.armazem, self.tenant_id,
                 chave_armazem=f"{self.CHAVE_PREFIXO}::{chave}")
             self._escolas[chave] = escola
-            if chave not in self._catalogo:
-                self._catalogo[chave] = {**contexto.como_dict(),
-                                         "criada_em": utcnow().isoformat()}
+            if doc is not None and chave not in self._catalogo:
+                self._catalogo[chave] = dict(doc)
                 self._salvar_catalogo()
         return escola
 
@@ -655,11 +699,17 @@ class EscolaCentral:
     def avaliar(self, *, sala: Sala, estrategia: str, versao: str = "1",
                 ativo: str, horizonte: str = "1h",
                 agora: datetime | None = None) -> Avaliacao:
-        """Avalia um aluno usando SOMENTE a evidência da sala informada."""
-        contexto = ContextoDeCertificacao(sala.contexto.corretora,
-                                          sala.contexto.mercado, ativo,
-                                          horizonte)
-        escola = self._escola(contexto)
+        """Avalia um aluno usando SOMENTE a evidência da sala informada.
+        O contexto carrega TUDO o que identifica a sala — corretora, conta,
+        mercado, modo e payout — para que evidência de uma conta/modo nunca
+        alimente a formação de outra."""
+        contexto = ContextoDeCertificacao(
+            corretora=sala.contexto.corretora, conta=sala.contexto.conta,
+            mercado=sala.contexto.mercado, modo=sala.contexto.modo,
+            ativo=ativo, horizonte=horizonte,
+            payout=sala.contexto.payout)
+        escola = self._escola_de_chave(contexto.chave, doc={
+            **contexto.como_dict(), "criada_em": utcnow().isoformat()})
         prova = [d for d in sala.desfechos
                  if d.estrategia == estrategia
                  and (d.versao or "1") == str(versao)
@@ -690,8 +740,9 @@ class EscolaCentral:
         if chave not in self._escolas and chave not in self._catalogo:
             return False, ("nenhuma evidência neste contexto de certificação "
                            f"({chave}) — a formatura não se transfere entre "
-                           "corretoras, mercados, ativos ou horizontes")
-        escola = self._escola(contexto)
+                           "corretoras, contas, modos, payouts, mercados, "
+                           "ativos ou horizontes")
+        escola = self._escola_de_chave(chave)
         return escola.elegivel_para_live(estrategia, versao)
 
     def estado_de(self, estrategia: str, versao: str = "1", *,
@@ -701,7 +752,7 @@ class EscolaCentral:
         chave = contexto.chave
         if chave not in self._escolas and chave not in self._catalogo:
             return "coletando"
-        estado = self._escola(contexto).estado_de(estrategia, versao)
+        estado = self._escola_de_chave(chave).estado_de(estrategia, versao)
         return estado.value if estado is not None else "coletando"
 
     # -- retratos -------------------------------------------------------
@@ -709,18 +760,23 @@ class EscolaCentral:
         certificados = []
         por_estado: dict[str, int] = {}
         for chave in sorted(self._catalogo):
-            escola = self._escola(ContextoDeCertificacao.de_dict(
-                self._catalogo[chave]))
+            doc = self._catalogo[chave]
+            legado = (not isinstance(doc, dict) or "conta" not in doc
+                      or "modo" not in doc)
+            escola = self._escola_de_chave(chave)
             for linha in escola.relatorio():
                 por_estado[linha["estado"]] = por_estado.get(linha["estado"], 0) + 1
-                certificados.append({**linha, "contexto": chave})
+                certificados.append({**linha, "contexto": chave,
+                                     "legado": legado})
         return {
             "escola_central": ("uma escola, uma instância por contexto "
-                               "(corretora|mercado|ativo|horizonte)"),
+                               "(corretora|conta|mercado|modo|ativo|"
+                               "horizonte[|payout])"),
             "total_contextos": len(self._catalogo),
             "por_estado": por_estado,
             "certificados": certificados,
-            "aviso": ("formação em um contexto não vale em outro; quem "
+            "aviso": ("formação em um contexto não vale em outro; contexto "
+                      "legado (sem conta/modo) não certifica sala nova; quem "
                       "autoriza operação real é o proprietário — a escola "
                       "nunca ativa nada"),
         }

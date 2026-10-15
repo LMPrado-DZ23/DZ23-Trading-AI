@@ -150,7 +150,7 @@ class TestAdocaoControlada:
         elegivel, motivo = central.elegivel_para_live(
             ESTRATEGIA, "1",
             contexto=ContextoDeCertificacao("bybit", "spot", "BTC/USDT",
-                                            "1h"))
+                                            "1h", "paper-1", "paper"))
         assert elegivel is False
         assert "nenhuma evidência" in motivo
 
