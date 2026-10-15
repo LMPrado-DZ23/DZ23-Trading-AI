@@ -219,7 +219,7 @@ const temTelegram=sta('ALERTA_TELEGRAM_TOKEN')&&sta('ALERTA_TELEGRAM_CHAT');
 const cn=await api('/v1/notificacoes/canais');
 const canais=(cn.ok&&cn.data&&Array.isArray(cn.data.canais))?cn.data.canais:[];
 const canal=n=>canais.find(c=>c.nome===n)||null;
-const teste=c=>(c&&c.ultimo_teste)?(' Último teste do canal: '+String(c.ultimo_teste).slice(0,16)+'.'):'';
+const teste=c=>(c&&c.ultimo_teste)?(' Último teste do canal: '+String(c.ultimo_teste).slice(0,16)+(c.ultimo_teste_ok===false?' (falhou)':'')+'.'):'';
 const perm='permissão de notificação '+pwaPermissaoTexto();
 const seguro=!!window.isSecureContext,temSW='serviceWorker' in navigator,temPush='PushManager' in window&&'Notification' in window;
 const win=canal('windows'),painel=canal('painel'),wp=canal('webpush');
@@ -406,7 +406,7 @@ const prov=Object.entries(d.por_provedor||{});
 if(prov.length)html+='<h3 style="margin-top:14px">Por provedor</h3>'+prov.map(([p,v])=>'<div class="metric-line"><span>'+escapeHtml(p)+'</span><b>'+v.chamadas+' chamadas · '+(v.tokens_entrada+v.tokens_saida)+' tokens · '+v.custo_estimado_usd+' USD</b></div>').join('');
 alvo.innerHTML=(t.chamadas||prov.length||o.definido)?html:'<div class="muted">Nenhuma chamada de IA registrada ainda.</div>'}
 async function notifLoad(){const[c,i,m]=await Promise.all([api('/v1/notificacoes/canais'),api('/v1/notificacoes/inbox'),api('/v1/notificacoes/matriz')]);
-if(c.ok)$('notifCanais').innerHTML=c.data.canais.map(x=>`<div class="metric-line"><span>${escapeHtml(x.nome)} ${x.configurado?'<b class="ok">configurado</b>':'<small class="muted">'+escapeHtml(x.detalhe||'não configurado')+'</small>'}</span><span>${x.ultimo_teste?'<small class="muted">testado '+escapeHtml(String(x.ultimo_teste).slice(0,16))+'</small> ':''}<button class="btn secondary" onclick="notifTestar('${x.nome}')">Testar</button></span></div>`).join('');
+if(c.ok)$('notifCanais').innerHTML=c.data.canais.map(x=>`<div class="metric-line"><span>${escapeHtml(x.nome)} ${x.configurado?'<b class="ok">configurado</b>':'<small class="muted">'+escapeHtml(x.detalhe||'não configurado')+'</small>'}</span><span>${x.ultimo_teste?'<small class="muted">'+(x.ultimo_teste_ok===false?'último teste falhou '+'('+escapeHtml(String(x.ultimo_teste).slice(0,16))+')':'testado '+escapeHtml(String(x.ultimo_teste).slice(0,16)))+'</small> ':''}<button class="btn secondary" onclick="notifTestar('${x.nome}')">Testar</button></span></div>`).join('');
 if(i.ok)$('notifInbox').innerHTML=(i.data.historico||[]).slice(0,12).map(a=>`<div class="metric-line"><span>${a.vencido?'⚠️ ':''}<b>${escapeHtml(a.titulo)}</b> <small class="muted">${escapeHtml(a.tipo)}</small></span><span><small class="muted">${escapeHtml(String(a.criado_em||'').slice(0,16))}</small> ${a.lido_em?'<b class="ok">lido</b>':`<button class="btn secondary" onclick="notifAck('${a.id}')">Marcar lido</button>`}</span></div>`).join('')||'<div class="muted">Caixa de entrada vazia.</div>';
 if(m.ok&&!$('notifMatriz').value)$('notifMatriz').value=JSON.stringify(m.data.regras||[])}
 async function notifTestar(canal){const r=await api('/v1/notificacoes/testar',{method:'POST',body:JSON.stringify({canal})});toast(r.ok?`${canal}: entrega confirmada (${r.data.latencia_ms??0} ms)`:r.data.detail||'Falha no teste',r.ok?'ok':'bad');notifLoad()}

@@ -466,3 +466,101 @@ class TestRotasPush:
         r = c.post("/v1/push/cancelar", headers=h, json={"id": alvo})
         assert r.status_code == 200 and r.json()["total"] == 0
         assert c.get("/v1/push/estado", headers=h).json()["total"] == 0
+
+    # ----- V9-PWA-03: diagnóstico de envio persistido (não só na RAM) -----
+
+    def _preparar_push(self, c, h):
+        """Chaves + WebPush ligado + toast do Windows desligado + 1 aparelho:
+        o mínimo para o despacho REAL passar pelo canal webpush."""
+        c.post("/v1/push/vapid/gerar", headers=h, json={})
+        r = c.post("/v1/config", headers=h, json={"vars": {
+            "ALERTA_WEBPUSH": "true", "ALERTA_WINDOWS": "false"}})
+        assert r.status_code == 200
+        r2 = c.post("/v1/push/assinar", headers=h, json=self._corpo())
+        assert r2.status_code == 200
+
+    def _despachar_com_remetente(self, m, c, h, monkeypatch, remetente):
+        """Despacho real (POST /v1/alertas/verificar) com o remetente de rede
+        trocado — nenhum byte sai do processo."""
+        original = m._push_do_tenant
+
+        def push_fake(tid):
+            assinaturas, entregador = original(tid)
+            entregador._remetente = remetente
+            return assinaturas, entregador
+
+        monkeypatch.setattr(m, "_push_do_tenant", push_fake)
+        c.get("/v1/desk/status", headers=h)
+        m._FILAS_ALERTAS["legacy"].enfileirar(
+            tipo="parada", severidade="urgente", titulo="T",
+            detalhe="D", acao="A")
+        r = c.post("/v1/alertas/verificar", headers=h)
+        assert r.status_code == 200
+
+    @pytest.mark.skipif(not _TEM_PY_VAPID, reason="py_vapid ausente")
+    def test_estado_guarda_diagnostico_real_apos_envio(self, tmp_path,
+                                                       monkeypatch):
+        m, c, h = self._app(tmp_path, monkeypatch)
+        self._preparar_push(c, h)
+        self._despachar_com_remetente(
+            m, c, h, monkeypatch, lambda a, p, ttl, u: None)
+
+        antes = c.get("/v1/push/estado", headers=h).json()
+        assert antes["dispositivos"][0]["ultimo_ok"], \
+            "o sucesso do envio precisa ficar persistido no estado"
+
+        # Reinício do serviço: o diagnóstico vem do armazém, não da memória.
+        import importlib
+
+        from fastapi.testclient import TestClient
+        importlib.reload(m)
+        m._FAILS.clear()
+        m._DESKS.clear()
+        m._FILAS_ALERTAS.clear()
+        c2 = TestClient(m.app)
+        depois = c2.get("/v1/push/estado", headers=h).json()
+        assert depois["dispositivos"][0]["ultimo_ok"], \
+            "o diagnóstico precisa sobreviver ao reinício do serviço"
+        assert depois["dispositivos"][0]["falhas"] == 0
+        assert depois["dispositivos"][0]["ultimo_erro"] == ""
+
+    @pytest.mark.skipif(not _TEM_PY_VAPID, reason="py_vapid ausente")
+    def test_estado_guarda_falha_e_contagem_reais_apos_envio(self, tmp_path,
+                                                             monkeypatch):
+        m, c, h = self._app(tmp_path, monkeypatch)
+        self._preparar_push(c, h)
+
+        def remetente_quebrado(a, p, ttl, u):
+            raise TimeoutError("sem resposta do serviço de push")
+
+        self._despachar_com_remetente(
+            m, c, h, monkeypatch, remetente_quebrado)
+
+        disp = c.get("/v1/push/estado", headers=h).json()["dispositivos"][0]
+        assert disp["falhas"] >= 1 and "TimeoutError" in disp["ultimo_erro"], \
+            "a falha real do envio precisa aparecer no estado persistido"
+
+    class _Expirado410(Exception):
+        """Simula o 410 do serviço de push (inscrição expirada)."""
+        response = type("_R", (), {"status_code": 410})()
+
+    @pytest.mark.skipif(not _TEM_PY_VAPID, reason="py_vapid ausente")
+    def test_persistencia_nao_ressuscita_inscricao_expirada_no_despacho(
+            self, tmp_path, monkeypatch):
+        m, c, h = self._app(tmp_path, monkeypatch)
+        self._preparar_push(c, h)                    # aparelho bom ("tok")
+        c.post("/v1/push/assinar", headers=h, json=self._corpo("velho"))
+        assert c.get("/v1/push/estado", headers=h).json()["total"] == 2
+
+        def remetente(a, p, ttl, u):
+            if a.endpoint.endswith("tokvelho"):
+                raise self._Expirado410()
+            return None
+
+        self._despachar_com_remetente(m, c, h, monkeypatch, remetente)
+
+        d = c.get("/v1/push/estado", headers=h).json()
+        assert d["total"] == 1, "a inscrição expirada precisa ser podada"
+        vivo = d["dispositivos"][0]
+        assert vivo["ultimo_ok"], "o aparelho vivo mantém o sucesso real"
+        assert vivo["falhas"] == 0 and vivo["ultimo_erro"] == ""

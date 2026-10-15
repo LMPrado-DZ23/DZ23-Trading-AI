@@ -79,6 +79,12 @@ class TestPainelPwa:
         assert "#notificacoes" in html
         assert "hashchange" in html
 
+    def test_ultimo_teste_do_canal_e_honesto_no_painel(self):
+        # V9-PWA-03: o painel consome ultimo_teste_ok — um teste de canal
+        # que FALHOU nunca aparece como "testado" sem ressalva.
+        html = self._html()
+        assert "ultimo_teste_ok" in html
+
 
 class TestRotasPwa:
     def _app(self, tmp_path, monkeypatch):

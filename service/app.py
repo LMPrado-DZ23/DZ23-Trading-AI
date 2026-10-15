@@ -2244,6 +2244,67 @@ def _push_do_tenant(tenant_id: str):
     return assinaturas, entregador
 
 
+def _persistir_diagnostico_push(tenant_id: str, assinaturas) -> None:
+    """Grava no config o diagnóstico REAL da última entrega (sucesso, erro,
+    falhas) — o painel recarrega o estado do armazém, não da memória do
+    processo. Inscrições podadas nesta rodada não voltam (filtro por id)."""
+    from tradingagents.desk import push_web
+    try:
+        cfg = load_cfg(tenant_id)
+        atuais = push_web.carregar_assinaturas(cfg)
+        diag = {a.identificador(): (a.ultimo_ok, a.ultimo_erro, a.falhas)
+                for a in assinaturas}
+        mudou = False
+        for atual in atuais:
+            valores = diag.get(atual.identificador())
+            if valores is None:
+                continue
+            if (atual.ultimo_ok, atual.ultimo_erro, atual.falhas) != valores:
+                atual.ultimo_ok, atual.ultimo_erro, atual.falhas = valores
+                mudou = True
+        if mudou:
+            save_cfg(push_web.salvar_assinaturas(cfg, atuais), tenant_id)
+    except Exception:
+        # Diagnóstico é melhor-esforço: a entrega já aconteceu de verdade.
+        LOGGER.warning("não foi possível persistir o diagnóstico do push")
+
+
+_CHAVE_TESTES_CANAL = "NOTIF_TESTES_CANAL"
+
+
+def _testes_canal_do_cfg(cfg: dict) -> dict:
+    bruto = cfg.get(_CHAVE_TESTES_CANAL)
+    if isinstance(bruto, str) and bruto.strip():
+        try:
+            bruto = json.loads(bruto)
+        except ValueError:
+            return {}
+    if not isinstance(bruto, dict):
+        return {}
+    return {k: v for k, v in bruto.items() if isinstance(v, dict)}
+
+
+def _testes_canal(tenant_id: str) -> dict:
+    return _testes_canal_do_cfg(load_cfg(tenant_id))
+
+
+def _registrar_teste_canal(tenant_id: str, nome: str, resultado: dict) -> None:
+    """Registra o resultado do teste — inclusive FALHA — no config do
+    inquilino: sobrevive ao reinício e nunca vira sucesso silencioso."""
+    from tradingagents.desk.models import utcnow
+    try:
+        cfg = load_cfg(tenant_id)
+        doc = _testes_canal_do_cfg(cfg)
+        doc[nome] = {"em": utcnow().isoformat(),
+                     "ok": bool(resultado.get("ok")),
+                     "detalhe": str(resultado.get("detalhe")
+                                    or resultado.get("erro") or "")[:160]}
+        cfg[_CHAVE_TESTES_CANAL] = json.dumps(doc, ensure_ascii=False)
+        save_cfg(cfg, tenant_id)
+    except Exception:
+        LOGGER.warning("não foi possível registrar o teste do canal")
+
+
 def _despachar_alertas(tenant_id: str) -> dict:
     """Tenta entregar o que está pendente, respeitando backoff e rate limit."""
     from tradingagents.desk.canais_alerta import construir_canais
@@ -2257,6 +2318,7 @@ def _despachar_alertas(tenant_id: str) -> dict:
         entregador_webpush=entregador)
     despachante = Despachante(fila, canais, matriz=_matriz_alertas(tenant_id))
     resultado = despachante.despachar()
+    _persistir_diagnostico_push(tenant_id, assinaturas)
     _persistir_fila_alertas(tenant_id)
     return resultado
 
@@ -4316,13 +4378,15 @@ def canais_de_notificacao(request: Request, _=Depends(auth)):
     canais = construir_canais(load_cfg(tid),
                               transportes=_TESTE_CANAL_TRANSPORTES.get(tid),
                               assinaturas_webpush=assinaturas)
-    d = _DESKS.get(tid) or {}
-    ultimos = d.get("testes_canal") or {}
+    ultimos = _testes_canal(tid)
     return {"canais": [{"nome": c.nome, "prioridade": c.prioridade,
                         "configurado": c.configurado(),
                         "disponivel": c.disponivel(),
                         "detalhe": c.detalhe(),
-                        "ultimo_teste": ultimos.get(c.nome, "")}
+                        "ultimo_teste": (ultimos.get(c.nome) or {}).get(
+                            "em", ""),
+                        "ultimo_teste_ok": (ultimos.get(c.nome) or {}).get(
+                            "ok")}
                        for c in canais],
             "aviso": ("sem nenhum canal externo configurado o alerta fica "
                       "na Caixa de entrada do painel — nunca se perde, mas "
@@ -4369,9 +4433,9 @@ async def testar_canal_de_notificacao(req: Request, _=Depends(auth)):
         except Exception as exc:
             resultado = {"ok": False,
                          "erro": f"{type(exc).__name__}: {exc}"[:160]}
-    d = _DESKS.get(tid)
-    if d is not None:
-        d.setdefault("testes_canal", {})[nome] = utcnow().isoformat()
+    if nome == "webpush":
+        _persistir_diagnostico_push(tid, assinaturas)
+    _registrar_teste_canal(tid, nome, resultado)
     if not resultado.get("ok"):
         METRICS.inc("notif.teste_falhou")
         raise HTTPException(502, "entrega falhou: "

@@ -423,6 +423,51 @@ class TestNoServico:
         d = r.json()
         assert d["ok"] and d["canal"] == "telegram" and "latencia_ms" in d
 
+    # ----- V9-PWA-03: "último teste" do canal persistido e honesto -----
+
+    def test_ultimo_teste_de_canal_sobrevive_ao_reinicio(self, tmp_path,
+                                                        monkeypatch):
+        m, c, h = self._app(tmp_path, monkeypatch)
+        c.post("/v1/config", headers=h, json={"vars": {
+            "ALERTA_TELEGRAM_TOKEN": "tok", "ALERTA_TELEGRAM_CHAT": "1"}})
+        m._TESTE_CANAL_TRANSPORTES["legacy"] = {"telegram": lambda a: None}
+        r = c.post("/v1/notificacoes/testar", headers=h,
+                   json={"canal": "telegram"})
+        assert r.status_code == 200 and r.json()["ok"] is True
+
+        # Reinício: o registro do teste precisa vir do armazém, não da RAM.
+        importlib.reload(m)
+        m._FAILS.clear()
+        m._DESKS.clear()
+        m._FILAS_ALERTAS.clear()
+        c2 = TestClient(m.app)
+        d = c2.get("/v1/notificacoes/canais", headers=h).json()
+        tg = next(x for x in d["canais"] if x["nome"] == "telegram")
+        assert tg["ultimo_teste"], \
+            "o último teste do canal precisa sobreviver ao reinício"
+        assert tg["ultimo_teste_ok"] is True
+
+    def test_teste_de_canal_falho_fica_registrado_sem_se_disfarcar(
+            self, tmp_path, monkeypatch):
+        m, c, h = self._app(tmp_path, monkeypatch)
+        c.post("/v1/config", headers=h, json={"vars": {
+            "ALERTA_TELEGRAM_TOKEN": "tok", "ALERTA_TELEGRAM_CHAT": "1"}})
+
+        def transporte_quebrado(a):
+            raise RuntimeError("rede fora do ar")
+
+        m._TESTE_CANAL_TRANSPORTES["legacy"] = {
+            "telegram": transporte_quebrado}
+        r = c.post("/v1/notificacoes/testar", headers=h,
+                   json={"canal": "telegram"})
+        assert r.status_code == 502
+
+        d = c.get("/v1/notificacoes/canais", headers=h).json()
+        tg = next(x for x in d["canais"] if x["nome"] == "telegram")
+        assert tg.get("ultimo_teste_ok") is False, \
+            "um teste que falhou não pode aparecer como sucesso"
+        assert tg["ultimo_teste"], "o horário da falha precisa ser registrado"
+
     def test_inbox_e_ack(self, tmp_path, monkeypatch):
         m, c, h = self._app(tmp_path, monkeypatch)
         c.get("/v1/desk/status", headers=h)          # garante a mesa montada
