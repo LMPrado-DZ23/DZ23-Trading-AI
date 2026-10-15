@@ -1,0 +1,67 @@
+..F.......FFF...                                                         [100%]
+================================== FAILURES ===================================
+____ TestServiceWorker.test_troca_de_inscricao_reinscreve_e_marca_pendente ____
+
+self = <tests.test_pwa_static.TestServiceWorker object at 0x000001B4CAC7A870>
+
+    def test_troca_de_inscricao_reinscreve_e_marca_pendente(self):
+        # V9-PWA-05: o navegador pode trocar a inscrição (expiração do
+        # push service). Sem tratamento, o endpoint novo nunca chega ao
+        # servidor e o aparelho para de receber em silêncio. O SW
+        # re-inscreve com a MESMA chave VAPID e deixa o novo destino num
+        # marcador persistente que o painel autenticado consome.
+        fonte = (STATIC / "sw.js").read_text(encoding="utf-8")
+>       assert "pushsubscriptionchange" in fonte
+E       AssertionError: assert 'pushsubscriptionchange' in '/* Service Worker do PWA DZ23 Trading AI — push real + cache MÍNIMO.\n *\n * O QUE ESTE SW FAZ:\n *  - recebe o push ...        return undefined;\n          }\n        }\n        return self.clients.openWindow(url);\n      })\n  );\n});\n'
+
+tests\test_pwa_static.py:45: AssertionError
+__ TestPainelPwa.test_ativar_apos_rotacao_vapid_descarta_assinatura_obsoleta __
+
+self = <tests.test_pwa_static.TestPainelPwa object at 0x000001B4CAC81520>
+
+    def test_ativar_apos_rotacao_vapid_descarta_assinatura_obsoleta(self):
+        # V9-PWA-05: depois de trocar as chaves VAPID, a inscrição antiga do
+        # navegador continua local e o subscribe() com a chave nova é
+        # recusado (InvalidStateError) — sem recuperação, o aparelho nunca
+        # volta a receber. Ativar precisa comparar a chave da inscrição
+        # existente com a atual, cancelar a obsoleta e reinscrever.
+        html = self._html()
+>       assert "getSubscription" in html
+E       assert 'getSubscription' in '<!doctype html>\n<html lang="pt-BR">\n<head>\n<meta charset="utf-8"><meta name="viewport" content="width=device-width.../[&<>"]/g,c=>({\'&\':\'&amp;\',\'<\':\'&lt;\',\'>\':\'&gt;\',\'"\':\'&quot;\'}[c]))}boot();\n</script></body></html>\n'
+
+tests\test_pwa_static.py:114: AssertionError
+____ TestPainelPwa.test_remover_aparelho_cancela_tambem_a_assinatura_local ____
+
+self = <tests.test_pwa_static.TestPainelPwa object at 0x000001B4CAC81BB0>
+
+    def test_remover_aparelho_cancela_tambem_a_assinatura_local(self):
+        # V9-PWA-05: cancelar no painel removia só o registro remoto — a
+        # inscrição local continuava viva e o próximo subscribe()/teste
+        # mentia sobre o estado. O id curto do painel é derivado do endpoint
+        # (sha256[:10]); quando o id removido é o DESTE navegador, a
+        # inscrição local também precisa ser cancelada.
+        html = self._html()
+>       assert "pwaIdCurto" in html
+E       assert 'pwaIdCurto' in '<!doctype html>\n<html lang="pt-BR">\n<head>\n<meta charset="utf-8"><meta name="viewport" content="width=device-width.../[&<>"]/g,c=>({\'&\':\'&amp;\',\'<\':\'&lt;\',\'>\':\'&gt;\',\'"\':\'&quot;\'}[c]))}boot();\n</script></body></html>\n'
+
+tests\test_pwa_static.py:126: AssertionError
+_____ TestPainelPwa.test_marcador_de_reinscricao_e_consumido_pelo_painel ______
+
+self = <tests.test_pwa_static.TestPainelPwa object at 0x000001B4CAC78CE0>
+
+    def test_marcador_de_reinscricao_e_consumido_pelo_painel(self):
+        # V9-PWA-05: a reinscrição feita pelo SW (troca de endpoint sem a
+        # página aberta) só restaura a entrega quando o servidor conhece o
+        # destino novo. O painel (autenticado) consome o marcador persistente
+        # na primeira abertura e registra via /v1/push/assinar.
+        html = self._html()
+>       assert "dz23-push-pendente" in html
+E       assert 'dz23-push-pendente' in '<!doctype html>\n<html lang="pt-BR">\n<head>\n<meta charset="utf-8"><meta name="viewport" content="width=device-width.../[&<>"]/g,c=>({\'&\':\'&amp;\',\'<\':\'&lt;\',\'>\':\'&gt;\',\'"\':\'&quot;\'}[c]))}boot();\n</script></body></html>\n'
+
+tests\test_pwa_static.py:134: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_pwa_static.py::TestServiceWorker::test_troca_de_inscricao_reinscreve_e_marca_pendente
+FAILED tests/test_pwa_static.py::TestPainelPwa::test_ativar_apos_rotacao_vapid_descarta_assinatura_obsoleta
+FAILED tests/test_pwa_static.py::TestPainelPwa::test_remover_aparelho_cancela_tambem_a_assinatura_local
+FAILED tests/test_pwa_static.py::TestPainelPwa::test_marcador_de_reinscricao_e_consumido_pelo_painel
+4 failed, 12 passed in 11.32s

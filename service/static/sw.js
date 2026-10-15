@@ -89,6 +89,65 @@ self.addEventListener("push", (evento) => {
   );
 });
 
+// V9-PWA-05: o push service pode TROCAR a inscrição (expiração do
+// endpoint) sem a página aberta. Sem tratamento, o destino novo nunca
+// chega ao servidor e o aparelho para de receber em silêncio. O SW
+// re-inscreve com a MESMA chave VAPID (a do servidor) e deixa o destino
+// novo num marcador persistente — o painel autenticado (único que tem
+// token) registra no servidor na primeira abertura; nada é apresentado
+// como ativo antes disso.
+const MARCADOR_PENDENTE = "dz23-push-pendente";
+self.addEventListener("pushsubscriptionchange", (evento) => {
+  evento.waitUntil(
+    (async () => {
+      let nova = evento.newSubscription || null;
+      const antiga = evento.oldSubscription || null;
+      if (
+        !nova &&
+        antiga &&
+        antiga.options &&
+        antiga.options.applicationServerKey
+      ) {
+        try {
+          nova = await self.registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: antiga.options.applicationServerKey,
+          });
+        } catch (erro) {
+          nova = null;
+        }
+      }
+      if (!nova) {
+        return;
+      }
+      const json = nova.toJSON ? nova.toJSON() : null;
+      if (!json || !json.endpoint) {
+        return;
+      }
+      try {
+        const cache = await caches.open(MARCADOR_PENDENTE);
+        await cache.put(
+          "/pendente",
+          new Response(
+            JSON.stringify({ endpoint: json.endpoint, keys: json.keys || {} }),
+            { headers: { "content-type": "application/json" } }
+          )
+        );
+      } catch (erro) {
+        // Marcador é melhor-esforço; sem ele o painel reconcilia pelo
+        // estado real (o aparelho aparece sem envios, nunca como ativo).
+      }
+      const janelas = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+      for (const janela of janelas) {
+        janela.postMessage({ tipo: "push-reinscrito" });
+      }
+    })()
+  );
+});
+
 self.addEventListener("notificationclick", (evento) => {
   evento.notification.close();
   const url =

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="16" time="11.312" timestamp="2026-10-15T13:31:12.876898-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_pwa_static.TestServiceWorker" name="test_cache_so_de_estaticos_publicos_e_versionado" time="0.089" /><testcase classname="tests.test_pwa_static.TestServiceWorker" name="test_push_mostra_notificacao_com_tag_e_abre_area_autenticada" time="0.008" /><testcase classname="tests.test_pwa_static.TestServiceWorker" name="test_troca_de_inscricao_reinscreve_e_marca_pendente" time="0.015"><failure message="AssertionError: assert 'pushsubscriptionchange' in '/* Service Worker do PWA DZ23 Trading AI — push real + cache MÍNIMO.\n *\n * O QUE ESTE SW FAZ:\n *  - recebe o push ...        return undefined;\n          }\n        }\n        return self.clients.openWindow(url);\n      })\n  );\n});\n'">self = &lt;tests.test_pwa_static.TestServiceWorker object at 0x000001B4CAC7A870&gt;
+
+    def test_troca_de_inscricao_reinscreve_e_marca_pendente(self):
+        # V9-PWA-05: o navegador pode trocar a inscrição (expiração do
+        # push service). Sem tratamento, o endpoint novo nunca chega ao
+        # servidor e o aparelho para de receber em silêncio. O SW
+        # re-inscreve com a MESMA chave VAPID e deixa o novo destino num
+        # marcador persistente que o painel autenticado consome.
+        fonte = (STATIC / "sw.js").read_text(encoding="utf-8")
+&gt;       assert "pushsubscriptionchange" in fonte
+E       AssertionError: assert 'pushsubscriptionchange' in '/* Service Worker do PWA DZ23 Trading AI — push real + cache MÍNIMO.\n *\n * O QUE ESTE SW FAZ:\n *  - recebe o push ...        return undefined;\n          }\n        }\n        return self.clients.openWindow(url);\n      })\n  );\n});\n'
+
+tests\test_pwa_static.py:45: AssertionError</failure></testcase><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_instalar_comeca_escondido_ate_o_navegador_oferecer" time="0.051" /><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_registra_sw_sem_cache_velho_e_inscreve_push_real" time="0.064" /><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_card_do_aplicativo_com_dica_iphone_e_estados" time="0.052" /><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_endereco_inseguro_degrada_honesto" time="0.046" /><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_fragmento_do_push_tem_consumidor_real_no_painel" time="0.052" /><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_ultimo_teste_do_canal_e_honesto_no_painel" time="0.043" /><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_toast_do_teste_de_canal_declara_a_lacuna_quando_parcial" time="0.056" /><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_ativar_apos_rotacao_vapid_descarta_assinatura_obsoleta" time="0.114"><failure message="assert 'getSubscription' in '&lt;!doctype html&gt;\n&lt;html lang=&quot;pt-BR&quot;&gt;\n&lt;head&gt;\n&lt;meta charset=&quot;utf-8&quot;&gt;&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width.../[&amp;&lt;&gt;&quot;]/g,c=&gt;({\'&amp;\':\'&amp;amp;\',\'&lt;\':\'&amp;lt;\',\'&gt;\':\'&amp;gt;\',\'&quot;\':\'&amp;quot;\'}[c]))}boot();\n&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;\n'">self = &lt;tests.test_pwa_static.TestPainelPwa object at 0x000001B4CAC81520&gt;
+
+    def test_ativar_apos_rotacao_vapid_descarta_assinatura_obsoleta(self):
+        # V9-PWA-05: depois de trocar as chaves VAPID, a inscrição antiga do
+        # navegador continua local e o subscribe() com a chave nova é
+        # recusado (InvalidStateError) — sem recuperação, o aparelho nunca
+        # volta a receber. Ativar precisa comparar a chave da inscrição
+        # existente com a atual, cancelar a obsoleta e reinscrever.
+        html = self._html()
+&gt;       assert "getSubscription" in html
+E       assert 'getSubscription' in '&lt;!doctype html&gt;\n&lt;html lang="pt-BR"&gt;\n&lt;head&gt;\n&lt;meta charset="utf-8"&gt;&lt;meta name="viewport" content="width=device-width.../[&amp;&lt;&gt;"]/g,c=&gt;({\'&amp;\':\'&amp;amp;\',\'&lt;\':\'&amp;lt;\',\'&gt;\':\'&amp;gt;\',\'"\':\'&amp;quot;\'}[c]))}boot();\n&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;\n'
+
+tests\test_pwa_static.py:114: AssertionError</failure></testcase><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_remover_aparelho_cancela_tambem_a_assinatura_local" time="0.066"><failure message="assert 'pwaIdCurto' in '&lt;!doctype html&gt;\n&lt;html lang=&quot;pt-BR&quot;&gt;\n&lt;head&gt;\n&lt;meta charset=&quot;utf-8&quot;&gt;&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width.../[&amp;&lt;&gt;&quot;]/g,c=&gt;({\'&amp;\':\'&amp;amp;\',\'&lt;\':\'&amp;lt;\',\'&gt;\':\'&amp;gt;\',\'&quot;\':\'&amp;quot;\'}[c]))}boot();\n&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;\n'">self = &lt;tests.test_pwa_static.TestPainelPwa object at 0x000001B4CAC81BB0&gt;
+
+    def test_remover_aparelho_cancela_tambem_a_assinatura_local(self):
+        # V9-PWA-05: cancelar no painel removia só o registro remoto — a
+        # inscrição local continuava viva e o próximo subscribe()/teste
+        # mentia sobre o estado. O id curto do painel é derivado do endpoint
+        # (sha256[:10]); quando o id removido é o DESTE navegador, a
+        # inscrição local também precisa ser cancelada.
+        html = self._html()
+&gt;       assert "pwaIdCurto" in html
+E       assert 'pwaIdCurto' in '&lt;!doctype html&gt;\n&lt;html lang="pt-BR"&gt;\n&lt;head&gt;\n&lt;meta charset="utf-8"&gt;&lt;meta name="viewport" content="width=device-width.../[&amp;&lt;&gt;"]/g,c=&gt;({\'&amp;\':\'&amp;amp;\',\'&lt;\':\'&amp;lt;\',\'&gt;\':\'&amp;gt;\',\'"\':\'&amp;quot;\'}[c]))}boot();\n&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;\n'
+
+tests\test_pwa_static.py:126: AssertionError</failure></testcase><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_marcador_de_reinscricao_e_consumido_pelo_painel" time="0.090"><failure message="assert 'dz23-push-pendente' in '&lt;!doctype html&gt;\n&lt;html lang=&quot;pt-BR&quot;&gt;\n&lt;head&gt;\n&lt;meta charset=&quot;utf-8&quot;&gt;&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width.../[&amp;&lt;&gt;&quot;]/g,c=&gt;({\'&amp;\':\'&amp;amp;\',\'&lt;\':\'&amp;lt;\',\'&gt;\':\'&amp;gt;\',\'&quot;\':\'&amp;quot;\'}[c]))}boot();\n&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;\n'">self = &lt;tests.test_pwa_static.TestPainelPwa object at 0x000001B4CAC78CE0&gt;
+
+    def test_marcador_de_reinscricao_e_consumido_pelo_painel(self):
+        # V9-PWA-05: a reinscrição feita pelo SW (troca de endpoint sem a
+        # página aberta) só restaura a entrega quando o servidor conhece o
+        # destino novo. O painel (autenticado) consome o marcador persistente
+        # na primeira abertura e registra via /v1/push/assinar.
+        html = self._html()
+&gt;       assert "dz23-push-pendente" in html
+E       assert 'dz23-push-pendente' in '&lt;!doctype html&gt;\n&lt;html lang="pt-BR"&gt;\n&lt;head&gt;\n&lt;meta charset="utf-8"&gt;&lt;meta name="viewport" content="width=device-width.../[&amp;&lt;&gt;"]/g,c=&gt;({\'&amp;\':\'&amp;amp;\',\'&lt;\':\'&amp;lt;\',\'&gt;\':\'&amp;gt;\',\'"\':\'&amp;quot;\'}[c]))}boot();\n&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;\n'
+
+tests\test_pwa_static.py:134: AssertionError</failure></testcase><testcase classname="tests.test_pwa_static.TestRotasPwa" name="test_sw_js_servido_com_escopo_raiz_e_sem_cache_velho" time="4.933" /><testcase classname="tests.test_pwa_static.TestRotasPwa" name="test_manifest_continua_servido" time="0.480" /><testcase classname="tests.test_pwa_static.TestRotasPwa" name="test_sw_exige_contexto_autenticado_apenas_para_painel_nao_para_o_arquivo" time="0.466" /></testsuite></testsuites>

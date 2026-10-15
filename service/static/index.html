@@ -755,6 +755,11 @@ async function manualHealth(){const r=await api('/v1/manual/monitor/health');if(
 function manualFecharDetalhe(){manualSel=null;manualVer=null;$('manualDetalheCard').classList.add('hide')}
 let pwaPrompt=null;
 window.addEventListener('beforeinstallprompt',evento=>{evento.preventDefault();pwaPrompt=evento;const b=$('btnPwaInstalar');if(b)b.classList.remove('hide')});
+// V9-PWA-05: o SW avisa quando o navegador TROCOU a inscrição de push sem a
+// página aberta (pushsubscriptionchange). O SW não tem token para registrar
+// no servidor — só o painel autenticado pode. Ao receber o aviso, o painel
+// consome o marcador persistente e registra o destino novo.
+if('serviceWorker' in navigator){navigator.serviceWorker.addEventListener('message',evento=>{if(evento.data&&evento.data.tipo==='push-reinscrito'){pwaProcessarPendente().then(()=>pwaLoad())}})}
 // O push abre /app#notificacoes (sw.js e URL_DO_TOQUE do backend); sem este
 // consumidor o fragmento morre em silêncio. replaceState limpa o hash para
 // que um novo toque no MESMO alerta dispare hashchange de novo e reabra a
@@ -762,10 +767,31 @@ window.addEventListener('beforeinstallprompt',evento=>{evento.preventDefault();p
 function consumirHashNotificacao(){if(location.hash!=='#notificacoes')return;history.replaceState(null,'',location.pathname+location.search);abrirPagina('config');const alvo=$('notifInbox');if(alvo&&alvo.scrollIntoView)alvo.scrollIntoView({block:'center'})}
 window.addEventListener('hashchange',consumirHashNotificacao);
 function pwaB64u(valor){const b64=(valor+'='.repeat((4-valor.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/');const cru=atob(b64);return Uint8Array.from(cru,c=>c.charCodeAt(0))}
+function pwaB64uDe(buffer){const bytes=new Uint8Array(buffer);let cru='';for(const b of bytes)cru+=String.fromCharCode(b);return btoa(cru).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
 function pwaRegistrarSW(){if(!('serviceWorker' in navigator)||!window.isSecureContext)return Promise.resolve(null);return navigator.serviceWorker.register('/sw.js',{updateViaCache:'none'}).catch(()=>null)}
+// V9-PWA-05: mesmo identificador curto do servidor (sha256[:10] do endpoint).
+async function pwaIdCurto(endpoint){if(!crypto.subtle)return '';const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(endpoint));return [...new Uint8Array(d)].map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,10)}
+// V9-PWA-05: marcador deixado pelo SW quando ele reinscreveu o push sem a
+// página aberta. Só o painel autenticado (que tem token) registra no servidor.
+async function pwaProcessarPendente(){
+  if(!('caches' in window))return;
+  let cache=null;
+  try{cache=await caches.open('dz23-push-pendente')}catch(erro){return}
+  const resposta=await cache.match('/pendente');
+  if(!resposta)return;
+  let dados=null;
+  try{dados=await resposta.json()}catch(erro){dados=null}
+  if(!dados||!dados.endpoint||!(dados.keys||{}).p256dh)return;
+  const rotulo=(/iPhone|iPad|iPod/.test(navigator.userAgent)?'iPhone/iPad':/Android/.test(navigator.userAgent)?'Android':'Computador')+' — '+new Date().toLocaleDateString('pt-BR');
+  const salvo=await api('/v1/push/assinar',{method:'POST',body:JSON.stringify({endpoint:dados.endpoint,keys:dados.keys,rotulo})});
+  if(!salvo.ok)return;
+  await cache.delete('/pendente');
+  toast('O navegador renovou a inscrição de push deste aparelho — registro atualizado no servidor.','ok');
+}
 async function pwaInstalar(){if(!pwaPrompt)return;await pwaPrompt.prompt();pwaPrompt=null;const b=$('btnPwaInstalar');if(b)b.classList.add('hide')}
 function pwaPermissaoTexto(){if(!('Notification' in window))return 'sem suporte a notificações do navegador';return {granted:'ativada',denied:'bloqueada pelo navegador',default:'ainda não pedida'}[Notification.permission]||String(Notification.permission)}
 async function pwaLoad(){
+  await pwaProcessarPendente();
   const linhas=[];
   const seguro=!!window.isSecureContext,temSW='serviceWorker' in navigator,temPush='PushManager' in window&&'Notification' in window;
   if(!seguro)linhas.push('<b class="warn">endereço inseguro</b> — push e instalação exigem HTTPS ou localhost; neste endereço o navegador não permite');
@@ -795,6 +821,13 @@ async function pwaAtivar(){
   if(await Notification.requestPermission()!=='granted')return toast('Permissão bloqueada — libere as notificações deste site nas configurações do navegador.','warn');
   const r=await api('/v1/push/estado');if(!r.ok)return toast(r.data.detail||'Falha ao ler o estado do push','bad');
   if(!r.data.vapid_publica)return toast('Gere as chaves VAPID primeiro e tente de novo.','warn');
+  // V9-PWA-05: se as chaves VAPID foram trocadas, a inscrição antiga continua
+  // local e o subscribe() com a chave nova é recusado (InvalidStateError) —
+  // sem descartar a obsoleta o aparelho nunca volta a receber. O servidor já
+  // zerou as assinaturas ao forçar chaves novas; aqui limpamos o lado do
+  // navegador para reinscrever com a chave atual.
+  const anterior=await reg.pushManager.getSubscription();
+  if(anterior){const chaveAntiga=(anterior.options&&anterior.options.applicationServerKey)?pwaB64uDe(anterior.options.applicationServerKey):'';if(chaveAntiga&&chaveAntiga!==r.data.vapid_publica){try{await anterior.unsubscribe()}catch(erro){}}}
   let assinatura;
   try{assinatura=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:pwaB64u(r.data.vapid_publica)})}
   catch(erro){return toast('O navegador recusou a inscrição: '+(erro&&erro.message||erro),'bad')}
@@ -819,10 +852,14 @@ async function pwaGerarChaves(){
   toast('Chaves VAPID geradas. Agora toque em Ativar notificações neste aparelho.','ok');
   pwaLoad();
 }
+// V9-PWA-05: remover o aparelho no painel cancelava só o registro remoto —
+// a inscrição local continuava viva e o próximo teste mentia sobre o estado.
+async function pwaCortarLocalRemovido(id){try{const reg=await navigator.serviceWorker.getRegistration('/');const local=reg?await reg.pushManager.getSubscription():null;if(local&&await pwaIdCurto(local.endpoint)===id)await local.unsubscribe()}catch(erro){}}
 async function pwaCancelar(id){
   if(!confirm('Remover este aparelho das notificações?'))return;
   const r=await api('/v1/push/cancelar',{method:'POST',body:JSON.stringify({id})});
   if(!r.ok)return toast(r.data.detail||'Falha ao remover o aparelho','bad');
+  await pwaCortarLocalRemovido(id);
   toast('Aparelho removido.','ok');
   pwaLoad();
 }
