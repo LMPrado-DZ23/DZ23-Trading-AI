@@ -72,3 +72,21 @@ Se a estratégia for rejeitada pela triagem, o veredito registrado é **"não su
 - `timeframe` é declarativo: o laboratório não deriva o timeframe das barras; a coerência entre `timeframe` e a série fornecida é responsabilidade do chamador (auditável no registro).
 - `detectar_lookahead` detecta vazamento por perturbação de truncamento; não substitui revisão de código do pipeline (é evidência adicional, não prova de ausência total).
 - Nenhum modelo de IA pesado foi introduzido (§5): as ferramentas são Python puro; o laboratório não promove ninguém automaticamente.
+
+## 6. Divergência de modelo de taxas DZ23 × convenção por ponta (V9-QUANT-07)
+
+Medição offline e determinística, sem rede, credenciais ou execução financeira — a ferramenta [`tools/v9_quant07_divergencia_custos.py`](../../tools/v9_quant07_divergencia_custos.py) compara três contabilidades para a MESMA operação (1 unidade, entrada a 100, taxa 0,1% por ponta):
+
+| Contabilidade | Ganho (saída 110) | Perda (saída 90) |
+|---|---|---|
+| DZ23 (`ModeloDeCusto.ida_e_volta` = 2×fixo sobre o principal) | +9,800 | −10,200 |
+| Referência por ponta (taxa de saída sobre o valor vendido) | +9,79 | −10,19 |
+| Freqtrade 2026.9 real (`LocalTrade.calculate_profit`, fonte primária) | **+9.79** (`profit_ratio 0.0978022`) | **−10.19** (`profit_ratio −0.1017982`) |
+
+- **Causa única:** o Freqtrade cobra `fee_close` sobre o valor de **saída**; o DZ23 desconta as duas pontas fixas sobre o principal (notional inicial).
+- **Magnitude exata:** `|DZ23 − por-ponta| = taxa × retorno_bruto` (0,0001 de fração no ganho a ±10%; −0,0001 na perda). Não é ruído — é o termo de primeira ordem que o modelo DZ23 ignora.
+- **Direção:** DZ23 é levemente **otimista em ganhos** e **conservador em perdas** (marca prejuízo maior). Para uma escola que decide com margem de segurança, o lado do erro que importa — perder dinheiro — está protegido.
+- **Decisão:** MANTER o modelo de primeira ordem (`FQ-0-MATRIZ-PARIDADE.md`: costs = "MANTER COMO ESTÁ"; `tests/test_desk_custos.py` pinava a fórmula desde antes). Mudar a semântica de `retorno_liquido` alteraria o significado dos `Desfecho` já registrados na Escola para ganhar um ponto-base de acurácia — custo de mudança maior que o erro.
+- **O que NÃO se pode afirmar:** equivalência exata de taxas com o Freqtrade. O que se pode — e está pinado por [tests/test_v9_quant07_divergencia_custos.py](../../tests/test_v9_quant07_divergencia_custos.py) (7 testes) — é a divergência exata, a direção conservadora e a guarda anti-mudança-silenciosa da fórmula.
+
+Evidências: `docs/mission/evidence/v9-baseline/v9-quant07-probe-repo.json` (+`.log`, ambiente do repositório, `freqtrade.disponivel: false`) e `v9-quant07-probe-freqtrade.json` (+`.log`, ambiente do spike isolado, Freqtrade 2026.9/GPLv3 em processo separado — nenhum código GPL entra no repositório).

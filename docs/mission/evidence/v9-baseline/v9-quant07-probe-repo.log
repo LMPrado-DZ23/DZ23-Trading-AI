@@ -1,0 +1,56 @@
+{
+  "achado": "V9-QUANT-07",
+  "cenario": {
+    "quantidade": "1",
+    "entrada": "100",
+    "taxa_por_ponta": "0.001",
+    "notional_inicial": "100"
+  },
+  "ganho": {
+    "saida": "110",
+    "dz23": {
+      "convencao": "duas taxas sobre o notional inicial (ida_e_volta = 2 x taxa)",
+      "bruto_fracao": "0.1",
+      "ida_e_volta": "0.002",
+      "liquido_fracao": "0.098",
+      "liquido_unidades": "9.800"
+    },
+    "referencia_por_ponta": {
+      "convencao": "taxa de cada ponta sobre o notional da propria ponta (referencia Freqtrade)",
+      "desembolso_compra": "100.100",
+      "venda_liquida": "109.890",
+      "liquido_unidades": "9.790"
+    },
+    "freqtrade": {
+      "disponivel": false
+    },
+    "divergencia_unidades": "0.010",
+    "divergencia_fracao": "0.0001",
+    "divergencia_formula": "taxa * bruto = 0.001 * 0.1",
+    "direcao": "DZ23 otimista em ganhos por exatamente taxa*bruto"
+  },
+  "perda": {
+    "saida": "90",
+    "dz23": {
+      "convencao": "duas taxas sobre o notional inicial (ida_e_volta = 2 x taxa)",
+      "bruto_fracao": "-0.1",
+      "ida_e_volta": "0.002",
+      "liquido_fracao": "-0.102",
+      "liquido_unidades": "-10.200"
+    },
+    "referencia_por_ponta": {
+      "convencao": "taxa de cada ponta sobre o notional da propria ponta (referencia Freqtrade)",
+      "desembolso_compra": "100.100",
+      "venda_liquida": "89.910",
+      "liquido_unidades": "-10.190"
+    },
+    "freqtrade": {
+      "disponivel": false
+    },
+    "divergencia_unidades": "-0.010",
+    "divergencia_fracao": "-0.0001",
+    "divergencia_formula": "taxa * bruto = 0.001 * -0.1",
+    "direcao": "DZ23 pessimista em perdas (conservador para capital)"
+  },
+  "interpretacao": "a diferenca entre as duas convencoes e exatamente taxa*bruto da fracao (segunda ordem): o modelo DZ23 de primeira ordem e conservador em perdas e levemente otimista em ganhos; nenhuma alegacao de equivalencia EXATA de taxas com o Freqtrade pode ignorar esta diferenca"
+}
