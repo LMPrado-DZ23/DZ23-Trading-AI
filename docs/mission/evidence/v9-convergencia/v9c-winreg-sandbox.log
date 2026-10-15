@@ -1,0 +1,18 @@
+...F.                                                                    [100%]
+================================== FAILURES ===================================
+____________________ test_identidade_registrada_no_windows ____________________
+
+    @pytest.mark.skipif(sys.platform != "win32", reason="registro é do Windows")
+    def test_identidade_registrada_no_windows():
+        import winreg
+    
+        from tradingagents.desk.canais_alerta import AUMID, registrar_identidade_windows
+    
+        resultado = registrar_identidade_windows()
+>       assert resultado["ok"] is True
+E       assert False is True
+
+tests\windows\test_notificacoes_identidade_win.py:61: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/windows/test_notificacoes_identidade_win.py::test_identidade_registrada_no_windows
+1 failed, 4 passed in 0.53s
