@@ -204,6 +204,8 @@ class TestMigracaoDoConfigLegado:
         monkeypatch.delenv("ALERTA_TELEGRAM_TOKEN", raising=False)
         m, c = _app(tmp_path, monkeypatch)
         outro_path = m.tenant_cfg_path("outro-tenant")
+        # V9-SEC-05: tenant_cfg_path não cria mais diretório ao ser lido.
+        outro_path.parent.mkdir(parents=True, exist_ok=True)
         outro_path.write_text(json.dumps({
             "ALERTA_TELEGRAM_TOKEN": TOKEN_ILEGIVEL,
         }), encoding="utf-8")

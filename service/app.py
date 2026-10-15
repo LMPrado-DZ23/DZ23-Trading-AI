@@ -11,6 +11,7 @@ import ipaddress
 import json
 import logging
 import os
+import re
 import secrets
 import threading
 import time
@@ -648,12 +649,19 @@ def resolve_llm(cfg: dict):
     return conf, env
 
 
+_TENANT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _tenant_id_valido(tenant_id: str) -> bool:
+    return bool(_TENANT_ID_RE.fullmatch(str(tenant_id)))
+
+
 def tenant_cfg_path(tenant_id: str = "legacy") -> Path:
     if tenant_id == "legacy":
         return CFG_PATH
-    path = DATA / "tenants" / tenant_id / "config.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    return path
+    if not _tenant_id_valido(tenant_id):
+        raise ValueError("identificador de inquilino inválido")
+    return DATA / "tenants" / tenant_id / "config.json"
 
 
 # Segredo cifrado que não pôde ser decifrado NESTE contexto (outro usuário
@@ -744,16 +752,34 @@ _TRADING_AGENT_IDS = (
 _AGENCY_LLM_AGENT_IDS = _GENERAL_AGENT_IDS + _TRADING_AGENT_IDS
 
 
+class _LLMIndisponivelHandler:
+    """Recusa execução quando não há LLM válido — nunca reusa chave removida."""
+
+    def __init__(self, motivo: str):
+        self.motivo = motivo
+
+    def __call__(self, task):
+        raise RuntimeError(f"LLM da agência indisponível — {self.motivo}")
+
+
+def _agencia_llm_fail_closed(runtime, motivo: str) -> None:
+    runtime.agency._agencia_llm_assinatura = None
+    recusa = _LLMIndisponivelHandler(motivo)
+    for agent_id in _AGENCY_LLM_AGENT_IDS:
+        runtime.agency.executor.handlers.pop(agent_id, None)
+        with contextlib.suppress(KeyError):
+            runtime.agency.register_task_handler(agent_id, recusa)
+
+
 def configure_agency_llm(runtime, tenant_id: str) -> str | None:
     """Configura handlers LLM por instância; retorna diagnóstico sem segredo."""
-    if all(agent_id in runtime.agency.executor.handlers for agent_id in _AGENCY_LLM_AGENT_IDS):
-        return None
     try:
         cfg = load_cfg(tenant_id)
         conf, resolved_env = resolve_llm(cfg)
         provider = str(conf.get("llm_provider", "")).strip()
         model = str(conf.get("quick_think_llm") or conf.get("deep_think_llm") or "").strip()
         if not provider or not model:
+            _agencia_llm_fail_closed(runtime, "modo de pensar não configurado")
             return "LLM não configurado para a agência"
         api_key = resolved_env.get("OPENAI_COMPATIBLE_API_KEY")
         if not api_key:
@@ -761,6 +787,13 @@ def configure_agency_llm(runtime, tenant_id: str) -> str | None:
                 if cfg.get(key_name):
                     api_key = cfg[key_name]
                     break
+        assinatura = (provider, model, str(conf.get("backend_url") or ""), api_key or "")
+        handlers = runtime.agency.executor.handlers
+        if (
+            getattr(runtime.agency, "_agencia_llm_assinatura", None) == assinatura
+            and all(agent_id in handlers for agent_id in _AGENCY_LLM_AGENT_IDS)
+        ):
+            return None
         role_by_agent = {
             "research-agent": "pesquisa empresarial",
             "news-agent": "inteligência de notícias",
@@ -786,8 +819,8 @@ def configure_agency_llm(runtime, tenant_id: str) -> str | None:
             "reconciliation-agent": "reconciliação Paper/Testnet",
         }
         for agent_id in _AGENCY_LLM_AGENT_IDS:
-            if agent_id in runtime.agency.executor.handlers:
-                continue
+            handlers.pop(agent_id, None)
+        for agent_id in _AGENCY_LLM_AGENT_IDS:
             runtime.agency.register_task_handler(
                 agent_id,
                 build_llm_handler(
@@ -798,9 +831,11 @@ def configure_agency_llm(runtime, tenant_id: str) -> str | None:
                     api_key=api_key,
                 ),
             )
+        runtime.agency._agencia_llm_assinatura = assinatura
         return None
     except Exception as exc:
         LOGGER.warning("LLM da agência indisponível para tenant %s: %s", tenant_id, type(exc).__name__)
+        _agencia_llm_fail_closed(runtime, type(exc).__name__)
         return f"LLM da agência indisponível ({type(exc).__name__})"
 
 def save_cfg(cfg: dict, tenant_id: str = "legacy"):
@@ -2402,6 +2437,11 @@ def _revisor_de_ia(tenant_id: str, cfg: dict):
         motivo_bloqueio = _ia_bloqueio(tenant_id)
         if motivo_bloqueio:
             raise RuntimeError(motivo_bloqueio)
+        # V9-SEC-07: credencial VIVA — a foto do boot não pode ressuscitar
+        # provedor/chave removidos no painel entre a rota e a revisão.
+        cfg_vivo = load_cfg(tenant_id)
+        if not cfg_vivo.get("TRADINGAGENTS_LLM_PROVIDER"):
+            raise RuntimeError("provedor de IA removido — revisão suspensa")
         from service.api.ia_provedores import consultar_ia
 
         prompt = (
@@ -2411,7 +2451,7 @@ def _revisor_de_ia(tenant_id: str, cfg: dict):
             "preço, alvo ou ordem nova e não invente dados que não estão "
             "nos fatos.\n"
             f"Fatos: {json.dumps(fatos, ensure_ascii=False)}")
-        texto, meta = consultar_ia(cfg, prompt)
+        texto, meta = consultar_ia(cfg_vivo, prompt)
         with contextlib.suppress(Exception):
             IA_USO.registrar(tenant_id, meta)
         return texto
@@ -2545,13 +2585,16 @@ def _desk_boot(tenant_id: str) -> dict:
             if motivo_bloqueio:
                 raise RuntimeError(
                     f"IA de contexto suspensa — {motivo_bloqueio}")
+            # V9-SEC-07: lê a credencial VIVA — chave removida no painel não
+            # pode ser ressuscitada pela foto do boot.
+            cfg_vivo = load_cfg(tenant_id)
             from service.api.ia_provedores import consultar_ia
 
             inicio = time.perf_counter()
             ok = False
-            provedor_registrado = cfg.get("TRADINGAGENTS_LLM_PROVIDER")
+            provedor_registrado = cfg_vivo.get("TRADINGAGENTS_LLM_PROVIDER")
             try:
-                texto, meta = consultar_ia(cfg, prompt)
+                texto, meta = consultar_ia(cfg_vivo, prompt)
                 ok = True
                 provedor_registrado = meta.get("provedor") or provedor_registrado
                 # V8 §6: consumo/custo estimado por inquilino (informativo).
@@ -4760,6 +4803,8 @@ def pagina_publica(tenant_id: str):
     Num mercado cheio de promessa vazia, mostrar o resultado real — com as
     perdas — é o argumento de venda mais forte que existe.
     """
+    if not _tenant_id_valido(tenant_id):
+        raise HTTPException(404, "agência não encontrada")
     cfg = load_cfg(tenant_id)
     if (cfg.get("TRANSPARENCIA_PUBLICA") or "").strip().lower() != "true":
         raise HTTPException(404, "esta agência não publicou seus resultados")
