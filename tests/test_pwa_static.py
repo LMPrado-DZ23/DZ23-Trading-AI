@@ -28,6 +28,17 @@ class TestServiceWorker:
         assert "/v1" not in codigo
         assert "caches.delete" in fonte  # purga de versões antigas no activate
 
+    def test_ativacao_remove_apenas_caches_do_proprio_app(self):
+        # V9-PWA-06: a purga de ativação apagava QUALQUER cache que não fosse
+        # o CACHE atual — inclusive caches de outro app no mesmo domínio
+        # (cache sentinela alheio) e o marcador persistente
+        # "dz23-push-pendente" da reinscrição (V9-PWA-05). A purga passa a
+        # ser escopada à família de caches do DZ23 ("dz23-pwa-"): alheios e
+        # o marcador sobrevivem por construção (o marcador não casa o prefixo).
+        fonte = (STATIC / "sw.js").read_text(encoding="utf-8")
+        assert 'startsWith("dz23-pwa-")' in fonte
+        assert "chaves.filter((k) => k !== CACHE)" not in fonte
+
     def test_push_mostra_notificacao_com_tag_e_abre_area_autenticada(self):
         fonte = (STATIC / "sw.js").read_text(encoding="utf-8")
         assert "showNotification" in fonte

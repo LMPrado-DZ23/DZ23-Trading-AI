@@ -9,7 +9,9 @@
  *    resposta com credencial — nenhum segredo entra no Cache Storage;
  *  - operar na corretora: o toque na notificação só abre o painel.
  *
- * VERSIONAMENTO: trocar CACHE descarta os caches antigos no activate.
+ * VERSIONAMENTO: trocar CACHE descarta no activate apenas as versões
+ * antigas desta família de caches ("dz23-pwa-*") — nunca caches de
+ * outros apps no mesmo domínio nem o marcador de push pendente.
  */
 const CACHE = "dz23-pwa-v1";
 const ESTATICOS = [
@@ -33,13 +35,19 @@ self.addEventListener("install", (evento) => {
   );
 });
 
+// V9-PWA-06: a purga é ESCOPADA à família de caches deste app
+// ("dz23-pwa-*"). Um cache de outro app no mesmo domínio e o marcador
+// persistente da reinscrição (dz23-push-pendente) sobrevivem à ativação;
+// só versões antigas deste Service Worker são descartadas.
 self.addEventListener("activate", (evento) => {
   evento.waitUntil(
     caches
       .keys()
       .then((chaves) =>
         Promise.all(
-          chaves.filter((k) => k !== CACHE).map((k) => caches.delete(k))
+          chaves
+            .filter((k) => k.startsWith("dz23-pwa-") && k !== CACHE)
+            .map((k) => caches.delete(k))
         )
       )
       .then(() => self.clients.claim())
