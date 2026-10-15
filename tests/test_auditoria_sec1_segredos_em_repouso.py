@@ -21,6 +21,7 @@ import importlib
 import json
 import os
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -183,6 +184,61 @@ class TestMigracaoDoConfigLegado:
         assert m.load_cfg("legacy")["ALERTA_TELEGRAM_TOKEN"] == "999:BBB-fresco"
         d = c.get("/v1/config", headers=H).json()
         assert "ALERTA_TELEGRAM_TOKEN" not in d["segredos_em_repouso"]["ilegiveis"]
+
+    @pytest.mark.parametrize("remover", [False, True], ids=["substituicao", "exclusao"])
+    def test_sem_dpapi_atualiza_ilegiveis_so_da_chave_alterada(
+            self, tmp_path, monkeypatch, remover):
+        """V9-CI-02: o caminho POSIX também é exercitado no Windows.
+
+        Re-colar/remover limpa o diagnóstico antigo, não outras credenciais
+        ilegíveis nem o registro do mesmo segredo em outro inquilino.
+        """
+        # V9 SEC-03 endureceu `cifrar`: no Windows, a AUSÊNCIA de DPAPI agora
+        # RECUSA gravar em claro. Simular só `tem_protecao()=False` deixou de
+        # reproduzir o POSIX — o `sys.platform` real segue "win32" e a recusa
+        # entra no meio. A simulação honesta do POSIX (o que o docstring
+        # promete) é: sem DPAPI E sem ser Windows. As asserções seguem intactas.
+        monkeypatch.setattr(segredos_em_repouso, "tem_protecao", lambda: False)
+        monkeypatch.setattr(segredos_em_repouso, "sys",
+                            SimpleNamespace(platform="linux"))
+        monkeypatch.delenv("ALERTA_TELEGRAM_TOKEN", raising=False)
+        m, c = _app(tmp_path, monkeypatch)
+        outro_path = m.tenant_cfg_path("outro-tenant")
+        outro_path.write_text(json.dumps({
+            "ALERTA_TELEGRAM_TOKEN": TOKEN_ILEGIVEL,
+        }), encoding="utf-8")
+        m.load_cfg("outro-tenant")
+        outro_registro = dict(m._SEGREDOS_ILEGIVEIS["outro-tenant"])
+        assert set(outro_registro) == {"ALERTA_TELEGRAM_TOKEN"}
+        outro_antes = outro_path.read_bytes()
+
+        (tmp_path / "config.json").write_text(json.dumps({
+            "ALERTA_TELEGRAM_TOKEN": TOKEN_ILEGIVEL,
+            "GROQ_API_KEY": TOKEN_ILEGIVEL,
+        }), encoding="utf-8")
+        m.load_cfg("legacy")
+        assert set(m._SEGREDOS_ILEGIVEIS["legacy"]) == {
+            "ALERTA_TELEGRAM_TOKEN", "GROQ_API_KEY"}
+        groq_antes = m._SEGREDOS_ILEGIVEIS["legacy"]["GROQ_API_KEY"]
+
+        pedido = ({"remover": ["ALERTA_TELEGRAM_TOKEN"]} if remover else
+                  {"vars": {"ALERTA_TELEGRAM_TOKEN": TELEGRAM}})
+        assert c.post("/v1/config", headers=H, json=pedido).status_code == 200
+        cfg = m.load_cfg("legacy")
+        no_disco = _config_no_disco(tmp_path)
+        esperado = None if remover else TELEGRAM
+        assert cfg.get("ALERTA_TELEGRAM_TOKEN") == esperado
+        assert no_disco.get("ALERTA_TELEGRAM_TOKEN") == esperado
+        assert cfg["GROQ_API_KEY"] == no_disco["GROQ_API_KEY"] == TOKEN_ILEGIVEL
+        assert m._SEGREDOS_ILEGIVEIS["outro-tenant"] == outro_registro
+        assert outro_path.read_bytes() == outro_antes
+        assert m._SEGREDOS_ILEGIVEIS["legacy"]["GROQ_API_KEY"] == groq_antes
+        assert "ALERTA_TELEGRAM_TOKEN" not in m._SEGREDOS_ILEGIVEIS["legacy"]
+
+        d = c.get("/v1/config", headers=H).json()
+        assert d["segredos_em_repouso"]["ilegiveis"] == {"GROQ_API_KEY": groq_antes}
+        assert d["config"]["ALERTA_TELEGRAM_TOKEN"]["set"] is (not remover)
+        assert d["config"]["GROQ_API_KEY"]["set"] is True
 
     def test_blob_valido_ilegivel_aqui_nao_e_apagado(self, tmp_path, monkeypatch):
         """Blob que PARECE cifrado de verdade (vem de outra máquina/usuário):

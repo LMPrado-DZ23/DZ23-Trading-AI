@@ -6,15 +6,76 @@ mesmo .tmp — a primeira o consumia no replace e a segunda estourava
 FileNotFoundError. Passava no Python 3.13 e falhava no 3.10/3.11/3.12: puro
 acaso de temporização.
 
+V9-TEST-03: no Windows o `os.replace` do escritor nega aberturas
+concorrentes com PermissionError transitório (medido em
+docs/mission/evidence/v9-baseline/v9-test03-probe.log). A prova de leitura
+espera e re-tenta negação transitória, só reprova negação persistente — e
+nenhuma exceção pode encerrar a thread leitora em silêncio (era o defeito:
+a thread morria, o warning ficava escondido e "8 passed" virava prova oca).
+
 Estes testes não dependem de sorte: forçam a concorrência.
 """
 from __future__ import annotations
 
 import json
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+import pytest
 
 from tradingagents.desk.storage import ArmazemDeEstado, escrever_json_atomico
+
+_MAX_NEGACOES = 100
+_PAUSA_LEITURA_S = 0.001
+
+
+def _vigiar_leitura(alvo: Path, parar: threading.Event,
+                    problemas: list[str], transitorios: list[str]) -> None:
+    """Lê `alvo` até `parar`; toda anomalia vira registro — nunca morte muda.
+
+    No Windows o `os.replace` do escritor nega aberturas concorrentes com
+    PermissionError transitório (medido em v9-test03-probe.log). Leitura
+    espaçada a 1 ms dá folga ao orçamento de retentativas do escritor;
+    negação que insiste além de `_MAX_NEGACOES` leituras seguidas vira
+    problema visível em vez de sumir.
+    """
+    negacoes = 0
+    while not parar.is_set():
+        try:
+            json.loads(alvo.read_text(encoding="utf-8"))
+            negacoes = 0
+        except ValueError:
+            problemas.append("json incompleto observado")
+        except FileNotFoundError:
+            problemas.append("arquivo sumiu durante a troca")
+        except PermissionError as exc:
+            negacoes += 1
+            transitorios.append(str(exc))
+            if negacoes >= _MAX_NEGACOES:
+                problemas.append(
+                    f"leitura negada persistentemente pelo SO "
+                    f"({negacoes} seguidas): {exc!r}")
+                return
+        except Exception as exc:
+            problemas.append(f"exceção inesperada na leitura: {exc!r}")
+            return
+        parar.wait(_PAUSA_LEITURA_S)
+
+
+def _injeta_negacoes(monkeypatch, alvo: Path, negacoes: int) -> None:
+    """Faz o `read_text` do `alvo` negar as PRIMEIRAS `negacoes` chamadas."""
+    original = Path.read_text
+    restantes = [negacoes]
+
+    def falso(self, *args, **kwargs):
+        if self == alvo and restantes[0] > 0:
+            restantes[0] -= 1
+            raise PermissionError(13, "Permission denied (injetado)")
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", falso)
 
 
 class TestEscritaAtomica:
@@ -37,18 +98,11 @@ class TestEscritaAtomica:
         alvo = tmp_path / "estado.json"
         escrever_json_atomico(alvo, {"inicial": True})
         problemas: list[str] = []
+        transitorios: list[str] = []
         parar = threading.Event()
-
-        def leitor():
-            while not parar.is_set():
-                try:
-                    json.loads(alvo.read_text())
-                except ValueError:
-                    problemas.append("json incompleto observado")
-                except FileNotFoundError:
-                    problemas.append("arquivo sumiu durante a troca")
-
-        t = threading.Thread(target=leitor, daemon=True)
+        t = threading.Thread(target=_vigiar_leitura,
+                             args=(alvo, parar, problemas, transitorios),
+                             daemon=True)
         t.start()
         try:
             for i in range(150):
@@ -56,7 +110,9 @@ class TestEscritaAtomica:
         finally:
             parar.set()
             t.join(timeout=5)
-        assert not problemas, problemas[:3]
+        assert not t.is_alive(), "a thread leitora não terminou"
+        assert not problemas, (problemas[:3],
+                               f"negações transitórias: {len(transitorios)}")
 
     def test_no_orphan_temp_files_are_left(self, tmp_path):
         alvo = tmp_path / "estado.json"
@@ -82,6 +138,69 @@ class TestEscritaAtomica:
         alvo = tmp_path / "a" / "b" / "c.json"
         escrever_json_atomico(alvo, {"ok": True})
         assert alvo.exists()
+
+
+class TestProvaDeLeituraNuncaMorreEmSilencio:
+    """Meta-testes da própria prova: negação transitória é registrada e
+    recuperada; negação persistente vira problema visível — em nenhum caso
+    a thread leitora morre em silêncio."""
+
+    def test_negacao_transitoria_e_registrada_e_recuperada(self, tmp_path,
+                                                           monkeypatch):
+        alvo = tmp_path / "estado.json"
+        escrever_json_atomico(alvo, {"ok": True})
+        _injeta_negacoes(monkeypatch, alvo, 1)
+        problemas: list[str] = []
+        transitorios: list[str] = []
+        parar = threading.Event()
+        t = threading.Thread(target=_vigiar_leitura,
+                             args=(alvo, parar, problemas, transitorios),
+                             daemon=True)
+        t.start()
+        limite = time.monotonic() + 2
+        while (t.is_alive() and not transitorios and not problemas
+               and time.monotonic() < limite):
+            time.sleep(0.01)
+        parar.set()
+        t.join(timeout=5)
+        assert not t.is_alive()
+        assert len(transitorios) == 1, transitorios
+        assert not problemas, problemas
+
+    def test_negacao_persistente_vira_problema_visivel(self, tmp_path,
+                                                       monkeypatch):
+        alvo = tmp_path / "estado.json"
+        escrever_json_atomico(alvo, {"ok": True})
+        _injeta_negacoes(monkeypatch, alvo, 10**9)
+        problemas: list[str] = []
+        transitorios: list[str] = []
+        parar = threading.Event()
+        t = threading.Thread(target=_vigiar_leitura,
+                             args=(alvo, parar, problemas, transitorios),
+                             daemon=True)
+        t.start()
+        t.join(timeout=10)
+        assert not t.is_alive(), "deveria desistir após o teto de negações"
+        assert any("persistentemente" in p for p in problemas), problemas
+
+
+class TestLeituraDoArmazemSobDisputa:
+    """`carregar` convive com a mesma corrida do Windows que o escritor:
+    negação transitória não pode derrubar a leitura, persistente falha alto."""
+
+    def test_negacao_transitoria_ainda_entrega_o_documento(self, tmp_path,
+                                                           monkeypatch):
+        armazem = ArmazemDeEstado(None, diretorio=tmp_path)
+        armazem.salvar("tenant-1", "mesa", {"ciclo": 7})
+        _injeta_negacoes(monkeypatch, tmp_path / "tenant-1" / "mesa.json", 1)
+        assert armazem.carregar("tenant-1", "mesa") == {"ciclo": 7}
+
+    def test_negacao_persistente_falha_alto(self, tmp_path, monkeypatch):
+        armazem = ArmazemDeEstado(None, diretorio=tmp_path)
+        armazem.salvar("tenant-1", "mesa", {"ciclo": 7})
+        _injeta_negacoes(monkeypatch, tmp_path / "tenant-1" / "mesa.json", 10**9)
+        with pytest.raises(PermissionError):
+            armazem.carregar("tenant-1", "mesa")
 
 
 class TestArmazemSobConcorrencia:

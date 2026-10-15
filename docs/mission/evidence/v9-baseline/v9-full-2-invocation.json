@@ -1,0 +1,38 @@
+{
+  "label": "v9-full-2",
+  "head": "2b7754a94cc1e4233ad95ac6fa377be4078e5055",
+  "scope": "todo o diretório tests/ (inclui tests/e2e e tests/windows)",
+  "hermetic": false,
+  "hermeticidade": "NÃO hermético. Lançado manualmente em segundo plano sem allowlist de ambiente, sem PYTHON_DOTENV_DISABLED e sem mapeamento de diretórios temporários. Não use como prova primária de isolamento; a prova hermética pós-correção é v9-full-3 (tools/v9_pytest.py).",
+  "command": [
+    ".venv/Scripts/python.exe",
+    "-m", "pytest", "tests", "-q",
+    "--junitxml=C:/Users/DZ23/AppData/Local/Temp/v9-full-2.xml"
+  ],
+  "command_recovery": "Comando exato recuperado do transcript da sessão (linha 74222 de 2f7f19a4-780d-41e7-a698-2c8db0c7a87e.jsonl); stdout/stderr redirecionados para C:/Users/DZ23/AppData/Local/Temp/v9-full-2.log.",
+  "working_directory": "C:/Users/DZ23/Documents/Qoder/2026-10-12/2f7f19a4/dz23-v9-audit",
+  "temporary_directory": "C:/Users/DZ23/AppData/Local/Temp",
+  "environment_names": "Ambiente herdado da sessão do executor (sem allowlist). PYTHON_DOTENV_DISABLED ausente. Não havia .env no worktree nem no diretório pai; DEEPSEEK_API_KEY, OPENROUTER_API_KEY e GEMINI_API_KEY estavam definidas na sessão (valores nunca registrados). ALERTA_WINDOWS não definido.",
+  "network": "irrestrita (sem audit hook)",
+  "exit_code": 0,
+  "result": "3257 passed, 4 skipped, 21 warnings, 71 subtests passed in 375.27s; JUnit XML: 154 módulos, 3261 casos, 0 falhas, 0 erros, 4 skips.",
+  "skips": [
+    "tests/test_bedrock_provider.py::TestBedrockProvider::test_construction_when_extra_installed (langchain_aws ausente)",
+    "tests/test_desk_backup.py::TestRestore::test_config_permissions_are_restored_tight (papéis POSIX em NTFS)",
+    "tests/test_modo_da_mesa.py::TestPosseNoPostgres::test_corrida_entre_dois_donos_so_um_ganha (DATABASE_URL ausente)",
+    "tests/test_quant_intelligence.py::TestModelosExperimentais::test_lgbm_instalado_treina_e_preve (lightgbm ausente)"
+  ],
+  "desvios_conhecidos": [
+    "Teste live DeepSeek executou com chave real herdada da sessão (tests/test_deepseek_reasoning.py::TestDeepSeekLiveStructuredOutput::test_v4_flash_returns_structured_output, PASS). No baseline hermético este teste era SKIP por ausência de chave. Chamada real de API de pequeno porte à api.deepseek.com; valor da chave nunca lido/registrado.",
+    "Teste de identidade Windows executou contra o HKCU real (tests/windows/test_notificacoes_identidade_win.py::test_identidade_registrada_no_windows, PASS), escrevendo de forma idempotente HKCU\\Software\\Classes\\AppUserModelId\\DZ23 Trading AI — a mesma chave aplicada pelo app em runtime e já presente na máquina do proprietário (DisplayName 'DZ23 Trading AI'). No baseline curado de Windows local este teste foi desmarcado.",
+    "tests/e2e e tests/windows foram incluídos nesta execução (31 + 58 casos, todos PASS), ao contrário do escopo curado do baseline pytest-safe que os exclui."
+  ],
+  "verificacao_de_ausencia_de_impacto": "Nenhum arquivo de dados do proprietário foi modificado na janela do run (07:00–09:00 de 2026-10-15): busca com find -newermt em %APPDATA%\\DZ23-Trading-AI e %LOCALAPPDATA%\\DZ23-Trading-AI não retornou resultados. A escrita no registro é escopada ao app e idempotente (mesmo conteúdo já presente).",
+  "artifacts": {
+    "log": "docs/mission/evidence/v9-baseline/v9-full-2.log",
+    "log_sha256": "dddf83742e64ad329fe801151ad8bf67b0bd6aca3f90f374c1956842523f48f4",
+    "junit": "docs/mission/evidence/v9-baseline/v9-full-2.xml",
+    "junit_sha256": "5697d550a109aca2679d828308978bd308f3dff1523b1da70ef1c62f05aec03a"
+  },
+  "notes": "Execução auxiliar de corroboração (árvore completa, verde). Não substitui o baseline hermético (pytest-safe) nem o pós-correção hermético (v9-full-3); vale como evidência adicional de que e2e + windows + suíte principal coexistem verdes no estado pós-correções da árvore de auditoria."
+}

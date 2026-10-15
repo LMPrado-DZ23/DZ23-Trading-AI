@@ -29,31 +29,22 @@ def sempre_comprado(history):
     return 1
 
 
-def test_volume_do_fixture_existente_e_neutro():
-    """volume=10, position_pct=0.1, max_participacao=0.01: o teto coincide
-    exatamente com o notional desejado (10×close×0.01 == close×0.1) — o
-    resultado dos testes anteriores fica idêntico, nada é limitado."""
-    r = run_backtest(serie([10] * 6), sempre_comprado, BacktestConfig())
+def test_volume_exato_comporta_entrada_e_saida_sem_limitar():
+    r = run_backtest(serie([20000] * 6, [100] * 6), sempre_comprado, BacktestConfig())
     assert r.trades == 5
     assert r.fills_limitados == 0
     assert r.fills_rejeitados_por_liquidez == 0
+    assert r.equity_curve[-1] == Decimal("99930")
 
 
 def test_volume_pequeno_limita_o_fill_e_registra():
-    """close=100/101/102, position_pct=0.1 → notional desejado ≈ 10.
-    volume=1 limita a capacidade a 1×close×0.01 — fill de ~10% do pedido."""
     r = run_backtest(serie([1, 1, 1]), sempre_comprado, BacktestConfig())
     assert r.trades == 2
     assert r.fills_limitados == 2
     assert r.fills_rejeitados_por_liquidez == 0
-
-    def liquido(capacidade: Decimal) -> Decimal:
-        return capacidade - capacidade * Decimal("7") / Decimal("10000")
-
-    esperado = (Decimal("100000")
-                + liquido(Decimal("101") * Decimal("0.01"))
-                + liquido(Decimal("102") * Decimal("0.01")))
-    assert r.equity_curve[-1] == esperado
+    assert r.equity_curve == (
+        Decimal("100000"), Decimal("99999.999293"), Decimal("99999.998579"),
+    )
 
 
 def test_volume_zero_nao_preenche_nem_custa():
@@ -61,9 +52,10 @@ def test_volume_zero_nao_preenche_nem_custa():
                      BacktestConfig())
     assert r.trades == 2
     assert r.fills_rejeitados_por_liquidez == 1
-    assert r.fills_limitados == 0
+    assert r.fills_limitados == 2
     assert r.equity_curve[1] == r.equity_curve[0], (
         "barra sem volume não pode mexer no caixa")
+    assert r.equity_curve[-1] == Decimal("99999.98565")
 
 
 def test_volume_negativo_e_rejeitado():

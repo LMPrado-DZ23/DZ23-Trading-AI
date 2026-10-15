@@ -1,0 +1,339 @@
+.....FFF..F.......FFFFF                                                  [100%]
+================================== FAILURES ===================================
+_ test_fin03_terminal_partial_imports_fills_before_releasing_remainder[canceled] _
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x000002700666D790>
+status = 'canceled'
+
+    @pytest.mark.parametrize("status", ["canceled", "cancelled", "expired"])
+    def test_fin03_terminal_partial_imports_fills_before_releasing_remainder(desk, status):
+        """Catch terminal handling that refunds the whole reservation and loses a fill."""
+        rec = _buy_order(desk)
+        assert rec.quantidade == D("2")
+        assert desk.ledger.reserved_cash(rec.reserva_id) == D("200")
+        reports = [_reconcile(
+            desk, rec, status=status, cumulative="1", remote_quantity="1",
+            fills=[_remote_fill("1")],
+        ) for _ in range(2)]
+        conclusion = desk.risk.incidentes_doc()["conclusoes"].get(rec.reserva_id, {})
+        observed = {
+            "quantity": desk.ledger.position_quantity(INSTRUMENT),
+            "cost": desk.ledger.invested_cost(), "cash": desk.ledger.cash(),
+            "ledger_reserved": desk.ledger.reserved_cash(rec.reserva_id),
+            "risk_reserved": desk.risk.reserved_total,
+            "consumed": D(conclusion.get("consumed_amount", "0")),
+            "released": D(conclusion.get("sobra_liberada", "0")),
+            "filled": rec.filled_qty, "seen": rec.seen_fills, "open": rec.open,
+            "posting_order": [tx.kind for tx in desk.ledger.transactions],
+            "safe": [report["seguro"] for report in reports],
+        }
+>       assert observed == {
+            "quantity": D("1"), "cost": D("100"), "cash": D("1900"),
+            "ledger_reserved": D("0"), "risk_reserved": D("0"),
+            "consumed": D("100"), "released": D("100"),
+            "filled": D("1"), "seen": {"remote-trade"}, "open": False,
+            "posting_order": ["opening", "reserve", "fill_buy", "release"],
+            "safe": [True, True],
+        }
+E       AssertionError: assert {'quantity': ...000000'), ...} == {'quantity': ...mal('0'), ...}
+E         
+E         Omitting 4 identical items, use -vv to show
+E         Differing items:
+E         {'cash': Decimal('1800.00000000')} != {'cash': Decimal('1900')}
+E         {'posting_order': ['opening', 'reserve', 'fill_buy']} != {'posting_order': ['opening', 'reserve', 'fill_buy', 'release']}
+E         {'ledger_reserved': Decimal('100.00000000')} != {'ledger_reserved': Decimal('0')}
+E         {'safe': [False, False]} != {'safe': [True, True]}...
+E         
+E         ...Full output truncated (5 lines hidden), use '-vv' to show
+
+tests\test_v9_financial_regressions.py:286: AssertionError
+_ test_fin03_terminal_partial_imports_fills_before_releasing_remainder[cancelled] _
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x000002700666C860>
+status = 'cancelled'
+
+    @pytest.mark.parametrize("status", ["canceled", "cancelled", "expired"])
+    def test_fin03_terminal_partial_imports_fills_before_releasing_remainder(desk, status):
+        """Catch terminal handling that refunds the whole reservation and loses a fill."""
+        rec = _buy_order(desk)
+        assert rec.quantidade == D("2")
+        assert desk.ledger.reserved_cash(rec.reserva_id) == D("200")
+        reports = [_reconcile(
+            desk, rec, status=status, cumulative="1", remote_quantity="1",
+            fills=[_remote_fill("1")],
+        ) for _ in range(2)]
+        conclusion = desk.risk.incidentes_doc()["conclusoes"].get(rec.reserva_id, {})
+        observed = {
+            "quantity": desk.ledger.position_quantity(INSTRUMENT),
+            "cost": desk.ledger.invested_cost(), "cash": desk.ledger.cash(),
+            "ledger_reserved": desk.ledger.reserved_cash(rec.reserva_id),
+            "risk_reserved": desk.risk.reserved_total,
+            "consumed": D(conclusion.get("consumed_amount", "0")),
+            "released": D(conclusion.get("sobra_liberada", "0")),
+            "filled": rec.filled_qty, "seen": rec.seen_fills, "open": rec.open,
+            "posting_order": [tx.kind for tx in desk.ledger.transactions],
+            "safe": [report["seguro"] for report in reports],
+        }
+>       assert observed == {
+            "quantity": D("1"), "cost": D("100"), "cash": D("1900"),
+            "ledger_reserved": D("0"), "risk_reserved": D("0"),
+            "consumed": D("100"), "released": D("100"),
+            "filled": D("1"), "seen": {"remote-trade"}, "open": False,
+            "posting_order": ["opening", "reserve", "fill_buy", "release"],
+            "safe": [True, True],
+        }
+E       AssertionError: assert {'quantity': ...000000'), ...} == {'quantity': ...mal('0'), ...}
+E         
+E         Omitting 4 identical items, use -vv to show
+E         Differing items:
+E         {'cash': Decimal('1800.00000000')} != {'cash': Decimal('1900')}
+E         {'posting_order': ['opening', 'reserve', 'fill_buy']} != {'posting_order': ['opening', 'reserve', 'fill_buy', 'release']}
+E         {'ledger_reserved': Decimal('100.00000000')} != {'ledger_reserved': Decimal('0')}
+E         {'safe': [False, False]} != {'safe': [True, True]}...
+E         
+E         ...Full output truncated (5 lines hidden), use '-vv' to show
+
+tests\test_v9_financial_regressions.py:286: AssertionError
+_ test_fin03_terminal_partial_imports_fills_before_releasing_remainder[expired] _
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x000002700666C800>
+status = 'expired'
+
+    @pytest.mark.parametrize("status", ["canceled", "cancelled", "expired"])
+    def test_fin03_terminal_partial_imports_fills_before_releasing_remainder(desk, status):
+        """Catch terminal handling that refunds the whole reservation and loses a fill."""
+        rec = _buy_order(desk)
+        assert rec.quantidade == D("2")
+        assert desk.ledger.reserved_cash(rec.reserva_id) == D("200")
+        reports = [_reconcile(
+            desk, rec, status=status, cumulative="1", remote_quantity="1",
+            fills=[_remote_fill("1")],
+        ) for _ in range(2)]
+        conclusion = desk.risk.incidentes_doc()["conclusoes"].get(rec.reserva_id, {})
+        observed = {
+            "quantity": desk.ledger.position_quantity(INSTRUMENT),
+            "cost": desk.ledger.invested_cost(), "cash": desk.ledger.cash(),
+            "ledger_reserved": desk.ledger.reserved_cash(rec.reserva_id),
+            "risk_reserved": desk.risk.reserved_total,
+            "consumed": D(conclusion.get("consumed_amount", "0")),
+            "released": D(conclusion.get("sobra_liberada", "0")),
+            "filled": rec.filled_qty, "seen": rec.seen_fills, "open": rec.open,
+            "posting_order": [tx.kind for tx in desk.ledger.transactions],
+            "safe": [report["seguro"] for report in reports],
+        }
+>       assert observed == {
+            "quantity": D("1"), "cost": D("100"), "cash": D("1900"),
+            "ledger_reserved": D("0"), "risk_reserved": D("0"),
+            "consumed": D("100"), "released": D("100"),
+            "filled": D("1"), "seen": {"remote-trade"}, "open": False,
+            "posting_order": ["opening", "reserve", "fill_buy", "release"],
+            "safe": [True, True],
+        }
+E       AssertionError: assert {'quantity': ...000000'), ...} == {'quantity': ...mal('0'), ...}
+E         
+E         Omitting 4 identical items, use -vv to show
+E         Differing items:
+E         {'cash': Decimal('1800.00000000')} != {'cash': Decimal('1900')}
+E         {'posting_order': ['opening', 'reserve', 'fill_buy']} != {'posting_order': ['opening', 'reserve', 'fill_buy', 'release']}
+E         {'ledger_reserved': Decimal('100.00000000')} != {'ledger_reserved': Decimal('0')}
+E         {'safe': [False, False]} != {'safe': [True, True]}...
+E         
+E         ...Full output truncated (5 lines hidden), use '-vv' to show
+
+tests\test_v9_financial_regressions.py:286: AssertionError
+_______ test_fin03_cumulative_trade_mismatch_cannot_turn_safe_on_repeat _______
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000027006673BF0>
+
+    def test_fin03_cumulative_trade_mismatch_cannot_turn_safe_on_repeat(desk):
+        """Catch unresolved FILLS_DIVERGEM disappearing when the local order fills."""
+        rec = _buy_order(desk)
+        reports = []
+        states = []
+        for _ in range(3):
+            reports.append(_reconcile(
+                desk, rec, status="closed", cumulative="1.5", remote_quantity="2",
+                fills=[_remote_fill("2")],
+            ))
+            states.append(rec.state.value)
+    
+        assert reports[0]["fills_status"] == "MISMATCH"
+        assert any("FILLS_DIVERGEM" in d for d in reports[0]["divergencias"])
+        assert rec.filled_qty == desk.ledger.position_quantity(INSTRUMENT) == D("2")
+        assert desk.ledger.invested_cost() == D("200")
+        assert desk.ledger.cash() == D("1800")
+        assert sum(tx.kind == "fill_buy" for tx in desk.ledger.transactions) == 1
+        assert desk.ledger.is_balanced()
+        observed = {
+            "safe": [report["seguro"] for report in reports],
+            "fills_status": [report["fills_status"] for report in reports],
+            "gate_closed": desk.reconciliacao_pendente,
+            "report_authorizes_execution": desk.relatorio_valido()[0],
+        }
+>       assert observed == {
+            "safe": [False, False, False],
+            "fills_status": ["MISMATCH", "MISMATCH", "MISMATCH"],
+            "gate_closed": True, "report_authorizes_execution": False,
+        }, f"unresolved remote cumulative 1.5 vs trades 2; local states={states}; {observed}"
+E       AssertionError: unresolved remote cumulative 1.5 vs trades 2; local states=['filled', 'filled', 'filled']; {'safe': [False, True, True], 'fills_status': ['MISMATCH', 'NAO_APLICAVEL', 'NAO_APLICAVEL'], 'gate_closed': False, 'report_authorizes_execution': True}
+E       assert {'safe': [Fal...cution': True} == {'safe': [Fal...ution': False}
+E         
+E         Differing items:
+E         {'fills_status': ['MISMATCH', 'NAO_APLICAVEL', 'NAO_APLICAVEL']} != {'fills_status': ['MISMATCH', 'MISMATCH', 'MISMATCH']}
+E         {'gate_closed': False} != {'gate_closed': True}
+E         {'safe': [False, True, True]} != {'safe': [False, False, False]}
+E         {'report_authorizes_execution': True} != {'report_authorizes_execution': False}
+E         Use -v to get more diff
+
+tests\test_v9_financial_regressions.py:343: AssertionError
+_ test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement[mismatch] _
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000027006674DD0>
+later = 'mismatch'
+
+    @pytest.mark.parametrize("later", ["mismatch", "unavailable", "not_found", "missing_total"])
+    def test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement(desk, later):
+        rec = _buy_order(desk, notional="220", price="110")
+        report = _reconcile(desk, rec, status="closed", cumulative="1.5",
+                            remote_quantity="2", fills=[_remote_fill("2")])
+        assert report["seguro"] is False
+        desk = _restart(desk)
+        rec = desk.orders[rec.order_id]
+        if later == "not_found":
+            report = desk.reconciliar(
+                lambda key: {"resultado": "CONFIRMED_NOT_FOUND"},
+                consultar_fills=lambda *args: [],
+                consultar_posicoes=lambda: {INSTRUMENT: D("2")},
+                consultar_ordens_abertas=lambda: [],
+            )
+        else:
+            report = _reconcile(
+                desk, rec, status="closed", cumulative=None if later == "missing_total" else "1.5",
+                remote_quantity="2", fills=(RuntimeError("unavailable") if later == "unavailable"
+                                           else [_remote_fill("2")]),
+            )
+>       assert report["seguro"] is False
+E       assert True is False
+
+tests\test_v9_financial_regressions.py:492: AssertionError
+_ test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement[unavailable] _
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000027006674A10>
+later = 'unavailable'
+
+    @pytest.mark.parametrize("later", ["mismatch", "unavailable", "not_found", "missing_total"])
+    def test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement(desk, later):
+        rec = _buy_order(desk, notional="220", price="110")
+        report = _reconcile(desk, rec, status="closed", cumulative="1.5",
+                            remote_quantity="2", fills=[_remote_fill("2")])
+        assert report["seguro"] is False
+        desk = _restart(desk)
+        rec = desk.orders[rec.order_id]
+        if later == "not_found":
+            report = desk.reconciliar(
+                lambda key: {"resultado": "CONFIRMED_NOT_FOUND"},
+                consultar_fills=lambda *args: [],
+                consultar_posicoes=lambda: {INSTRUMENT: D("2")},
+                consultar_ordens_abertas=lambda: [],
+            )
+        else:
+            report = _reconcile(
+                desk, rec, status="closed", cumulative=None if later == "missing_total" else "1.5",
+                remote_quantity="2", fills=(RuntimeError("unavailable") if later == "unavailable"
+                                           else [_remote_fill("2")]),
+            )
+>       assert report["seguro"] is False
+E       assert True is False
+
+tests\test_v9_financial_regressions.py:492: AssertionError
+_ test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement[not_found] _
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000027006675370>
+later = 'not_found'
+
+    @pytest.mark.parametrize("later", ["mismatch", "unavailable", "not_found", "missing_total"])
+    def test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement(desk, later):
+        rec = _buy_order(desk, notional="220", price="110")
+        report = _reconcile(desk, rec, status="closed", cumulative="1.5",
+                            remote_quantity="2", fills=[_remote_fill("2")])
+        assert report["seguro"] is False
+        desk = _restart(desk)
+        rec = desk.orders[rec.order_id]
+        if later == "not_found":
+            report = desk.reconciliar(
+                lambda key: {"resultado": "CONFIRMED_NOT_FOUND"},
+                consultar_fills=lambda *args: [],
+                consultar_posicoes=lambda: {INSTRUMENT: D("2")},
+                consultar_ordens_abertas=lambda: [],
+            )
+        else:
+            report = _reconcile(
+                desk, rec, status="closed", cumulative=None if later == "missing_total" else "1.5",
+                remote_quantity="2", fills=(RuntimeError("unavailable") if later == "unavailable"
+                                           else [_remote_fill("2")]),
+            )
+>       assert report["seguro"] is False
+E       assert True is False
+
+tests\test_v9_financial_regressions.py:492: AssertionError
+_ test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement[missing_total] _
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000027006682BD0>
+later = 'missing_total'
+
+    @pytest.mark.parametrize("later", ["mismatch", "unavailable", "not_found", "missing_total"])
+    def test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement(desk, later):
+        rec = _buy_order(desk, notional="220", price="110")
+        report = _reconcile(desk, rec, status="closed", cumulative="1.5",
+                            remote_quantity="2", fills=[_remote_fill("2")])
+        assert report["seguro"] is False
+        desk = _restart(desk)
+        rec = desk.orders[rec.order_id]
+        if later == "not_found":
+            report = desk.reconciliar(
+                lambda key: {"resultado": "CONFIRMED_NOT_FOUND"},
+                consultar_fills=lambda *args: [],
+                consultar_posicoes=lambda: {INSTRUMENT: D("2")},
+                consultar_ordens_abertas=lambda: [],
+            )
+        else:
+            report = _reconcile(
+                desk, rec, status="closed", cumulative=None if later == "missing_total" else "1.5",
+                remote_quantity="2", fills=(RuntimeError("unavailable") if later == "unavailable"
+                                           else [_remote_fill("2")]),
+            )
+>       assert report["seguro"] is False
+E       assert True is False
+
+tests\test_v9_financial_regressions.py:492: AssertionError
+______________ test_fin03_terminal_release_failure_is_replayable ______________
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000027006681E50>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000027006683260>
+
+    def test_fin03_terminal_release_failure_is_replayable(desk, monkeypatch):
+        rec = _buy_order(desk)
+        original = desk.ledger.release
+    
+        def fail_after_release(*args, **kwargs):
+            original(*args, **kwargs)
+            raise LedgerError("after terminal release")
+    
+        with monkeypatch.context() as patch:
+            patch.setattr(desk.ledger, "release", fail_after_release)
+>           with pytest.raises(LedgerError, match="terminal release"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE LedgerError
+
+tests\test_v9_financial_regressions.py:526: Failed
+=========================== short test summary info ===========================
+FAILED tests/test_v9_financial_regressions.py::test_fin03_terminal_partial_imports_fills_before_releasing_remainder[canceled]
+FAILED tests/test_v9_financial_regressions.py::test_fin03_terminal_partial_imports_fills_before_releasing_remainder[cancelled]
+FAILED tests/test_v9_financial_regressions.py::test_fin03_terminal_partial_imports_fills_before_releasing_remainder[expired]
+FAILED tests/test_v9_financial_regressions.py::test_fin03_cumulative_trade_mismatch_cannot_turn_safe_on_repeat
+FAILED tests/test_v9_financial_regressions.py::test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement[mismatch]
+FAILED tests/test_v9_financial_regressions.py::test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement[unavailable]
+FAILED tests/test_v9_financial_regressions.py::test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement[not_found]
+FAILED tests/test_v9_financial_regressions.py::test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement[missing_total]
+FAILED tests/test_v9_financial_regressions.py::test_fin03_terminal_release_failure_is_replayable
+9 failed, 14 passed in 0.39s

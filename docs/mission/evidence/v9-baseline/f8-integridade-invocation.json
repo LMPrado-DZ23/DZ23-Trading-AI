@@ -1,0 +1,17 @@
+{
+ "ferramenta": "tools/v9_f8_integridade.py",
+ "comando": "PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe tools/v9_f8_integridade.py docs/mission/evidence/v9-baseline/f8-integridade.json",
+ "head": "2b7754a94cc1e4233ad95ac6fa377be4078e5055",
+ "data_utc": "2026-10-15T11:28:46Z",
+ "exit": 0,
+ "relatorio_sha256": "bbf8bd1946fb9d4f66e3bb1fac442f963d7e509acb1481d9cf9ba86a2203021b",
+ "log_sha256": "64661a2abbf623414312d66c48532cfdfc55b52da61a9fdf117d4b0c69f1fd4f",
+ "resumo": {
+  "artefatos_no_manifesto": 385,
+  "hashes_registrados_em_docs": 44,
+  "hashes_verificados_ok": 38,
+  "hashes_externos_conhecidos": 6,
+  "hashes_orfaos": 0
+ },
+ "nota": "Somente leitura sobre o diretorio de evidencias; o proprio relatorio e excluido do manifesto."
+}

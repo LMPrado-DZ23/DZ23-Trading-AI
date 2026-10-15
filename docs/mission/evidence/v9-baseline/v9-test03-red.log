@@ -1,0 +1,125 @@
+.F....FFF...                                                             [100%]
+================================== FAILURES ===================================
+__________ TestEscritaAtomica.test_file_is_always_complete_and_valid __________
+
+self = <tests.test_escrita_atomica.TestEscritaAtomica object at 0x000001BF4567C2C0>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-test03-red-ewz_0y0g/tmp/pytest-of-unknown/pytest-0/test_file_is_always_complete_a0')
+
+    def test_file_is_always_complete_and_valid(self, tmp_path):
+        """Nunca deve existir um JSON pela metade — nem durante a escrita."""
+        alvo = tmp_path / "estado.json"
+        escrever_json_atomico(alvo, {"inicial": True})
+        problemas: list[str] = []
+        transitorios: list[str] = []
+        parar = threading.Event()
+        t = threading.Thread(target=_vigiar_leitura,
+                             args=(alvo, parar, problemas, transitorios),
+                             daemon=True)
+        t.start()
+        try:
+            for i in range(150):
+                escrever_json_atomico(alvo, {"ciclo": i, "dados": "x" * 500})
+        finally:
+            parar.set()
+            t.join(timeout=5)
+        assert not t.is_alive(), "a thread leitora não terminou"
+>       assert not problemas, (problemas[:3],
+                               f"negações transitórias: {len(transitorios)}")
+E       AssertionError: (["leitura negada pelo SO: PermissionError(13, 'Permission denied')"], 'negações transitórias: 0')
+E       assert not ["leitura negada pelo SO: PermissionError(13, 'Permission denied')"]
+
+tests\test_escrita_atomica.py:99: AssertionError
+_ TestProvaDeLeituraNuncaMorreEmSilencio.test_negacao_transitoria_e_registrada_e_recuperada _
+
+self = <tests.test_escrita_atomica.TestProvaDeLeituraNuncaMorreEmSilencio object at 0x000001BF4567D610>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-test03-red-ewz_0y0g/tmp/pytest-of-unknown/pytest-0/test_negacao_transitoria_e_reg0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001BF4570DEE0>
+
+    def test_negacao_transitoria_e_registrada_e_recuperada(self, tmp_path,
+                                                           monkeypatch):
+        alvo = tmp_path / "estado.json"
+        escrever_json_atomico(alvo, {"ok": True})
+        _injeta_negacoes(monkeypatch, alvo, 1)
+        problemas: list[str] = []
+        transitorios: list[str] = []
+        parar = threading.Event()
+        t = threading.Thread(target=_vigiar_leitura,
+                             args=(alvo, parar, problemas, transitorios),
+                             daemon=True)
+        t.start()
+        limite = time.monotonic() + 2
+        while (t.is_alive() and not transitorios and not problemas
+               and time.monotonic() < limite):
+            time.sleep(0.01)
+        parar.set()
+        t.join(timeout=5)
+        assert not t.is_alive()
+>       assert len(transitorios) == 1, transitorios
+E       AssertionError: []
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests\test_escrita_atomica.py:152: AssertionError
+_ TestProvaDeLeituraNuncaMorreEmSilencio.test_negacao_persistente_vira_problema_visivel _
+
+self = <tests.test_escrita_atomica.TestProvaDeLeituraNuncaMorreEmSilencio object at 0x000001BF4567D940>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-test03-red-ewz_0y0g/tmp/pytest-of-unknown/pytest-0/test_negacao_persistente_vira_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001BF45712390>
+
+    def test_negacao_persistente_vira_problema_visivel(self, tmp_path,
+                                                       monkeypatch):
+        alvo = tmp_path / "estado.json"
+        escrever_json_atomico(alvo, {"ok": True})
+        _injeta_negacoes(monkeypatch, alvo, 10**9)
+        problemas: list[str] = []
+        transitorios: list[str] = []
+        parar = threading.Event()
+        t = threading.Thread(target=_vigiar_leitura,
+                             args=(alvo, parar, problemas, transitorios),
+                             daemon=True)
+        t.start()
+        t.join(timeout=10)
+        assert not t.is_alive(), "deveria desistir após o teto de negações"
+>       assert any("persistentemente" in p for p in problemas), problemas
+E       AssertionError: ["leitura negada pelo SO: PermissionError(13, 'Permission denied (injetado)')"]
+E       assert False
+E        +  where False = any(<generator object TestProvaDeLeituraNuncaMorreEmSilencio.test_negacao_persistente_vira_problema_visivel.<locals>.<genexpr> at 0x000001BF4575D970>)
+
+tests\test_escrita_atomica.py:169: AssertionError
+_ TestLeituraDoArmazemSobDisputa.test_negacao_transitoria_ainda_entrega_o_documento _
+
+self = <tests.test_escrita_atomica.TestLeituraDoArmazemSobDisputa object at 0x000001BF4567DCA0>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-test03-red-ewz_0y0g/tmp/pytest-of-unknown/pytest-0/test_negacao_transitoria_ainda0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001BF45710200>
+
+    def test_negacao_transitoria_ainda_entrega_o_documento(self, tmp_path,
+                                                           monkeypatch):
+        armazem = ArmazemDeEstado(None, diretorio=tmp_path)
+        armazem.salvar("tenant-1", "mesa", {"ciclo": 7})
+        _injeta_negacoes(monkeypatch, tmp_path / "tenant-1" / "mesa.json", 1)
+>       assert armazem.carregar("tenant-1", "mesa") == {"ciclo": 7}
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_escrita_atomica.py:181: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tradingagents\desk\storage.py:229: in carregar
+    return json.loads(caminho.read_text(encoding="utf-8"))
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-test03-red-ewz_0y0g/tmp/pytest-of-unknown/pytest-0/test_negacao_transitoria_ainda0/tenant-1/mesa.json')
+args = (), kwargs = {'encoding': 'utf-8'}
+
+    def falso(self, *args, **kwargs):
+        if self == alvo and restantes[0] > 0:
+            restantes[0] -= 1
+>           raise PermissionError(13, "Permission denied (injetado)")
+E           PermissionError: [Errno 13] Permission denied (injetado)
+
+tests\test_escrita_atomica.py:60: PermissionError
+=========================== short test summary info ===========================
+FAILED tests/test_escrita_atomica.py::TestEscritaAtomica::test_file_is_always_complete_and_valid
+FAILED tests/test_escrita_atomica.py::TestProvaDeLeituraNuncaMorreEmSilencio::test_negacao_transitoria_e_registrada_e_recuperada
+FAILED tests/test_escrita_atomica.py::TestProvaDeLeituraNuncaMorreEmSilencio::test_negacao_persistente_vira_problema_visivel
+FAILED tests/test_escrita_atomica.py::TestLeituraDoArmazemSobDisputa::test_negacao_transitoria_ainda_entrega_o_documento
+4 failed, 8 passed in 36.09s

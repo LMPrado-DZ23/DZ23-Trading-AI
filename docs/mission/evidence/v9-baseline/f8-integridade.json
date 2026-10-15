@@ -1,0 +1,1362 @@
+{
+ "artefatos_no_manifesto": 385,
+ "artefatos_sem_hash_citada": [
+  "docs/mission/evidence/v9-baseline/auth-red-invocation.json",
+  "docs/mission/evidence/v9-baseline/auth-red.log",
+  "docs/mission/evidence/v9-baseline/auth-red.xml",
+  "docs/mission/evidence/v9-baseline/ci-failed.log",
+  "docs/mission/evidence/v9-baseline/ci-secrets-green-invocation.json",
+  "docs/mission/evidence/v9-baseline/ci-secrets-green.log",
+  "docs/mission/evidence/v9-baseline/ci-secrets-green.xml",
+  "docs/mission/evidence/v9-baseline/ci-secrets-red-invocation.json",
+  "docs/mission/evidence/v9-baseline/ci-secrets-red.log",
+  "docs/mission/evidence/v9-baseline/ci-secrets-red.xml",
+  "docs/mission/evidence/v9-baseline/e2e-diagnostic-invocation.json",
+  "docs/mission/evidence/v9-baseline/e2e-diagnostic.log",
+  "docs/mission/evidence/v9-baseline/e2e-diagnostic.xml",
+  "docs/mission/evidence/v9-baseline/e2e-invocation.json",
+  "docs/mission/evidence/v9-baseline/e2e.log",
+  "docs/mission/evidence/v9-baseline/e2e.xml",
+  "docs/mission/evidence/v9-baseline/escola-diagnostic-invocation.json",
+  "docs/mission/evidence/v9-baseline/escola-diagnostic.log",
+  "docs/mission/evidence/v9-baseline/escola-diagnostic.xml",
+  "docs/mission/evidence/v9-baseline/f5-classificacao-conectores.md",
+  "docs/mission/evidence/v9-baseline/f5-probe-ia-auth.err.log",
+  "docs/mission/evidence/v9-baseline/f5-probe-real-readonly.err.log",
+  "docs/mission/evidence/v9-baseline/f6-classificacao-pwa-oracle.md",
+  "docs/mission/evidence/v9-baseline/f6-health-recovery-invocation.json",
+  "docs/mission/evidence/v9-baseline/f6-health-recovery.xml",
+  "docs/mission/evidence/v9-baseline/f6-pwa-invocation.json",
+  "docs/mission/evidence/v9-baseline/f6-pwa.xml",
+  "docs/mission/evidence/v9-baseline/f6-reconciliacao-invocation.json",
+  "docs/mission/evidence/v9-baseline/f6-reconciliacao.xml",
+  "docs/mission/evidence/v9-baseline/f6-sessao-invocation.json",
+  "docs/mission/evidence/v9-baseline/f6-sessao.xml",
+  "docs/mission/evidence/v9-baseline/f7-rotas-classificacao.md",
+  "docs/mission/evidence/v9-baseline/f7-rotas-pos-sec06.json",
+  "docs/mission/evidence/v9-baseline/f7-rotas.json",
+  "docs/mission/evidence/v9-baseline/f8-rotas-invocation.json",
+  "docs/mission/evidence/v9-baseline/f8-rotas-red-invocation.json",
+  "docs/mission/evidence/v9-baseline/f8-rotas-red.log",
+  "docs/mission/evidence/v9-baseline/f8-rotas-red.xml",
+  "docs/mission/evidence/v9-baseline/f8-rotas.log",
+  "docs/mission/evidence/v9-baseline/f8-rotas.xml",
+  "docs/mission/evidence/v9-baseline/f8-sentiment-invocation.json",
+  "docs/mission/evidence/v9-baseline/f8-sentiment-red-invocation.json",
+  "docs/mission/evidence/v9-baseline/f8-sentiment-red.log",
+  "docs/mission/evidence/v9-baseline/f8-sentiment-red.xml",
+  "docs/mission/evidence/v9-baseline/f8-sentiment.log",
+  "docs/mission/evidence/v9-baseline/f8-sentiment.xml",
+  "docs/mission/evidence/v9-baseline/fin-impl-2-invocation.json",
+  "docs/mission/evidence/v9-baseline/fin-impl-2.log",
+  "docs/mission/evidence/v9-baseline/fin-impl-2.xml",
+  "docs/mission/evidence/v9-baseline/fin-impl-check-1-invocation.json",
+  "docs/mission/evidence/v9-baseline/fin-impl-check-1.log",
+  "docs/mission/evidence/v9-baseline/fin-impl-check-1.xml",
+  "docs/mission/evidence/v9-baseline/financial-green-harness.json",
+  "docs/mission/evidence/v9-baseline/financial-green-red-expanded-invocation.json",
+  "docs/mission/evidence/v9-baseline/financial-green-red-expanded.log",
+  "docs/mission/evidence/v9-baseline/financial-green-red-expanded.xml",
+  "docs/mission/evidence/v9-baseline/financial-red-invocation.json",
+  "docs/mission/evidence/v9-baseline/financial-red.log",
+  "docs/mission/evidence/v9-baseline/financial-red.xml",
+  "docs/mission/evidence/v9-baseline/full-3-invocation.json",
+  "docs/mission/evidence/v9-baseline/full-3.log",
+  "docs/mission/evidence/v9-baseline/full-3.xml",
+  "docs/mission/evidence/v9-baseline/full-4-invocation.json",
+  "docs/mission/evidence/v9-baseline/full-4.log",
+  "docs/mission/evidence/v9-baseline/full-4.xml",
+  "docs/mission/evidence/v9-baseline/full-5-invocation.json",
+  "docs/mission/evidence/v9-baseline/full-5.log",
+  "docs/mission/evidence/v9-baseline/full-5.xml",
+  "docs/mission/evidence/v9-baseline/pytest-invocation.json",
+  "docs/mission/evidence/v9-baseline/pytest-safe-invocation.json",
+  "docs/mission/evidence/v9-baseline/pytest-safe.log",
+  "docs/mission/evidence/v9-baseline/pytest-safe.xml",
+  "docs/mission/evidence/v9-baseline/pytest.log",
+  "docs/mission/evidence/v9-baseline/quant-accounting-probe.json",
+  "docs/mission/evidence/v9-baseline/quant-green-final-1-invocation.json",
+  "docs/mission/evidence/v9-baseline/quant-green-final-1.log",
+  "docs/mission/evidence/v9-baseline/quant-green-final-1.xml",
+  "docs/mission/evidence/v9-baseline/quant-green-initial-invocation.json",
+  "docs/mission/evidence/v9-baseline/quant-green-initial.log",
+  "docs/mission/evidence/v9-baseline/quant-green-initial.xml",
+  "docs/mission/evidence/v9-baseline/quant-red-invocation.json",
+  "docs/mission/evidence/v9-baseline/quant-red.log",
+  "docs/mission/evidence/v9-baseline/quant-red.xml",
+  "docs/mission/evidence/v9-baseline/quant-safety-red-invocation.json",
+  "docs/mission/evidence/v9-baseline/quant-safety-red.log",
+  "docs/mission/evidence/v9-baseline/quant-safety-red.xml",
+  "docs/mission/evidence/v9-baseline/screenshots/00-login-premium-desktop.png",
+  "docs/mission/evidence/v9-baseline/screenshots/01-visao-geral-dono.png",
+  "docs/mission/evidence/v9-baseline/screenshots/02-floor-embutido.png",
+  "docs/mission/evidence/v9-baseline/screenshots/03-mesa-quant.png",
+  "docs/mission/evidence/v9-baseline/screenshots/04-login-mobile.png",
+  "docs/mission/evidence/v9-baseline/screenshots/05-painel-mobile.png",
+  "docs/mission/evidence/v9-baseline/screenshots/06-codigo-recuperacao.png",
+  "docs/mission/evidence/v9-baseline/screenshots/07-login-1366x768.png",
+  "docs/mission/evidence/v9-baseline/screenshots/07-login-1920x1080.png",
+  "docs/mission/evidence/v9-baseline/screenshots/07-login-320x568.png",
+  "docs/mission/evidence/v9-baseline/screenshots/07-login-360x640.png",
+  "docs/mission/evidence/v9-baseline/screenshots/07-login-390x844.png",
+  "docs/mission/evidence/v9-baseline/screenshots/07-login-768x1024.png",
+  "docs/mission/evidence/v9-baseline/screenshots/08-minhas-operacoes.png",
+  "docs/mission/evidence/v9-baseline/screenshots/08-pwa-config.png",
+  "docs/mission/evidence/v9-baseline/screenshots/09-inicio-assistente.png",
+  "docs/mission/evidence/v9-baseline/screenshots/09b-inicio-capacidades.png",
+  "docs/mission/evidence/v9-baseline/screenshots/09c-fm3-preparo-real.png",
+  "docs/mission/evidence/v9-baseline/screenshots/09d-fm3-catalogo.png",
+  "docs/mission/evidence/v9-baseline/screenshots/09e-fm3-reconciliacao.png",
+  "docs/mission/evidence/v9-baseline/screenshots/fm6-01-avancado-todas-paginas.png",
+  "docs/mission/evidence/v9-baseline/screenshots/fm6-02-corretoras.png",
+  "docs/mission/evidence/v9-baseline/screenshots/fm6-03-escola.png",
+  "docs/mission/evidence/v9-baseline/screenshots/fm6-04-dashboard-lc.png",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-01-capacidades.png",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-01-inicio.png",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-02-painel-global.png",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-03-sala-trader.png",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-04-analise-copiloto.png",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-05-acompanhar-prefill.png",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-06-registro-diario.png",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-07-alerta-stop.png",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-08-centro-alertas.png",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-09-config-ia.png",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-10-mesa-dez-traders.png",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-11-pwa-push.png",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-12-manual-320.png",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-12-manual-390.png",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-13-01-abrir.png",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-13-03-analise.png",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-13-05-persistencia.png",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-13-07-alerta.png",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-13-09-resultado.png",
+  "docs/mission/evidence/v9-baseline/screenshots/v9-escola-diagnostic.png",
+  "docs/mission/evidence/v9-baseline/sec-impl-1-invocation.json",
+  "docs/mission/evidence/v9-baseline/sec-impl-1.log",
+  "docs/mission/evidence/v9-baseline/sec-impl-1.xml",
+  "docs/mission/evidence/v9-baseline/v9-ci-sec1-linux-green-sync.log",
+  "docs/mission/evidence/v9-baseline/v9-ci-sec1-linux-green.log",
+  "docs/mission/evidence/v9-baseline/v9-ci-sec1-linux-green.xml",
+  "docs/mission/evidence/v9-baseline/v9-ci-sec1-linux-red-sync.log",
+  "docs/mission/evidence/v9-baseline/v9-ci-sec1-linux-red.log",
+  "docs/mission/evidence/v9-baseline/v9-ci-sec1-linux-red.xml",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/00-login-premium-desktop.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/01-visao-geral-dono.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/02-floor-embutido.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/03-mesa-quant.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/04-login-mobile.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/05-painel-mobile.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/06-codigo-recuperacao.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/07-login-1366x768.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/07-login-1920x1080.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/07-login-320x568.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/07-login-360x640.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/07-login-390x844.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/07-login-768x1024.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/08-minhas-operacoes.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/08-pwa-config.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/09-inicio-assistente.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/09b-inicio-capacidades.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/09c-fm3-preparo-real.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/09d-fm3-catalogo.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/09e-fm3-reconciliacao.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/fm6-01-avancado-todas-paginas.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/fm6-02-corretoras.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/fm6-03-escola.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/fm6-04-dashboard-lc.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-01-capacidades.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-01-inicio.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-02-painel-global.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-03-sala-trader.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-04-analise-copiloto.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-05-acompanhar-prefill.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-06-registro-diario.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-07-alerta-stop.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-08-centro-alertas.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-09-config-ia.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-10-mesa-dez-traders.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-11-pwa-push.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-12-manual-320.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-12-manual-390.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-13-01-abrir.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-13-03-analise.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-13-05-persistencia.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-13-07-alerta.png",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-13-09-resultado.png",
+  "docs/mission/evidence/v9-baseline/v9-env-1-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-env-1.log",
+  "docs/mission/evidence/v9-baseline/v9-env-1.xml",
+  "docs/mission/evidence/v9-baseline/v9-f1-reexec-head.log",
+  "docs/mission/evidence/v9-baseline/v9-f1-reexec-head.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin-1-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin-1.log",
+  "docs/mission/evidence/v9-baseline/v9-fin-1.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin-2-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin-2.log",
+  "docs/mission/evidence/v9-baseline/v9-fin-2.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin-3-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin-3.log",
+  "docs/mission/evidence/v9-baseline/v9-fin-3.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin-4-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin-4.log",
+  "docs/mission/evidence/v9-baseline/v9-fin-4.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin-5-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin-5.log",
+  "docs/mission/evidence/v9-baseline/v9-fin-5.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin-6-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin-6.log",
+  "docs/mission/evidence/v9-baseline/v9-fin-6.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin04-green-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin04-green.log",
+  "docs/mission/evidence/v9-baseline/v9-fin04-green.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin04-red-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin04-red.log",
+  "docs/mission/evidence/v9-baseline/v9-fin04-red.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin04-regressao-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin04-regressao.log",
+  "docs/mission/evidence/v9-baseline/v9-fin04-regressao.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin05-green-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin05-green.log",
+  "docs/mission/evidence/v9-baseline/v9-fin05-green.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin05-green2-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin05-green2.log",
+  "docs/mission/evidence/v9-baseline/v9-fin05-green2.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin05-red-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin05-red.log",
+  "docs/mission/evidence/v9-baseline/v9-fin05-red.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin05-regress-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin05-regress.log",
+  "docs/mission/evidence/v9-baseline/v9-fin05-regress.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin06-green-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin06-green.log",
+  "docs/mission/evidence/v9-baseline/v9-fin06-green.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin06-red-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin06-red.log",
+  "docs/mission/evidence/v9-baseline/v9-fin06-red.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin06-regressao-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin06-regressao.log",
+  "docs/mission/evidence/v9-baseline/v9-fin06-regressao.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin07-green-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin07-green.log",
+  "docs/mission/evidence/v9-baseline/v9-fin07-green.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin07-red-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin07-red.log",
+  "docs/mission/evidence/v9-baseline/v9-fin07-red.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin07-regress-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin07-regress.log",
+  "docs/mission/evidence/v9-baseline/v9-fin07-regress.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin08-green-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin08-green.log",
+  "docs/mission/evidence/v9-baseline/v9-fin08-green.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin08-red-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin08-red.log",
+  "docs/mission/evidence/v9-baseline/v9-fin08-red.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin08-regressao-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin08-regressao.log",
+  "docs/mission/evidence/v9-baseline/v9-fin08-regressao.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin08-servico-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin08-servico.log",
+  "docs/mission/evidence/v9-baseline/v9-fin08-servico.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin09-green-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin09-green.log",
+  "docs/mission/evidence/v9-baseline/v9-fin09-green.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin09-red-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin09-red.log",
+  "docs/mission/evidence/v9-baseline/v9-fin09-red.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin09-regress-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin09-regress.log",
+  "docs/mission/evidence/v9-baseline/v9-fin09-regress.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin10-green-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin10-green.log",
+  "docs/mission/evidence/v9-baseline/v9-fin10-green.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin10-green2-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin10-green2.log",
+  "docs/mission/evidence/v9-baseline/v9-fin10-green2.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin10-red-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin10-red.log",
+  "docs/mission/evidence/v9-baseline/v9-fin10-red.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin11-green-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin11-green.log",
+  "docs/mission/evidence/v9-baseline/v9-fin11-green.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin11-red-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin11-red.log",
+  "docs/mission/evidence/v9-baseline/v9-fin11-red.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin11-regress-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin11-regress.log",
+  "docs/mission/evidence/v9-baseline/v9-fin11-regress.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin12-green-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin12-green.log",
+  "docs/mission/evidence/v9-baseline/v9-fin12-green.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin12-kernel-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin12-kernel.log",
+  "docs/mission/evidence/v9-baseline/v9-fin12-kernel.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin12-red-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin12-red.log",
+  "docs/mission/evidence/v9-baseline/v9-fin12-red.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin12-regressao-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin12-regressao.log",
+  "docs/mission/evidence/v9-baseline/v9-fin12-regressao.xml",
+  "docs/mission/evidence/v9-baseline/v9-fin12-servico-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-fin12-servico.log",
+  "docs/mission/evidence/v9-baseline/v9-fin12-servico.xml",
+  "docs/mission/evidence/v9-baseline/v9-full-1-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-full-1.log",
+  "docs/mission/evidence/v9-baseline/v9-full-1.xml",
+  "docs/mission/evidence/v9-baseline/v9-full-2-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-full-2.log",
+  "docs/mission/evidence/v9-baseline/v9-full-2.xml",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-dir.toml",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-triagem.md",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-worktree-tentativa-invalida-report.json",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-worktree-tentativa-invalida.log",
+  "docs/mission/evidence/v9-baseline/v9-lint-f5.log",
+  "docs/mission/evidence/v9-baseline/v9-modo-lint-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-modo-lint.log",
+  "docs/mission/evidence/v9-baseline/v9-modo-lint.xml",
+  "docs/mission/evidence/v9-baseline/v9-posse-green-linux.xml",
+  "docs/mission/evidence/v9-baseline/v9-posse-green.xml",
+  "docs/mission/evidence/v9-baseline/v9-posse-red-linux.xml",
+  "docs/mission/evidence/v9-baseline/v9-posse-red.xml",
+  "docs/mission/evidence/v9-baseline/v9-pw-collision-green-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-pw-collision-green.log",
+  "docs/mission/evidence/v9-baseline/v9-pw-collision-red-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-pw-collision-red.log",
+  "docs/mission/evidence/v9-baseline/v9-regressoes-1-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-regressoes-1.log",
+  "docs/mission/evidence/v9-baseline/v9-regressoes-1.xml",
+  "docs/mission/evidence/v9-baseline/v9-sec-1-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-sec-1.log",
+  "docs/mission/evidence/v9-baseline/v9-sec-1.xml",
+  "docs/mission/evidence/v9-baseline/v9-sec-2-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-sec-2.log",
+  "docs/mission/evidence/v9-baseline/v9-sec-2.xml",
+  "docs/mission/evidence/v9-baseline/v9-sec-3-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-sec-3.log",
+  "docs/mission/evidence/v9-baseline/v9-sec-3.xml",
+  "docs/mission/evidence/v9-baseline/v9-sec06-green-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-sec06-green-plain.log",
+  "docs/mission/evidence/v9-baseline/v9-sec06-green-runner.py",
+  "docs/mission/evidence/v9-baseline/v9-sec06-green.log",
+  "docs/mission/evidence/v9-baseline/v9-sec06-green.xml",
+  "docs/mission/evidence/v9-baseline/v9-sec06-red-invocation.json",
+  "docs/mission/evidence/v9-baseline/v9-sec06-red.log",
+  "docs/mission/evidence/v9-baseline/windows-2-invocation.json",
+  "docs/mission/evidence/v9-baseline/windows-2.log",
+  "docs/mission/evidence/v9-baseline/windows-2.xml",
+  "docs/mission/evidence/v9-baseline/windows-local-invocation.json",
+  "docs/mission/evidence/v9-baseline/windows-local.log",
+  "docs/mission/evidence/v9-baseline/windows-local.xml"
+ ],
+ "checks": [
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao-report.json"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-F8.2 (deps, licenças e secret scanning) — EXECUTADO/justificado.** (a) **Dependências/vulnerabilidades:** `pip-audit` sem vulnerabilidades conhecidas ([v9-depaudit-windows.l",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "0362225a23cf689c81ed23299e3d4dc078c7b26395adf031aec117cfcb2e15b3",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao5.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-F8.2 (deps, licenças e secret scanning) — EXECUTADO/justificado.** (a) **Dependências/vulnerabilidades:** `pip-audit` sem vulnerabilidades conhecidas ([v9-depaudit-windows.l",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "169d1b846a5b890972ab360dec020858c13705ddca0dd2804b15f5a9e0c2b77c",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-gitleaks-historico.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-F8.2 (deps, licenças e secret scanning) — EXECUTADO/justificado.** (a) **Dependências/vulnerabilidades:** `pip-audit` sem vulnerabilidades conhecidas ([v9-depaudit-windows.l",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "19117eaaef6d3533424b34de8c70f72212c19419d7407a055aca8de5f481a18f",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao6-report.json"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-F8.2 (deps, licenças e secret scanning) — EXECUTADO/justificado.** (a) **Dependências/vulnerabilidades:** `pip-audit` sem vulnerabilidades conhecidas ([v9-depaudit-windows.l",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "19293b9af77866f80fdef9dc45a5b21cbaa363656b89f7295d7cb829359b394b",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-gitleaks-dir.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-F8.2 (deps, licenças e secret scanning) — EXECUTADO/justificado.** (a) **Dependências/vulnerabilidades:** `pip-audit` sem vulnerabilidades conhecidas ([v9-depaudit-windows.l",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "245e03fe52425ebb3279e9a8be4bd60ea30c0d4b4cc2b44a4c3b450019d83f4d",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [],
+   "citado_em": [
+    {
+     "contexto": "- **Artefato:** run Windows `38467455263` (`d8892dc`) — Setup 69.805.469 B `sha256:24b29dc1b7e1ee9ee0328211aa9a410ce43806fde9e4a866bf4e6a16019fec37`; zip 88.540.652 B `sha256:865bb",
+     "doc": "docs/mission/TRADING-CHECKPOINTS.md"
+    }
+   ],
+   "nota": "CI run 38467455263 — Setup .exe (C018), binário CI não armazenado no repo",
+   "sha256": "24b29dc1b7e1ee9ee0328211aa9a410ce43806fde9e4a866bf4e6a16019fec37",
+   "veredito": "EXTERNO_CONHECIDO"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/f5-probe-ia-auth.json"
+   ],
+   "citado_em": [
+    {
+     "contexto": "| [f5-probe-ia-auth.json](f5-probe-ia-auth.json) | `2a2d6a3ec723fbb8022406d2eb4278809305d3430dc10e9976021d58c04aa580` | 9 provedores IA do catálogo sondados pelo caminho do produto",
+     "doc": "docs/mission/evidence/v9-baseline/f5-classificacao-conectores.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "2a2d6a3ec723fbb8022406d2eb4278809305d3430dc10e9976021d58c04aa580",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-ci-linux-full-green.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-CI-02 — CORRIGIDO/verificado (reprodução e verificação em Linux real).** `_segredos_do_disco` em `service/app.py` passa a limpar o diagnóstico obsoleto quando o valor em dis",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "2c0ffa9cfaeca5e8c2d8e2288b8cd45e1511757bd463557952ac3f39fbca2e87",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [],
+   "citado_em": [
+    {
+     "contexto": "12. **HOMOLOGAÇÃO FINAL DO BUNDLE — run `38450504893` (artefato do merge `0c3fc26`, com C008+C009+C010).** Setup `DZ23-Trading-AI-Setup-v0.4.0.exe` **69.759.848 B** `sha256:bd16083",
+     "doc": "docs/mission/WINDOWS-RELEASE-EVIDENCE.md"
+    }
+   ],
+   "nota": "CI run 38450504893 — zip Windows x64 homologado, binário CI",
+   "sha256": "2cd7ebc2f7d244707b8f51adc54a8d80f0e4fb8b331188f7777780ef3ab822a5",
+   "veredito": "EXTERNO_CONHECIDO"
+  },
+  {
+   "arquivos": [],
+   "citado_em": [
+    {
+     "contexto": "- **V9-F8.2 (deps, licenças e secret scanning) — EXECUTADO/justificado.** (a) **Dependências/vulnerabilidades:** `pip-audit` sem vulnerabilidades conhecidas ([v9-depaudit-windows.l",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "agregado canônico dos 17 achados gitleaks (ordenados por fingerprint), computado em memória",
+   "sha256": "3582b2af52bf64e837665988d46aa175893fa93486d3c1867dcbb225801b77f4",
+   "veredito": "EXTERNO_CONHECIDO"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao5-report.json"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-F8.2 (deps, licenças e secret scanning) — EXECUTADO/justificado.** (a) **Dependências/vulnerabilidades:** `pip-audit` sem vulnerabilidades conhecidas ([v9-depaudit-windows.l",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "3b12780d0c637a886b399e3c51ecca50de115d0721d1e338a46a39b10f76bbd0",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-e2e-final.xml"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-F8.1 (E2E Playwright) — EXECUTADO.** A suíte completa `tests/e2e` (31 itens: 14 do painel + 13 do aceite TD-5 + 4 do FM-6) rodou no HEAD congelado contra o app REAL — cada t",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "3bb807ad291bef76da9e16ba8bbd60222a37b7ea5f0ae9d1faa051224723631f",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-ci-linux-full-green3.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-POSSE-01 — CONFIRMADO/CORRIGIDO.** O backend ARQUIVO da posse (`tradingagents/desk/storage.py::salvar_posse`) concedia a posse a DOIS processos reais: o `_WRITE_LOCK` do mód",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "5ee124042ac58d363ea39c678c4f4eeec6514dc6f4cee59e7a78738b83956bf7",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-posse-regress.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-POSSE-01 — CONFIRMADO/CORRIGIDO.** O backend ARQUIVO da posse (`tradingagents/desk/storage.py::salvar_posse`) concedia a posse a DOIS processos reais: o `_WRITE_LOCK` do mód",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "5fa1c6e882b6ea588016f4815cd0c7954323da174fe09781123633d99167bff6",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/f6-health-recovery.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "| [f6-health-recovery.log](f6-health-recovery.log) | `61224b15dd58e2b8147d693044b4f4f6cf4806d317c55791455853321fa0abf9` | `test_service_leigo.py` + `test_single_owner_g2.py` + `tes",
+     "doc": "docs/mission/evidence/v9-baseline/f6-classificacao-pwa-oracle.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "61224b15dd58e2b8147d693044b4f4f6cf4806d317c55791455853321fa0abf9",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao2.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-F8.2 (deps, licenças e secret scanning) — EXECUTADO/justificado.** (a) **Dependências/vulnerabilidades:** `pip-audit` sem vulnerabilidades conhecidas ([v9-depaudit-windows.l",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "64b1d5c07949a688f9da7e954f6cd4e656cd736bcffcdd71dd5c9d012ea386c7",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [],
+   "citado_em": [
+    {
+     "contexto": "- **Artefato:** run Windows `38467455263` (`d8892dc`) — Setup 69.805.469 B `sha256:24b29dc1b7e1ee9ee0328211aa9a410ce43806fde9e4a866bf4e6a16019fec37`; zip 88.540.652 B `sha256:865bb",
+     "doc": "docs/mission/TRADING-CHECKPOINTS.md"
+    }
+   ],
+   "nota": "CI run 38467455263 — zip Windows x64 (C018), binário CI não armazenado no repo",
+   "sha256": "865bb4e93e1d1f33916b133fcf5bd52cd6c0e1fafdeda54673e1b43202ed770c",
+   "veredito": "EXTERNO_CONHECIDO"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-posse-red-linux.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-POSSE-01 — CONFIRMADO/CORRIGIDO.** O backend ARQUIVO da posse (`tradingagents/desk/storage.py::salvar_posse`) concedia a posse a DOIS processos reais: o `_WRITE_LOCK` do mód",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "874b4476aa39e603c7897ffb47a81c011586b74eb1058de2ec1dec22e4525632",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-gitleaks-historico-report.json"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-F8.2 (deps, licenças e secret scanning) — EXECUTADO/justificado.** (a) **Dependências/vulnerabilidades:** `pip-audit` sem vulnerabilidades conhecidas ([v9-depaudit-windows.l",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "89551075369465c26186049af839ead4033ff9c7bdbcfc4b5fbf9e022f71ffde",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-depaudit-windows.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-F8.2 (deps, licenças e secret scanning) — EXECUTADO/justificado.** (a) **Dependências/vulnerabilidades:** `pip-audit` sem vulnerabilidades conhecidas ([v9-depaudit-windows.l",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "8d30129b90f1057809d79183b49316d3a73c6cbb7d3ce8b6e858dcd929930d5c",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/f6-reconciliacao.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "| [f6-reconciliacao.log](f6-reconciliacao.log) | `8d425ecaa34514e1fdfd6a2145b84557433f52d42323adbcb9fdd1adc1aa86b5` | `test_reconciliacao_adversarial.py` + `test_reconciliation_sta",
+     "doc": "docs/mission/evidence/v9-baseline/f6-classificacao-pwa-oracle.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "8d425ecaa34514e1fdfd6a2145b84557433f52d42323adbcb9fdd1adc1aa86b5",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/f5-probe-real-readonly.json"
+   ],
+   "citado_em": [
+    {
+     "contexto": "| [f5-probe-real-readonly.json](f5-probe-real-readonly.json) | `8fc9e3651f06cd3662747fa0eed1409e5bb1d6d9ff5865162b1b97596750be25` | 4 provas read-only: velas Binance produção, livr",
+     "doc": "docs/mission/evidence/v9-baseline/f5-classificacao-conectores.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "8fc9e3651f06cd3662747fa0eed1409e5bb1d6d9ff5865162b1b97596750be25",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-ci-linux-full-run1-sem-git.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-CI-02 — CORRIGIDO/verificado (reprodução e verificação em Linux real).** `_segredos_do_disco` em `service/app.py` passa a limpar o diagnóstico obsoleto quando o valor em dis",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "97a604398d30313eef656786b33e2bd55021731cacb4bc5686f00ae17a1cb9a5",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-posse-red.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-POSSE-01 — CONFIRMADO/CORRIGIDO.** O backend ARQUIVO da posse (`tradingagents/desk/storage.py::salvar_posse`) concedia a posse a DOIS processos reais: o `_WRITE_LOCK` do mód",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "97c7862bfc467d29774f88f13594b0abe50db2bfb07cff6e0b33f9eb7860a061",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/f5-deepseek-live-invocation.json"
+   ],
+   "citado_em": [
+    {
+     "contexto": "| [f5-deepseek-live-invocation.json](f5-deepseek-live-invocation.json) | `9b532dbf877d1436d99a4f31201ee05e076526cbbaee0b21696de52e15d8cfe4` | Invocação do teste live (1 chamada rea",
+     "doc": "docs/mission/evidence/v9-baseline/f5-classificacao-conectores.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "9b532dbf877d1436d99a4f31201ee05e076526cbbaee0b21696de52e15d8cfe4",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-posse-green-linux.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-POSSE-01 — CONFIRMADO/CORRIGIDO.** O backend ARQUIVO da posse (`tradingagents/desk/storage.py::salvar_posse`) concedia a posse a DOIS processos reais: o `_WRITE_LOCK` do mód",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "9e50ceaadc579a2837a01086dc20ddc61a1e70fd522d2ace98692d9d984c4dd3",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-ci-linux-full-green3.xml"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-POSSE-01 — CONFIRMADO/CORRIGIDO.** O backend ARQUIVO da posse (`tradingagents/desk/storage.py::salvar_posse`) concedia a posse a DOIS processos reais: o `_WRITE_LOCK` do mód",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "a5400b4a2e26bfaa2b0e4923b143b8a4529f84c0169a5d4275c21b618c9149cc",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao3.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-F8.2 (deps, licenças e secret scanning) — EXECUTADO/justificado.** (a) **Dependências/vulnerabilidades:** `pip-audit` sem vulnerabilidades conhecidas ([v9-depaudit-windows.l",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "a576b3a5911d4b0a0d65f61d50e30f04984507850395557cf9062c649e59426f",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-F8.2 (deps, licenças e secret scanning) — EXECUTADO/justificado.** (a) **Dependências/vulnerabilidades:** `pip-audit` sem vulnerabilidades conhecidas ([v9-depaudit-windows.l",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "aa142108753b540e6347fcae0d202f5b102c347f3f7032540670febe45b0a84f",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao6.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-F8.2 (deps, licenças e secret scanning) — EXECUTADO/justificado.** (a) **Dependências/vulnerabilidades:** `pip-audit` sem vulnerabilidades conhecidas ([v9-depaudit-windows.l",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "b48eb3f35daf960295ec0fd73367c2228206b4b7537e8d2b7a850ebe6377073c",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-ci-linux-full-green.xml"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-CI-02 — CORRIGIDO/verificado (reprodução e verificação em Linux real).** `_segredos_do_disco` em `service/app.py` passa a limpar o diagnóstico obsoleto quando o valor em dis",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "b69a6d2fe17c88d19e7d2ec1f29d1b25d36125fbab1003299369c8aa21310baa",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao2-report.json",
+    "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao4-report.json",
+    "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-report.json"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-F8.2 (deps, licenças e secret scanning) — EXECUTADO/justificado.** (a) **Dependências/vulnerabilidades:** `pip-audit` sem vulnerabilidades conhecidas ([v9-depaudit-windows.l",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "b9520002f14cbafe992e1558fa900f4449ef948c34203ca71d5529f88e487811",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [],
+   "citado_em": [
+    {
+     "contexto": "12. **HOMOLOGAÇÃO FINAL DO BUNDLE — run `38450504893` (artefato do merge `0c3fc26`, com C008+C009+C010).** Setup `DZ23-Trading-AI-Setup-v0.4.0.exe` **69.759.848 B** `sha256:bd16083",
+     "doc": "docs/mission/WINDOWS-RELEASE-EVIDENCE.md"
+    }
+   ],
+   "nota": "CI run 38450504893 — Setup v0.4.0 homologado (C008+C009+C010), binário CI",
+   "sha256": "bd160830a51a46222270317e932772bb82b9313054504410071d4e4848ae74de",
+   "veredito": "EXTERNO_CONHECIDO"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/f5-deepseek-live.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "| [f5-deepseek-live.log](f5-deepseek-live.log) | `c1f2b155e467726665fe8878859d827022414b6b81241283eabf583f18619aff` | Teste live do próprio repo (`TestDeepSeekLiveStructuredOutput`",
+     "doc": "docs/mission/evidence/v9-baseline/f5-classificacao-conectores.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "c1f2b155e467726665fe8878859d827022414b6b81241283eabf583f18619aff",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao4.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-F8.2 (deps, licenças e secret scanning) — EXECUTADO/justificado.** (a) **Dependências/vulnerabilidades:** `pip-audit` sem vulnerabilidades conhecidas ([v9-depaudit-windows.l",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "c6141b8898af8edfde2268c359ada1a95873ee2f4fa8f6c682fe09632553db8d",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-e2e-final.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-F8.1 (E2E Playwright) — EXECUTADO.** A suíte completa `tests/e2e` (31 itens: 14 do painel + 13 do aceite TD-5 + 4 do FM-6) rodou no HEAD congelado contra o app REAL — cada t",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "c69326a022c544a42b77ba5d3a09c9106dd5b0e8b6c062eb4d83e6dd1fb588d2",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/f5-probe-real-readonly-invocation.json"
+   ],
+   "citado_em": [
+    {
+     "contexto": "| [f5-probe-real-readonly-invocation.json](f5-probe-real-readonly-invocation.json) | `dc4699a3561e5c7634cfc4b2e56eb558501a361ccc57785a7fb4116c2912d28c` | Invocação da prova acima (",
+     "doc": "docs/mission/evidence/v9-baseline/f5-classificacao-conectores.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "dc4699a3561e5c7634cfc4b2e56eb558501a361ccc57785a7fb4116c2912d28c",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/f6-sessao.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "| [f6-sessao.log](f6-sessao.log) | `e28e99bc6f278263c5afce4036cb8a74b87c52519d28b5bafc11387634aeee03` | `test_login_dono_unico.py` + `test_oauth_social.py` + `test_desk_backup.py` ",
+     "doc": "docs/mission/evidence/v9-baseline/f6-classificacao-pwa-oracle.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "e28e99bc6f278263c5afce4036cb8a74b87c52519d28b5bafc11387634aeee03",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/f5-probe-ia-auth-invocation.json"
+   ],
+   "citado_em": [
+    {
+     "contexto": "| [f5-probe-ia-auth-invocation.json](f5-probe-ia-auth-invocation.json) | `e6e60c690826e3e132f80b669a291722ff93219b583c3d527c2a51b291ebe8e6` | Invocação da sondagem IA (exit 0; auto",
+     "doc": "docs/mission/evidence/v9-baseline/f5-classificacao-conectores.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "e6e60c690826e3e132f80b669a291722ff93219b583c3d527c2a51b291ebe8e6",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-posse-green.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-POSSE-01 — CONFIRMADO/CORRIGIDO.** O backend ARQUIVO da posse (`tradingagents/desk/storage.py::salvar_posse`) concedia a posse a DOIS processos reais: o `_WRITE_LOCK` do mód",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "ec6922103feec25698e67fb804a0a08f9bae80c5355a3a83ac79228b4057fd92",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [],
+   "citado_em": [
+    {
+     "contexto": "- **Evidência:** run Windows Release Build `38437252278` success (todos os steps ✓: uv sync → Inno Setup → PyInstaller → ISCC → zip+hash → upload); artefato `dz23-windows-x64` (157",
+     "doc": "docs/mission/TRADING-CHECKPOINTS.md"
+    },
+    {
+     "contexto": "- Artefato `dz23-windows-x64` (157.294.923 bytes; digest CI `sha256:f40ab26db60f267e9e2f4d47042e08f1f68c331a5a899d13b4f25bb08c2f659f`); baixado localmente: Setup = 69.752.620 bytes",
+     "doc": "docs/mission/WINDOWS-RELEASE-EVIDENCE.md"
+    }
+   ],
+   "nota": "digest do artefato CI dz23-windows-x64 run 38437252278, não armazenado no repo",
+   "sha256": "f40ab26db60f267e9e2f4d47042e08f1f68c331a5a899d13b4f25bb08c2f659f",
+   "veredito": "EXTERNO_CONHECIDO"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao3-report.json"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-F8.2 (deps, licenças e secret scanning) — EXECUTADO/justificado.** (a) **Dependências/vulnerabilidades:** `pip-audit` sem vulnerabilidades conhecidas ([v9-depaudit-windows.l",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "f535f2e70f917338ec1a1156a6e39c8ff3492fb1e0b72eb901d4268b3daf2cd3",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/v9-licencas.csv"
+   ],
+   "citado_em": [
+    {
+     "contexto": "- **V9-F8.2 (deps, licenças e secret scanning) — EXECUTADO/justificado.** (a) **Dependências/vulnerabilidades:** `pip-audit` sem vulnerabilidades conhecidas ([v9-depaudit-windows.l",
+     "doc": "docs/mission/V9-BASELINE.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "f63d547f9108610dce4a82cc1b808174204b9620f18473a558d45ae8fe8267e7",
+   "veredito": "OK"
+  },
+  {
+   "arquivos": [
+    "docs/mission/evidence/v9-baseline/f6-pwa.log"
+   ],
+   "citado_em": [
+    {
+     "contexto": "| [f6-pwa.log](f6-pwa.log) | `feabc72a263f75d47320f062d74ef5506e97eeac0986f8b7e13d08cc5873e0ce` | `test_pwa_push.py` + `test_pwa_static.py` no executor hermético — **45 passed** |",
+     "doc": "docs/mission/evidence/v9-baseline/f6-classificacao-pwa-oracle.md"
+    }
+   ],
+   "nota": "",
+   "sha256": "feabc72a263f75d47320f062d74ef5506e97eeac0986f8b7e13d08cc5873e0ce",
+   "veredito": "OK"
+  }
+ ],
+ "ferramenta": "tools/v9_f8_integridade.py",
+ "hashes_externos_conhecidos": [
+  "24b29dc1b7e1ee9ee0328211aa9a410ce43806fde9e4a866bf4e6a16019fec37",
+  "2cd7ebc2f7d244707b8f51adc54a8d80f0e4fb8b331188f7777780ef3ab822a5",
+  "3582b2af52bf64e837665988d46aa175893fa93486d3c1867dcbb225801b77f4",
+  "865bb4e93e1d1f33916b133fcf5bd52cd6c0e1fafdeda54673e1b43202ed770c",
+  "bd160830a51a46222270317e932772bb82b9313054504410071d4e4848ae74de",
+  "f40ab26db60f267e9e2f4d47042e08f1f68c331a5a899d13b4f25bb08c2f659f"
+ ],
+ "hashes_orfaos": [],
+ "hashes_registrados_em_docs": 44,
+ "hashes_verificados_ok": 38,
+ "head": "2b7754a94cc1e4233ad95ac6fa377be4078e5055",
+ "manifesto": {
+  "docs/mission/evidence/v9-baseline/auth-red-invocation.json": "83d99e10ce4b0bb8b58d691da3bd015199aec0117dd3ba6d4b508d83d832fd6c",
+  "docs/mission/evidence/v9-baseline/auth-red.log": "6f718fcac1397693616f0ed8e4ad8ffb43de0bde5aff10f6e8eedd22281a8e4d",
+  "docs/mission/evidence/v9-baseline/auth-red.xml": "91ad46a6f72344f737b707692ee3533873490daeb5f23f944dbd2a000741ffdf",
+  "docs/mission/evidence/v9-baseline/ci-failed.log": "18eb16a72a499e93e7208734a759337e38dbea1f6353ccc560e8e03f4120d887",
+  "docs/mission/evidence/v9-baseline/ci-secrets-green-invocation.json": "6a8a257b93c1aea259bee561153b599e7618cba1640786b7ee9c4285cb882a17",
+  "docs/mission/evidence/v9-baseline/ci-secrets-green.log": "cfce62b41de6d66a686800f2c30eb143c2007414aede0464e26f6890fe6a71ee",
+  "docs/mission/evidence/v9-baseline/ci-secrets-green.xml": "e1f01f534c258bfdee97878bd85c07af1bf2d960ed299772c32f6e48e2b68db1",
+  "docs/mission/evidence/v9-baseline/ci-secrets-red-invocation.json": "0ab1636c10c9289eb3e224c239f97b3c08626b5d8bdd45c44078ff44f23e79c6",
+  "docs/mission/evidence/v9-baseline/ci-secrets-red.log": "9f26093db3e2b0b5838309a6925d231200626b7d224a45ee111cc55b641fbe29",
+  "docs/mission/evidence/v9-baseline/ci-secrets-red.xml": "9f4d5d40c878899396d9f40893d3ec54bb87c2af490111a0642ff32fa6ff5cc2",
+  "docs/mission/evidence/v9-baseline/e2e-diagnostic-invocation.json": "fdfa40431d84ac513e6e7a4cd0e28941e479d53c692a6a3569afbf4e919a6d4e",
+  "docs/mission/evidence/v9-baseline/e2e-diagnostic.log": "050b2c66465003b3de08ae9db48670b8cda5c4c1fbc1092f8b0f2d4985ffe45e",
+  "docs/mission/evidence/v9-baseline/e2e-diagnostic.xml": "8bcb5a5611b7e9ba626d4d4d8359fc60ecd7eac7a2550f99ff44280a2f20e757",
+  "docs/mission/evidence/v9-baseline/e2e-invocation.json": "c78f2e8eeb728fa19908a85908b5a425c6a9a9d173ace7df60f444002d94f661",
+  "docs/mission/evidence/v9-baseline/e2e.log": "a1bcccb7f8d4f31bcc6a1def3729d466f04992cbed765ab8e4e6945948581720",
+  "docs/mission/evidence/v9-baseline/e2e.xml": "c96fe0c851ffdf5797cdbee35dd13228eb025aa4ca9d2346af6d77d9222062ce",
+  "docs/mission/evidence/v9-baseline/escola-diagnostic-invocation.json": "faab114711b037f7ac10565ce60e9753921ab5d32089a319615149ecc2df84a3",
+  "docs/mission/evidence/v9-baseline/escola-diagnostic.log": "f07895a891f402cd62d14311b42e8e232d68fb1e7268cfb79439ef59c21ca982",
+  "docs/mission/evidence/v9-baseline/escola-diagnostic.xml": "05a00ee47b285a39274ffad059e3303cd54759e54a6294cc0a756a943d7743e3",
+  "docs/mission/evidence/v9-baseline/f5-classificacao-conectores.md": "86344eb2bf7a8d78579c5daecba260803a388b793dd5043e30bc947500d8af3e",
+  "docs/mission/evidence/v9-baseline/f5-deepseek-live-invocation.json": "9b532dbf877d1436d99a4f31201ee05e076526cbbaee0b21696de52e15d8cfe4",
+  "docs/mission/evidence/v9-baseline/f5-deepseek-live.log": "c1f2b155e467726665fe8878859d827022414b6b81241283eabf583f18619aff",
+  "docs/mission/evidence/v9-baseline/f5-probe-ia-auth-invocation.json": "e6e60c690826e3e132f80b669a291722ff93219b583c3d527c2a51b291ebe8e6",
+  "docs/mission/evidence/v9-baseline/f5-probe-ia-auth.err.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "docs/mission/evidence/v9-baseline/f5-probe-ia-auth.json": "2a2d6a3ec723fbb8022406d2eb4278809305d3430dc10e9976021d58c04aa580",
+  "docs/mission/evidence/v9-baseline/f5-probe-real-readonly-invocation.json": "dc4699a3561e5c7634cfc4b2e56eb558501a361ccc57785a7fb4116c2912d28c",
+  "docs/mission/evidence/v9-baseline/f5-probe-real-readonly.err.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "docs/mission/evidence/v9-baseline/f5-probe-real-readonly.json": "8fc9e3651f06cd3662747fa0eed1409e5bb1d6d9ff5865162b1b97596750be25",
+  "docs/mission/evidence/v9-baseline/f6-classificacao-pwa-oracle.md": "da2b02641598ae299d3a3668b13ac590a048cd72a5be25a265458150ad6c4a26",
+  "docs/mission/evidence/v9-baseline/f6-health-recovery-invocation.json": "e4dcdba63560eb4b1f4a95fd52b216140169856f0839b4de87980042ac1ddb31",
+  "docs/mission/evidence/v9-baseline/f6-health-recovery.log": "61224b15dd58e2b8147d693044b4f4f6cf4806d317c55791455853321fa0abf9",
+  "docs/mission/evidence/v9-baseline/f6-health-recovery.xml": "891c52ca718ed559e8697e8b9b28c3c1389f92d6970b9c632430850596f6d0ee",
+  "docs/mission/evidence/v9-baseline/f6-pwa-invocation.json": "3f2ebb5b469289652aeb74b12d8a7dba7e479aaaf032c3115bea3d64ae0dd0f5",
+  "docs/mission/evidence/v9-baseline/f6-pwa.log": "feabc72a263f75d47320f062d74ef5506e97eeac0986f8b7e13d08cc5873e0ce",
+  "docs/mission/evidence/v9-baseline/f6-pwa.xml": "df666766bc9039e07b7d7062a8480ddeb0fd794587cc954305d268d3a57125cf",
+  "docs/mission/evidence/v9-baseline/f6-reconciliacao-invocation.json": "322b516259b09e58055945c1194cad81e9b656bb0d682e805b8612a852cfd6fc",
+  "docs/mission/evidence/v9-baseline/f6-reconciliacao.log": "8d425ecaa34514e1fdfd6a2145b84557433f52d42323adbcb9fdd1adc1aa86b5",
+  "docs/mission/evidence/v9-baseline/f6-reconciliacao.xml": "94b632f43203a60fae85f2edd7e56b9babc98e2ac12bde9b3dfc77b8645fcb94",
+  "docs/mission/evidence/v9-baseline/f6-sessao-invocation.json": "666d4046faea4d062751a9272075489b7357020128d8e1135c28cf473cb301a2",
+  "docs/mission/evidence/v9-baseline/f6-sessao.log": "e28e99bc6f278263c5afce4036cb8a74b87c52519d28b5bafc11387634aeee03",
+  "docs/mission/evidence/v9-baseline/f6-sessao.xml": "fd6b5f976a0c36c53ad7d1dd16dd7c21d0b70c090cc5f9c92c591392b6d04208",
+  "docs/mission/evidence/v9-baseline/f7-rotas-classificacao.md": "02cc2501dfe825864fc2b1f9f8378168b18b4ef38f7b6c0922a4f44fb0950553",
+  "docs/mission/evidence/v9-baseline/f7-rotas-pos-sec06.json": "54fd401763299128c0c3f7420876a235fb414b908751a29e2c1e9b9e81d14e62",
+  "docs/mission/evidence/v9-baseline/f7-rotas.json": "a06cbda23b572c96625d956f6c0d5c61a78963e7420bbb549d11e6e66830aa2d",
+  "docs/mission/evidence/v9-baseline/f8-rotas-invocation.json": "918a9dbe6eedd113e3546e0f6d6ed4f8668b6b025e25e40f31574e28b4a26979",
+  "docs/mission/evidence/v9-baseline/f8-rotas-red-invocation.json": "98bb7eb742ecf25f0719e146853423a437f326f3bd0db17d4278df10d44be093",
+  "docs/mission/evidence/v9-baseline/f8-rotas-red.log": "7e5aeca341599fea00de3e9dcf94ed3c97d45fac68a3a1ac2a0cf12304d29990",
+  "docs/mission/evidence/v9-baseline/f8-rotas-red.xml": "1fe9244ddbc6435e59ae745f617971ee8155d0bd5c3cbdc5bc69b1d515baa8da",
+  "docs/mission/evidence/v9-baseline/f8-rotas.log": "5c3fe0aa119e35ca52855feba0b06e40aab07616fcb6ba9d5b3abc908b7b52df",
+  "docs/mission/evidence/v9-baseline/f8-rotas.xml": "3561847e6a31a7778dea52197de18f063ec70e229c93f8ba87071490f4aab338",
+  "docs/mission/evidence/v9-baseline/f8-sentiment-invocation.json": "d6dd7188ac14318f218d3a94e38af0134af468548eed0e69644eb45cc0eea13c",
+  "docs/mission/evidence/v9-baseline/f8-sentiment-red-invocation.json": "afc43b9f647515c2d1b67582f276fb09174f02c88b2598a20f091895ecb75aad",
+  "docs/mission/evidence/v9-baseline/f8-sentiment-red.log": "cfd5d9a7025cffbe8e57527c8e0792cb10db2a93572d083e3fba744b117b279a",
+  "docs/mission/evidence/v9-baseline/f8-sentiment-red.xml": "c56391e5b5747f4c715b7ce07685de96f3ce277de5f150ed072fcb877a3a1294",
+  "docs/mission/evidence/v9-baseline/f8-sentiment.log": "5bdff1141d1a698e4cda4029db7c20401258348c5f49d13f5c83e74b2f4aed7d",
+  "docs/mission/evidence/v9-baseline/f8-sentiment.xml": "fb7207610a49f0fb20192804b97a2cb4f6f2b73ac18c360f3696d19ae8346d21",
+  "docs/mission/evidence/v9-baseline/fin-impl-2-invocation.json": "9ec226d19d119b88474a2fde298b49b9cb872164a549300887c96827649fc2ae",
+  "docs/mission/evidence/v9-baseline/fin-impl-2.log": "2c2a71789311331375967c132e5fd48aca68a696be2dc0f83cd1fe198419926d",
+  "docs/mission/evidence/v9-baseline/fin-impl-2.xml": "10e2f48c53ae6a985c9f881ee6c81ba264949969e2a02e62ec83c85e2172b94f",
+  "docs/mission/evidence/v9-baseline/fin-impl-check-1-invocation.json": "aed7bb38b4869370b13b2f70ee8153501fbdc855fdc277ac299e4dfd26b73c3e",
+  "docs/mission/evidence/v9-baseline/fin-impl-check-1.log": "01ec8dbc089b727bd45a11f7575ef25d12c170dbeb2b5483a4616c3d1009ee86",
+  "docs/mission/evidence/v9-baseline/fin-impl-check-1.xml": "f0f8455f9fd112c6b8107bc36dec34a4389ae7484415eb0dbdc46e723ba4258a",
+  "docs/mission/evidence/v9-baseline/financial-green-harness.json": "acb09ff0919ad7a0c7da65441d9de3c6de598aee81f4899381e41682979599f6",
+  "docs/mission/evidence/v9-baseline/financial-green-red-expanded-invocation.json": "8cceaeb8c288fff5fdfdfc6ad5c3cdc9d76c0b0acbb17c20e6501ac8e026e59e",
+  "docs/mission/evidence/v9-baseline/financial-green-red-expanded.log": "430b92348e652d5a8eab54af1d5564025d2bb4e36655c91e2473db11a721c5b1",
+  "docs/mission/evidence/v9-baseline/financial-green-red-expanded.xml": "ec14af826e40fdb5d4b40e82e10510b9cb73ed5837f064368d69e809f6e83d93",
+  "docs/mission/evidence/v9-baseline/financial-red-invocation.json": "9286f475933ea9a2f796000bb89c9c7318cbe5f2e39c1bb62381591724b5df79",
+  "docs/mission/evidence/v9-baseline/financial-red.log": "e5c14da18734730a3f513f12841f0edf4233088756a7b747c4262eff19b640dd",
+  "docs/mission/evidence/v9-baseline/financial-red.xml": "7030f6da7491e79e4a0b83545c2567915e4b8d495c4264f9ca1944933a4d06e8",
+  "docs/mission/evidence/v9-baseline/full-3-invocation.json": "df8358689c8a236cd553261d73c38f2b9533ada2f1639fffc3c46c6cef6bfaad",
+  "docs/mission/evidence/v9-baseline/full-3.log": "5000bd5e309c806ea392af48b221afbd0e6e633e1709af2adfda712de5411bc4",
+  "docs/mission/evidence/v9-baseline/full-3.xml": "2cb02213252eee996e64b12696540f97443e8d0e70b507fc6bd9f185a286e2bf",
+  "docs/mission/evidence/v9-baseline/full-4-invocation.json": "55bdcf1c351b39c426def01ced482d418f008fcf22601ee0ab1faf1265dfb031",
+  "docs/mission/evidence/v9-baseline/full-4.log": "e63a028ef5f49a3c9f139f5cba419f5b02256565ce6272c3901dc421c3a4f072",
+  "docs/mission/evidence/v9-baseline/full-4.xml": "33030561dac150381d0a7e094ab781bb593b35f2d92d9fca30a48a0febf47d1c",
+  "docs/mission/evidence/v9-baseline/full-5-invocation.json": "100d0c7ccc58dec3bc0e2341cb1da2fb3a43c6bd30e02070c9bee9a12e6c0ddd",
+  "docs/mission/evidence/v9-baseline/full-5.log": "ff6fe8862660cf76e64d3deb96a5749f38b4b408920f85389421245ead8e7b2a",
+  "docs/mission/evidence/v9-baseline/full-5.xml": "948c618b2a57393bccc20e5fa8386a7a147f7674907955f62e7b03e15661a480",
+  "docs/mission/evidence/v9-baseline/pytest-invocation.json": "b96bb035a8c0ee7bf36c6f8ebab8f544c1311a70fb770764af9d3ce5382dfb1a",
+  "docs/mission/evidence/v9-baseline/pytest-safe-invocation.json": "78cfae7d07bb2a57328c6c506e904ff1501ad7f7d59395a0e4694ce3ad1fd6e8",
+  "docs/mission/evidence/v9-baseline/pytest-safe.log": "d089126c3aa87ebfda95c2b90984565d26ba61d031def1e959947a69ac1c34b1",
+  "docs/mission/evidence/v9-baseline/pytest-safe.xml": "dbba171b06b06032357beb8fa684e497853fc44a8b6b8d03cd0a0f6e59cd9689",
+  "docs/mission/evidence/v9-baseline/pytest.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "docs/mission/evidence/v9-baseline/quant-accounting-probe.json": "3eeee8a1169e7f137182629d89e61b3f4aff025824ae1c3a2dcfae52a5acb378",
+  "docs/mission/evidence/v9-baseline/quant-green-final-1-invocation.json": "ab25bb2453de3ce213d623b9e5cdd91a99fbc8d57cc75cf2a74ca5ff38da1c33",
+  "docs/mission/evidence/v9-baseline/quant-green-final-1.log": "8884b34a814680a961da6e445822761a3beabcf926e396a3a2fca43380d38f0a",
+  "docs/mission/evidence/v9-baseline/quant-green-final-1.xml": "de8a7a947dfba62eb0f925433f5b614add8713a9d562af17de09ad5bee976490",
+  "docs/mission/evidence/v9-baseline/quant-green-initial-invocation.json": "749e44b2b1af94948729bd56e55ec0341fa45b4d47e116b9310ba07f7754f5e3",
+  "docs/mission/evidence/v9-baseline/quant-green-initial.log": "18b9b17cba38414529fd608952e5d09cf8943c1d29348d58ecb106483ad89831",
+  "docs/mission/evidence/v9-baseline/quant-green-initial.xml": "451a3a44fd2ce24e648e16b22f7c642cdd382aa1f029fe30cec2e5a66ccd5bc7",
+  "docs/mission/evidence/v9-baseline/quant-red-invocation.json": "3a9f1d2867e8bdbc1b0ed45bf4768f6f3c95ac77a3dc3916606782edfbfa0079",
+  "docs/mission/evidence/v9-baseline/quant-red.log": "08556af97ec2456ddc3f9933fae80f75ca2bb91e947debb6a182eda12b6d1a96",
+  "docs/mission/evidence/v9-baseline/quant-red.xml": "bf59ee51afb844d403ecefdd4809be188f6adec2979edf1c8fd99cd8deb42173",
+  "docs/mission/evidence/v9-baseline/quant-safety-red-invocation.json": "c2e8d2a1f7ecde03280d8850e279910017a69c8d696a61023dce56fcdbbd5ea8",
+  "docs/mission/evidence/v9-baseline/quant-safety-red.log": "c1f8ea484ec6bfed4352d0e91da016a892ea6b2e7c5420ace537d79b9f5a5fa2",
+  "docs/mission/evidence/v9-baseline/quant-safety-red.xml": "f77cf32fcd94f6056d6df0bba9b7830ca22915475f208ba3ddb58099463e551f",
+  "docs/mission/evidence/v9-baseline/screenshots/00-login-premium-desktop.png": "996e40388e5541f6b635313c57684569d069f54d3c27b06d3331cfaae84ffc17",
+  "docs/mission/evidence/v9-baseline/screenshots/01-visao-geral-dono.png": "5ed84f7c3171952079ab5ad45ea06b1974ef364a82f882f76db9541dbd22b35f",
+  "docs/mission/evidence/v9-baseline/screenshots/02-floor-embutido.png": "7458aabd193ea99aa8a88ba95289c8bdbe746da4b8c02efce147c722fb73b826",
+  "docs/mission/evidence/v9-baseline/screenshots/03-mesa-quant.png": "3f3251ea17f03def2d7b797cc8dc15d4b1e1b27c218d6a237551a5bf6f3ebea1",
+  "docs/mission/evidence/v9-baseline/screenshots/04-login-mobile.png": "705f724b3f068237287827f612be533920a261c856afb757067cc331bbebb09e",
+  "docs/mission/evidence/v9-baseline/screenshots/05-painel-mobile.png": "84a1a7257adfa1b737021f3768a6c63c9f0fd9e30736863ef4a1be36b2790f8e",
+  "docs/mission/evidence/v9-baseline/screenshots/06-codigo-recuperacao.png": "15c5a3e436752138b726b20f999f0bbc95ea0f42c18083c92924427c2367f795",
+  "docs/mission/evidence/v9-baseline/screenshots/07-login-1366x768.png": "631527111a9b2dc3f564317e9e723ded30b73bb49bb0582625e84a54b756f950",
+  "docs/mission/evidence/v9-baseline/screenshots/07-login-1920x1080.png": "8ff6bdb45aa9fd86213ea85bc4fc1b19a3a2efe3da2a9da75177800ae9dabd22",
+  "docs/mission/evidence/v9-baseline/screenshots/07-login-320x568.png": "f4811b70b8ee7c8534b9788c6a8795d344715f5dbd97f0010a4a78e7dabced2e",
+  "docs/mission/evidence/v9-baseline/screenshots/07-login-360x640.png": "7534f4d233d1ee511ebc337b3430f1cb091b2c9fa333d06044a5a19369ae27f1",
+  "docs/mission/evidence/v9-baseline/screenshots/07-login-390x844.png": "ff946ffb2168d1fa51229d2cbdb7da69b6f81c9d64122a596c5d4658e7b0d091",
+  "docs/mission/evidence/v9-baseline/screenshots/07-login-768x1024.png": "e9f48261a45e5537ee67ea7f5f7abf904fa2aceefb1ee93acff0c08bb0795f99",
+  "docs/mission/evidence/v9-baseline/screenshots/08-minhas-operacoes.png": "0c6831120895a00c19f31f87b4fb008e91554a950e424900db0d470376f0969e",
+  "docs/mission/evidence/v9-baseline/screenshots/08-pwa-config.png": "26d4db98fde038590f66fbd7417d39809811a647c61eb776001b9f5b27a19a9f",
+  "docs/mission/evidence/v9-baseline/screenshots/09-inicio-assistente.png": "d4285f61b4c8307dded1bccaf6ca511fd291a32f36360c020fb9c44310e9ca20",
+  "docs/mission/evidence/v9-baseline/screenshots/09b-inicio-capacidades.png": "cb27df5bca86c8a23dede4162d1f9fe06c9a6bc736afc74499fa06e72eee7bc9",
+  "docs/mission/evidence/v9-baseline/screenshots/09c-fm3-preparo-real.png": "86aa2dc55f923013c8b41adbb8ae10e1e3231823272af88a7eabc2c944a1f9f1",
+  "docs/mission/evidence/v9-baseline/screenshots/09d-fm3-catalogo.png": "8439e2d9b670933090a1e3a179d49c1339738044037548f848ec20675c108906",
+  "docs/mission/evidence/v9-baseline/screenshots/09e-fm3-reconciliacao.png": "bbc565a67735093cdb4eee5b15329eeb65587a603d464726eb7fc8f3d62957cf",
+  "docs/mission/evidence/v9-baseline/screenshots/fm6-01-avancado-todas-paginas.png": "7740421942127f7d441debc3aa632d1617c081bae39aefff0e173602edbb43d1",
+  "docs/mission/evidence/v9-baseline/screenshots/fm6-02-corretoras.png": "a6d0a338140c0ae577f731a26b6141c91b77d3a59e3955f6620f4667521d38e0",
+  "docs/mission/evidence/v9-baseline/screenshots/fm6-03-escola.png": "bea4e5a58796b08c8bf192d392ba152fd497dde251f0e3f4eb976c83debfdced",
+  "docs/mission/evidence/v9-baseline/screenshots/fm6-04-dashboard-lc.png": "95ab3c165230038118c1aa431c51488b9fd604f9647ae428fb5b0416f62d661b",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-01-capacidades.png": "e89bbb671642d765e0b4469b2f4e7d6498187352ba4b0510175d0e6110fbffed",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-01-inicio.png": "9c085143d7c1d515f4c1166ae6fc3550c597b5887006cc2f517c72ade3cb83ae",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-02-painel-global.png": "f2a9e140cd59a24992c6c43f02df4d6590855d44705b7420f089c93f994b4cff",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-03-sala-trader.png": "190baccbf5a87909327aee914a17b72d3465b7761a62d9c0b317f5ef34cd9385",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-04-analise-copiloto.png": "e8161ba6bc29eac8d41acc6d3ad695a25b6214d629ef67ed2ca13303582f3688",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-05-acompanhar-prefill.png": "d6853a6ec5e8334e7baca5fdf726d946cc5fd865ccb6e4e8141e2f8c059eff4d",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-06-registro-diario.png": "b2d72fc59d50a64e2805b593f846c7b24de876f49c87f62fa0cf18e1f984aacb",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-07-alerta-stop.png": "aef678edcb66f8e8a22deee79c9e2dd2695664f594304fafcd7a845361e22456",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-08-centro-alertas.png": "86be75ee17b702303f88c4cab557a4106ed32878dd878fc26438ae5f4c1ff4bd",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-09-config-ia.png": "3c7da1891e140e90a6b754c79a4861911cf457b6991b617055474c66ac2c86dc",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-10-mesa-dez-traders.png": "b6d5213732e626eba2111290189532096ce69b2e8d0660bd7ff36b723c0edad8",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-11-pwa-push.png": "80c11de6219765a8dda574a2bdb99d791faeae5236b24b991982ce00db5fad77",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-12-manual-320.png": "721c1fdb47512f22e5161131f6947041e319cf17d8fe509589357b3d7c8e91b1",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-12-manual-390.png": "88cdd1445622b7a3c66dbea897b17a549599b13b10a3d356bbe2262cfdc2fa4c",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-13-01-abrir.png": "f36b54cb97d8ec0947532ee76a748a07cfe04c596f028d6b6a44ca63da43fb41",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-13-03-analise.png": "5048f358c30aab204fdb9318969f05145f55dbdbf424e265b8da79555c9b1c81",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-13-05-persistencia.png": "036c0abbd3dae7a4785f583a30bc110c4884d5129ae3664b8aad94a78b7c4f80",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-13-07-alerta.png": "4b521f67a54aaef42eb42fdc839970fcd05579c1486751c91a898453a4492f15",
+  "docs/mission/evidence/v9-baseline/screenshots/td5-13-09-resultado.png": "cdd78e08ebc69b0d9e86dccdb3cf3fb4448b9e7df032f96b095c61e1ec890a11",
+  "docs/mission/evidence/v9-baseline/screenshots/v9-escola-diagnostic.png": "2d73cd5b68ef367b5f4fcc41f4c69478d028a66ee95d7ff859eaa7116c9908b3",
+  "docs/mission/evidence/v9-baseline/sec-impl-1-invocation.json": "4921d21204b62c04c893019b7231a1ce374df40adfcce39f6a59f5265e57cdfa",
+  "docs/mission/evidence/v9-baseline/sec-impl-1.log": "86fded0ea34196d7cf00bc0b34722d4deb392c5bd29b572839edd47c8560b18b",
+  "docs/mission/evidence/v9-baseline/sec-impl-1.xml": "9a141b80f013bf0aa4e72959b81f161945307d7b95fde2f219756c51d770fe59",
+  "docs/mission/evidence/v9-baseline/v9-ci-linux-full-green.log": "2c0ffa9cfaeca5e8c2d8e2288b8cd45e1511757bd463557952ac3f39fbca2e87",
+  "docs/mission/evidence/v9-baseline/v9-ci-linux-full-green.xml": "b69a6d2fe17c88d19e7d2ec1f29d1b25d36125fbab1003299369c8aa21310baa",
+  "docs/mission/evidence/v9-baseline/v9-ci-linux-full-green3.log": "5ee124042ac58d363ea39c678c4f4eeec6514dc6f4cee59e7a78738b83956bf7",
+  "docs/mission/evidence/v9-baseline/v9-ci-linux-full-green3.xml": "a5400b4a2e26bfaa2b0e4923b143b8a4529f84c0169a5d4275c21b618c9149cc",
+  "docs/mission/evidence/v9-baseline/v9-ci-linux-full-run1-sem-git.log": "97a604398d30313eef656786b33e2bd55021731cacb4bc5686f00ae17a1cb9a5",
+  "docs/mission/evidence/v9-baseline/v9-ci-sec1-linux-green-sync.log": "99d1711c3650107ae0be8ee45b14b195ce5738b639dc937d4164e24cb3191cc9",
+  "docs/mission/evidence/v9-baseline/v9-ci-sec1-linux-green.log": "f09ad303d00a0954dd67f9992ca00d421d2878830e3361e6e742adb991a58355",
+  "docs/mission/evidence/v9-baseline/v9-ci-sec1-linux-green.xml": "f85ac4c1ddad9678a09564628bb1727522f84a3c07241673b76bfd3a23313ba7",
+  "docs/mission/evidence/v9-baseline/v9-ci-sec1-linux-red-sync.log": "4e5e01198ad4a120736afebe2a33d4c2e9b35156c32f9dce84bd19ebf61aa13b",
+  "docs/mission/evidence/v9-baseline/v9-ci-sec1-linux-red.log": "1b62189ad3416ac057334fa2af1acf41ca2e7d049cd93811c98e8efd0c287ec3",
+  "docs/mission/evidence/v9-baseline/v9-ci-sec1-linux-red.xml": "fcd93b436098fd7e679ce555d78ad789189dc852bc6a28b6f1efb46fbbe58362",
+  "docs/mission/evidence/v9-baseline/v9-depaudit-windows.log": "8d30129b90f1057809d79183b49316d3a73c6cbb7d3ce8b6e858dcd929930d5c",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final.log": "c69326a022c544a42b77ba5d3a09c9106dd5b0e8b6c062eb4d83e6dd1fb588d2",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final.xml": "3bb807ad291bef76da9e16ba8bbd60222a37b7ea5f0ae9d1faa051224723631f",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/00-login-premium-desktop.png": "6d02d380ac728f25c75e75f564b53f994b8304d1dc661e786304a8b3803f350a",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/01-visao-geral-dono.png": "3b461c3f75b14b60a55447c2688fa0ac30de32f81d9ed496146632fca46d77bf",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/02-floor-embutido.png": "c62909acac0dbcdd7a3dae47e99779b5b8f6d9c737bbf4d928fcd16e3c036260",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/03-mesa-quant.png": "82bf5390362c61594eb6d5ec1da945b51ac3f96520999820bb454aac3f89e8a7",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/04-login-mobile.png": "eb7654eb7a586210436b09dacf1301a4cfc1052b4f60c12f30b56b9feea58aaf",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/05-painel-mobile.png": "5cdc5c9bcf36eb750e55ac010f16fa2725ae050d933b3e0a9b86259b8919f621",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/06-codigo-recuperacao.png": "8d878ca9903f118d0725ef34b79baada09d321f5f254577cff9c6e2576428429",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/07-login-1366x768.png": "0292cc4fd775268ad65cb9fcbcfca14eb140ed4e9ea244b6e7dac298d3db0c43",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/07-login-1920x1080.png": "068a209b224629ca59ca50756261afbaf560ead298ef097bd8d6435bc6cb41c7",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/07-login-320x568.png": "033178bb9e2521f3f41b17c57a82c981f44ff029d701aa1935e0219762e75aae",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/07-login-360x640.png": "85e8a1c2c8f2c321c8591c4860f221bdb413ea651b00fa597d94761a5e29c21f",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/07-login-390x844.png": "709c6ddc9c02be603243d4e19c946b872dea66934ec82db604d0620787b44475",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/07-login-768x1024.png": "42801a81fea730d3cdc85edde911fe586ac1a631e92d3a405c5727bd7a0b068b",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/08-minhas-operacoes.png": "ecbb3f3be2584e27cb3a137ea001c85dbb148c23403a69d81d0518a387875735",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/08-pwa-config.png": "ec44a51dcedd37ee398c6f86ebe87d98f0444e8176bb3cded94b958c26cfeb13",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/09-inicio-assistente.png": "f838e48b39cd47da993cd768c7391d77609ce5df9eea05924c0f0a91df7919c2",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/09b-inicio-capacidades.png": "d1fbafad5a8639301be44b60cf048c4037fffeadf29f29d7b97f36c25b85d4d2",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/09c-fm3-preparo-real.png": "4adddcea7141ff25cc69672552a05261898d685dac95db0cb72e7bb4a489eca4",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/09d-fm3-catalogo.png": "d4aaba04b90c86a680350e5834d5aecc6c50d80748340b4c97e8f8612af585dc",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/09e-fm3-reconciliacao.png": "275d48c57e741b1b0cd37c3932b0cd64d596104a1a23fa0b53b92550743fc000",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/fm6-01-avancado-todas-paginas.png": "d4b36529e4173cddae324ebd85efa51bb38b2d55753d1d67de9dc5423c3393bf",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/fm6-02-corretoras.png": "2ef1cac7e2de336f271c1791f21ce0719e05d24fe35847ef9341a3aedafde116",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/fm6-03-escola.png": "f66a98ed5f30d6bbe6ebb675b48c84d0a3ebcd2cbd971cdad7a788d36fd81bff",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/fm6-04-dashboard-lc.png": "a52bacfd6d811cfc09fd3e02c25c4b4a2dcb573d64bc77a14c7ad3f96ebf3d42",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-01-capacidades.png": "85bae9c7c1c43beaa07fcde2f443d9b3a28c6ee213f4557d9e751ab27f4e9819",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-01-inicio.png": "245ae9238c462dfb7a01ee4b1bf0aa1805270b5fb531ef7c313fe5269fca0f14",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-02-painel-global.png": "67a7fdec6e15284294cf17701c1d70e83500391e80fc634a512fffced76bc536",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-03-sala-trader.png": "febe33266f01ecbdc74fdb4e1de400c58f84077edda5a786311cba351284300a",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-04-analise-copiloto.png": "545be5eb570ca577fa8a9467144ee80447954f7f50dc8f6ad986a5253d8ab7f6",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-05-acompanhar-prefill.png": "c8eb04629f556e7af86e9e272b26d13aeff24afe53087ee81be218a7a8aaeec4",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-06-registro-diario.png": "90d1961a2be9dd222c5383cb94ddff4c87b9c279b49d6f6eb30bc36c2e9c875d",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-07-alerta-stop.png": "1529d18bcfffbc0d32ac287e102ed344c0f7e2c028337301da8fe571b0ba8e6d",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-08-centro-alertas.png": "41b067d9029104a2acd58c42eb07e3851d24a19be891ba19ac462accca64f8d9",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-09-config-ia.png": "e9313a089f8a884ae9305260d2ce3624e47d2ebca154a213e4fdeaf4e090b1e0",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-10-mesa-dez-traders.png": "195b84949df45ce6a4cf239c78afadacb60346212374138a3eab9c75d73502ec",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-11-pwa-push.png": "b3cc21a2cf4bd693b04e20a43ad2bec91d4176a00bb978d398158c271b47f721",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-12-manual-320.png": "fc9f878e5862e258903e549c94b2e33b6cedd40ce8d59fcaca574f4e134bb353",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-12-manual-390.png": "1bbb258eed45de40ad26ea3feba0244b79d740cbbe8872cba0bf1edce2276dce",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-13-01-abrir.png": "62a8428504fad4ea73f3ee2ebc752493300b1f77771c0927a7201f639687b567",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-13-03-analise.png": "3474227c7d0f8e18eb9a647b17b47b12497600aa3916bbb15372bcc93dca5d84",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-13-05-persistencia.png": "ce4257acba347ad72c96f5c84041cfda9f6e533a2ce29323651f20835c0b2b07",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-13-07-alerta.png": "e016ad37bf8246d6f6894eb04d4f23fb76942d19e6ffee91bc2de273343839ff",
+  "docs/mission/evidence/v9-baseline/v9-e2e-final/td5-13-09-resultado.png": "684105a6c7a1d77d29b92570fb3b5d3c098d824f45b174eb87a456e26cfb859c",
+  "docs/mission/evidence/v9-baseline/v9-env-1-invocation.json": "5b728ae2e137736411c99bc548665c9a6522a0185fcb3828f5d858d4ffe91e92",
+  "docs/mission/evidence/v9-baseline/v9-env-1.log": "0f3b122952b4637502cfde7f9055ed6b9d1fb720159cead33cf90e9098793868",
+  "docs/mission/evidence/v9-baseline/v9-env-1.xml": "9548357514a6d1656f0fa5f095daf55898cdcf1ce2d7894ed06027fda2d65e0d",
+  "docs/mission/evidence/v9-baseline/v9-f1-reexec-head.log": "bc69373b0a8423d27ba9444a5f4bd5fe217950ef9ed1dcc90802e59cb295567f",
+  "docs/mission/evidence/v9-baseline/v9-f1-reexec-head.xml": "3d2330d5b2dc7076ad0647c47f431b8568686aed779787252a6bbf693c9d0021",
+  "docs/mission/evidence/v9-baseline/v9-fin-1-invocation.json": "3854f56839974709c12b2e15f299c4668ef10df1c42096c47022fedd92c6eda0",
+  "docs/mission/evidence/v9-baseline/v9-fin-1.log": "21da627a976abf59ee9c563402749d7dc2e00193384743c3e1bfb01f783ffd5b",
+  "docs/mission/evidence/v9-baseline/v9-fin-1.xml": "1cd2ec7ad8ac21818c14efea91093962f446efee5e2217d3d3ced386e77b7070",
+  "docs/mission/evidence/v9-baseline/v9-fin-2-invocation.json": "4f793fb1ae7802656f6933fb361dc5c1327aa1acb457962731e2196c6388376c",
+  "docs/mission/evidence/v9-baseline/v9-fin-2.log": "aae6db276cc0593b39bc405f3fcf84a1fb94b1979ee14ef42ec98b5b56ac72bd",
+  "docs/mission/evidence/v9-baseline/v9-fin-2.xml": "a77e71d50bc587a74abe543e74a0ce4d0a0a4c0471300c4f1d6ee2d714ab69e0",
+  "docs/mission/evidence/v9-baseline/v9-fin-3-invocation.json": "f517a5423a111826708aa9b7094f5dd0dad82f865edc872962eea5e5b810237a",
+  "docs/mission/evidence/v9-baseline/v9-fin-3.log": "747ad2ef70cbe6779cb6f1418b8e79a070e7d8a1e02505e006e6963fe2e895ef",
+  "docs/mission/evidence/v9-baseline/v9-fin-3.xml": "0c1c86bcd8a833b0b8e12be603cfd0fdb45cedcbad9fc493ae368758bbdcfe55",
+  "docs/mission/evidence/v9-baseline/v9-fin-4-invocation.json": "4ab82077507e5f2b403ab59ede81de3184cbe521b1b240d21a68a9fdee589b85",
+  "docs/mission/evidence/v9-baseline/v9-fin-4.log": "3b6e389886d9950e81f2d5b1512a8c22c68a79e8fd7f8c301add2d1b42cbcd41",
+  "docs/mission/evidence/v9-baseline/v9-fin-4.xml": "6fa906ce0364c0ffde1378fbfc799c7002d0abe69a0284971ad97008edcb2831",
+  "docs/mission/evidence/v9-baseline/v9-fin-5-invocation.json": "4cc55c2fe02d326f84ae4b13aab3ea51ac389b200c2eb1e33ffa9a70275c1885",
+  "docs/mission/evidence/v9-baseline/v9-fin-5.log": "97989710333edac5ee8f820bd58e14dadb0eefabc10d1e6593cc90cc67515a42",
+  "docs/mission/evidence/v9-baseline/v9-fin-5.xml": "64dad16cb80e041fdb85c605ce36490af83b00ffc8e9ce1c099662149c43d162",
+  "docs/mission/evidence/v9-baseline/v9-fin-6-invocation.json": "48c45563743bc29e095c6d2e8f0aa5f048018c2b8d864c2b5a8850d7d812a746",
+  "docs/mission/evidence/v9-baseline/v9-fin-6.log": "e82587c9aa2d4c5157f6a12b3a3707ced640174f4e22d190ead5daaa4bc561b3",
+  "docs/mission/evidence/v9-baseline/v9-fin-6.xml": "0efcddcb29254b61411541d5ac9192232717eee50e40d20b2d6968d6e7246de2",
+  "docs/mission/evidence/v9-baseline/v9-fin04-green-invocation.json": "bb1b333aa04faf307013d2ff3a2b9223bf5820b7001e4e1bf5dc4990f85d0a03",
+  "docs/mission/evidence/v9-baseline/v9-fin04-green.log": "c3ddc4343d316cc8e402e8bcfc36e78cf6cd221b8aaf7e4d2bc98aa045543e68",
+  "docs/mission/evidence/v9-baseline/v9-fin04-green.xml": "67a756b819b643d14c8f2ca067b7c7235068e35970b0f00016f78c700c0ce90f",
+  "docs/mission/evidence/v9-baseline/v9-fin04-red-invocation.json": "ddf74a41a6eb2f6406885552702c5fcf858e583a4a92622dd58a964ae56c5996",
+  "docs/mission/evidence/v9-baseline/v9-fin04-red.log": "b598ef543b83345f2122bba6643753c73a2d32718c57d35a6640748f9775f64a",
+  "docs/mission/evidence/v9-baseline/v9-fin04-red.xml": "72329fc8b43ab6cac55ceca5062a438947667d30df48bbea93fdc66de85da303",
+  "docs/mission/evidence/v9-baseline/v9-fin04-regressao-invocation.json": "d991f6f2584cc0a6415d66952d3eac0ff2c532094da7cfbcb436630e1ba637cd",
+  "docs/mission/evidence/v9-baseline/v9-fin04-regressao.log": "d0be7320b96522914ba0cb0f3acc7e0f43f0249f33950ec1cb2a90fb957b356f",
+  "docs/mission/evidence/v9-baseline/v9-fin04-regressao.xml": "8b51762b1245f4864ec128d9580aa39e864b80311a0b685aaab88d2f9517d808",
+  "docs/mission/evidence/v9-baseline/v9-fin05-green-invocation.json": "3a5a15479e88ba54401f5dc1db4916ccb7bd9421806061a33c55d2a7d934d1e0",
+  "docs/mission/evidence/v9-baseline/v9-fin05-green.log": "18eef3b0a96e895a3e251a854bd819148a1a84aa377118ed7d5df5b41d46f95e",
+  "docs/mission/evidence/v9-baseline/v9-fin05-green.xml": "fbbe70538ebf582139d380ddb5ccbf6b6932031476b2a5e36a5a423825e048bc",
+  "docs/mission/evidence/v9-baseline/v9-fin05-green2-invocation.json": "5a9b1cb8dd3c36a2df019d338b7fa70e80f94d495d2fab82e47f82201501e0d2",
+  "docs/mission/evidence/v9-baseline/v9-fin05-green2.log": "c9f11fe1a319e392f37c814929ffac937c1c3f1ae3c918b8354b28adbd11e9f6",
+  "docs/mission/evidence/v9-baseline/v9-fin05-green2.xml": "7d147cbbb8f42fb74c464047f610e3caafb0ba5f6485778be83f5a9380fb2c4a",
+  "docs/mission/evidence/v9-baseline/v9-fin05-red-invocation.json": "0b140b8b81592fd7c6eb0e8e8ed876804094feb9172d2af2f99bd297050c2478",
+  "docs/mission/evidence/v9-baseline/v9-fin05-red.log": "ff115f33fc365a4d1510e8779b4b7b58687fa630c36a0854b67fef1294fd62cc",
+  "docs/mission/evidence/v9-baseline/v9-fin05-red.xml": "ba594b3d9bcf616b580122eae56834ed70c596f317eea56e015523e685a20348",
+  "docs/mission/evidence/v9-baseline/v9-fin05-regress-invocation.json": "ca96fda144431402c68e5b1113e0ab267b94c17a2541f04368baf7116c33a4ce",
+  "docs/mission/evidence/v9-baseline/v9-fin05-regress.log": "f753ef839789af36d0b9f681fd8f29a54f3fe935ced703ccf04eae24056b5a77",
+  "docs/mission/evidence/v9-baseline/v9-fin05-regress.xml": "38bce7a18c1d612fb799228a8f28e4d5822128c1060f2e01cd1889b449e4263f",
+  "docs/mission/evidence/v9-baseline/v9-fin06-green-invocation.json": "39fd23954fc5a9efe82a436e0497dc1d4d049d6039c20249e3a53a7d8deb69f9",
+  "docs/mission/evidence/v9-baseline/v9-fin06-green.log": "1103449afe9ad9eeb34d5d5379b827a6d54ed8204744cc6e921136a24a7c2098",
+  "docs/mission/evidence/v9-baseline/v9-fin06-green.xml": "e0e03bedd1bfb76e1be9b0baeaa942ee762cf43a7d7eaec24644970a6eaea938",
+  "docs/mission/evidence/v9-baseline/v9-fin06-red-invocation.json": "062d77cf7ae91070109ab3ff6e08eff25401a0cb627ecbb85eb9a82eb3501bd0",
+  "docs/mission/evidence/v9-baseline/v9-fin06-red.log": "56a291edcbd2fd8bb7b25ace451cd30bda9586effad83984b1a4ec9745fc16f9",
+  "docs/mission/evidence/v9-baseline/v9-fin06-red.xml": "6ad8a4ad751c839716fc3885c8e40a3a215eb4a849ecbf07c15b406e5f68a490",
+  "docs/mission/evidence/v9-baseline/v9-fin06-regressao-invocation.json": "cb05c2059a8446e9f88b670ac1063174b4c54222be980b2203aba7e4f241e7a7",
+  "docs/mission/evidence/v9-baseline/v9-fin06-regressao.log": "67ed80a5ae4a9ad4f6b82d6b19e7ffdcd136244dec7c7e746c1d020d8f12b870",
+  "docs/mission/evidence/v9-baseline/v9-fin06-regressao.xml": "adfa17456fab1b1b0d4e7c5fd4d61d79a37d8d5c93b12da5907f44a70fdc2d20",
+  "docs/mission/evidence/v9-baseline/v9-fin07-green-invocation.json": "012abf55d8418dce7428ad8e8cd89bdce1d53f358c2df87dfa2244fd45289cd6",
+  "docs/mission/evidence/v9-baseline/v9-fin07-green.log": "d2fdac65ef31f8023f94dff08464af2ceae99a69aced965ff1387e837ebceea9",
+  "docs/mission/evidence/v9-baseline/v9-fin07-green.xml": "a5b0b664174d817bd3eb2fb9f2464c0512d3892fa504ac100dd350c9631d6a85",
+  "docs/mission/evidence/v9-baseline/v9-fin07-red-invocation.json": "b6dc6276c34b67fc05d117ba6534b729d0c755ad079ee92c1c87ec14a7c5c044",
+  "docs/mission/evidence/v9-baseline/v9-fin07-red.log": "3bea787493bc6ef1aceb6779d8f0095632c41417594f8d3c6c4937e73c63aa2f",
+  "docs/mission/evidence/v9-baseline/v9-fin07-red.xml": "f5fa6f9ea05ad11a0c62f6f90df9e76b2bd00a3f9c40dfadafba4a3679867650",
+  "docs/mission/evidence/v9-baseline/v9-fin07-regress-invocation.json": "81ade55dfa2415266b570f14ff773b958ca051855f3e683244acbbfa43cff334",
+  "docs/mission/evidence/v9-baseline/v9-fin07-regress.log": "6f509dc0602e0e10d54db84cee2104ee055f87d84b6ce00973c00a6f78aeb0a0",
+  "docs/mission/evidence/v9-baseline/v9-fin07-regress.xml": "b3bd581827ed70688f35a1a7407abb841c0f725c57f04c3d192eed7743107186",
+  "docs/mission/evidence/v9-baseline/v9-fin08-green-invocation.json": "a8678023ef4f325479176723af6129e2513c688b8b523e6ac1734c874d0858d2",
+  "docs/mission/evidence/v9-baseline/v9-fin08-green.log": "8787d4f1a6ab429e78741550fe05d58f099ab05d820b959fdffa3b64db38db53",
+  "docs/mission/evidence/v9-baseline/v9-fin08-green.xml": "de1dbd6de062463731c0ec1670d79d5c9951fa74012b91b7a83a502b10437585",
+  "docs/mission/evidence/v9-baseline/v9-fin08-red-invocation.json": "c8fc66d521419f18756bcb3ab2ae553671a4e64537ca403d757b3707b719eb25",
+  "docs/mission/evidence/v9-baseline/v9-fin08-red.log": "495a1d84dcc823067a5167f15fd2af945b5b39625e6627bcf0f0c8aa8b80a8c9",
+  "docs/mission/evidence/v9-baseline/v9-fin08-red.xml": "81337c48d4c21cba7efd6446c3f976c073009ed64faf51aa0c45004fb00a3a98",
+  "docs/mission/evidence/v9-baseline/v9-fin08-regressao-invocation.json": "288858c4eb505d435a223e3b49f61160777cec1e367b4ebdbbae8a67da54e7c2",
+  "docs/mission/evidence/v9-baseline/v9-fin08-regressao.log": "61b42030716a04ce3bd82e8d3fc39f4e9cb48a5082abd74b85d8263fbd4c0409",
+  "docs/mission/evidence/v9-baseline/v9-fin08-regressao.xml": "dbc3cabe9f8b0e322a1cd7e9e0c55e668fcf320fe7923fbf136f5a0ecdc92d75",
+  "docs/mission/evidence/v9-baseline/v9-fin08-servico-invocation.json": "8e73faab6c7811b09f8ba49ec5edf99cbefda0fc67593f2a05b6a42291fad9a5",
+  "docs/mission/evidence/v9-baseline/v9-fin08-servico.log": "3aad76a4aea7ad46807c1f84ad334783ff3420f79714372f3920adaee61ec9c6",
+  "docs/mission/evidence/v9-baseline/v9-fin08-servico.xml": "794eda0b86836d5a37ac7b08f2a8b736e2e216265ec62b9bc1b6f18ce19e867c",
+  "docs/mission/evidence/v9-baseline/v9-fin09-green-invocation.json": "2f227b5578ec80fdec832eca1cbf071b2f806b5770a3b9affca40253ef5414ad",
+  "docs/mission/evidence/v9-baseline/v9-fin09-green.log": "c650684da631a53569764f5af8f60c3e0d0a19a4321a45fbbac8d3f55d3a7118",
+  "docs/mission/evidence/v9-baseline/v9-fin09-green.xml": "1a50c205f333cdccb1e3755cef57291da71a82ddf5511c2ff3bcef0af4d1cf9e",
+  "docs/mission/evidence/v9-baseline/v9-fin09-red-invocation.json": "0fec8b522db45f45001e6dd47a0ba761c93caba24c60f23f3b134a5c3507775c",
+  "docs/mission/evidence/v9-baseline/v9-fin09-red.log": "9e3a44e79feb66ae62d6f50a5f26da42274f7f829b6e589a7402fc061f5ce378",
+  "docs/mission/evidence/v9-baseline/v9-fin09-red.xml": "7700de8f741198ade5669dc26b6f429260d85ed1a32f4ffe92a288631db2adaa",
+  "docs/mission/evidence/v9-baseline/v9-fin09-regress-invocation.json": "856c7c5fe6bcc2edde53dd6942c4ac79cc55962aac299f8608727a843273f422",
+  "docs/mission/evidence/v9-baseline/v9-fin09-regress.log": "3485ef0f8f6db9df6504613ba384277773f9c9ee53b9471ea5201d7c05146eb7",
+  "docs/mission/evidence/v9-baseline/v9-fin09-regress.xml": "703a7a0bb698843c743524dd07b13cdac40a078f9ff5dcfa40d430cb34885735",
+  "docs/mission/evidence/v9-baseline/v9-fin10-green-invocation.json": "8eb1ce7f52ac1a21a036c9f425b0df0838f57150bda2ea764fe3327960ca9da9",
+  "docs/mission/evidence/v9-baseline/v9-fin10-green.log": "c1d14ecd643338f7cee016115bdcdd2e63f54c9721fecaaa9fe748060316b620",
+  "docs/mission/evidence/v9-baseline/v9-fin10-green.xml": "15170ecced0be0dadd70f6a2546ca0aa6836a6d4b91c689acfa149d0c59b5859",
+  "docs/mission/evidence/v9-baseline/v9-fin10-green2-invocation.json": "21effd8197de4007b44d196a031dfc347e5c12b55fda7434e63a041648afd7d0",
+  "docs/mission/evidence/v9-baseline/v9-fin10-green2.log": "b84fcb7aa43c3818b2daea72a6c605aac693bbf6c2109428fceb66cc728da232",
+  "docs/mission/evidence/v9-baseline/v9-fin10-green2.xml": "1632fd6aacb556b19d8b753ef944ba6ec2f8106f23ff0554cdb00bd0337a1a4f",
+  "docs/mission/evidence/v9-baseline/v9-fin10-red-invocation.json": "180dab17ae34af6b5ec11e78ab0571849cbb02601f701a4af087ffd989a84f41",
+  "docs/mission/evidence/v9-baseline/v9-fin10-red.log": "57fdddf777cbbd30a21a8093bbc9dc3e14165a49b5d210d642da1d2c8119f7ee",
+  "docs/mission/evidence/v9-baseline/v9-fin10-red.xml": "adb5a8a2fbbc397a1878b97da2b9edbe6b7a5a5adb5fb947297d9fae5aebc180",
+  "docs/mission/evidence/v9-baseline/v9-fin11-green-invocation.json": "d74859d9775fc926fbe029a1fdb3ef91ad98b2bc4e20c670c6b8a58f510954e6",
+  "docs/mission/evidence/v9-baseline/v9-fin11-green.log": "7148718990d7ea797310a566f73839afc086a66a233d8b87a51420dbd3998814",
+  "docs/mission/evidence/v9-baseline/v9-fin11-green.xml": "db390e58a1dea70a9bb155ee7cc7d2328a26a6102d09ec9f2c068e550dea23ce",
+  "docs/mission/evidence/v9-baseline/v9-fin11-red-invocation.json": "4a04e020d8e0f4d20d27536e02c1e1e9f53100309692166a6763053b6223033c",
+  "docs/mission/evidence/v9-baseline/v9-fin11-red.log": "c0b6e872ba8b31d623569f8ad1a591f357301acb46bb9fcc3e2ee8992ab12670",
+  "docs/mission/evidence/v9-baseline/v9-fin11-red.xml": "405308fef826b7150f9612d5963ffe7fa6a6d89df2afed1435caaff55c9cb98d",
+  "docs/mission/evidence/v9-baseline/v9-fin11-regress-invocation.json": "2c5d5af2a9bf9a4701cba3e17f989894e54a8c196231f654c0f3881fa7c286ef",
+  "docs/mission/evidence/v9-baseline/v9-fin11-regress.log": "65ba66243c58ac3873060b544f52ceababe7383007913fad01b7a8363800dd04",
+  "docs/mission/evidence/v9-baseline/v9-fin11-regress.xml": "a2a6f734c5b4604feff0e39108b256686f21c029c35a011b0a4dfc732ec23561",
+  "docs/mission/evidence/v9-baseline/v9-fin12-green-invocation.json": "c074fb1877df95d5a93fca19ce443e92e1e45d1e8dab3f292da374381e9fb743",
+  "docs/mission/evidence/v9-baseline/v9-fin12-green.log": "e5cefdf4ce715bcb5a6b653ba7f1bfdc3d656e970e700ef288faa58893e932cd",
+  "docs/mission/evidence/v9-baseline/v9-fin12-green.xml": "d8f26c5f2cfcafea0c774266f3ceac8e62353745883171a2ab2e9416bd2e6f0c",
+  "docs/mission/evidence/v9-baseline/v9-fin12-kernel-invocation.json": "a619b2ec2c1611f96d3dda3d62301fe2c64a55890df006982b93207947249569",
+  "docs/mission/evidence/v9-baseline/v9-fin12-kernel.log": "d1b4581ff6f8bffbff4f9639237334de38af9856dc17f24f9d547b970edd413d",
+  "docs/mission/evidence/v9-baseline/v9-fin12-kernel.xml": "6e6333fcc2391be81fccbe8f000105c300cc1e76f56ed0e0b2b9403294a71ab9",
+  "docs/mission/evidence/v9-baseline/v9-fin12-red-invocation.json": "209198d93a4f234de07602c597593f1206bee0526ba73b1a7840608bcbd7e601",
+  "docs/mission/evidence/v9-baseline/v9-fin12-red.log": "4a06d8d6b653b1fa69de6e649f532a3a44fab29ccc4bab662ed5f6c40a653f48",
+  "docs/mission/evidence/v9-baseline/v9-fin12-red.xml": "2704d9e18a99168d152bd9113ddb0fe0a19722465ccbbdb9bb94872a5c29fbcb",
+  "docs/mission/evidence/v9-baseline/v9-fin12-regressao-invocation.json": "318bc9f5a45a3c6135f60970fa952e8c034976832c0c55bac591354ac757db3d",
+  "docs/mission/evidence/v9-baseline/v9-fin12-regressao.log": "12f12a969e8c44e5e952b8c51bb1e36ab573e8a38cc82a493b5ce75a24038a55",
+  "docs/mission/evidence/v9-baseline/v9-fin12-regressao.xml": "127368d69db543d103eed4182bf968db6426a367eb51cb614d766ed526bef539",
+  "docs/mission/evidence/v9-baseline/v9-fin12-servico-invocation.json": "6231cfd58f8c023b943b42b702bf7af3bb09c274bb7772770ff6b4b6983164c1",
+  "docs/mission/evidence/v9-baseline/v9-fin12-servico.log": "79e393ea7fe00bd79a04464d816fbcf3684c1401a240963ff16948b3f248c6a5",
+  "docs/mission/evidence/v9-baseline/v9-fin12-servico.xml": "893268f685e7869e85af2c15a65e4246bb1d4bf821125b75001763485370800a",
+  "docs/mission/evidence/v9-baseline/v9-full-1-invocation.json": "b9f3dc7596208cf1a17acf1bfdf76f54469d224e825ed56a1d3e34b91b4f5ac0",
+  "docs/mission/evidence/v9-baseline/v9-full-1.log": "35b20af49e07f73ddaa23d63b098282f54583f570b811e9a8f1a5c31263f6ed9",
+  "docs/mission/evidence/v9-baseline/v9-full-1.xml": "42fd6ab6c56f47300ff020990a414c061e36d1b9330c258f5f7f1a8f0bc055ee",
+  "docs/mission/evidence/v9-baseline/v9-full-2-invocation.json": "abbbe04753720c0c7602ef62dfef131af7c5b18680dd1edbb806b1484ee4d2e4",
+  "docs/mission/evidence/v9-baseline/v9-full-2.log": "dddf83742e64ad329fe801151ad8bf67b0bd6aca3f90f374c1956842523f48f4",
+  "docs/mission/evidence/v9-baseline/v9-full-2.xml": "5697d550a109aca2679d828308978bd308f3dff1523b1da70ef1c62f05aec03a",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao-report.json": "0362225a23cf689c81ed23299e3d4dc078c7b26395adf031aec117cfcb2e15b3",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao.log": "aa142108753b540e6347fcae0d202f5b102c347f3f7032540670febe45b0a84f",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao2-report.json": "b9520002f14cbafe992e1558fa900f4449ef948c34203ca71d5529f88e487811",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao2.log": "64b1d5c07949a688f9da7e954f6cd4e656cd736bcffcdd71dd5c9d012ea386c7",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao3-report.json": "f535f2e70f917338ec1a1156a6e39c8ff3492fb1e0b72eb901d4268b3daf2cd3",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao3.log": "a576b3a5911d4b0a0d65f61d50e30f04984507850395557cf9062c649e59426f",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao4-report.json": "b9520002f14cbafe992e1558fa900f4449ef948c34203ca71d5529f88e487811",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao4.log": "c6141b8898af8edfde2268c359ada1a95873ee2f4fa8f6c682fe09632553db8d",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao5-report.json": "3b12780d0c637a886b399e3c51ecca50de115d0721d1e338a46a39b10f76bbd0",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao5.log": "169d1b846a5b890972ab360dec020858c13705ddca0dd2804b15f5a9e0c2b77c",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao6-report.json": "19293b9af77866f80fdef9dc45a5b21cbaa363656b89f7295d7cb829359b394b",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-confirmacao6.log": "b48eb3f35daf960295ec0fd73367c2228206b4b7537e8d2b7a850ebe6377073c",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-dir-report.json": "b9520002f14cbafe992e1558fa900f4449ef948c34203ca71d5529f88e487811",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-dir.log": "245e03fe52425ebb3279e9a8be4bd60ea30c0d4b4cc2b44a4c3b450019d83f4d",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-dir.toml": "cce86a251003624c1683d039b5de8597da682321bb380138b35b88e57a4531dd",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-historico-report.json": "89551075369465c26186049af839ead4033ff9c7bdbcfc4b5fbf9e022f71ffde",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-historico.log": "19117eaaef6d3533424b34de8c70f72212c19419d7407a055aca8de5f481a18f",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-triagem.md": "7dcac76436af4332b8253f54f3dcbd76af182496eb09042776ce6d510a2a9a86",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-worktree-tentativa-invalida-report.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+  "docs/mission/evidence/v9-baseline/v9-gitleaks-worktree-tentativa-invalida.log": "a116f51535e7694cac5f1d259bc676ee57c78eb51e6a747241197d4b131a3f19",
+  "docs/mission/evidence/v9-baseline/v9-licencas.csv": "f63d547f9108610dce4a82cc1b808174204b9620f18473a558d45ae8fe8267e7",
+  "docs/mission/evidence/v9-baseline/v9-lint-f5.log": "00c0575835d15e6d03648abcb679a8d9e7776a7c57d7307c46261c981fe703be",
+  "docs/mission/evidence/v9-baseline/v9-modo-lint-invocation.json": "c04cc2236749040519b7a409da4d9e821b919f5ac7564426e20fac3e370ebce3",
+  "docs/mission/evidence/v9-baseline/v9-modo-lint.log": "be89279a8b6013cc35ef76edc8ba0db9ac66cf69a26fbf6192eeb643ea8286fc",
+  "docs/mission/evidence/v9-baseline/v9-modo-lint.xml": "da6141cb309f9d20d3db9febb5baf1ebb869cb18d0a33120c042bad9e81eced0",
+  "docs/mission/evidence/v9-baseline/v9-posse-green-linux.log": "9e50ceaadc579a2837a01086dc20ddc61a1e70fd522d2ace98692d9d984c4dd3",
+  "docs/mission/evidence/v9-baseline/v9-posse-green-linux.xml": "4ee280f85d1d3779b106ceb403089f160a16db4a69ef132d6537e1293599df9c",
+  "docs/mission/evidence/v9-baseline/v9-posse-green.log": "ec6922103feec25698e67fb804a0a08f9bae80c5355a3a83ac79228b4057fd92",
+  "docs/mission/evidence/v9-baseline/v9-posse-green.xml": "55e142f210f0dbf6674c7f2ea142a2a693497e60870d5ef99ab728ab6856b712",
+  "docs/mission/evidence/v9-baseline/v9-posse-red-linux.log": "874b4476aa39e603c7897ffb47a81c011586b74eb1058de2ec1dec22e4525632",
+  "docs/mission/evidence/v9-baseline/v9-posse-red-linux.xml": "3d23540d9e6a1d8cc8fa7d9aed288ad3769cce854e616b574065c8a9b528a67c",
+  "docs/mission/evidence/v9-baseline/v9-posse-red.log": "97c7862bfc467d29774f88f13594b0abe50db2bfb07cff6e0b33f9eb7860a061",
+  "docs/mission/evidence/v9-baseline/v9-posse-red.xml": "6e38ca33c90bc0a9f5438c66a4f52db194af92fb6e16a05e578c58d2454632bc",
+  "docs/mission/evidence/v9-baseline/v9-posse-regress.log": "5fa1c6e882b6ea588016f4815cd0c7954323da174fe09781123633d99167bff6",
+  "docs/mission/evidence/v9-baseline/v9-pw-collision-green-invocation.json": "d9c178482e36f53c75b74571a8295d32177fc8c45d97f0e7d0ddcff60bf5b61e",
+  "docs/mission/evidence/v9-baseline/v9-pw-collision-green.log": "bc9e5b4d31f6922f17f88929d5b5fbe6a679f1e413faa3bf055f3e9a2be998eb",
+  "docs/mission/evidence/v9-baseline/v9-pw-collision-red-invocation.json": "15b9a8fc35c4b34ee5d124ff12d1b7b52a22002eedcdfc1f8cdc7d4f705fcda1",
+  "docs/mission/evidence/v9-baseline/v9-pw-collision-red.log": "0d6db6fd42151415c1fd91127368e076ee34bcbd612480d134e6cf09a35c4816",
+  "docs/mission/evidence/v9-baseline/v9-regressoes-1-invocation.json": "ce75fc645f9b756689ce21ae269596b930a53652bbbb7518fe0e16717659373c",
+  "docs/mission/evidence/v9-baseline/v9-regressoes-1.log": "b5305f7771c6bde2583b8f488f60f9c3d9a150051218668fabee8e82927ce4a7",
+  "docs/mission/evidence/v9-baseline/v9-regressoes-1.xml": "1730eba467f2088ab7250537c5998c1b4636ef4cbabd038fd936965795c91987",
+  "docs/mission/evidence/v9-baseline/v9-sec-1-invocation.json": "c0f7cda55024628d1c4604efe37a8dddc867847dff92fc7c276f3a5f7247841e",
+  "docs/mission/evidence/v9-baseline/v9-sec-1.log": "8ec6320a0f0fa972894e5227b9b9a1e3b2bf24348c1ecb68c54e1585429bb455",
+  "docs/mission/evidence/v9-baseline/v9-sec-1.xml": "b2ec9614b8f38890468927ac8352d3b0d0fdece08f84bba85caa9cd9ff1d4a79",
+  "docs/mission/evidence/v9-baseline/v9-sec-2-invocation.json": "abe24adb6d4d471a9cf1d5899ab56e493b96deb0d2c8f21863e5b30d8e28fbae",
+  "docs/mission/evidence/v9-baseline/v9-sec-2.log": "6f312d5cf93f3daa7049e073b39ec8223f858a4334664ad3243e180a4a684b89",
+  "docs/mission/evidence/v9-baseline/v9-sec-2.xml": "d16d5906e920224e50c8b66924fda88c75681732c5b0516da752776e6da174bc",
+  "docs/mission/evidence/v9-baseline/v9-sec-3-invocation.json": "ef5eb6ab662c30ed7d3df7b70b86b79ecc3e7d54d4b4bbd6ee8ce3fe40f640b0",
+  "docs/mission/evidence/v9-baseline/v9-sec-3.log": "d42a901415c45d15aca40c799fab8bfd2d1bb9f6216fd77a9e1e5587b9a823ab",
+  "docs/mission/evidence/v9-baseline/v9-sec-3.xml": "dc3e99d6b654c87fa0cf838faf002fa71e4b5d838c565caeeb7fd6154d80f297",
+  "docs/mission/evidence/v9-baseline/v9-sec06-green-invocation.json": "48700673eb2bf760ae18a0dc7fd5060ab00d94e0e4fc6e9e3a1a257ce7d5aa20",
+  "docs/mission/evidence/v9-baseline/v9-sec06-green-plain.log": "e5aaa625b15d433d30f08c852b10d1fb582b1c4af519c543346d4ab92fb3f076",
+  "docs/mission/evidence/v9-baseline/v9-sec06-green-runner.py": "dd0336333ec00c9db866366f5e78ad5ed5a8a97795f02e15977d3d0a82ff7674",
+  "docs/mission/evidence/v9-baseline/v9-sec06-green.log": "76a26082fe63ef5612ff4335f0048815cf1bc05079f0e35742c998d6ab14015e",
+  "docs/mission/evidence/v9-baseline/v9-sec06-green.xml": "583355b67530dac91ec5a0d1fc82e8a731046a5c58613ea8e0bce8865fc4aeaf",
+  "docs/mission/evidence/v9-baseline/v9-sec06-red-invocation.json": "287749d01a9d50a81e968548bc05fc6475447a87b49cdb9b471cf5f242fef24f",
+  "docs/mission/evidence/v9-baseline/v9-sec06-red.log": "8dd66290ebd00dea3f40d99d97b57054678229f3ebbeeb3398e59789bbb4eee4",
+  "docs/mission/evidence/v9-baseline/windows-2-invocation.json": "636643528fabb43bcea19bb56d1af886ffca6389fde3ec03ee76bd3c4f0cab82",
+  "docs/mission/evidence/v9-baseline/windows-2.log": "6c6358516a8aff1b471dc0d3c17f9411718fcc849eeca6260e62e29fb908efd1",
+  "docs/mission/evidence/v9-baseline/windows-2.xml": "86c3adc6093d970c1285194807d1dff10260ca40a6d4faaa0953cdec5902833e",
+  "docs/mission/evidence/v9-baseline/windows-local-invocation.json": "42e0a6593e2537753d4cb11065f3a4864df35a44ac757f34a3b0913931fa8512",
+  "docs/mission/evidence/v9-baseline/windows-local.log": "99bf61f588ee8d95822e0bd9a04ef12ed920e3c59a229b746fd1623fe745bcc2",
+  "docs/mission/evidence/v9-baseline/windows-local.xml": "d59c648d75f102f6badee43e964f0a59ade1150e41be21621dfd22ebc1b5c2f2"
+ }
+}

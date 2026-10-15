@@ -113,6 +113,9 @@ class DeskScheduler:
             view = exchange_lookup(rec) if exchange_lookup else None
             self.coordinator.reconcile(rec.order_id, view)
             (resolved if not rec.needs_reconciliation else still_unknown).append(rec.order_id)
+        # Reconciliado vira posição GERENCIÁVEL já na retomada: o financeiro
+        # registrou o fill, o livro de gestão precisa saber antes de operar.
+        self.sincronizar_livro()
         self.save()
         return {"reconciliadas": resolved, "ainda_incertas": still_unknown,
                 "posicoes": sorted(self.orchestrator.open_exposure())}
@@ -127,6 +130,35 @@ class DeskScheduler:
             else:
                 fresh.append(snap)
         return fresh, discarded
+
+    # -- sincronização financeiro → livro de gestão --------------------
+    def _compra_viva(self, rec) -> bool:
+        """Verdadeiro só para compra com fill real e lastro financeiro vivo."""
+        if rec.lado != "buy" or rec.filled_qty <= 0 or rec.avg_price <= 0:
+            return False
+        instrumento = rec.instrumento
+        if not instrumento:
+            return False
+        # Só o que o FINANCEIRO ainda tem é gestão: uma posição já encerrada
+        # (venda preenchida) não pode ressuscitar pela ordem de compra original.
+        return self.coordinator.ledger.position_quantity(instrumento) > 0
+
+    def sincronizar_livro(self) -> list[str]:
+        """Fills que chegaram FORA do ciclo (ACK → reconciliado/recover)
+        entram no livro de gestão. Um instrumento, uma posição: quem já tem
+        dono no livro não é re-registrado (nada de duplicar ou sobrescrever)."""
+        registradas = []
+        for rec in self.coordinator.orders.values():
+            if not self._compra_viva(rec):
+                continue
+            instrumento = rec.instrumento
+            if instrumento in self.orchestrator.book:
+                continue
+            self.orchestrator.register_fill(
+                instrumento, rec.filled_qty, rec.avg_price, rec.agente,
+                rec.filled_qty * rec.avg_price)
+            registradas.append(instrumento)
+        return registradas
 
     def _executar_saida(self, s: dict) -> dict:
         """Executa UMA saída estruturada do motor global (M3/M4).
@@ -206,6 +238,11 @@ class DeskScheduler:
         out = {"descartados": discarded, "ordens": [], "encerradas": [],
                "resumo": "sem dados elegíveis"}
         if snaps:
+            if executar:
+                # Fill que chegou FORA do ciclo (ACK → reconciliado em
+                # recover/rota) entra no livro ANTES da avaliação: sem isto
+                # a posição existe no financeiro e o stop não a vê.
+                self.sincronizar_livro()
             report = self.orchestrator.run_cycle(snaps, self.price_provider())
             if executar:
                 # PROTEÇÃO PRIMEIRO: as saídas decididas pelo motor global

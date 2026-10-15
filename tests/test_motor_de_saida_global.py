@@ -156,6 +156,28 @@ class TestPoliticaImutavel:
         assert afrouxamento(base, pol(alvo="0.05", trailing="0.01", versao="2"))
         assert afrouxamento(base, pol(alvo="0.02", versao="2"))  # trailing sumiu
 
+    def test_trailing_mais_largo_tambem_afrouxa(self):
+        """Catch a silent widening of the trailing stop (1% → 10%).
+
+        Um trailing maior deixa o preço recuar mais antes de proteger o lucro
+        — é afrouxamento da proteção. Antes só a REMOÇÃO do trailing era
+        detectada; aumentar o percentual passava batido e enfraquecia a saída
+        sem recusa.
+        """
+        from tradingagents.desk.saida import afrouxamento
+        base = pol(alvo="0.02", trailing="0.01")
+        motivo = afrouxamento(base, pol(alvo="0.02", trailing="0.10", versao="2"))
+        assert motivo, "trailing mais largo deveria ser recusado como afrouxamento"
+        assert "trailing" in motivo
+        p = posicao(politica=base)
+        try:
+            aplicar_ajuste(p, pol(alvo="0.02", trailing="0.10", versao="2"))
+            raise AssertionError("afrouxamento de trailing deveria ser recusado")
+        except ValueError as exc:
+            assert "afroux" in str(exc)
+        # apertar o trailing continua permitido
+        assert not afrouxamento(base, pol(alvo="0.02", trailing="0.005", versao="2"))
+
     def test_politica_por_trader_carrega_versao_e_horizonte(self):
         t = enable([default_desk(UNIV)[0]])[0]
         p = politica_por(t)

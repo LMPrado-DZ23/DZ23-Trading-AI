@@ -1,0 +1,976 @@
+..............................FF......                                   [100%]
+================================== FAILURES ===================================
+_ TestMigracaoDoConfigLegado.test_sem_dpapi_atualiza_ilegiveis_so_da_chave_alterada[substituicao] _
+  + Exception Group Traceback (most recent call last):
+  |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\_utils.py", line 107, in create_collapsing_task_group
+  |     async with anyio.create_task_group() as tg:
+  |                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 847, in __aexit__
+  |     raise BaseExceptionGroup(
+  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Traceback (most recent call last):
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\runner.py", line 361, in from_call
+    |     result: TResult | None = func()
+    |                              ^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\runner.py", line 250, in <lambda>
+    |     lambda: runtest_hook(item=item, **kwds),
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    |     return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    |     return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+    |     raise exception
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 139, in _multicall
+    |     teardown.throw(exception)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\logging.py", line 865, in pytest_runtest_call
+    |     yield
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 139, in _multicall
+    |     teardown.throw(exception)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\capture.py", line 900, in pytest_runtest_call
+    |     return (yield)
+    |             ^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 139, in _multicall
+    |     teardown.throw(exception)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 53, in run_old_style_hookwrapper
+    |     return result.get_result()
+    |            ^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_result.py", line 103, in get_result
+    |     raise exc.with_traceback(tb)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 38, in run_old_style_hookwrapper
+    |     res = yield
+    |           ^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 139, in _multicall
+    |     teardown.throw(exception)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\skipping.py", line 268, in pytest_runtest_call
+    |     return (yield)
+    |             ^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    |     res = hook_impl.function(*args)
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\runner.py", line 184, in pytest_runtest_call
+    |     item.runtest()
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\python.py", line 1707, in runtest
+    |     self.ihook.pytest_pyfunc_call(pyfuncitem=self)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    |     return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    |     return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+    |     raise exception
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    |     res = hook_impl.function(*args)
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\python.py", line 167, in pytest_pyfunc_call
+    |     result = testfunction(**testargs)
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_auditoria_sec1_segredos_em_repouso.py", line 218, in test_sem_dpapi_atualiza_ilegiveis_so_da_chave_alterada
+    |     assert c.post("/v1/config", headers=H, json=pedido).status_code == 200
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 1204, in post
+    |     return self.request(
+    |            ^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\testclient.py", line 463, in request
+    |     return super().request(
+    |            ^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 797, in request
+    |     return self.send(request, auth=auth, follow_redirects=follow_redirects)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 980, in send
+    |     response = self._send_handling_auth(
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 1008, in _send_handling_auth
+    |     response = self._send_handling_redirects(
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 1043, in _send_handling_redirects
+    |     response = self._send_single_request(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 1076, in _send_single_request
+    |     response = transport.handle_request(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\testclient.py", line 360, in handle_request
+    |     raise exc
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\testclient.py", line 357, in handle_request
+    |     portal.call(self.app, scope, receive, send)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\anyio\from_thread.py", line 340, in call
+    |     return cast(T_Retval, self.start_task_soon(func, *args).result())
+    |                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 456, in result
+    |     return self.__get_result()
+    |            ^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 401, in __get_result
+    |     raise self._exception
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\anyio\from_thread.py", line 265, in _call_func
+    |     retval = await retval_or_awaitable
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    |     await super().__call__(scope, receive, send)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\applications.py", line 96, in __call__
+    |     await self.middleware_stack(scope, receive, send)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    |     raise exc
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    |     await self.app(scope, receive, _send)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 197, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\app.py", line 1077, in cabecalhos_de_seguranca
+    |     resposta = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 173, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 149, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 197, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\app.py", line 585, in security_headers
+    |     resp = await call_next(request)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 173, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 149, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 197, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\app.py", line 300, in bloqueio_single_owner
+    |     return await call_next(request)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 173, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 149, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    |     await self.app(scope, receive, send)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\routing.py", line 676, in __call__
+    |     await self.middleware_stack(scope, receive, send)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 2734, in app
+    |     await route.handle(scope, receive, send)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 1281, in handle
+    |     await super().handle(scope, receive, send)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\routing.py", line 282, in handle
+    |     await self.app(scope, receive, send)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 158, in app
+    |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 144, in app
+    |     response = await f(request)
+    |                ^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 706, in app
+    |     raw_response = await run_endpoint_function(
+    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 352, in run_endpoint_function
+    |     return await dependant.call(**values)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\app.py", line 1141, in set_cfg
+    |     save_cfg(cfg, tenant_id)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\app.py", line 819, in save_cfg
+    |     para_disco[chave] = segredos_em_repouso.cifrar(valor)
+    |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\api\segredos_em_repouso.py", line 138, in cifrar
+    |     raise SegredoIlegivel(
+    | service.api.segredos_em_repouso.SegredoIlegivel: Windows sem DPAPI disponível: gravar o segredo em texto claro seria pior que recusar — nada foi gravado no disco
+    +------------------------------------
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_auditoria_sec1_segredos_em_repouso.py", line 218, in test_sem_dpapi_atualiza_ilegiveis_so_da_chave_alterada
+    assert c.post("/v1/config", headers=H, json=pedido).status_code == 200
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 1204, in post
+    return self.request(
+           ^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\testclient.py", line 463, in request
+    return super().request(
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 797, in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 980, in send
+    response = self._send_handling_auth(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 1008, in _send_handling_auth
+    response = self._send_handling_redirects(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 1043, in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 1076, in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\testclient.py", line 360, in handle_request
+    raise exc
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\testclient.py", line 357, in handle_request
+    portal.call(self.app, scope, receive, send)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\anyio\from_thread.py", line 340, in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 456, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 401, in __get_result
+    raise self._exception
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\anyio\from_thread.py", line 265, in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 197, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\app.py", line 1077, in cabecalhos_de_seguranca
+    resposta = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 173, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 149, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 197, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\app.py", line 585, in security_headers
+    resp = await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 173, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 149, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 197, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\app.py", line 300, in bloqueio_single_owner
+    return await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 173, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 149, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\routing.py", line 676, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 2734, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 1281, in handle
+    await super().handle(scope, receive, send)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\routing.py", line 282, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 158, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 144, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 706, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 352, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\app.py", line 1141, in set_cfg
+    save_cfg(cfg, tenant_id)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\app.py", line 819, in save_cfg
+    para_disco[chave] = segredos_em_repouso.cifrar(valor)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\api\segredos_em_repouso.py", line 138, in cifrar
+    raise SegredoIlegivel(
+service.api.segredos_em_repouso.SegredoIlegivel: Windows sem DPAPI disponível: gravar o segredo em texto claro seria pior que recusar — nada foi gravado no disco
+
+The above exception was the direct cause of the following exception:
+
+self = <tests.test_auditoria_sec1_segredos_em_repouso.TestMigracaoDoConfigLegado object at 0x000001D91BDD00E0>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-sec-1-fj3ztvh8/tmp/pytest-of-unknown/pytest-0/test_sem_dpapi_atualiza_ilegiv0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001D91DE88DA0>
+remover = False
+
+    @pytest.mark.parametrize("remover", [False, True], ids=["substituicao", "exclusao"])
+    def test_sem_dpapi_atualiza_ilegiveis_so_da_chave_alterada(
+            self, tmp_path, monkeypatch, remover):
+        """V9-CI-02: o caminho POSIX também é exercitado no Windows.
+    
+        Re-colar/remover limpa o diagnóstico antigo, não outras credenciais
+        ilegíveis nem o registro do mesmo segredo em outro inquilino.
+        """
+        monkeypatch.setattr(segredos_em_repouso, "tem_protecao", lambda: False)
+        monkeypatch.delenv("ALERTA_TELEGRAM_TOKEN", raising=False)
+        m, c = _app(tmp_path, monkeypatch)
+        outro_path = m.tenant_cfg_path("outro-tenant")
+        outro_path.write_text(json.dumps({
+            "ALERTA_TELEGRAM_TOKEN": TOKEN_ILEGIVEL,
+        }), encoding="utf-8")
+        m.load_cfg("outro-tenant")
+        outro_registro = dict(m._SEGREDOS_ILEGIVEIS["outro-tenant"])
+        assert set(outro_registro) == {"ALERTA_TELEGRAM_TOKEN"}
+        outro_antes = outro_path.read_bytes()
+    
+        (tmp_path / "config.json").write_text(json.dumps({
+            "ALERTA_TELEGRAM_TOKEN": TOKEN_ILEGIVEL,
+            "GROQ_API_KEY": TOKEN_ILEGIVEL,
+        }), encoding="utf-8")
+        m.load_cfg("legacy")
+        assert set(m._SEGREDOS_ILEGIVEIS["legacy"]) == {
+            "ALERTA_TELEGRAM_TOKEN", "GROQ_API_KEY"}
+        groq_antes = m._SEGREDOS_ILEGIVEIS["legacy"]["GROQ_API_KEY"]
+    
+        pedido = ({"remover": ["ALERTA_TELEGRAM_TOKEN"]} if remover else
+                  {"vars": {"ALERTA_TELEGRAM_TOKEN": TELEGRAM}})
+>       assert c.post("/v1/config", headers=H, json=pedido).status_code == 200
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_auditoria_sec1_segredos_em_repouso.py:218: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\httpx2\_client.py:1204: in post
+    return self.request(
+.venv\Lib\site-packages\starlette\testclient.py:463: in request
+    return super().request(
+.venv\Lib\site-packages\httpx2\_client.py:797: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx2\_client.py:980: in send
+    response = self._send_handling_auth(
+.venv\Lib\site-packages\httpx2\_client.py:1008: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv\Lib\site-packages\httpx2\_client.py:1043: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx2\_client.py:1076: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:360: in handle_request
+    raise exc
+.venv\Lib\site-packages\starlette\testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv\Lib\site-packages\anyio\from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\concurrent\futures\_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\concurrent\futures\_base.py:401: in __get_result
+    raise self._exception
+.venv\Lib\site-packages\anyio\from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+service\app.py:1077: in cabecalhos_de_seguranca
+    resposta = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+service\app.py:585: in security_headers
+    resp = await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+service\app.py:300: in bloqueio_single_owner
+    return await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1281: in handle
+    await super().handle(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:282: in handle
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:706: in app
+    raw_response = await run_endpoint_function(
+.venv\Lib\site-packages\fastapi\routing.py:352: in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+service\app.py:1141: in set_cfg
+    save_cfg(cfg, tenant_id)
+service\app.py:819: in save_cfg
+    para_disco[chave] = segredos_em_repouso.cifrar(valor)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+valor = '123456:AAH-token-do-bot'
+
+    def cifrar(valor: str) -> str:
+        """Prepara um segredo para o disco.
+    
+        Windows: DPAPI do usuário + verificação de ida-e-volta — o que não se
+        consegue decifrar de volta NÃO é gravado (o chamador decide o que fazer
+        com a falha). POSIX: devolve como está — a proteção ali é o 0600 do
+        arquivo, e fingir criptografia caseira seria pior que nenhuma.
+    
+        Windows SEM DPAPI disponível: RECUSA. Devolver texto claro seria escrever
+        o segredo legível em disco — exatamente o achado SEC-1 que este módulo
+        corrige. Fail-closed também vale para o path de gravação.
+        """
+        if not tem_protecao():
+            if protecao_exigida():
+>               raise SegredoIlegivel(
+                    "Windows sem DPAPI disponível: gravar o segredo em texto claro "
+                    "seria pior que recusar — nada foi gravado no disco")
+E               service.api.segredos_em_repouso.SegredoIlegivel: Windows sem DPAPI disponível: gravar o segredo em texto claro seria pior que recusar — nada foi gravado no disco
+
+service\api\segredos_em_repouso.py:138: SegredoIlegivel
+------------------------------ Captured log call ------------------------------
+WARNING  tradingagents.service:app.py:714 segredo ALERTA_TELEGRAM_TOKEN ilegível neste contexto
+WARNING  tradingagents.service:app.py:714 segredo ALERTA_TELEGRAM_TOKEN ilegível neste contexto
+WARNING  tradingagents.service:app.py:714 segredo GROQ_API_KEY ilegível neste contexto
+WARNING  tradingagents.service:app.py:714 segredo ALERTA_TELEGRAM_TOKEN ilegível neste contexto
+WARNING  tradingagents.service:app.py:714 segredo GROQ_API_KEY ilegível neste contexto
+_ TestMigracaoDoConfigLegado.test_sem_dpapi_atualiza_ilegiveis_so_da_chave_alterada[exclusao] _
+  + Exception Group Traceback (most recent call last):
+  |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\_utils.py", line 107, in create_collapsing_task_group
+  |     async with anyio.create_task_group() as tg:
+  |                ^^^^^^^^^^^^^^^^^^^^^^^^^
+  |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\anyio\_backends\_asyncio.py", line 847, in __aexit__
+  |     raise BaseExceptionGroup(
+  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Traceback (most recent call last):
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\runner.py", line 361, in from_call
+    |     result: TResult | None = func()
+    |                              ^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\runner.py", line 250, in <lambda>
+    |     lambda: runtest_hook(item=item, **kwds),
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    |     return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    |     return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+    |     raise exception
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 139, in _multicall
+    |     teardown.throw(exception)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\logging.py", line 865, in pytest_runtest_call
+    |     yield
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 139, in _multicall
+    |     teardown.throw(exception)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\capture.py", line 900, in pytest_runtest_call
+    |     return (yield)
+    |             ^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 139, in _multicall
+    |     teardown.throw(exception)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 53, in run_old_style_hookwrapper
+    |     return result.get_result()
+    |            ^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_result.py", line 103, in get_result
+    |     raise exc.with_traceback(tb)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 38, in run_old_style_hookwrapper
+    |     res = yield
+    |           ^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 139, in _multicall
+    |     teardown.throw(exception)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\skipping.py", line 268, in pytest_runtest_call
+    |     return (yield)
+    |             ^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    |     res = hook_impl.function(*args)
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\runner.py", line 184, in pytest_runtest_call
+    |     item.runtest()
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\python.py", line 1707, in runtest
+    |     self.ihook.pytest_pyfunc_call(pyfuncitem=self)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    |     return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    |     return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+    |     raise exception
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    |     res = hook_impl.function(*args)
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\python.py", line 167, in pytest_pyfunc_call
+    |     result = testfunction(**testargs)
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_auditoria_sec1_segredos_em_repouso.py", line 218, in test_sem_dpapi_atualiza_ilegiveis_so_da_chave_alterada
+    |     assert c.post("/v1/config", headers=H, json=pedido).status_code == 200
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 1204, in post
+    |     return self.request(
+    |            ^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\testclient.py", line 463, in request
+    |     return super().request(
+    |            ^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 797, in request
+    |     return self.send(request, auth=auth, follow_redirects=follow_redirects)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 980, in send
+    |     response = self._send_handling_auth(
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 1008, in _send_handling_auth
+    |     response = self._send_handling_redirects(
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 1043, in _send_handling_redirects
+    |     response = self._send_single_request(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 1076, in _send_single_request
+    |     response = transport.handle_request(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\testclient.py", line 360, in handle_request
+    |     raise exc
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\testclient.py", line 357, in handle_request
+    |     portal.call(self.app, scope, receive, send)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\anyio\from_thread.py", line 340, in call
+    |     return cast(T_Retval, self.start_task_soon(func, *args).result())
+    |                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 456, in result
+    |     return self.__get_result()
+    |            ^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 401, in __get_result
+    |     raise self._exception
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\anyio\from_thread.py", line 265, in _call_func
+    |     retval = await retval_or_awaitable
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    |     await super().__call__(scope, receive, send)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\applications.py", line 96, in __call__
+    |     await self.middleware_stack(scope, receive, send)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    |     raise exc
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    |     await self.app(scope, receive, _send)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 197, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\app.py", line 1077, in cabecalhos_de_seguranca
+    |     resposta = await call_next(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 173, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 149, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 197, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\app.py", line 585, in security_headers
+    |     resp = await call_next(request)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 173, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 149, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 197, in __call__
+    |     response = await self.dispatch_func(request, call_next)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\app.py", line 300, in bloqueio_single_owner
+    |     return await call_next(request)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 173, in call_next
+    |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 149, in coro
+    |     await self.app(scope, receive_or_disconnect, send_no_error)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    |     await self.app(scope, receive, send)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\routing.py", line 676, in __call__
+    |     await self.middleware_stack(scope, receive, send)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 2734, in app
+    |     await route.handle(scope, receive, send)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 1281, in handle
+    |     await super().handle(scope, receive, send)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\routing.py", line 282, in handle
+    |     await self.app(scope, receive, send)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 158, in app
+    |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    |     raise exc
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    |     await app(scope, receive, sender)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 144, in app
+    |     response = await f(request)
+    |                ^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 706, in app
+    |     raw_response = await run_endpoint_function(
+    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 352, in run_endpoint_function
+    |     return await dependant.call(**values)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\app.py", line 1141, in set_cfg
+    |     save_cfg(cfg, tenant_id)
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\app.py", line 819, in save_cfg
+    |     para_disco[chave] = segredos_em_repouso.cifrar(valor)
+    |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\api\segredos_em_repouso.py", line 138, in cifrar
+    |     raise SegredoIlegivel(
+    | service.api.segredos_em_repouso.SegredoIlegivel: Windows sem DPAPI disponível: gravar o segredo em texto claro seria pior que recusar — nada foi gravado no disco
+    +------------------------------------
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_auditoria_sec1_segredos_em_repouso.py", line 218, in test_sem_dpapi_atualiza_ilegiveis_so_da_chave_alterada
+    assert c.post("/v1/config", headers=H, json=pedido).status_code == 200
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 1204, in post
+    return self.request(
+           ^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\testclient.py", line 463, in request
+    return super().request(
+           ^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 797, in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 980, in send
+    response = self._send_handling_auth(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 1008, in _send_handling_auth
+    response = self._send_handling_redirects(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 1043, in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\httpx2\_client.py", line 1076, in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\testclient.py", line 360, in handle_request
+    raise exc
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\testclient.py", line 357, in handle_request
+    portal.call(self.app, scope, receive, send)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\anyio\from_thread.py", line 340, in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 456, in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python312\Lib\concurrent\futures\_base.py", line 401, in __get_result
+    raise self._exception
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\anyio\from_thread.py", line 265, in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\applications.py", line 1163, in __call__
+    await super().__call__(scope, receive, send)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 197, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\app.py", line 1077, in cabecalhos_de_seguranca
+    resposta = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 173, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 149, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 197, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\app.py", line 585, in security_headers
+    resp = await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 173, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 149, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 197, in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\app.py", line 300, in bloqueio_single_owner
+    return await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 173, in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\base.py", line 149, in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\routing.py", line 676, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 2734, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 1281, in handle
+    await super().handle(scope, receive, send)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\routing.py", line 282, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 158, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 144, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 706, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\fastapi\routing.py", line 352, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\app.py", line 1141, in set_cfg
+    save_cfg(cfg, tenant_id)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\app.py", line 819, in save_cfg
+    para_disco[chave] = segredos_em_repouso.cifrar(valor)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\service\api\segredos_em_repouso.py", line 138, in cifrar
+    raise SegredoIlegivel(
+service.api.segredos_em_repouso.SegredoIlegivel: Windows sem DPAPI disponível: gravar o segredo em texto claro seria pior que recusar — nada foi gravado no disco
+
+The above exception was the direct cause of the following exception:
+
+self = <tests.test_auditoria_sec1_segredos_em_repouso.TestMigracaoDoConfigLegado object at 0x000001D91BDD39E0>
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-sec-1-fj3ztvh8/tmp/pytest-of-unknown/pytest-0/test_sem_dpapi_atualiza_ilegiv1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001D91DCC2600>
+remover = True
+
+    @pytest.mark.parametrize("remover", [False, True], ids=["substituicao", "exclusao"])
+    def test_sem_dpapi_atualiza_ilegiveis_so_da_chave_alterada(
+            self, tmp_path, monkeypatch, remover):
+        """V9-CI-02: o caminho POSIX também é exercitado no Windows.
+    
+        Re-colar/remover limpa o diagnóstico antigo, não outras credenciais
+        ilegíveis nem o registro do mesmo segredo em outro inquilino.
+        """
+        monkeypatch.setattr(segredos_em_repouso, "tem_protecao", lambda: False)
+        monkeypatch.delenv("ALERTA_TELEGRAM_TOKEN", raising=False)
+        m, c = _app(tmp_path, monkeypatch)
+        outro_path = m.tenant_cfg_path("outro-tenant")
+        outro_path.write_text(json.dumps({
+            "ALERTA_TELEGRAM_TOKEN": TOKEN_ILEGIVEL,
+        }), encoding="utf-8")
+        m.load_cfg("outro-tenant")
+        outro_registro = dict(m._SEGREDOS_ILEGIVEIS["outro-tenant"])
+        assert set(outro_registro) == {"ALERTA_TELEGRAM_TOKEN"}
+        outro_antes = outro_path.read_bytes()
+    
+        (tmp_path / "config.json").write_text(json.dumps({
+            "ALERTA_TELEGRAM_TOKEN": TOKEN_ILEGIVEL,
+            "GROQ_API_KEY": TOKEN_ILEGIVEL,
+        }), encoding="utf-8")
+        m.load_cfg("legacy")
+        assert set(m._SEGREDOS_ILEGIVEIS["legacy"]) == {
+            "ALERTA_TELEGRAM_TOKEN", "GROQ_API_KEY"}
+        groq_antes = m._SEGREDOS_ILEGIVEIS["legacy"]["GROQ_API_KEY"]
+    
+        pedido = ({"remover": ["ALERTA_TELEGRAM_TOKEN"]} if remover else
+                  {"vars": {"ALERTA_TELEGRAM_TOKEN": TELEGRAM}})
+>       assert c.post("/v1/config", headers=H, json=pedido).status_code == 200
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\test_auditoria_sec1_segredos_em_repouso.py:218: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\httpx2\_client.py:1204: in post
+    return self.request(
+.venv\Lib\site-packages\starlette\testclient.py:463: in request
+    return super().request(
+.venv\Lib\site-packages\httpx2\_client.py:797: in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx2\_client.py:980: in send
+    response = self._send_handling_auth(
+.venv\Lib\site-packages\httpx2\_client.py:1008: in _send_handling_auth
+    response = self._send_handling_redirects(
+.venv\Lib\site-packages\httpx2\_client.py:1043: in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\httpx2\_client.py:1076: in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\testclient.py:360: in handle_request
+    raise exc
+.venv\Lib\site-packages\starlette\testclient.py:357: in handle_request
+    portal.call(self.app, scope, receive, send)
+.venv\Lib\site-packages\anyio\from_thread.py:340: in call
+    return cast(T_Retval, self.start_task_soon(func, *args).result())
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\concurrent\futures\_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+C:\Program Files\Python312\Lib\concurrent\futures\_base.py:401: in __get_result
+    raise self._exception
+.venv\Lib\site-packages\anyio\from_thread.py:265: in _call_func
+    retval = await retval_or_awaitable
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\applications.py:1163: in __call__
+    await super().__call__(scope, receive, send)
+.venv\Lib\site-packages\starlette\applications.py:96: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\starlette\middleware\errors.py:186: in __call__
+    raise exc
+.venv\Lib\site-packages\starlette\middleware\errors.py:164: in __call__
+    await self.app(scope, receive, _send)
+.venv\Lib\site-packages\starlette\middleware\base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+service\app.py:1077: in cabecalhos_de_seguranca
+    resposta = await call_next(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+service\app.py:585: in security_headers
+    resp = await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\base.py:197: in __call__
+    response = await self.dispatch_func(request, call_next)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+service\app.py:300: in bloqueio_single_owner
+    return await call_next(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\starlette\middleware\base.py:173: in call_next
+    raise app_exc from app_exc.__cause__ or app_exc.__context__
+.venv\Lib\site-packages\starlette\middleware\base.py:149: in coro
+    await self.app(scope, receive_or_disconnect, send_no_error)
+.venv\Lib\site-packages\starlette\middleware\exceptions.py:63: in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py:18: in __call__
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:676: in __call__
+    await self.middleware_stack(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:2734: in app
+    await route.handle(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:1281: in handle
+    await super().handle(scope, receive, send)
+.venv\Lib\site-packages\starlette\routing.py:282: in handle
+    await self.app(scope, receive, send)
+.venv\Lib\site-packages\fastapi\routing.py:158: in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+.venv\Lib\site-packages\starlette\_exception_handler.py:53: in wrapped_app
+    raise exc
+.venv\Lib\site-packages\starlette\_exception_handler.py:42: in wrapped_app
+    await app(scope, receive, sender)
+.venv\Lib\site-packages\fastapi\routing.py:144: in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\fastapi\routing.py:706: in app
+    raw_response = await run_endpoint_function(
+.venv\Lib\site-packages\fastapi\routing.py:352: in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+service\app.py:1141: in set_cfg
+    save_cfg(cfg, tenant_id)
+service\app.py:819: in save_cfg
+    para_disco[chave] = segredos_em_repouso.cifrar(valor)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+valor = 'placeholder'
+
+    def cifrar(valor: str) -> str:
+        """Prepara um segredo para o disco.
+    
+        Windows: DPAPI do usuário + verificação de ida-e-volta — o que não se
+        consegue decifrar de volta NÃO é gravado (o chamador decide o que fazer
+        com a falha). POSIX: devolve como está — a proteção ali é o 0600 do
+        arquivo, e fingir criptografia caseira seria pior que nenhuma.
+    
+        Windows SEM DPAPI disponível: RECUSA. Devolver texto claro seria escrever
+        o segredo legível em disco — exatamente o achado SEC-1 que este módulo
+        corrige. Fail-closed também vale para o path de gravação.
+        """
+        if not tem_protecao():
+            if protecao_exigida():
+>               raise SegredoIlegivel(
+                    "Windows sem DPAPI disponível: gravar o segredo em texto claro "
+                    "seria pior que recusar — nada foi gravado no disco")
+E               service.api.segredos_em_repouso.SegredoIlegivel: Windows sem DPAPI disponível: gravar o segredo em texto claro seria pior que recusar — nada foi gravado no disco
+
+service\api\segredos_em_repouso.py:138: SegredoIlegivel
+------------------------------ Captured log call ------------------------------
+WARNING  tradingagents.service:app.py:714 segredo ALERTA_TELEGRAM_TOKEN ilegível neste contexto
+WARNING  tradingagents.service:app.py:714 segredo ALERTA_TELEGRAM_TOKEN ilegível neste contexto
+WARNING  tradingagents.service:app.py:714 segredo GROQ_API_KEY ilegível neste contexto
+WARNING  tradingagents.service:app.py:714 segredo ALERTA_TELEGRAM_TOKEN ilegível neste contexto
+WARNING  tradingagents.service:app.py:714 segredo GROQ_API_KEY ilegível neste contexto
+=========================== short test summary info ===========================
+FAILED tests/test_auditoria_sec1_segredos_em_repouso.py::TestMigracaoDoConfigLegado::test_sem_dpapi_atualiza_ilegiveis_so_da_chave_alterada[substituicao]
+FAILED tests/test_auditoria_sec1_segredos_em_repouso.py::TestMigracaoDoConfigLegado::test_sem_dpapi_atualiza_ilegiveis_so_da_chave_alterada[exclusao]
+2 failed, 36 passed in 4.14s

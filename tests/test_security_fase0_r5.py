@@ -5,6 +5,7 @@ the hardened transport; (c) E2E adversarial flow through the FINAL decision
 (analyst → researcher → manager → trader → risk → PM), no live calls."""
 
 import asyncio
+import concurrent.futures
 import os
 import pathlib
 import re
@@ -107,7 +108,10 @@ class TestHardenedTransport:
             client._transport = httpx.MockTransport(handler)
             return await client.get("https://start.example.com/v1")
 
-        resp = asyncio.run(run())
+        # Playwright (e2e) mantém um loop "rodando" na thread principal por
+        # toda a sessão; um asyncio.run() direto colide na suíte completa.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            resp = pool.submit(asyncio.run, run()).result()
         assert resp.status_code == code
         assert hits == ["start.example.com"]
 

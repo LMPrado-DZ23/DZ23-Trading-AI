@@ -1,0 +1,419 @@
+{
+  "baseline": "2b7754a94cc1e4233ad95ac6fa377be4078e5055",
+  "branch": "audit/v9-rc-20261015",
+  "root": "C:/Users/DZ23/Documents/Qoder/2026-10-12/2f7f19a4/dz23-v9-audit",
+  "inherited_environment_allowlist": [
+    "SYSTEMROOT",
+    "WINDIR",
+    "COMSPEC",
+    "PATHEXT",
+    "PATH",
+    "SYSTEMDRIVE",
+    "PROGRAMFILES",
+    "PROGRAMFILES(X86)",
+    "PROGRAMW6432",
+    "NUMBER_OF_PROCESSORS",
+    "PROCESSOR_ARCHITECTURE"
+  ],
+  "preflight": [
+    "Long inline shell invocation exited 2 with unexpected EOF before Python/tests started; moved harness into this authorized invocation JSON to avoid shell quoting/length transport."
+  ],
+  "attempts": [
+    {
+      "started_utc": "2026-10-15T01:09:14.850788+00:00",
+      "command": [
+        "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\.venv\\Scripts\\python.exe",
+        "-I",
+        "-S",
+        "-B",
+        "-c",
+        "import os\nimport sys\nfrom pathlib import Path\nroot, sandbox, junit = map(Path, sys.argv[1:4])\nsys.path[:0] = [str(root), str(root / '.venv/Lib/site-packages')]\nallowed_read = [os.path.normcase(os.path.abspath(p)) for p in (root, sandbox, Path(sys.base_prefix))]\nsafe_root = os.path.normcase(os.path.abspath(sandbox))\nxml_path = os.path.normcase(os.path.abspath(junit))\nviolations = []\nclass IsolationViolation(BaseException):\n    pass\ndef within(path, base):\n    return path == base or path.startswith(base + os.sep)\ndef check_path(value, writing=False):\n    if value is None or isinstance(value, int):\n        return\n    path = os.path.normcase(os.path.abspath(os.fsdecode(value)))\n    if path == os.path.normcase(os.devnull):\n        return\n    if writing:\n        safe = within(path, safe_root) or path == xml_path\n    else:\n        safe = any(within(path, base) for base in allowed_read)\n        name = os.path.basename(path)\n        if (name == '.env' or name.startswith('.env.')) and not within(path, safe_root):\n            safe = False\n    if not safe:\n        violations.append('filesystem-write' if writing else 'filesystem-read')\n        raise IsolationViolation('filesystem access outside authorized sandbox/code paths')\ndef audit(event, args):\n    if event.startswith('winreg.') or event in {'socket.connect', 'socket.bind', 'socket.getaddrinfo', 'socket.gethostbyname', 'socket.gethostbyaddr', 'socket.sendto', 'subprocess.Popen', 'os.system', 'os.startfile', 'os.startfile/2'}:\n        violations.append(event)\n        raise IsolationViolation('forbidden external operation: ' + event)\n    if event == 'import' and args[0].startswith('desktop'):\n        violations.append('desktop-import')\n        raise IsolationViolation('desktop launcher is out of scope')\n    if event == 'open':\n        flags = args[2] or 0\n        check_path(args[0], bool(flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND)))\n    elif event in {'os.listdir', 'os.scandir'}:\n        check_path(args[0] if args else os.getcwd())\n    elif event in {'os.mkdir', 'os.remove', 'os.rmdir', 'os.chmod'}:\n        check_path(args[0], True)\n    elif event in {'os.rename', 'os.link', 'os.symlink'}:\n        check_path(args[0], True)\n        check_path(args[1], True)\n    elif event == 'sqlite3.connect' and args[0] != ':memory:':\n        check_path(args[0], True)\nsys.addaudithook(audit)\nimport dotenv\ndotenv.find_dotenv = lambda *args, **kwargs: ''\nimport mimetypes\nmimetypes.MimeTypes.read_windows_registry = lambda *args, **kwargs: None\nimport pytest\nargs = [str(root / 'tests/test_v9_authorization_regressions.py'), '-q', '--tb=short', '--color=no', '-p', 'no:cacheprovider', '-c', str(root / 'pyproject.toml'), '--rootdir=' + str(root), '--confcutdir=' + str(root / 'tests'), '--basetemp=' + str(sandbox / 'pytest'), '--junitxml=' + str(junit)]\ntry:\n    result = int(pytest.main(args))\nfinally:\n    print('V9 isolation guard violations: ' + str(len(violations)))\nraise SystemExit(result if not violations else 3)\n",
+        "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit",
+        "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-dxlcx9mw",
+        "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\docs\\mission\\evidence\\v9-baseline\\auth-red.xml"
+      ],
+      "cwd": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-dxlcx9mw\\working",
+      "overrides": {
+        "HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-dxlcx9mw\\home",
+        "USERPROFILE": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-dxlcx9mw\\home",
+        "HOMEDRIVE": "C:",
+        "HOMEPATH": "\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-dxlcx9mw\\home",
+        "APPDATA": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-dxlcx9mw\\appdata",
+        "LOCALAPPDATA": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-dxlcx9mw\\localappdata",
+        "DATA_DIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-dxlcx9mw\\data",
+        "TEMP": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-dxlcx9mw\\temp",
+        "TMP": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-dxlcx9mw\\temp",
+        "TMPDIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-dxlcx9mw\\temp",
+        "XDG_CACHE_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-dxlcx9mw\\cache",
+        "XDG_CONFIG_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-dxlcx9mw\\config",
+        "XDG_DATA_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-dxlcx9mw\\data",
+        "XDG_STATE_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-dxlcx9mw\\state",
+        "PROGRAMDATA": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-dxlcx9mw\\programdata",
+        "ALLUSERSPROFILE": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-dxlcx9mw\\programdata",
+        "TRADINGAGENTS_CACHE_DIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-dxlcx9mw\\cache",
+        "TRADINGAGENTS_RESULTS_DIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-dxlcx9mw\\results",
+        "TRADINGAGENTS_MEMORY_LOG_PATH": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-dxlcx9mw\\memory\\trading_memory.md",
+        "PYTHON_DOTENV_DISABLED": "1",
+        "ALERTA_WINDOWS": "false",
+        "REAL_MONEY_EXECUTION": "false",
+        "MULTI_TENANT_ENABLED": "false",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "log": "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\docs\\mission\\evidence\\v9-baseline\\auth-red.log",
+      "junit": "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\docs\\mission\\evidence\\v9-baseline\\auth-red.xml",
+      "exit_code": 1,
+      "finished_utc": "2026-10-15T01:09:15.169547+00:00"
+    },
+    {
+      "started_utc": "2026-10-15T01:09:43.407775+00:00",
+      "command": [
+        "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\.venv\\Scripts\\python.exe",
+        "-I",
+        "-S",
+        "-B",
+        "-c",
+        "import os\nos.environ['PYTEST_ADDOPTS'] = '--capture=sys'\nimport sys\nfrom pathlib import Path\nroot, sandbox, junit = map(Path, sys.argv[1:4])\nsys.path[:0] = [str(root), str(root / '.venv/Lib/site-packages')]\nallowed_read = [os.path.normcase(os.path.abspath(p)) for p in (root, sandbox, Path(sys.base_prefix))]\nsafe_root = os.path.normcase(os.path.abspath(sandbox))\nxml_path = os.path.normcase(os.path.abspath(junit))\nviolations = []\nclass IsolationViolation(BaseException):\n    pass\ndef within(path, base):\n    return path == base or path.startswith(base + os.sep)\ndef check_path(value, writing=False):\n    if value is None or isinstance(value, int):\n        return\n    path = os.path.normcase(os.path.abspath(os.fsdecode(value)))\n    if path == os.path.normcase(os.devnull):\n        return\n    if writing:\n        safe = within(path, safe_root) or path == xml_path\n    else:\n        safe = any(within(path, base) for base in allowed_read)\n        name = os.path.basename(path)\n        if (name == '.env' or name.startswith('.env.')) and not within(path, safe_root):\n            safe = False\n    if not safe:\n        violations.append('filesystem-write' if writing else 'filesystem-read')\n        raise IsolationViolation('filesystem access outside authorized sandbox/code paths')\ndef audit(event, args):\n    if event.startswith('winreg.') or event in {'socket.connect', 'socket.bind', 'socket.getaddrinfo', 'socket.gethostbyname', 'socket.gethostbyaddr', 'socket.sendto', 'subprocess.Popen', 'os.system', 'os.startfile', 'os.startfile/2'}:\n        violations.append(event)\n        raise IsolationViolation('forbidden external operation: ' + event)\n    if event == 'import' and args[0].startswith('desktop'):\n        violations.append('desktop-import')\n        raise IsolationViolation('desktop launcher is out of scope')\n    if event == 'open':\n        flags = args[2] or 0\n        check_path(args[0], bool(flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND)))\n    elif event in {'os.listdir', 'os.scandir'}:\n        check_path(args[0] if args else os.getcwd())\n    elif event in {'os.mkdir', 'os.remove', 'os.rmdir', 'os.chmod'}:\n        check_path(args[0], True)\n    elif event in {'os.rename', 'os.link', 'os.symlink'}:\n        check_path(args[0], True)\n        check_path(args[1], True)\n    elif event == 'sqlite3.connect' and args[0] != ':memory:':\n        check_path(args[0], True)\nsys.addaudithook(audit)\nimport dotenv\ndotenv.find_dotenv = lambda *args, **kwargs: ''\nimport mimetypes\nmimetypes.MimeTypes.read_windows_registry = lambda *args, **kwargs: None\nimport pytest\nargs = [str(root / 'tests/test_v9_authorization_regressions.py'), '-q', '--tb=short', '--color=no', '-p', 'no:cacheprovider', '-c', str(root / 'pyproject.toml'), '--rootdir=' + str(root), '--confcutdir=' + str(root / 'tests'), '--basetemp=' + str(sandbox / 'pytest'), '--junitxml=' + str(junit)]\ntry:\n    result = int(pytest.main(args))\nfinally:\n    print('V9 isolation guard violations: ' + str(len(violations)))\nraise SystemExit(result if not violations else 3)\n",
+        "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit",
+        "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-0ilxiugw",
+        "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\docs\\mission\\evidence\\v9-baseline\\auth-red.xml"
+      ],
+      "cwd": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-0ilxiugw\\working",
+      "overrides": {
+        "HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-0ilxiugw\\home",
+        "USERPROFILE": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-0ilxiugw\\home",
+        "HOMEDRIVE": "C:",
+        "HOMEPATH": "\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-0ilxiugw\\home",
+        "APPDATA": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-0ilxiugw\\appdata",
+        "LOCALAPPDATA": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-0ilxiugw\\localappdata",
+        "DATA_DIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-0ilxiugw\\data",
+        "TEMP": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-0ilxiugw\\temp",
+        "TMP": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-0ilxiugw\\temp",
+        "TMPDIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-0ilxiugw\\temp",
+        "XDG_CACHE_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-0ilxiugw\\cache",
+        "XDG_CONFIG_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-0ilxiugw\\config",
+        "XDG_DATA_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-0ilxiugw\\data",
+        "XDG_STATE_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-0ilxiugw\\state",
+        "PROGRAMDATA": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-0ilxiugw\\programdata",
+        "ALLUSERSPROFILE": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-0ilxiugw\\programdata",
+        "TRADINGAGENTS_CACHE_DIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-0ilxiugw\\cache",
+        "TRADINGAGENTS_RESULTS_DIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-0ilxiugw\\results",
+        "TRADINGAGENTS_MEMORY_LOG_PATH": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-0ilxiugw\\memory\\trading_memory.md",
+        "PYTHON_DOTENV_DISABLED": "1",
+        "ALERTA_WINDOWS": "false",
+        "REAL_MONEY_EXECUTION": "false",
+        "MULTI_TENANT_ENABLED": "false",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "log": "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\docs\\mission\\evidence\\v9-baseline\\auth-red.log",
+      "junit": "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\docs\\mission\\evidence\\v9-baseline\\auth-red.xml",
+      "exit_code": 3,
+      "finished_utc": "2026-10-15T01:09:43.869660+00:00"
+    },
+    {
+      "started_utc": "2026-10-15T01:10:08.708846+00:00",
+      "command": [
+        "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\.venv\\Scripts\\python.exe",
+        "-I",
+        "-S",
+        "-B",
+        "-c",
+        "import os\nos.devnull = os.path.abspath(os.devnull)\nos.environ['PYTEST_ADDOPTS'] = '--capture=sys'\nimport sys\nfrom pathlib import Path\nroot, sandbox, junit = map(Path, sys.argv[1:4])\nsys.path[:0] = [str(root), str(root / '.venv/Lib/site-packages')]\nallowed_read = [os.path.normcase(os.path.abspath(p)) for p in (root, sandbox, Path(sys.base_prefix))]\nsafe_root = os.path.normcase(os.path.abspath(sandbox))\nxml_path = os.path.normcase(os.path.abspath(junit))\nviolations = []\nclass IsolationViolation(BaseException):\n    pass\ndef within(path, base):\n    return path == base or path.startswith(base + os.sep)\ndef check_path(value, writing=False):\n    if value is None or isinstance(value, int):\n        return\n    path = os.path.normcase(os.path.abspath(os.fsdecode(value)))\n    if path == os.path.normcase(os.devnull):\n        return\n    if writing:\n        safe = within(path, safe_root) or path == xml_path\n    else:\n        safe = any(within(path, base) for base in allowed_read)\n        name = os.path.basename(path)\n        if (name == '.env' or name.startswith('.env.')) and not within(path, safe_root):\n            safe = False\n    if not safe:\n        violations.append('filesystem-write' if writing else 'filesystem-read')\n        raise IsolationViolation('filesystem access outside authorized sandbox/code paths')\ndef audit(event, args):\n    if event.startswith('winreg.') or event in {'socket.connect', 'socket.bind', 'socket.getaddrinfo', 'socket.gethostbyname', 'socket.gethostbyaddr', 'socket.sendto', 'subprocess.Popen', 'os.system', 'os.startfile', 'os.startfile/2'}:\n        violations.append(event)\n        raise IsolationViolation('forbidden external operation: ' + event)\n    if event == 'import' and args[0].startswith('desktop'):\n        violations.append('desktop-import')\n        raise IsolationViolation('desktop launcher is out of scope')\n    if event == 'open':\n        flags = args[2] or 0\n        check_path(args[0], bool(flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND)))\n    elif event in {'os.listdir', 'os.scandir'}:\n        check_path(args[0] if args else os.getcwd())\n    elif event in {'os.mkdir', 'os.remove', 'os.rmdir', 'os.chmod'}:\n        check_path(args[0], True)\n    elif event in {'os.rename', 'os.link', 'os.symlink'}:\n        check_path(args[0], True)\n        check_path(args[1], True)\n    elif event == 'sqlite3.connect' and args[0] != ':memory:':\n        check_path(args[0], True)\nsys.addaudithook(audit)\nimport dotenv\ndotenv.find_dotenv = lambda *args, **kwargs: ''\nimport mimetypes\nmimetypes.MimeTypes.read_windows_registry = lambda *args, **kwargs: None\nimport pytest\nargs = [str(root / 'tests/test_v9_authorization_regressions.py'), '-q', '--tb=short', '--color=no', '-p', 'no:cacheprovider', '-c', str(root / 'pyproject.toml'), '--rootdir=' + str(root), '--confcutdir=' + str(root / 'tests'), '--basetemp=' + str(sandbox / 'pytest'), '--junitxml=' + str(junit)]\ntry:\n    result = int(pytest.main(args))\nfinally:\n    print('V9 isolation guard violations: ' + str(len(violations)))\nraise SystemExit(result if not violations else 3)\n",
+        "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit",
+        "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-un8jkuua",
+        "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\docs\\mission\\evidence\\v9-baseline\\auth-red.xml"
+      ],
+      "cwd": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-un8jkuua\\working",
+      "overrides": {
+        "HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-un8jkuua\\home",
+        "USERPROFILE": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-un8jkuua\\home",
+        "HOMEDRIVE": "C:",
+        "HOMEPATH": "\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-un8jkuua\\home",
+        "APPDATA": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-un8jkuua\\appdata",
+        "LOCALAPPDATA": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-un8jkuua\\localappdata",
+        "DATA_DIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-un8jkuua\\data",
+        "TEMP": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-un8jkuua\\temp",
+        "TMP": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-un8jkuua\\temp",
+        "TMPDIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-un8jkuua\\temp",
+        "XDG_CACHE_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-un8jkuua\\cache",
+        "XDG_CONFIG_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-un8jkuua\\config",
+        "XDG_DATA_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-un8jkuua\\data",
+        "XDG_STATE_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-un8jkuua\\state",
+        "PROGRAMDATA": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-un8jkuua\\programdata",
+        "ALLUSERSPROFILE": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-un8jkuua\\programdata",
+        "TRADINGAGENTS_CACHE_DIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-un8jkuua\\cache",
+        "TRADINGAGENTS_RESULTS_DIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-un8jkuua\\results",
+        "TRADINGAGENTS_MEMORY_LOG_PATH": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-un8jkuua\\memory\\trading_memory.md",
+        "PYTHON_DOTENV_DISABLED": "1",
+        "ALERTA_WINDOWS": "false",
+        "REAL_MONEY_EXECUTION": "false",
+        "MULTI_TENANT_ENABLED": "false",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "log": "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\docs\\mission\\evidence\\v9-baseline\\auth-red.log",
+      "junit": "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\docs\\mission\\evidence\\v9-baseline\\auth-red.xml",
+      "exit_code": 1,
+      "finished_utc": "2026-10-15T01:10:11.603636+00:00"
+    },
+    {
+      "started_utc": "2026-10-15T01:11:38.971702+00:00",
+      "command": [
+        "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\.venv\\Scripts\\python.exe",
+        "-I",
+        "-S",
+        "-B",
+        "-c",
+        "import os\nos.devnull = os.path.abspath(os.devnull)\nos.environ['PYTEST_ADDOPTS'] = '--capture=sys'\nimport sys\nfrom pathlib import Path\nroot, sandbox, junit = map(Path, sys.argv[1:4])\njunit = sandbox / 'auth-red.xml'\nsys.path[:0] = [str(root), str(root / '.venv/Lib/site-packages')]\nallowed_read = [os.path.normcase(os.path.abspath(p)) for p in (root, sandbox, Path(sys.base_prefix))]\nsafe_root = os.path.normcase(os.path.abspath(sandbox))\nxml_path = os.path.normcase(os.path.abspath(junit))\nviolations = []\nclass IsolationViolation(BaseException):\n    pass\ndef within(path, base):\n    return path == base or path.startswith(base + os.sep)\ndef check_path(value, writing=False):\n    if value is None or isinstance(value, int):\n        return\n    path = os.path.normcase(os.path.abspath(os.fsdecode(value)))\n    if path == os.path.normcase(os.devnull):\n        return\n    if writing:\n        safe = within(path, safe_root) or path == xml_path\n    else:\n        safe = any(within(path, base) for base in allowed_read)\n        name = os.path.basename(path)\n        if (name == '.env' or name.startswith('.env.')) and not within(path, safe_root):\n            safe = False\n    if not safe:\n        violations.append('filesystem-write' if writing else 'filesystem-read')\n        raise IsolationViolation('filesystem access outside authorized sandbox/code paths')\ndef audit(event, args):\n    if event.startswith('winreg.') or event in {'socket.connect', 'socket.bind', 'socket.getaddrinfo', 'socket.gethostbyname', 'socket.gethostbyaddr', 'socket.sendto', 'subprocess.Popen', 'os.system', 'os.startfile', 'os.startfile/2'}:\n        violations.append(event)\n        raise IsolationViolation('forbidden external operation: ' + event)\n    if event == 'import' and args[0].startswith('desktop'):\n        violations.append('desktop-import')\n        raise IsolationViolation('desktop launcher is out of scope')\n    if event == 'open':\n        flags = args[2] or 0\n        check_path(args[0], bool(flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND)))\n    elif event in {'os.listdir', 'os.scandir'}:\n        check_path(args[0] if args else os.getcwd())\n    elif event in {'os.mkdir', 'os.remove', 'os.rmdir', 'os.chmod'}:\n        check_path(args[0], True)\n    elif event in {'os.rename', 'os.link', 'os.symlink'}:\n        check_path(args[0], True)\n        check_path(args[1], True)\n    elif event == 'sqlite3.connect' and args[0] != ':memory:':\n        check_path(args[0], True)\nsys.addaudithook(audit)\nimport dotenv\ndotenv.find_dotenv = lambda *args, **kwargs: ''\nimport mimetypes\nmimetypes.MimeTypes.read_windows_registry = lambda *args, **kwargs: None\nimport pytest\nargs = [str(root / 'tests/test_v9_authorization_regressions.py'), '-q', '--tb=short', '--color=no', '-p', 'no:cacheprovider', '-c', str(root / 'pyproject.toml'), '--rootdir=' + str(root), '--confcutdir=' + str(root / 'tests'), '--basetemp=' + str(sandbox / 'pytest'), '--junitxml=' + str(junit)]\ntry:\n    result = int(pytest.main(args))\nfinally:\n    print('V9 isolation guard violations: ' + str(len(violations)))\nraise SystemExit(result if not violations else 3)\n",
+        "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit",
+        "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-we97hhnr",
+        "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\docs\\mission\\evidence\\v9-baseline\\auth-red.xml"
+      ],
+      "cwd": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-we97hhnr\\working",
+      "overrides": {
+        "HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-we97hhnr\\home",
+        "USERPROFILE": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-we97hhnr\\home",
+        "HOMEDRIVE": "C:",
+        "HOMEPATH": "\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-we97hhnr\\home",
+        "APPDATA": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-we97hhnr\\appdata",
+        "LOCALAPPDATA": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-we97hhnr\\localappdata",
+        "DATA_DIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-we97hhnr\\data",
+        "TEMP": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-we97hhnr\\temp",
+        "TMP": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-we97hhnr\\temp",
+        "TMPDIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-we97hhnr\\temp",
+        "XDG_CACHE_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-we97hhnr\\cache",
+        "XDG_CONFIG_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-we97hhnr\\config",
+        "XDG_DATA_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-we97hhnr\\data",
+        "XDG_STATE_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-we97hhnr\\state",
+        "PROGRAMDATA": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-we97hhnr\\programdata",
+        "ALLUSERSPROFILE": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-we97hhnr\\programdata",
+        "TRADINGAGENTS_CACHE_DIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-we97hhnr\\cache",
+        "TRADINGAGENTS_RESULTS_DIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-we97hhnr\\results",
+        "TRADINGAGENTS_MEMORY_LOG_PATH": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-we97hhnr\\memory\\trading_memory.md",
+        "PYTHON_DOTENV_DISABLED": "1",
+        "ALERTA_WINDOWS": "false",
+        "REAL_MONEY_EXECUTION": "false",
+        "MULTI_TENANT_ENABLED": "false",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "log": "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\docs\\mission\\evidence\\v9-baseline\\auth-red.log",
+      "junit": "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\docs\\mission\\evidence\\v9-baseline\\auth-red.xml",
+      "exit_code": 1,
+      "finished_utc": "2026-10-15T01:11:41.433446+00:00"
+    },
+    {
+      "started_utc": "2026-10-15T01:12:38.780595+00:00",
+      "command": [
+        "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\.venv\\Scripts\\python.exe",
+        "-I",
+        "-S",
+        "-B",
+        "-c",
+        "import os\nos.devnull = os.path.abspath(os.devnull)\nos.environ['PYTEST_ADDOPTS'] = '--capture=sys'\nimport sys\nfrom pathlib import Path\nroot, sandbox, junit = map(Path, sys.argv[1:4])\njunit = sandbox / 'auth-red.xml'\nsys.path[:0] = [str(root), str(root / '.venv/Lib/site-packages')]\nallowed_read = [os.path.normcase(os.path.abspath(p)) for p in (root, sandbox, Path(sys.base_prefix))]\nsafe_root = os.path.normcase(os.path.abspath(sandbox))\nxml_path = os.path.normcase(os.path.abspath(junit))\nviolations = []\nclass IsolationViolation(BaseException):\n    pass\ndef within(path, base):\n    return path == base or path.startswith(base + os.sep)\ndef check_path(value, writing=False):\n    if value is None or isinstance(value, int):\n        return\n    path = os.path.normcase(os.path.abspath(os.fsdecode(value)))\n    if path == os.path.normcase(os.devnull):\n        return\n    if writing:\n        safe = within(path, safe_root) or path == xml_path\n    else:\n        safe = any(within(path, base) for base in allowed_read)\n        name = os.path.basename(path)\n        if (name == '.env' or name.startswith('.env.')) and not within(path, safe_root):\n            safe = False\n    if not safe:\n        violations.append('filesystem-write' if writing else 'filesystem-read')\n        raise IsolationViolation('filesystem access outside authorized sandbox/code paths')\ndef audit(event, args):\n    if event.startswith('winreg.') or event in {'socket.connect', 'socket.bind', 'socket.getaddrinfo', 'socket.gethostbyname', 'socket.gethostbyaddr', 'socket.sendto', 'subprocess.Popen', 'os.system', 'os.startfile', 'os.startfile/2'}:\n        violations.append(event)\n        raise IsolationViolation('forbidden external operation: ' + event)\n    if event == 'import' and args[0].startswith('desktop'):\n        violations.append('desktop-import')\n        raise IsolationViolation('desktop launcher is out of scope')\n    if event == 'open':\n        flags = args[2] or 0\n        check_path(args[0], bool(flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND)))\n    elif event in {'os.listdir', 'os.scandir'}:\n        check_path(args[0] if args else os.getcwd())\n    elif event in {'os.mkdir', 'os.remove', 'os.rmdir', 'os.chmod'}:\n        check_path(args[0], True)\n    elif event in {'os.rename', 'os.link', 'os.symlink'}:\n        check_path(args[0], True)\n        check_path(args[1], True)\n    elif event == 'sqlite3.connect' and args[0] != ':memory:':\n        check_path(args[0], True)\nsys.addaudithook(audit)\nimport dotenv\ndotenv.find_dotenv = lambda *args, **kwargs: ''\nimport mimetypes\nmimetypes.MimeTypes.read_windows_registry = lambda *args, **kwargs: None\nimport pytest\nargs = [str(root / 'tests/test_v9_authorization_regressions.py'), '-q', '--tb=short', '--color=no', '-p', 'no:cacheprovider', '-c', str(root / 'pyproject.toml'), '--rootdir=' + str(root), '--confcutdir=' + str(root / 'tests'), '--basetemp=' + str(sandbox / 'pytest'), '--junitxml=' + str(junit)]\ntry:\n    result = int(pytest.main(args))\nfinally:\n    print('V9 isolation guard violations: ' + str(len(violations)))\nraise SystemExit(result if not violations else 3)\n",
+        "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit",
+        "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-sqsxvo5l",
+        "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\docs\\mission\\evidence\\v9-baseline\\auth-red.xml"
+      ],
+      "cwd": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-sqsxvo5l\\working",
+      "overrides": {
+        "HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-sqsxvo5l\\home",
+        "USERPROFILE": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-sqsxvo5l\\home",
+        "HOMEDRIVE": "C:",
+        "HOMEPATH": "\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-sqsxvo5l\\home",
+        "APPDATA": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-sqsxvo5l\\appdata",
+        "LOCALAPPDATA": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-sqsxvo5l\\localappdata",
+        "DATA_DIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-sqsxvo5l\\data",
+        "TEMP": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-sqsxvo5l\\temp",
+        "TMP": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-sqsxvo5l\\temp",
+        "TMPDIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-sqsxvo5l\\temp",
+        "XDG_CACHE_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-sqsxvo5l\\cache",
+        "XDG_CONFIG_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-sqsxvo5l\\config",
+        "XDG_DATA_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-sqsxvo5l\\data",
+        "XDG_STATE_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-sqsxvo5l\\state",
+        "PROGRAMDATA": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-sqsxvo5l\\programdata",
+        "ALLUSERSPROFILE": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-sqsxvo5l\\programdata",
+        "TRADINGAGENTS_CACHE_DIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-sqsxvo5l\\cache",
+        "TRADINGAGENTS_RESULTS_DIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-sqsxvo5l\\results",
+        "TRADINGAGENTS_MEMORY_LOG_PATH": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-sqsxvo5l\\memory\\trading_memory.md",
+        "PYTHON_DOTENV_DISABLED": "1",
+        "ALERTA_WINDOWS": "false",
+        "REAL_MONEY_EXECUTION": "false",
+        "MULTI_TENANT_ENABLED": "false",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "log": "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\docs\\mission\\evidence\\v9-baseline\\auth-red.log",
+      "junit": "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\docs\\mission\\evidence\\v9-baseline\\auth-red.xml",
+      "exit_code": 1,
+      "lint": {
+        "command": [
+          "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\.venv\\Scripts\\ruff.exe",
+          "check",
+          "--no-cache",
+          "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\tests\\test_v9_authorization_regressions.py"
+        ],
+        "exit_code": 1
+      },
+      "finished_utc": "2026-10-15T01:12:40.828536+00:00"
+    },
+    {
+      "test_sha256": "d79580216352af26dbba2c4b5856a7cd93b4b9a3d948d542f8172517d6452fda",
+      "started_utc": "2026-10-15T01:13:19.619418+00:00",
+      "command": [
+        "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\.venv\\Scripts\\python.exe",
+        "-I",
+        "-S",
+        "-B",
+        "-c",
+        "import os\nos.devnull = os.path.abspath(os.devnull)\nos.environ['PYTEST_ADDOPTS'] = '--capture=sys'\nimport sys\nfrom pathlib import Path\nroot, sandbox, junit = map(Path, sys.argv[1:4])\njunit = sandbox / 'auth-red.xml'\nsys.path[:0] = [str(root), str(root / '.venv/Lib/site-packages')]\nallowed_read = [os.path.normcase(os.path.abspath(p)) for p in (root, sandbox, Path(sys.base_prefix))]\nsafe_root = os.path.normcase(os.path.abspath(sandbox))\nxml_path = os.path.normcase(os.path.abspath(junit))\nviolations = []\nclass IsolationViolation(BaseException):\n    pass\ndef within(path, base):\n    return path == base or path.startswith(base + os.sep)\ndef check_path(value, writing=False):\n    if value is None or isinstance(value, int):\n        return\n    path = os.path.normcase(os.path.abspath(os.fsdecode(value)))\n    if path == os.path.normcase(os.devnull):\n        return\n    if writing:\n        safe = within(path, safe_root) or path == xml_path\n    else:\n        safe = any(within(path, base) for base in allowed_read)\n        name = os.path.basename(path)\n        if (name == '.env' or name.startswith('.env.')) and not within(path, safe_root):\n            safe = False\n    if not safe:\n        violations.append('filesystem-write' if writing else 'filesystem-read')\n        raise IsolationViolation('filesystem access outside authorized sandbox/code paths')\ndef audit(event, args):\n    if event.startswith('winreg.') or event in {'socket.connect', 'socket.bind', 'socket.getaddrinfo', 'socket.gethostbyname', 'socket.gethostbyaddr', 'socket.sendto', 'subprocess.Popen', 'os.system', 'os.startfile', 'os.startfile/2'}:\n        violations.append(event)\n        raise IsolationViolation('forbidden external operation: ' + event)\n    if event == 'import' and args[0].startswith('desktop'):\n        violations.append('desktop-import')\n        raise IsolationViolation('desktop launcher is out of scope')\n    if event == 'open':\n        flags = args[2] or 0\n        check_path(args[0], bool(flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND)))\n    elif event in {'os.listdir', 'os.scandir'}:\n        check_path(args[0] if args else os.getcwd())\n    elif event in {'os.mkdir', 'os.remove', 'os.rmdir', 'os.chmod'}:\n        check_path(args[0], True)\n    elif event in {'os.rename', 'os.link', 'os.symlink'}:\n        check_path(args[0], True)\n        check_path(args[1], True)\n    elif event == 'sqlite3.connect' and args[0] != ':memory:':\n        check_path(args[0], True)\nsys.addaudithook(audit)\nimport dotenv\ndotenv.find_dotenv = lambda *args, **kwargs: ''\nimport mimetypes\nmimetypes.MimeTypes.read_windows_registry = lambda *args, **kwargs: None\nimport pytest\nargs = [str(root / 'tests/test_v9_authorization_regressions.py'), '-q', '--tb=short', '--color=no', '-p', 'no:cacheprovider', '-c', str(root / 'pyproject.toml'), '--rootdir=' + str(root), '--confcutdir=' + str(root / 'tests'), '--basetemp=' + str(sandbox / 'pytest'), '--junitxml=' + str(junit)]\ntry:\n    result = int(pytest.main(args))\nfinally:\n    print('V9 isolation guard violations: ' + str(len(violations)))\nraise SystemExit(result if not violations else 3)\n",
+        "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit",
+        "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-a2b1_lyr",
+        "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\docs\\mission\\evidence\\v9-baseline\\auth-red.xml"
+      ],
+      "cwd": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-a2b1_lyr\\working",
+      "overrides": {
+        "HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-a2b1_lyr\\home",
+        "USERPROFILE": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-a2b1_lyr\\home",
+        "HOMEDRIVE": "C:",
+        "HOMEPATH": "\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-a2b1_lyr\\home",
+        "APPDATA": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-a2b1_lyr\\appdata",
+        "LOCALAPPDATA": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-a2b1_lyr\\localappdata",
+        "DATA_DIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-a2b1_lyr\\data",
+        "TEMP": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-a2b1_lyr\\temp",
+        "TMP": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-a2b1_lyr\\temp",
+        "TMPDIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-a2b1_lyr\\temp",
+        "XDG_CACHE_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-a2b1_lyr\\cache",
+        "XDG_CONFIG_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-a2b1_lyr\\config",
+        "XDG_DATA_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-a2b1_lyr\\data",
+        "XDG_STATE_HOME": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-a2b1_lyr\\state",
+        "PROGRAMDATA": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-a2b1_lyr\\programdata",
+        "ALLUSERSPROFILE": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-a2b1_lyr\\programdata",
+        "TRADINGAGENTS_CACHE_DIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-a2b1_lyr\\cache",
+        "TRADINGAGENTS_RESULTS_DIR": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-a2b1_lyr\\results",
+        "TRADINGAGENTS_MEMORY_LOG_PATH": "C:\\Users\\DZ23\\AppData\\Local\\Temp\\v9-auth-red-a2b1_lyr\\memory\\trading_memory.md",
+        "PYTHON_DOTENV_DISABLED": "1",
+        "ALERTA_WINDOWS": "false",
+        "REAL_MONEY_EXECUTION": "false",
+        "MULTI_TENANT_ENABLED": "false",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "PYTHONDONTWRITEBYTECODE": "1"
+      },
+      "log": "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\docs\\mission\\evidence\\v9-baseline\\auth-red.log",
+      "junit": "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\docs\\mission\\evidence\\v9-baseline\\auth-red.xml",
+      "exit_code": 1,
+      "lint": {
+        "command": [
+          "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\.venv\\Scripts\\ruff.exe",
+          "check",
+          "--no-cache",
+          "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\tests\\test_v9_authorization_regressions.py"
+        ],
+        "exit_code": 0
+      },
+      "junit_summary": {
+        "name": "pytest",
+        "errors": "0",
+        "failures": "16",
+        "skipped": "0",
+        "tests": "21",
+        "time": "1.572",
+        "timestamp": "2026-10-14T22:13:19.949483-03:00",
+        "hostname": "DESKTOP-AVELL"
+      },
+      "test_outcomes": [
+        {
+          "id": "test_v9_sec01_postgres_write_outage_cannot_grant_local_ownership",
+          "outcome": "failed"
+        },
+        {
+          "id": "test_v9_sec01_unverified_file_write_never_grants_ownership[read-denied]",
+          "outcome": "failed"
+        },
+        {
+          "id": "test_v9_sec01_unverified_file_write_never_grants_ownership[malformed-json]",
+          "outcome": "failed"
+        },
+        {
+          "id": "test_v9_sec01_file_contenders_cannot_both_win",
+          "outcome": "failed"
+        },
+        {
+          "id": "test_v9_sec01_existing_valid_file_lease_rejects_rival",
+          "outcome": "passed"
+        },
+        {
+          "id": "test_v9_sec02_existing_invalid_mode_blocks_execution[malformed-json]",
+          "outcome": "failed"
+        },
+        {
+          "id": "test_v9_sec02_existing_invalid_mode_blocks_execution[array]",
+          "outcome": "failed"
+        },
+        {
+          "id": "test_v9_sec02_existing_invalid_mode_blocks_execution[null]",
+          "outcome": "failed"
+        },
+        {
+          "id": "test_v9_sec02_existing_invalid_mode_blocks_execution[string]",
+          "outcome": "failed"
+        },
+        {
+          "id": "test_v9_sec02_existing_invalid_mode_blocks_execution[number]",
+          "outcome": "failed"
+        },
+        {
+          "id": "test_v9_sec02_genuinely_missing_mode_keeps_new_install_default",
+          "outcome": "passed"
+        },
+        {
+          "id": "test_v9_sec02_unknown_state_in_object_remains_blocked",
+          "outcome": "passed"
+        },
+        {
+          "id": "test_v9_sec03_windows_without_dpapi_refuses_secret_save[new-config]",
+          "outcome": "failed"
+        },
+        {
+          "id": "test_v9_sec03_windows_without_dpapi_refuses_secret_save[existing-config]",
+          "outcome": "failed"
+        },
+        {
+          "id": "test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[malformed-json]",
+          "outcome": "failed"
+        },
+        {
+          "id": "test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[non-object]",
+          "outcome": "failed"
+        },
+        {
+          "id": "test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[missing-hash]",
+          "outcome": "failed"
+        },
+        {
+          "id": "test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[invalid-hash-type]",
+          "outcome": "failed"
+        },
+        {
+          "id": "test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[read-denied]",
+          "outcome": "failed"
+        },
+        {
+          "id": "test_v9_sec04_genuinely_missing_owner_allows_first_setup",
+          "outcome": "passed"
+        },
+        {
+          "id": "test_v9_sec04_valid_existing_owner_rejects_anonymous_replacement",
+          "outcome": "passed"
+        }
+      ],
+      "assertion_failures": 16,
+      "finished_utc": "2026-10-15T01:13:21.647276+00:00"
+    }
+  ],
+  "bootstrap": "import os\nos.devnull = os.path.abspath(os.devnull)\nos.environ['PYTEST_ADDOPTS'] = '--capture=sys'\nimport sys\nfrom pathlib import Path\nroot, sandbox, junit = map(Path, sys.argv[1:4])\njunit = sandbox / 'auth-red.xml'\nsys.path[:0] = [str(root), str(root / '.venv/Lib/site-packages')]\nallowed_read = [os.path.normcase(os.path.abspath(p)) for p in (root, sandbox, Path(sys.base_prefix))]\nsafe_root = os.path.normcase(os.path.abspath(sandbox))\nxml_path = os.path.normcase(os.path.abspath(junit))\nviolations = []\nclass IsolationViolation(BaseException):\n    pass\ndef within(path, base):\n    return path == base or path.startswith(base + os.sep)\ndef check_path(value, writing=False):\n    if value is None or isinstance(value, int):\n        return\n    path = os.path.normcase(os.path.abspath(os.fsdecode(value)))\n    if path == os.path.normcase(os.devnull):\n        return\n    if writing:\n        safe = within(path, safe_root) or path == xml_path\n    else:\n        safe = any(within(path, base) for base in allowed_read)\n        name = os.path.basename(path)\n        if (name == '.env' or name.startswith('.env.')) and not within(path, safe_root):\n            safe = False\n    if not safe:\n        violations.append('filesystem-write' if writing else 'filesystem-read')\n        raise IsolationViolation('filesystem access outside authorized sandbox/code paths')\ndef audit(event, args):\n    if event.startswith('winreg.') or event in {'socket.connect', 'socket.bind', 'socket.getaddrinfo', 'socket.gethostbyname', 'socket.gethostbyaddr', 'socket.sendto', 'subprocess.Popen', 'os.system', 'os.startfile', 'os.startfile/2'}:\n        violations.append(event)\n        raise IsolationViolation('forbidden external operation: ' + event)\n    if event == 'import' and args[0].startswith('desktop'):\n        violations.append('desktop-import')\n        raise IsolationViolation('desktop launcher is out of scope')\n    if event == 'open':\n        flags = args[2] or 0\n        check_path(args[0], bool(flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND)))\n    elif event in {'os.listdir', 'os.scandir'}:\n        check_path(args[0] if args else os.getcwd())\n    elif event in {'os.mkdir', 'os.remove', 'os.rmdir', 'os.chmod'}:\n        check_path(args[0], True)\n    elif event in {'os.rename', 'os.link', 'os.symlink'}:\n        check_path(args[0], True)\n        check_path(args[1], True)\n    elif event == 'sqlite3.connect' and args[0] != ':memory:':\n        check_path(args[0], True)\nsys.addaudithook(audit)\nimport dotenv\ndotenv.find_dotenv = lambda *args, **kwargs: ''\nimport mimetypes\nmimetypes.MimeTypes.read_windows_registry = lambda *args, **kwargs: None\nimport pytest\nargs = [str(root / 'tests/test_v9_authorization_regressions.py'), '-q', '--tb=short', '--color=no', '-p', 'no:cacheprovider', '-c', str(root / 'pyproject.toml'), '--rootdir=' + str(root), '--confcutdir=' + str(root / 'tests'), '--basetemp=' + str(sandbox / 'pytest'), '--junitxml=' + str(junit)]\ntry:\n    result = int(pytest.main(args))\nfinally:\n    print('V9 isolation guard violations: ' + str(len(violations)))\nraise SystemExit(result if not violations else 3)\n",
+  "launcher": "import hashlib\nimport json\nimport os\nfrom pathlib import Path\nimport subprocess\nimport tempfile\nfrom datetime import datetime, timezone\nroot = Path(record['root'])\nevidence = root / 'docs/mission/evidence/v9-baseline'\npython = root / '.venv/Scripts/python.exe'\nrecord['test_sha256'] = hashlib.sha256((root / 'tests/test_v9_authorization_regressions.py').read_bytes()).hexdigest()\nwith tempfile.TemporaryDirectory(prefix='v9-auth-red-', dir='C:/Users/DZ23/AppData/Local/Temp') as temp:\n    sandbox = Path(temp)\n    paths = {key: sandbox / key for key in ('home', 'appdata', 'localappdata', 'data', 'temp', 'cache', 'results', 'memory', 'config', 'state', 'programdata', 'working')}\n    for path in paths.values():\n        path.mkdir()\n    env = {key: os.environ[key] for key in record['inherited_environment_allowlist'] if key in os.environ}\n    overrides = {'HOME': str(paths['home']), 'USERPROFILE': str(paths['home']), 'HOMEDRIVE': paths['home'].drive, 'HOMEPATH': str(paths['home'])[len(paths['home'].drive):], 'APPDATA': str(paths['appdata']), 'LOCALAPPDATA': str(paths['localappdata']), 'DATA_DIR': str(paths['data']), 'TEMP': str(paths['temp']), 'TMP': str(paths['temp']), 'TMPDIR': str(paths['temp']), 'XDG_CACHE_HOME': str(paths['cache']), 'XDG_CONFIG_HOME': str(paths['config']), 'XDG_DATA_HOME': str(paths['data']), 'XDG_STATE_HOME': str(paths['state']), 'PROGRAMDATA': str(paths['programdata']), 'ALLUSERSPROFILE': str(paths['programdata']), 'TRADINGAGENTS_CACHE_DIR': str(paths['cache']), 'TRADINGAGENTS_RESULTS_DIR': str(paths['results']), 'TRADINGAGENTS_MEMORY_LOG_PATH': str(paths['memory'] / 'trading_memory.md'), 'PYTHON_DOTENV_DISABLED': '1', 'ALERTA_WINDOWS': 'false', 'REAL_MONEY_EXECUTION': 'false', 'MULTI_TENANT_ENABLED': 'false', 'PYTEST_DISABLE_PLUGIN_AUTOLOAD': '1', 'PYTHONDONTWRITEBYTECODE': '1'}\n    env.update(overrides)\n    command = [str(python), '-I', '-S', '-B', '-c', record['bootstrap'], str(root), str(sandbox), str(evidence / 'auth-red.xml')]\n    attempt = {'test_sha256': record['test_sha256'], 'started_utc': datetime.now(timezone.utc).isoformat(), 'command': command, 'cwd': str(paths['working']), 'overrides': overrides, 'log': str(evidence / 'auth-red.log'), 'junit': str(evidence / 'auth-red.xml')}\n    record['attempts'].append(attempt)\n    try:\n        with (evidence / 'auth-red.log').open('ab') as log:\n            log.write(('\\n=== isolated invocation ' + str(len(record['attempts'])) + ' ===\\n').encode())\n            log.flush()\n            completed = subprocess.run(command, cwd=paths['working'], env=env, stdout=log, stderr=subprocess.STDOUT, timeout=180)\n        attempt['exit_code'] = completed.returncode\n        lint_command = [str(root / '.venv/Scripts/ruff.exe'), 'check', '--no-cache', str(root / 'tests/test_v9_authorization_regressions.py')]\n        lint = subprocess.run(lint_command, cwd=paths['working'], env=env, capture_output=True, timeout=60)\n        attempt['lint'] = {'command': lint_command, 'exit_code': lint.returncode}\n        with (evidence / 'auth-red.log').open('ab') as log:\n            log.write(lint.stdout + lint.stderr)\n    finally:\n        if (sandbox / 'auth-red.xml').exists():\n            (evidence / 'auth-red.xml').write_bytes((sandbox / 'auth-red.xml').read_bytes())\n            import xml.etree.ElementTree as ET\n            suite = ET.parse(sandbox / 'auth-red.xml').getroot().find('testsuite')\n            attempt['junit_summary'] = dict(suite.attrib)\n            attempt['test_outcomes'] = [{'id': case.attrib['name'], 'outcome': 'failed' if case.find('failure') is not None else 'error' if case.find('error') is not None else 'passed'} for case in suite.findall('testcase')]\n            attempt['assertion_failures'] = sum('AssertionError' in (failure.text or '') for failure in suite.iter('failure'))\n        attempt['finished_utc'] = datetime.now(timezone.utc).isoformat()\n        (evidence / 'auth-red-invocation.json').write_text(json.dumps(record, indent=2), encoding='utf-8')\nrecord['sandbox_removed'] = True\n(evidence / 'auth-red-invocation.json').write_text(json.dumps(record, indent=2), encoding='utf-8')\nprint('Isolated RED invocation exit:', completed.returncode)\n",
+  "test_sha256": "d79580216352af26dbba2c4b5856a7cd93b4b9a3d948d542f8172517d6452fda",
+  "sandbox_removed": true
+}

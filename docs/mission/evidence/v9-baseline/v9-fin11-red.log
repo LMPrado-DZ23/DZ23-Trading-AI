@@ -1,0 +1,25 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+________ TestPoliticaImutavel.test_trailing_mais_largo_tambem_afrouxa _________
+
+self = <tests.test_motor_de_saida_global.TestPoliticaImutavel object at 0x00000269938E6810>
+
+    def test_trailing_mais_largo_tambem_afrouxa(self):
+        """Catch a silent widening of the trailing stop (1% → 10%).
+    
+        Um trailing maior deixa o preço recuar mais antes de proteger o lucro
+        — é afrouxamento da proteção. Antes só a REMOÇÃO do trailing era
+        detectada; aumentar o percentual passava batido e enfraquecia a saída
+        sem recusa.
+        """
+        from tradingagents.desk.saida import afrouxamento
+        base = pol(alvo="0.02", trailing="0.01")
+        motivo = afrouxamento(base, pol(alvo="0.02", trailing="0.10", versao="2"))
+>       assert motivo, "trailing mais largo deveria ser recusado como afrouxamento"
+E       AssertionError: trailing mais largo deveria ser recusado como afrouxamento
+E       assert None
+
+tests\test_motor_de_saida_global.py:170: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_motor_de_saida_global.py::TestPoliticaImutavel::test_trailing_mais_largo_tambem_afrouxa
+1 failed in 0.29s

@@ -1,0 +1,33 @@
+...............F...............                                          [100%]
+================================== FAILURES ===================================
+____________________ test_fm6_03_escola_central_no_painel _____________________
+
+page = <Page url='http://127.0.0.1:57405/app'>
+mesa_url = 'http://127.0.0.1:57405', senha = 's3nh4-dz23-e2e'
+evidence_dir = WindowsPath('C:/Users/DZ23/Documents/Qoder/2026-10-12/2f7f19a4/dz23-v9-audit/docs/mission/evidence/v9-baseline/screenshots')
+
+    def test_fm6_03_escola_central_no_painel(page, mesa_url, senha, evidence_dir):
+        # §11 "Escola": a Escola Central abre no painel autenticado com contextos
+        # de certificação, salas isoladas por corretora/conta/mercado, pausa e
+        # exposição global do Maestro e pilotos — com a autorização declarada
+        # como ato exclusivo do proprietário.
+        entrar_como_dono(page, mesa_url, senha)
+        modo_avancado(page)
+        ir_para(page, "mesa")
+        expect(page.locator("#deskOut")).to_contain_text("(10 perfis)", timeout=20000)
+    
+        page.get_by_role("button", name="Escola Central").click()
+        escola = page.locator("#deskMsg")
+>       expect(escola).to_contain_text("Escola Central", timeout=15000)
+E       AssertionError: Locator expected to contain text 'Escola Central'
+E       Actual value:  
+E       Call log:
+E         - Expect "to_contain_text" locator("#deskMsg") with timeout 15000ms
+E         - waiting for locator("#deskMsg")
+E           33 × locator resolved to <div id="deskMsg" class="message"></div>
+E              - unexpected value ""
+
+tests\e2e\test_fm6_app_isolado.py:201: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/e2e/test_fm6_app_isolado.py::test_fm6_03_escola_central_no_painel
+1 failed, 30 passed in 76.16s (0:01:16)

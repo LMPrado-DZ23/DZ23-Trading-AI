@@ -118,7 +118,11 @@ filterwarnings = [
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-extend-exclude = ["results", "worklog"]
+# "docs/mission/evidence" contém artefatos de evidência congelados (transcrições de
+# runners cujo sha256 fica registrado no invocation.json; o E402 do runner é
+# deliberado: addaudithook precisa ser instalado antes do import do pytest).
+# Código de produto continua lintado integralmente.
+extend-exclude = ["results", "worklog", "docs/mission/evidence"]
 
 [tool.ruff.lint]
 # Standard "good defaults" rule set (pyflakes + pycodestyle + isort + bugbear +

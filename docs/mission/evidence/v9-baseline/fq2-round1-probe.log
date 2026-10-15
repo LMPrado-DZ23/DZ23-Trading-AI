@@ -1,0 +1,5 @@
+velas: 4999 | cruzamentos no arquivo: 96 entrada / 95 saida
+entradas na janela (candidatas): 66 | fills no export freqtrade: 66
+PARTE A: EQUIVALENTE | trades sim=66 freqtrade=66 | carteira sim=989.1910209104 export=989.19102087
+PARTE B (motor laboratorio DZ23): trades=66 retorno=-0.0089571297583076558956201 drawdown=0.01057147111512901739595103618 carteira=991.0428702416923441043799000 rejeitados=0
+dataset_hash DZ23: afd77b1668eef4072f8a5490d51e88709d9be2fad0e4ebb2f4ca08d123146c9c

@@ -1,0 +1,60 @@
+FF                                                                       [100%]
+================================== FAILURES ===================================
+_____ TestConsultaDeExecucoes.test_all_fee_components_survive_the_adapter _____
+
+self = <tests.test_broker_contrato.TestConsultaDeExecucoes object at 0x000001F8244D35C0>
+
+    def test_all_fee_components_survive_the_adapter(self):
+        """`order.fee` é UM componente; uma taxa dividida em `fees[]` (parte
+        na moeda de cotação, parte numa moeda nativa) precisa chegar inteira.
+        Antes o adaptador lia apenas `t['fee']` e a moeda nativa sumia — o
+        custo reportado ficava menor do que o real."""
+        a = adaptador(self.ComTrades([
+            {"id": "t-1", "order": "ex-1", "symbol": "BTC/USDT", "side": "buy",
+             "amount": 0.3, "price": 100,
+             "fees": [{"cost": 0.03, "currency": "USDT"},
+                      {"cost": 0.001, "currency": "BNB"}],
+             "timestamp": 1}]))
+        fill = a.fetch_order_fills("coid-1", "ex-1")[0]
+>       assert fill["fees"] == [
+               ^^^^^^^^^^^^
+            {"cost": Decimal("0.03"), "currency": "USDT"},
+            {"cost": Decimal("0.001"), "currency": "BNB"},
+        ], "a moeda nativa da taxa desapareceu no adaptador"
+E       KeyError: 'fees'
+
+tests\test_broker_contrato.py:189: KeyError
+____________ test_fin04_reconciliation_applies_every_fee_component ____________
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x000001F8244D3740>
+
+    def test_fin04_reconciliation_applies_every_fee_component(desk):
+        """Catch the remote path keeping a single `fee` and dropping `fees[]`.
+    
+        Uma execução com o custo dividido em componentes (taxa na moeda de
+        cotação mais taxa numa moeda nativa) chegava à reconciliação com apenas
+        um `fee`. O componente nativo sumia: o custo ficava menor que o real e
+        nenhum incidente FEE_VALUATION_UNKNOWN era criado.
+        """
+        rec = _buy_order(desk, notional="200", price="100")
+        fills = [{
+            "fill_id": "multi-fee", "quantity": D("1"), "price": D("100"),
+            "fee": D("0"), "fee_currency": "", "side": "buy",
+            "fees": [{"cost": D("1"), "currency": "USDT"},
+                     {"cost": D("0.1"), "currency": "BNB"}],
+        }]
+        _reconcile(desk, rec, status="closed", cumulative="1",
+                   remote_quantity="1", fills=fills)
+        incidents = {i["type"]: i for i in desk.risk.incidentes()}
+>       assert desk.ledger.balance("FEES:USDT") == D("1")
+E       AssertionError: assert Decimal('0') == Decimal('1')
+E        +  where Decimal('0') = balance('FEES:USDT')
+E        +    where balance = <tradingagents.desk.ledger.Ledger object at 0x000001F8244D47A0>.balance
+E        +      where <tradingagents.desk.ledger.Ledger object at 0x000001F8244D47A0> = <tradingagents.desk.execution.ExecutionCoordinator object at 0x000001F8244D3740>.ledger
+E        +  and   Decimal('1') = D('1')
+
+tests\test_v9_financial_regressions.py:561: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_broker_contrato.py::TestConsultaDeExecucoes::test_all_fee_components_survive_the_adapter
+FAILED tests/test_v9_financial_regressions.py::test_fin04_reconciliation_applies_every_fee_component
+2 failed in 0.37s

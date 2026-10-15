@@ -1,0 +1,52 @@
+FF                                                                       [100%]
+================================== FAILURES ===================================
+____________ test_fin08_write_failure_before_send_blocks_new_sends ____________
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000022A7FC87D70>
+
+    def test_fin08_write_failure_before_send_blocks_new_sends(desk):
+        """Sem gravação durável confirmada a ordem NÃO sai — nem a próxima."""
+        armazem = _ArmazemDeTeste()
+        armazem.falha = True
+        _ligar_wal(desk, armazem)
+        envios, original = [], desk.broker
+    
+        class _Contando:
+            def submit(self, coid, instrument, side, quantity, final_state=None):
+                envios.append(coid)
+                return original.submit(coid, instrument, side, quantity,
+                                       final_state=final_state)
+    
+        desk.broker = _Contando()
+    
+>       with pytest.raises(ExecutionRefused, match="persist"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ExecutionRefused
+
+tests\test_v9_financial_regressions.py:971: Failed
+________ test_fin08_identity_survives_crash_right_after_broker_accept _________
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x0000022A7FC93B60>
+
+    def test_fin08_identity_survives_crash_right_after_broker_accept(desk):
+        """Crash entre o aceite da corretora e o fim do ciclo não perde a ordem.
+    
+        Sem WAL o único snapshot existente era do ciclo ANTERIOR: a ordem
+        recém-aceita sumia do restauro e a mesa acordava sem saber que havia
+        ordem viva na corretora."""
+        armazem = _ArmazemDeTeste()
+        _ligar_wal(desk, armazem)
+    
+        rec = _buy_order(desk)
+        assert rec.state is OrderState.ACKNOWLEDGED      # a corretora aceitou…
+        # …e o processo MORRE aqui, antes de qualquer persistência de fim de
+        # ciclo. O armazém só contém o que o WAL gravou ANTES do envio.
+>       assert armazem.documento is not None
+E       assert None is not None
+E        +  where None = <tests.test_v9_financial_regressions._ArmazemDeTeste object at 0x0000022A7FC937D0>.documento
+
+tests\test_v9_financial_regressions.py:1009: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_v9_financial_regressions.py::test_fin08_write_failure_before_send_blocks_new_sends
+FAILED tests/test_v9_financial_regressions.py::test_fin08_identity_survives_crash_right_after_broker_accept
+2 failed, 35 deselected in 0.47s

@@ -1,0 +1,11 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit
+configfile: pyproject.toml
+plugins: anyio-4.15.1, langsmith-0.14.0
+collecting ... collected 14 items / 13 deselected / 1 selected
+
+tests/test_deepseek_reasoning.py::TestDeepSeekLiveStructuredOutput::test_v4_flash_returns_structured_output PASSED [100%]
+
+====================== 1 passed, 13 deselected in 4.04s =======================

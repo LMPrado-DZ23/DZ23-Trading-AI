@@ -78,10 +78,26 @@ class CredenciaisDoDono:
         return doc
 
     def existe(self) -> bool:
-        """Arquivo EM USO (parseável). Corrompido conta como não configurado:
-        fail-closed para autenticar, mas o dono não fica trancado fora — o
-        assistente de configuração reaparece por cima."""
+        """Arquivo EM USO (parseável). Corrompido conta como não configurado
+        para AUTENTICAR, mas o dono não fica trancado fora — o código de
+        recuperação e a rotação continuam sendo o caminho de volta."""
         return self._ler() is not None
+
+    def arquivo_presente(self) -> bool:
+        """O arquivo de credenciais EXISTE no disco — mesmo ilegível/inválido.
+
+        Distinto de `existe()` (parseável). É a barreira do assistente anônimo
+        de primeira execução (V9-SEC-04): storage existente NUNCA é
+        'instalação nova'. Sem isto, corromper/inacessibilizar o arquivo
+        reabriria o setup e permitiria a um terceiro trocar a senha do dono
+        sem prova alguma.
+        """
+        try:
+            return self.caminho.exists()
+        except OSError:
+            # Nem consultar o disco foi possível: trate como PRESENTE —
+            # fail-closed nunca reabre o setup por falha de leitura.
+            return True
 
     def criar(self, senha: str) -> str:
         """Define a senha do dono e devolve o código de recuperação (única

@@ -1,0 +1,38 @@
+{
+  "head": "2b7754a94cc1e4233ad95ac6fa377be4078e5055",
+  "command": [
+    "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\.venv\\Scripts\\python.exe",
+    "-m",
+    "pytest",
+    "tests/e2e/test_panel_e2e.py::test_dono_entra_e_visao_geral_paper",
+    "tests/test_security_fase0_r5.py::TestHardenedTransport",
+    "-q"
+  ],
+  "working_directory": "C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit",
+  "result": "13 passed in 7.54s",
+  "exit_code": 0,
+  "log": "v9-pw-collision-green.log",
+  "fix": {
+    "file": "tests/test_security_fase0_r5.py",
+    "change": "test_async_client_does_not_follow passa a executar o coroutine em loop próprio, num pool de thread único (concurrent.futures.ThreadPoolExecutor(max_workers=1) + pool.submit(asyncio.run, run())), em vez do asyncio.run() nu na thread principal; asserts originais preservados (status_code == code; hits == [\"start.example.com\"])",
+    "import_added": "concurrent.futures",
+    "asserts_weakened": false
+  },
+  "corroborating_runs": [
+    {
+      "kind": "arquivo r5 isolado",
+      "command": ".venv/Scripts/python.exe -m pytest tests/test_security_fase0_r5.py -q",
+      "result": "22 passed in 10.87s (iso_exit=0)"
+    },
+    {
+      "kind": "ruff no arquivo corrigido",
+      "command": ".venv/Scripts/python.exe -m ruff check tests/test_security_fase0_r5.py",
+      "result": "All checks passed! (ruff_exit=0, saída de sessão)"
+    }
+  ],
+  "notes": [
+    "GREEN mínimo da mesma combinação que produzia as 5 falhas — a correção remove a colisão sem tocar no contrato de segurança do teste (3xx não seguido; origem maliciosa nunca contatada).",
+    "Efeito colateral evitado: o loop do Playwright é greenlet-based e marca a thread principal como 'rodando' na 3.12.10; ramificar o loop para uma thread de trabalho consta como correção de isolamento de teste, não de produto.",
+    "Execução plain (sem runner de audit hook, sem --junitxml); saída completa em docs/mission/evidence/v9-baseline/v9-pw-collision-green.log (sha256 bc9e5b4d...)."
+  ]
+}

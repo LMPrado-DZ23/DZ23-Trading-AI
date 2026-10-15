@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from .execution import BrokerTimeout
+from .execution import BrokerTimeout, ExecutionCoordinator
 
 
 def _e_ordem_inexistente(exc: BaseException) -> bool:
@@ -165,7 +165,16 @@ class CCXTDeskBroker:
                 # unicidade é o caminho para contabilizar duas vezes.
                 raise BrokerConsultaIndisponivel(
                     "execução sem identificador: impossível deduplicar")
-            taxa = t.get("fee") or {}
+            # Mesma normalização canônica do caminho de resposta direta: lê
+            # `fee` E `fees[]`, preserva a MOEDA de cada componente. Ler só
+            # `t['fee']` fazia a taxa em moeda nativa sumir no caminho remoto.
+            componentes = ExecutionCoordinator._componentes_de_taxa(t)
+            invalida = any(c.get("invalida") for c in componentes)
+            ambigua = next((c["ambigua"] for c in componentes
+                            if c.get("ambigua")), None)
+            componentes = [c for c in componentes if not c.get("ambigua")]
+            principal = componentes[0] if componentes else {
+                "cost": Decimal("0"), "currency": ""}
             saida.append({
                 "fill_id": str(fid),
                 "exchange_order_id": t.get("order") or "",
@@ -174,8 +183,12 @@ class CCXTDeskBroker:
                 "side": (t.get("side") or "").lower(),
                 "quantity": Decimal(str(t.get("amount") or 0)),
                 "price": Decimal(str(t.get("price") or 0)),
-                "fee": Decimal(str(taxa.get("cost") or 0)),
-                "fee_currency": taxa.get("currency") or "",
+                "fee": principal["cost"],
+                "fee_currency": principal["currency"],
+                "fees": [{"cost": c["cost"], "currency": c["currency"]}
+                         for c in componentes],
+                "fee_invalida": invalida,
+                "fee_ambigua": ambigua,
                 "timestamp": t.get("timestamp"),
             })
         return saida

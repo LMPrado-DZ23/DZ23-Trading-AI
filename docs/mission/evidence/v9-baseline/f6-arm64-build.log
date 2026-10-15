@@ -1,0 +1,62 @@
+=== F6 — Docker ARM64 — replica local do job arm64-deps do CI (missao V9, 2026-10-15) ===
+Host: Windows-11-10.0.26300-SP0 | Docker Desktop (emulacao QEMU) | Executado FORA do executor hermetico de proposito (Docker nao e Python), como documentado em f6-classificacao-pwa-oracle.md
+data_utc: 2026-10-15T11:48:02Z
+
+=== [1] Construcao no worktree de auditoria (exit 0). Cauda do log preservada pelo executor (40 linhas): docker buildx build --platform linux/arm64 --load -t dz23-trading-ai:arm64-validacao-local . ===
+#10 411.3 Downloading protobuf-7.36.2-cp310-abi3-manylinux2014_aarch64.whl (344 kB)
+#10 411.4 Downloading soupsieve-3.0.3-py3-none-any.whl (41 kB)
+#10 411.4 Downloading zstandard-0.25.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl (5.1 MB)
+#10 411.8    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.1/5.1 MB 11.7 MB/s  0:00:00
+#10 411.9 Downloading argon2_cffi_bindings-26.1.0-cp310-abi3-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl (27 kB)
+#10 411.9 Downloading regex-2026.9.29-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl (805 kB)
+#10 412.0    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 805.9/805.9 kB 14.4 MB/s  0:00:00
+#10 418.2 Building wheels for collected packages: tradingagents
+#10 418.2   Building wheel for tradingagents (pyproject.toml): started
+#10 431.2   Building wheel for tradingagents (pyproject.toml): finished with status 'done'
+#10 431.2   Created wheel for tradingagents: filename=tradingagents-0.5.0-py3-none-any.whl size=2116636 sha256=3055500f8736c29a6baeb2abf2f8c01626333e8578c7c379c3545b9afecaa842
+#10 431.2   Stored in directory: /tmp/pip-ephem-wheel-cache-pjvsirk9/wheels/7f/5c/67/61a4ca28ccbc7df61f55a044560f100aa81c66ef20585de495
+#10 431.3 Successfully built tradingagents
+#10 435.7 Installing collected packages: sqlite-vec, pytz, multitasking, filetype, zstandard, zlib-ng, xxhash, websockets, wcwidth, w3lib, uvloop, uuid-utils, urllib3, typing-extensions, truststore, tqdm, tenacity, soupsieve, sniffio, six, shellingham, setuptools, regex, redis, pyyaml, python-dotenv, pygments, pycparser, pyasn1, psycopg-binary, protobuf, propcache, platformdirs, peewee, ormsgpack, orjson, numpy, multidict, mdurl, lxml, jsonpointer, jmespath, jiter, idna, httpx-sse, h11, frozenlist, docstring-parser, distro, cssselect, coincurve, click, charset_normalizer, certifi, attrs, annotated-types, annotated-doc, aiosqlite, aiohappyeyeballs, yarl, uvicorn, typing-inspection, sqlalchemy, requests, python-dateutil, pydantic-core, pyasn1-modules, psycopg, prompt_toolkit, parsel, opentelemetry-api, markdown-it-py, langchain-protocol, jsonpatch, httpcore2, httpcore, cffi, beautifulsoup4, anyio, aiosignal, tiktoken, starlette, rich, requests-toolbelt, questionary, pydantic, pandas, httpx2, httpx, curl_cffi, cryptography, argon2-cffi-bindings, aiohttp, yfinance, typer, stockstats, pydantic-settings, openai, langsmith, google-auth, fastapi, argon2-cffi, anthropic, aiohttp-fast-zlib, langchain-core, ccxt, langgraph-sdk, langgraph-checkpoint, langchain-text-splitters, langchain-openai, langchain-anthropic, google-genai, langgraph-prebuilt, langgraph-checkpoint-sqlite, langchain-google-genai, langchain-classic, langgraph, langchain-community, langchain-experimental, tradingagents
+#10 817.7 
+#10 818.0 Successfully installed aiohappyeyeballs-2.7.1 aiohttp-3.14.5 aiohttp-fast-zlib-0.3.0 aiosignal-1.4.0 aiosqlite-0.22.1 annotated-doc-0.0.5 annotated-types-0.8.0 anthropic-1.14.0 anyio-4.15.1 argon2-cffi-25.1.0 argon2-cffi-bindings-26.1.0 attrs-26.1.0 beautifulsoup4-4.15.0 ccxt-4.5.88 certifi-2026.7.22 cffi-2.0.0 charset_normalizer-3.4.7 click-8.5.0 coincurve-21.0.0 cryptography-50.0.2 cssselect-1.6.0 curl_cffi-0.16.3 distro-1.9.0 docstring-parser-0.18.0 fastapi-0.143.1 filetype-1.2.0 frozenlist-1.8.0 google-auth-2.62.0 google-genai-2.31.0 h11-0.16.0 httpcore-1.0.9 httpcore2-2.13.1 httpx-0.28.1 httpx-sse-0.4.3 httpx2-2.13.1 idna-3.18 jiter-0.17.0 jmespath-1.1.0 jsonpatch-1.35 jsonpointer-3.2.1 langchain-anthropic-1.7.6 langchain-classic-1.0.8 langchain-community-0.4.2 langchain-core-1.6.10 langchain-experimental-0.4.2 langchain-google-genai-4.4.2 langchain-openai-1.7.2 langchain-protocol-0.0.19 langchain-text-splitters-1.1.3 langgraph-1.2.15 langgraph-checkpoint-4.3.0 langgraph-checkpoint-sqlite-3.1.2 langgraph-prebuilt-1.1.1 langgraph-sdk-0.4.7 langsmith-0.14.8 lxml-6.1.3 markdown-it-py-4.2.0 mdurl-0.1.2 multidict-6.9.1 multitasking-0.0.13 numpy-2.5.4 openai-3.31.0 opentelemetry-api-1.45.1 orjson-3.13.0 ormsgpack-1.12.2 pandas-3.0.6 parsel-1.12.1 peewee-4.5.3 platformdirs-4.13.0 prompt_toolkit-3.0.53 propcache-0.5.2 protobuf-7.36.2 psycopg-3.3.6 psycopg-binary-3.3.6 pyasn1-0.6.4 pyasn1-modules-0.4.2 pycparser-3.0 pydantic-2.14.1 pydantic-core-2.50.1 pydantic-settings-2.16.0 pygments-2.21.0 python-dateutil-2.9.0.post0 python-dotenv-1.2.4 pytz-2026.5 pyyaml-6.0.3 questionary-2.1.1 redis-8.1.0 regex-2026.9.29 requests-2.34.2 requests-toolbelt-1.0.0 rich-15.0.0 setuptools-84.0.0 shellingham-1.5.4 six-1.17.0 sniffio-1.3.1 soupsieve-3.0.3 sqlalchemy-2.1.4 sqlite-vec-0.1.9 starlette-1.8.0 stockstats-0.6.9 tenacity-9.1.4 tiktoken-0.14.0 tqdm-4.70.1 tradingagents-0.5.0 truststore-0.10.5 typer-0.27.3 typing-extensions-4.16.0 typing-inspection-0.4.4 urllib3-2.8.0 uuid-utils-0.17.1 uvicorn-0.54.0 uvloop-0.22.1 w3lib-2.5.0 wcwidth-0.9.2 websockets-16.1.1 xxhash-4.0.1 yarl-1.25.1 yfinance-1.7.0 zlib-ng-1.0.0 zstandard-0.25.0
+#10 DONE 820.6s
+
+#11 [stage-1 2/5] COPY --from=builder /opt/venv /opt/venv
+#11 DONE 5.6s
+
+#12 [stage-1 3/5] RUN useradd --create-home appuser  && install -d -m 0700 -o appuser -g appuser /data
+#12 DONE 1.7s
+
+#13 [stage-1 4/5] WORKDIR /home/appuser/app
+#13 DONE 0.1s
+
+#14 [stage-1 5/5] COPY --from=builder --chown=appuser:appuser /build .
+#14 DONE 0.7s
+
+#15 exporting to image
+#15 exporting layers
+#15 exporting layers 42.5s done
+#15 exporting manifest sha256:0fa995f023e845546e3d9294647f0fcae30e0064e6f02776052c34bded5207d4 0.0s done
+#15 exporting config sha256:56a3cdb07049104da31b35e9ba9c90742dadf4dcee27520afb53c17c5a593b1e 0.0s done
+#15 exporting attestation manifest sha256:9cc94f8b01d8a9e20ebba377dba37dfac256c75876dfc5ed6f091cebaee0aa38 0.0s done
+#15 exporting manifest list sha256:5e39e89645927c75c787ebedd52ff8e24943f8f567044f5ed65f9e7a8723b631
+#15 exporting manifest list sha256:5e39e89645927c75c787ebedd52ff8e24943f8f567044f5ed65f9e7a8723b631 0.0s done
+#15 naming to docker.io/library/dz23-trading-ai:arm64-validacao-local done
+#15 DONE 42.8s
+
+=== [2] Versao do backend de build ===
+$ docker buildx version
+github.com/docker/buildx v0.37.1 0b265a9f62db554fa9aba6dd19e1bd5704bc7d8a
+buildx_exit=0
+
+=== [3] Identidade da imagem resultante ===
+$ docker image inspect dz23-trading-ai:arm64-validacao-local --format '{{.Id}} arch={{.Architecture}} os={{.Os}}'
+sha256:5e39e89645927c75c787ebedd52ff8e24943f8f567044f5ed65f9e7a8723b631 arch=arm64 os=linux
+inspect_exit=0
+
+=== [4] Import smoke dentro da imagem emulada linux/arm64 ===
+$ docker run --rm -i --platform linux/arm64 dz23-trading-ai:arm64-validacao-local python -c '<import smoke>'
+arm64 import smoke OK em aarch64 | pandas 3.0.6
+smoke_exit=0
+
+=== [5] Job de CI replicado: .github/workflows/ci.yml (job arm64-deps; rotulado no proprio CI como NAO-homologacao-Oracle). Homologacao na VPS Oracle Ampere real = DEPENDENCIA EXTERNA (sem deploy/DNS autorizados). ===

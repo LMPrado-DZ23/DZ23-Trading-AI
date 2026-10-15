@@ -1,0 +1,133 @@
+........................................................................ [  2%]
+........................................................................ [  4%]
+........................................................................ [  6%]
+............................................s..........s................ [  8%]
+........................................................................ [ 11%]
+........................................................................ [ 13%]
+........................................................................ [ 15%]
+........................................................................ [ 17%]
+........................................................................ [ 20%]
+........................................................................ [ 22%]
+.....s.................................................................. [ 24%]
+........................................................................ [ 26%]
+........................................................................ [ 29%]
+........................................................................ [ 31%]
+........................................................................ [ 33%]
+........................................................................ [ 35%]
+........................................................................ [ 37%]
+........................................................................ [ 40%]
+..................................................................... [ 42%]
+.............s.......................................................... [ 44%]
+........................................................................ [ 46%]
+........................................................................ [ 48%]
+........................................................................ [ 51%]
+.............................................................s.............. [ 53%]
+........................................................................ [ 55%]
+........................................................................ [ 58%]
+........................................................................ [ 60%]
+........................................................................ [ 62%]
+........................................................................ [ 64%]
+..s..................................................................... [ 66%]
+........................................................................ [ 69%]
+........................................................................ [ 71%]
+........................................................................ [ 73%]
+........................................................................ [ 75%]
+........................................................................ [ 78%]
+........................................................................ [ 80%]
+........................................................................ [ 82%]
+........................................................................ [ 84%]
+........................................................................ [ 87%]
+........................................................................ [ 89%]
+........................................................................ [ 91%]
+........................................................................ [ 93%]
+........................................................................ [ 95%]
+........................................................................ [ 98%]
+.........................................ss.............s.               [100%]
+=============================== warnings summary ===============================
+tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-haiku-5-0]
+  /w/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-haiku-5-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-haiku-4-7-preview]
+  /w/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-haiku-4-7-preview' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-sonnet-4-5]
+  /w/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-4-5' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_unsupported_models_do_not_receive_effort[claude-sonnet-4-0]
+  /w/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-4-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_current_opus_and_sonnet_receive_effort[claude-opus-4-5]
+  /w/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-opus-4-5' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_current_opus_and_sonnet_receive_effort[claude-opus-4-6]
+  /w/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-opus-4-6' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_current_opus_and_sonnet_receive_effort[claude-sonnet-4-6]
+  /w/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-4-6' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_future_opus_sonnet_inherit_effort_via_pattern[claude-opus-5-0]
+  /w/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-opus-5-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_future_opus_sonnet_inherit_effort_via_pattern[claude-sonnet-5-0]
+  /w/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-sonnet-5-0' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_claude_5_family_receives_effort[claude-mythos-5]
+  /w/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-mythos-5' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_mythos_preview_receives_effort
+  /w/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-mythos-preview' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_anthropic_effort.py::TestEffortGate::test_unknown_anthropic_model_does_not_receive_effort
+  /w/tradingagents/llm_clients/anthropic_client.py:68: RuntimeWarning: Model 'claude-experimental-x' is not in the known model list for provider 'anthropic'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_llm_transport_timeouts.py::TestConstrucaoGoogle::test_modelo_carrega_timeout_finito
+tests/test_llm_transport_timeouts.py::TestConstrucaoGoogle::test_timeout_do_usuario_prevalece
+  /w/tradingagents/llm_clients/google_client.py:35: RuntimeWarning: Model 'gemini-3-pro' is not in the known model list for provider 'google'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_ollama_base_url.py::test_resolver_does_not_affect_other_providers
+  /w/tradingagents/llm_clients/openai_client.py:284: RuntimeWarning: Model 'm' is not in the known model list for provider 'xai'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_ollama_base_url.py::test_resolver_does_not_affect_other_providers
+  /w/tradingagents/llm_clients/openai_client.py:284: RuntimeWarning: Model 'm' is not in the known model list for provider 'deepseek'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_openai_reasoning_effort.py::test_non_reasoning_model_drops_effort
+tests/test_temperature_config.py::TestTemperatureForwarding::test_temperature_reaches_client_when_set[openai-gpt-4.1]
+tests/test_temperature_config.py::TestTemperatureForwarding::test_temperature_omitted_leaves_provider_default
+  /w/tradingagents/llm_clients/openai_client.py:284: RuntimeWarning: Model 'gpt-4.1' is not in the known model list for provider 'openai'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+tests/test_temperature_config.py::TestTemperatureForwarding::test_temperature_reaches_client_when_set[deepseek-deepseek-chat]
+  /w/tradingagents/llm_clients/openai_client.py:284: RuntimeWarning: Model 'deepseek-chat' is not in the known model list for provider 'deepseek'. Continuing anyway.
+    self.warn_if_unknown_model()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/e2e/test_aceite_td5.py:34: playwright não instalado; rode: uv run --with playwright pytest tests/e2e -q
+SKIPPED [1] tests/e2e/test_fm6_app_isolado.py:31: playwright não instalado; rode: uv run --with playwright pytest tests/e2e -q
+SKIPPED [1] tests/e2e/test_panel_e2e.py:14: playwright não instalado; rode: uv run --with playwright pytest tests/e2e -v
+SKIPPED [1] tests/test_auditoria_sec1_segredos_em_repouso.py:247: sem DPAPI não há blob válido-de-outra-máquina a forjar
+SKIPPED [1] tests/test_bedrock_provider.py:74: could not import 'langchain_aws': No module named 'langchain_aws'
+SKIPPED [1] tests/test_deepseek_reasoning.py:209: DEEPSEEK_API_KEY not set (or placeholder); skipping live API call
+SKIPPED [1] tests/test_ia_painel_static.py:146: node indisponível neste ambiente
+SKIPPED [1] tests/test_modo_da_mesa.py:161: sem DATABASE_URL — caminho postgres roda no CI
+SKIPPED [1] tests/test_quant_intelligence.py:74: could not import 'lightgbm': No module named 'lightgbm'
+SKIPPED [1] tests/windows/test_desktop_launcher.py:710: objetos nomeados do Windows
+SKIPPED [1] tests/windows/test_desktop_launcher.py:727: objetos nomeados do Windows
+SKIPPED [1] tests/windows/test_notificacoes_identidade_win.py:54: registro é do Windows
+3218 passed, 12 skipped, 20 warnings, 71 subtests passed in 253.00s (0:04:12)
+EXIT=0

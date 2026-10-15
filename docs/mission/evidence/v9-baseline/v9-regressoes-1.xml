@@ -1,0 +1,854 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="25" skipped="1" tests="85" time="7.976" timestamp="2026-10-14T23:32:27.421587-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_v9_financial_regressions" name="test_fin01_partial_sale_uses_the_same_fifo_cost_as_live_lots" time="0.007" /><testcase classname="tests.test_v9_financial_regressions" name="test_fin01_two_sales_leave_no_cost_or_phantom_pnl" time="0.001" /><testcase classname="tests.test_v9_financial_regressions" name="test_fin01_guardian_exit_consumes_the_original_owners_lots" time="0.001" /><testcase classname="tests.test_v9_financial_regressions" name="test_fin02_failed_ledger_post_can_be_replayed_exactly_once[partial]" time="0.002" /><testcase classname="tests.test_v9_financial_regressions" name="test_fin02_failed_ledger_post_can_be_replayed_exactly_once[terminal]" time="0.002" /><testcase classname="tests.test_v9_financial_regressions" name="test_fin03_terminal_partial_imports_fills_before_releasing_remainder[canceled]" time="0.002"><failure message="AssertionError: assert {'quantity': ...000000'), ...} == {'quantity': ...mal('0'), ...}&#10;  &#10;  Omitting 4 identical items, use -vv to show&#10;  Differing items:&#10;  {'open': True} != {'open': False}&#10;  {'posting_order': ['opening', 'reserve', 'fill_buy']} != {'posting_order': ['opening', 'reserve', 'fill_buy', 'release']}&#10;  {'ledger_reserved': Decimal('100.00000000')} != {'ledger_reserved': Decimal('0')}&#10;  {'consumed': Decimal('0')} != {'consumed': Decimal('100')}...&#10;  &#10;  ...Full output truncated (5 lines hidden), use '-vv' to show">desk = &lt;tradingagents.desk.execution.ExecutionCoordinator object at 0x00000195D6CB3E30&gt;
+status = 'canceled'
+
+    @pytest.mark.parametrize("status", ["canceled", "cancelled", "expired"])
+    def test_fin03_terminal_partial_imports_fills_before_releasing_remainder(desk, status):
+        """Catch terminal handling that refunds the whole reservation and loses a fill."""
+        rec = _buy_order(desk)
+        assert rec.quantidade == D("2")
+        assert desk.ledger.reserved_cash(rec.reserva_id) == D("200")
+        reports = [_reconcile(
+            desk, rec, status=status, cumulative="1", remote_quantity="1",
+            fills=[_remote_fill("1")],
+        ) for _ in range(2)]
+        conclusion = desk.risk.incidentes_doc()["conclusoes"].get(rec.reserva_id, {})
+        observed = {
+            "quantity": desk.ledger.position_quantity(INSTRUMENT),
+            "cost": desk.ledger.invested_cost(), "cash": desk.ledger.cash(),
+            "ledger_reserved": desk.ledger.reserved_cash(rec.reserva_id),
+            "risk_reserved": desk.risk.reserved_total,
+            "consumed": D(conclusion.get("consumed_amount", "0")),
+            "released": D(conclusion.get("sobra_liberada", "0")),
+            "filled": rec.filled_qty, "seen": rec.seen_fills, "open": rec.open,
+            "posting_order": [tx.kind for tx in desk.ledger.transactions],
+            "safe": [report["seguro"] for report in reports],
+        }
+&gt;       assert observed == {
+            "quantity": D("1"), "cost": D("100"), "cash": D("1900"),
+            "ledger_reserved": D("0"), "risk_reserved": D("0"),
+            "consumed": D("100"), "released": D("100"),
+            "filled": D("1"), "seen": {"remote-trade"}, "open": False,
+            "posting_order": ["opening", "reserve", "fill_buy", "release"],
+            "safe": [True, True],
+        }
+E       AssertionError: assert {'quantity': ...000000'), ...} == {'quantity': ...mal('0'), ...}
+E         
+E         Omitting 4 identical items, use -vv to show
+E         Differing items:
+E         {'open': True} != {'open': False}
+E         {'posting_order': ['opening', 'reserve', 'fill_buy']} != {'posting_order': ['opening', 'reserve', 'fill_buy', 'release']}
+E         {'ledger_reserved': Decimal('100.00000000')} != {'ledger_reserved': Decimal('0')}
+E         {'consumed': Decimal('0')} != {'consumed': Decimal('100')}...
+E         
+E         ...Full output truncated (5 lines hidden), use '-vv' to show
+
+tests\test_v9_financial_regressions.py:286: AssertionError</failure></testcase><testcase classname="tests.test_v9_financial_regressions" name="test_fin03_terminal_partial_imports_fills_before_releasing_remainder[cancelled]" time="0.002"><failure message="AssertionError: assert {'quantity': ...000000'), ...} == {'quantity': ...mal('0'), ...}&#10;  &#10;  Omitting 4 identical items, use -vv to show&#10;  Differing items:&#10;  {'open': True} != {'open': False}&#10;  {'posting_order': ['opening', 'reserve', 'fill_buy']} != {'posting_order': ['opening', 'reserve', 'fill_buy', 'release']}&#10;  {'ledger_reserved': Decimal('100.00000000')} != {'ledger_reserved': Decimal('0')}&#10;  {'consumed': Decimal('0')} != {'consumed': Decimal('100')}...&#10;  &#10;  ...Full output truncated (5 lines hidden), use '-vv' to show">desk = &lt;tradingagents.desk.execution.ExecutionCoordinator object at 0x00000195D6CB08F0&gt;
+status = 'cancelled'
+
+    @pytest.mark.parametrize("status", ["canceled", "cancelled", "expired"])
+    def test_fin03_terminal_partial_imports_fills_before_releasing_remainder(desk, status):
+        """Catch terminal handling that refunds the whole reservation and loses a fill."""
+        rec = _buy_order(desk)
+        assert rec.quantidade == D("2")
+        assert desk.ledger.reserved_cash(rec.reserva_id) == D("200")
+        reports = [_reconcile(
+            desk, rec, status=status, cumulative="1", remote_quantity="1",
+            fills=[_remote_fill("1")],
+        ) for _ in range(2)]
+        conclusion = desk.risk.incidentes_doc()["conclusoes"].get(rec.reserva_id, {})
+        observed = {
+            "quantity": desk.ledger.position_quantity(INSTRUMENT),
+            "cost": desk.ledger.invested_cost(), "cash": desk.ledger.cash(),
+            "ledger_reserved": desk.ledger.reserved_cash(rec.reserva_id),
+            "risk_reserved": desk.risk.reserved_total,
+            "consumed": D(conclusion.get("consumed_amount", "0")),
+            "released": D(conclusion.get("sobra_liberada", "0")),
+            "filled": rec.filled_qty, "seen": rec.seen_fills, "open": rec.open,
+            "posting_order": [tx.kind for tx in desk.ledger.transactions],
+            "safe": [report["seguro"] for report in reports],
+        }
+&gt;       assert observed == {
+            "quantity": D("1"), "cost": D("100"), "cash": D("1900"),
+            "ledger_reserved": D("0"), "risk_reserved": D("0"),
+            "consumed": D("100"), "released": D("100"),
+            "filled": D("1"), "seen": {"remote-trade"}, "open": False,
+            "posting_order": ["opening", "reserve", "fill_buy", "release"],
+            "safe": [True, True],
+        }
+E       AssertionError: assert {'quantity': ...000000'), ...} == {'quantity': ...mal('0'), ...}
+E         
+E         Omitting 4 identical items, use -vv to show
+E         Differing items:
+E         {'open': True} != {'open': False}
+E         {'posting_order': ['opening', 'reserve', 'fill_buy']} != {'posting_order': ['opening', 'reserve', 'fill_buy', 'release']}
+E         {'ledger_reserved': Decimal('100.00000000')} != {'ledger_reserved': Decimal('0')}
+E         {'consumed': Decimal('0')} != {'consumed': Decimal('100')}...
+E         
+E         ...Full output truncated (5 lines hidden), use '-vv' to show
+
+tests\test_v9_financial_regressions.py:286: AssertionError</failure></testcase><testcase classname="tests.test_v9_financial_regressions" name="test_fin03_terminal_partial_imports_fills_before_releasing_remainder[expired]" time="0.002"><failure message="AssertionError: assert {'quantity': ...000000'), ...} == {'quantity': ...mal('0'), ...}&#10;  &#10;  Omitting 4 identical items, use -vv to show&#10;  Differing items:&#10;  {'open': True} != {'open': False}&#10;  {'posting_order': ['opening', 'reserve', 'fill_buy']} != {'posting_order': ['opening', 'reserve', 'fill_buy', 'release']}&#10;  {'ledger_reserved': Decimal('100.00000000')} != {'ledger_reserved': Decimal('0')}&#10;  {'consumed': Decimal('0')} != {'consumed': Decimal('100')}...&#10;  &#10;  ...Full output truncated (5 lines hidden), use '-vv' to show">desk = &lt;tradingagents.desk.execution.ExecutionCoordinator object at 0x00000195D6CB39E0&gt;
+status = 'expired'
+
+    @pytest.mark.parametrize("status", ["canceled", "cancelled", "expired"])
+    def test_fin03_terminal_partial_imports_fills_before_releasing_remainder(desk, status):
+        """Catch terminal handling that refunds the whole reservation and loses a fill."""
+        rec = _buy_order(desk)
+        assert rec.quantidade == D("2")
+        assert desk.ledger.reserved_cash(rec.reserva_id) == D("200")
+        reports = [_reconcile(
+            desk, rec, status=status, cumulative="1", remote_quantity="1",
+            fills=[_remote_fill("1")],
+        ) for _ in range(2)]
+        conclusion = desk.risk.incidentes_doc()["conclusoes"].get(rec.reserva_id, {})
+        observed = {
+            "quantity": desk.ledger.position_quantity(INSTRUMENT),
+            "cost": desk.ledger.invested_cost(), "cash": desk.ledger.cash(),
+            "ledger_reserved": desk.ledger.reserved_cash(rec.reserva_id),
+            "risk_reserved": desk.risk.reserved_total,
+            "consumed": D(conclusion.get("consumed_amount", "0")),
+            "released": D(conclusion.get("sobra_liberada", "0")),
+            "filled": rec.filled_qty, "seen": rec.seen_fills, "open": rec.open,
+            "posting_order": [tx.kind for tx in desk.ledger.transactions],
+            "safe": [report["seguro"] for report in reports],
+        }
+&gt;       assert observed == {
+            "quantity": D("1"), "cost": D("100"), "cash": D("1900"),
+            "ledger_reserved": D("0"), "risk_reserved": D("0"),
+            "consumed": D("100"), "released": D("100"),
+            "filled": D("1"), "seen": {"remote-trade"}, "open": False,
+            "posting_order": ["opening", "reserve", "fill_buy", "release"],
+            "safe": [True, True],
+        }
+E       AssertionError: assert {'quantity': ...000000'), ...} == {'quantity': ...mal('0'), ...}
+E         
+E         Omitting 4 identical items, use -vv to show
+E         Differing items:
+E         {'open': True} != {'open': False}
+E         {'posting_order': ['opening', 'reserve', 'fill_buy']} != {'posting_order': ['opening', 'reserve', 'fill_buy', 'release']}
+E         {'ledger_reserved': Decimal('100.00000000')} != {'ledger_reserved': Decimal('0')}
+E         {'consumed': Decimal('0')} != {'consumed': Decimal('100')}...
+E         
+E         ...Full output truncated (5 lines hidden), use '-vv' to show
+
+tests\test_v9_financial_regressions.py:286: AssertionError</failure></testcase><testcase classname="tests.test_v9_financial_regressions" name="test_fin03_unverified_terminal_partial_keeps_capital_reserved[canceled]" time="0.002" /><testcase classname="tests.test_v9_financial_regressions" name="test_fin03_unverified_terminal_partial_keeps_capital_reserved[expired]" time="0.001" /><testcase classname="tests.test_v9_financial_regressions" name="test_fin03_cumulative_trade_mismatch_cannot_turn_safe_on_repeat" time="0.002"><failure message="AssertionError: unresolved remote cumulative 1.5 vs trades 2; local states=['filled', 'filled', 'filled']; {'safe': [False, True, True], 'fills_status': ['MISMATCH', 'NAO_APLICAVEL', 'NAO_APLICAVEL'], 'gate_closed': False, 'report_authorizes_execution': True}&#10;assert {'safe': [Fal...cution': True} == {'safe': [Fal...ution': False}&#10;  &#10;  Differing items:&#10;  {'gate_closed': False} != {'gate_closed': True}&#10;  {'report_authorizes_execution': True} != {'report_authorizes_execution': False}&#10;  {'fills_status': ['MISMATCH', 'NAO_APLICAVEL', 'NAO_APLICAVEL']} != {'fills_status': ['MISMATCH', 'MISMATCH', 'MISMATCH']}&#10;  {'safe': [False, True, True]} != {'safe': [False, False, False]}&#10;  Use -v to get more diff">desk = &lt;tradingagents.desk.execution.ExecutionCoordinator object at 0x00000195D6D69FA0&gt;
+
+    def test_fin03_cumulative_trade_mismatch_cannot_turn_safe_on_repeat(desk):
+        """Catch unresolved FILLS_DIVERGEM disappearing when the local order fills."""
+        rec = _buy_order(desk)
+        reports = []
+        states = []
+        for _ in range(3):
+            reports.append(_reconcile(
+                desk, rec, status="closed", cumulative="1.5", remote_quantity="2",
+                fills=[_remote_fill("2")],
+            ))
+            states.append(rec.state.value)
+    
+        assert reports[0]["fills_status"] == "MISMATCH"
+        assert any("FILLS_DIVERGEM" in d for d in reports[0]["divergencias"])
+        assert rec.filled_qty == desk.ledger.position_quantity(INSTRUMENT) == D("2")
+        assert desk.ledger.invested_cost() == D("200")
+        assert desk.ledger.cash() == D("1800")
+        assert sum(tx.kind == "fill_buy" for tx in desk.ledger.transactions) == 1
+        assert desk.ledger.is_balanced()
+        observed = {
+            "safe": [report["seguro"] for report in reports],
+            "fills_status": [report["fills_status"] for report in reports],
+            "gate_closed": desk.reconciliacao_pendente,
+            "report_authorizes_execution": desk.relatorio_valido()[0],
+        }
+&gt;       assert observed == {
+            "safe": [False, False, False],
+            "fills_status": ["MISMATCH", "MISMATCH", "MISMATCH"],
+            "gate_closed": True, "report_authorizes_execution": False,
+        }, f"unresolved remote cumulative 1.5 vs trades 2; local states={states}; {observed}"
+E       AssertionError: unresolved remote cumulative 1.5 vs trades 2; local states=['filled', 'filled', 'filled']; {'safe': [False, True, True], 'fills_status': ['MISMATCH', 'NAO_APLICAVEL', 'NAO_APLICAVEL'], 'gate_closed': False, 'report_authorizes_execution': True}
+E       assert {'safe': [Fal...cution': True} == {'safe': [Fal...ution': False}
+E         
+E         Differing items:
+E         {'gate_closed': False} != {'gate_closed': True}
+E         {'report_authorizes_execution': True} != {'report_authorizes_execution': False}
+E         {'fills_status': ['MISMATCH', 'NAO_APLICAVEL', 'NAO_APLICAVEL']} != {'fills_status': ['MISMATCH', 'MISMATCH', 'MISMATCH']}
+E         {'safe': [False, True, True]} != {'safe': [False, False, False]}
+E         Use -v to get more diff
+
+tests\test_v9_financial_regressions.py:343: AssertionError</failure></testcase><testcase classname="tests.test_v9_financial_regressions" name="test_fin01_guardian_fifo_is_chronological_across_owners_and_restart" time="0.002" /><testcase classname="tests.test_v9_financial_regressions" name="test_fin01_an_unprivileged_agent_cannot_consume_another_owners_lots" time="0.002" /><testcase classname="tests.test_v9_financial_regressions" name="test_fin02_partial_progress_is_rolled_back_before_retry[buy_post]" time="0.003" /><testcase classname="tests.test_v9_financial_regressions" name="test_fin02_partial_progress_is_rolled_back_before_retry[release]" time="0.002" /><testcase classname="tests.test_v9_financial_regressions" name="test_fin02_partial_progress_is_rolled_back_before_retry[order_transition]" time="0.002" /><testcase classname="tests.test_v9_financial_regressions" name="test_fin02_fee_and_deficit_incidents_rollback_without_losing_prior_occurrences" time="0.002" /><testcase classname="tests.test_v9_financial_regressions" name="test_fin02_sale_failure_restores_lots_pnl_and_daily_loss" time="0.002" /><testcase classname="tests.test_v9_financial_regressions" name="test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement[mismatch]" time="0.002"><failure message="assert True is False">desk = &lt;tradingagents.desk.execution.ExecutionCoordinator object at 0x00000195D6F2AA50&gt;
+later = 'mismatch'
+
+    @pytest.mark.parametrize("later", ["mismatch", "unavailable", "not_found", "missing_total"])
+    def test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement(desk, later):
+        rec = _buy_order(desk, notional="220", price="110")
+        report = _reconcile(desk, rec, status="closed", cumulative="1.5",
+                            remote_quantity="2", fills=[_remote_fill("2")])
+        assert report["seguro"] is False
+        desk = _restart(desk)
+        rec = desk.orders[rec.order_id]
+        if later == "not_found":
+            report = desk.reconciliar(
+                lambda key: {"resultado": "CONFIRMED_NOT_FOUND"},
+                consultar_fills=lambda *args: [],
+                consultar_posicoes=lambda: {INSTRUMENT: D("2")},
+                consultar_ordens_abertas=lambda: [],
+            )
+        else:
+            report = _reconcile(
+                desk, rec, status="closed", cumulative=None if later == "missing_total" else "1.5",
+                remote_quantity="2", fills=(RuntimeError("unavailable") if later == "unavailable"
+                                           else [_remote_fill("2")]),
+            )
+&gt;       assert report["seguro"] is False
+E       assert True is False
+
+tests\test_v9_financial_regressions.py:492: AssertionError</failure></testcase><testcase classname="tests.test_v9_financial_regressions" name="test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement[unavailable]" time="0.002"><failure message="assert True is False">desk = &lt;tradingagents.desk.execution.ExecutionCoordinator object at 0x00000195D6F29AC0&gt;
+later = 'unavailable'
+
+    @pytest.mark.parametrize("later", ["mismatch", "unavailable", "not_found", "missing_total"])
+    def test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement(desk, later):
+        rec = _buy_order(desk, notional="220", price="110")
+        report = _reconcile(desk, rec, status="closed", cumulative="1.5",
+                            remote_quantity="2", fills=[_remote_fill("2")])
+        assert report["seguro"] is False
+        desk = _restart(desk)
+        rec = desk.orders[rec.order_id]
+        if later == "not_found":
+            report = desk.reconciliar(
+                lambda key: {"resultado": "CONFIRMED_NOT_FOUND"},
+                consultar_fills=lambda *args: [],
+                consultar_posicoes=lambda: {INSTRUMENT: D("2")},
+                consultar_ordens_abertas=lambda: [],
+            )
+        else:
+            report = _reconcile(
+                desk, rec, status="closed", cumulative=None if later == "missing_total" else "1.5",
+                remote_quantity="2", fills=(RuntimeError("unavailable") if later == "unavailable"
+                                           else [_remote_fill("2")]),
+            )
+&gt;       assert report["seguro"] is False
+E       assert True is False
+
+tests\test_v9_financial_regressions.py:492: AssertionError</failure></testcase><testcase classname="tests.test_v9_financial_regressions" name="test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement[not_found]" time="0.003"><failure message="assert True is False">desk = &lt;tradingagents.desk.execution.ExecutionCoordinator object at 0x00000195D6F2A450&gt;
+later = 'not_found'
+
+    @pytest.mark.parametrize("later", ["mismatch", "unavailable", "not_found", "missing_total"])
+    def test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement(desk, later):
+        rec = _buy_order(desk, notional="220", price="110")
+        report = _reconcile(desk, rec, status="closed", cumulative="1.5",
+                            remote_quantity="2", fills=[_remote_fill("2")])
+        assert report["seguro"] is False
+        desk = _restart(desk)
+        rec = desk.orders[rec.order_id]
+        if later == "not_found":
+            report = desk.reconciliar(
+                lambda key: {"resultado": "CONFIRMED_NOT_FOUND"},
+                consultar_fills=lambda *args: [],
+                consultar_posicoes=lambda: {INSTRUMENT: D("2")},
+                consultar_ordens_abertas=lambda: [],
+            )
+        else:
+            report = _reconcile(
+                desk, rec, status="closed", cumulative=None if later == "missing_total" else "1.5",
+                remote_quantity="2", fills=(RuntimeError("unavailable") if later == "unavailable"
+                                           else [_remote_fill("2")]),
+            )
+&gt;       assert report["seguro"] is False
+E       assert True is False
+
+tests\test_v9_financial_regressions.py:492: AssertionError</failure></testcase><testcase classname="tests.test_v9_financial_regressions" name="test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement[missing_total]" time="0.002"><failure message="assert True is False">desk = &lt;tradingagents.desk.execution.ExecutionCoordinator object at 0x00000195D6F4E900&gt;
+later = 'missing_total'
+
+    @pytest.mark.parametrize("later", ["mismatch", "unavailable", "not_found", "missing_total"])
+    def test_fin03_unresolved_terminal_evidence_survives_restart_until_actual_agreement(desk, later):
+        rec = _buy_order(desk, notional="220", price="110")
+        report = _reconcile(desk, rec, status="closed", cumulative="1.5",
+                            remote_quantity="2", fills=[_remote_fill("2")])
+        assert report["seguro"] is False
+        desk = _restart(desk)
+        rec = desk.orders[rec.order_id]
+        if later == "not_found":
+            report = desk.reconciliar(
+                lambda key: {"resultado": "CONFIRMED_NOT_FOUND"},
+                consultar_fills=lambda *args: [],
+                consultar_posicoes=lambda: {INSTRUMENT: D("2")},
+                consultar_ordens_abertas=lambda: [],
+            )
+        else:
+            report = _reconcile(
+                desk, rec, status="closed", cumulative=None if later == "missing_total" else "1.5",
+                remote_quantity="2", fills=(RuntimeError("unavailable") if later == "unavailable"
+                                           else [_remote_fill("2")]),
+            )
+&gt;       assert report["seguro"] is False
+E       assert True is False
+
+tests\test_v9_financial_regressions.py:492: AssertionError</failure></testcase><testcase classname="tests.test_v9_financial_regressions" name="test_fin03_terminal_release_failure_is_replayable" time="0.002"><failure message="Failed: DID NOT RAISE LedgerError">desk = &lt;tradingagents.desk.execution.ExecutionCoordinator object at 0x00000195D6F4D160&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000195D6F4C500&gt;
+
+    def test_fin03_terminal_release_failure_is_replayable(desk, monkeypatch):
+        rec = _buy_order(desk)
+        original = desk.ledger.release
+    
+        def fail_after_release(*args, **kwargs):
+            original(*args, **kwargs)
+            raise LedgerError("after terminal release")
+    
+        with monkeypatch.context() as patch:
+            patch.setattr(desk.ledger, "release", fail_after_release)
+&gt;           with pytest.raises(LedgerError, match="terminal release"):
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE LedgerError
+
+tests\test_v9_financial_regressions.py:526: Failed</failure></testcase><testcase classname="tests.test_v9_authorization_regressions" name="test_v9_sec01_postgres_write_outage_cannot_grant_local_ownership" time="0.023"><failure message="AssertionError: central owner remains unexpired; a PostgreSQL outage must not grant a local lease&#10;assert (True, True, True) == (True, False, False)&#10;  &#10;  At index 1 diff: True != False&#10;  Use -v to get more diff">tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-regressoes-1-umw0uq32/tmp/pytest-of-unknown/pytest-0/test_v9_sec01_postgres_write_o0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000195D6F4D1C0&gt;
+
+    def test_v9_sec01_postgres_write_outage_cannot_grant_local_ownership(tmp_path, monkeypatch):
+        database = _LeasePostgres()
+        monkeypatch.setattr(
+            storage.ArmazemDeEstado, "_conectar",
+            lambda self: database.connect(fail_write=self.diretorio.name == "partitioned"),
+        )
+        healthy = storage.ArmazemDeEstado(
+            "postgresql://v9.invalid/synthetic", diretorio=tmp_path / "healthy",
+        )
+        partitioned = storage.ArmazemDeEstado(
+            "postgresql://v9.invalid/synthetic", diretorio=tmp_path / "partitioned",
+        )
+        assert healthy.backend == partitioned.backend == "postgres"
+        first = _claim(healthy, "owner-a")
+        second = _claim(partitioned, "owner-b")
+        local_lease = partitioned._caminho(_TENANT, "posse")
+&gt;       assert (first, second, local_lease.exists()) == (True, False, False), (
+            "central owner remains unexpired; a PostgreSQL outage must not grant a local lease"
+        )
+E       AssertionError: central owner remains unexpired; a PostgreSQL outage must not grant a local lease
+E       assert (True, True, True) == (True, False, False)
+E         
+E         At index 1 diff: True != False
+E         Use -v to get more diff
+
+tests\test_v9_authorization_regressions.py:110: AssertionError</failure></testcase><testcase classname="tests.test_v9_authorization_regressions" name="test_v9_sec01_unverified_file_write_never_grants_ownership[read-denied]" time="0.004"><failure message="AssertionError: a proposed document is not proof of durable ownership&#10;assert True is False">tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-regressoes-1-umw0uq32/tmp/pytest-of-unknown/pytest-0/test_v9_sec01_unverified_file_0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000195D6F4D610&gt;
+failure = 'read-denied'
+
+    @pytest.mark.parametrize("failure", ["read-denied", "malformed-json"])
+    def test_v9_sec01_unverified_file_write_never_grants_ownership(tmp_path, monkeypatch, failure):
+        store = storage.ArmazemDeEstado(diretorio=tmp_path)
+        path = store._caminho(_TENANT, "posse")
+        read_text = Path.read_text
+    
+        def unreadable_final_read(self, *args, **kwargs):
+            if self == path and path.exists():
+                if failure == "read-denied":
+                    raise PermissionError("synthetic verification read denied")
+                return "{"
+            return read_text(self, *args, **kwargs)
+    
+        # Initially absent: the real atomic write runs; only verification fails.
+        monkeypatch.setattr(Path, "read_text", unreadable_final_read)
+        granted = _claim(store, "owner-a")
+&gt;       assert granted is False, "a proposed document is not proof of durable ownership"
+E       AssertionError: a proposed document is not proof of durable ownership
+E       assert True is False
+
+tests\test_v9_authorization_regressions.py:131: AssertionError</failure></testcase><testcase classname="tests.test_v9_authorization_regressions" name="test_v9_sec01_unverified_file_write_never_grants_ownership[malformed-json]" time="0.005"><failure message="AssertionError: a proposed document is not proof of durable ownership&#10;assert True is False">tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-regressoes-1-umw0uq32/tmp/pytest-of-unknown/pytest-0/test_v9_sec01_unverified_file_1')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000195D6F2ADE0&gt;
+failure = 'malformed-json'
+
+    @pytest.mark.parametrize("failure", ["read-denied", "malformed-json"])
+    def test_v9_sec01_unverified_file_write_never_grants_ownership(tmp_path, monkeypatch, failure):
+        store = storage.ArmazemDeEstado(diretorio=tmp_path)
+        path = store._caminho(_TENANT, "posse")
+        read_text = Path.read_text
+    
+        def unreadable_final_read(self, *args, **kwargs):
+            if self == path and path.exists():
+                if failure == "read-denied":
+                    raise PermissionError("synthetic verification read denied")
+                return "{"
+            return read_text(self, *args, **kwargs)
+    
+        # Initially absent: the real atomic write runs; only verification fails.
+        monkeypatch.setattr(Path, "read_text", unreadable_final_read)
+        granted = _claim(store, "owner-a")
+&gt;       assert granted is False, "a proposed document is not proof of durable ownership"
+E       AssertionError: a proposed document is not proof of durable ownership
+E       assert True is False
+
+tests\test_v9_authorization_regressions.py:131: AssertionError</failure></testcase><testcase classname="tests.test_v9_authorization_regressions" name="test_v9_sec01_file_contenders_cannot_both_win" time="0.074"><failure message="AssertionError: one unexpired lease yielded 4 successful owners&#10;assert 4 == 1&#10; +  where 4 = sum([True, True, True, True])">tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-regressoes-1-umw0uq32/tmp/pytest-of-unknown/pytest-0/test_v9_sec01_file_contenders_0')
+
+    def test_v9_sec01_file_contenders_cannot_both_win(tmp_path):
+        stores = [storage.ArmazemDeEstado(diretorio=tmp_path) for _ in range(4)]
+        path = stores[0]._caminho(_TENANT, "posse")
+        entry = threading.Barrier(4, timeout=10)
+    
+        def contender(index):
+            entry.wait()
+            return _claim(stores[index], f"owner-{index}")
+    
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            for _ in range(30):
+                storage.escrever_json_atomico(
+                    path, {"dono": "expired-owner", "expira_em": _NOW - 1},
+                )
+                futures = [pool.submit(contender, i) for i in range(4)]
+                winners = [future.result(timeout=15) for future in futures]
+&gt;               assert sum(winners) == 1, (
+                    f"one unexpired lease yielded {sum(winners)} successful owners"
+                )
+E               AssertionError: one unexpired lease yielded 4 successful owners
+E               assert 4 == 1
+E                +  where 4 = sum([True, True, True, True])
+
+tests\test_v9_authorization_regressions.py:150: AssertionError</failure></testcase><testcase classname="tests.test_v9_authorization_regressions" name="test_v9_sec01_existing_valid_file_lease_rejects_rival" time="0.018" /><testcase classname="tests.test_v9_authorization_regressions" name="test_v9_sec02_existing_invalid_mode_blocks_execution[malformed-json]" time="0.004"><failure message="AssertionError: invalid existing mode must not enable execution&#10;assert True is False">tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-regressoes-1-umw0uq32/tmp/pytest-of-unknown/pytest-0/test_v9_sec02_existing_invalid0')
+contents = '{'
+
+    @pytest.mark.parametrize(
+        "contents", ["{", "[]", "null", '"pausada"', "42"],
+        ids=["malformed-json", "array", "null", "string", "number"],
+    )
+    def test_v9_sec02_existing_invalid_mode_blocks_execution(tmp_path, contents):
+        store = storage.ArmazemDeEstado(diretorio=tmp_path)
+        path = store._caminho(_TENANT, "modo")
+        path.parent.mkdir(parents=True)
+        path.write_text(contents, encoding="utf-8")
+        mode = ModoDaMesa(store, _TENANT)
+&gt;       assert mode.pode_executar()[0] is False, "invalid existing mode must not enable execution"
+E       AssertionError: invalid existing mode must not enable execution
+E       assert True is False
+
+tests\test_v9_authorization_regressions.py:174: AssertionError</failure></testcase><testcase classname="tests.test_v9_authorization_regressions" name="test_v9_sec02_existing_invalid_mode_blocks_execution[array]" time="0.003"><failure message="AssertionError: invalid existing mode must not enable execution&#10;assert True is False">tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-regressoes-1-umw0uq32/tmp/pytest-of-unknown/pytest-0/test_v9_sec02_existing_invalid1')
+contents = '[]'
+
+    @pytest.mark.parametrize(
+        "contents", ["{", "[]", "null", '"pausada"', "42"],
+        ids=["malformed-json", "array", "null", "string", "number"],
+    )
+    def test_v9_sec02_existing_invalid_mode_blocks_execution(tmp_path, contents):
+        store = storage.ArmazemDeEstado(diretorio=tmp_path)
+        path = store._caminho(_TENANT, "modo")
+        path.parent.mkdir(parents=True)
+        path.write_text(contents, encoding="utf-8")
+        mode = ModoDaMesa(store, _TENANT)
+&gt;       assert mode.pode_executar()[0] is False, "invalid existing mode must not enable execution"
+E       AssertionError: invalid existing mode must not enable execution
+E       assert True is False
+
+tests\test_v9_authorization_regressions.py:174: AssertionError</failure></testcase><testcase classname="tests.test_v9_authorization_regressions" name="test_v9_sec02_existing_invalid_mode_blocks_execution[null]" time="0.004"><failure message="AssertionError: invalid existing mode must not enable execution&#10;assert True is False">tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-regressoes-1-umw0uq32/tmp/pytest-of-unknown/pytest-0/test_v9_sec02_existing_invalid2')
+contents = 'null'
+
+    @pytest.mark.parametrize(
+        "contents", ["{", "[]", "null", '"pausada"', "42"],
+        ids=["malformed-json", "array", "null", "string", "number"],
+    )
+    def test_v9_sec02_existing_invalid_mode_blocks_execution(tmp_path, contents):
+        store = storage.ArmazemDeEstado(diretorio=tmp_path)
+        path = store._caminho(_TENANT, "modo")
+        path.parent.mkdir(parents=True)
+        path.write_text(contents, encoding="utf-8")
+        mode = ModoDaMesa(store, _TENANT)
+&gt;       assert mode.pode_executar()[0] is False, "invalid existing mode must not enable execution"
+E       AssertionError: invalid existing mode must not enable execution
+E       assert True is False
+
+tests\test_v9_authorization_regressions.py:174: AssertionError</failure></testcase><testcase classname="tests.test_v9_authorization_regressions" name="test_v9_sec02_existing_invalid_mode_blocks_execution[string]" time="0.010"><failure message="AssertionError: invalid existing mode must not enable execution&#10;assert True is False">tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-regressoes-1-umw0uq32/tmp/pytest-of-unknown/pytest-0/test_v9_sec02_existing_invalid3')
+contents = '"pausada"'
+
+    @pytest.mark.parametrize(
+        "contents", ["{", "[]", "null", '"pausada"', "42"],
+        ids=["malformed-json", "array", "null", "string", "number"],
+    )
+    def test_v9_sec02_existing_invalid_mode_blocks_execution(tmp_path, contents):
+        store = storage.ArmazemDeEstado(diretorio=tmp_path)
+        path = store._caminho(_TENANT, "modo")
+        path.parent.mkdir(parents=True)
+        path.write_text(contents, encoding="utf-8")
+        mode = ModoDaMesa(store, _TENANT)
+&gt;       assert mode.pode_executar()[0] is False, "invalid existing mode must not enable execution"
+E       AssertionError: invalid existing mode must not enable execution
+E       assert True is False
+
+tests\test_v9_authorization_regressions.py:174: AssertionError</failure></testcase><testcase classname="tests.test_v9_authorization_regressions" name="test_v9_sec02_existing_invalid_mode_blocks_execution[number]" time="0.004"><failure message="AssertionError: invalid existing mode must not enable execution&#10;assert True is False">tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-regressoes-1-umw0uq32/tmp/pytest-of-unknown/pytest-0/test_v9_sec02_existing_invalid4')
+contents = '42'
+
+    @pytest.mark.parametrize(
+        "contents", ["{", "[]", "null", '"pausada"', "42"],
+        ids=["malformed-json", "array", "null", "string", "number"],
+    )
+    def test_v9_sec02_existing_invalid_mode_blocks_execution(tmp_path, contents):
+        store = storage.ArmazemDeEstado(diretorio=tmp_path)
+        path = store._caminho(_TENANT, "modo")
+        path.parent.mkdir(parents=True)
+        path.write_text(contents, encoding="utf-8")
+        mode = ModoDaMesa(store, _TENANT)
+&gt;       assert mode.pode_executar()[0] is False, "invalid existing mode must not enable execution"
+E       AssertionError: invalid existing mode must not enable execution
+E       assert True is False
+
+tests\test_v9_authorization_regressions.py:174: AssertionError</failure></testcase><testcase classname="tests.test_v9_authorization_regressions" name="test_v9_sec02_genuinely_missing_mode_keeps_new_install_default" time="0.003" /><testcase classname="tests.test_v9_authorization_regressions" name="test_v9_sec02_unknown_state_in_object_remains_blocked" time="0.012" /><testcase classname="tests.test_v9_authorization_regressions" name="test_v9_sec03_windows_without_dpapi_refuses_secret_save[new-config]" time="0.455"><failure message="AssertionError: Windows save must refuse unavailable DPAPI, preserve disk, and never write plaintext&#10;assert (False, False, True) == (True, True, False)&#10;  &#10;  At index 0 diff: False != True&#10;  Use -v to get more diff">service_module = &lt;module 'service.app' from 'C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\service\\app.py'&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000195D6CB2A80&gt;
+existing = False
+
+    @pytest.mark.parametrize(
+        "existing", [False, True], ids=["new-config", "existing-config"],
+    )
+    def test_v9_sec03_windows_without_dpapi_refuses_secret_save(service_module, monkeypatch, existing):
+        from service.api import segredos_em_repouso as encryption
+    
+        path = service_module.CFG_PATH
+        before = b'{"TRADINGAGENTS_DESK_CAPITAL": "100"}' if existing else None
+        if before is not None:
+            path.write_bytes(before)
+    
+        def unavailable_dll():
+            raise OSError("synthetic DPAPI loader failure")
+    
+        # Exercise real tem_protecao -&gt; cifrar -&gt; save_cfg. Do not replace cifrar
+        # with an exception: that would miss the plaintext fallback under audit.
+        monkeypatch.setattr(encryption, "sys", SimpleNamespace(platform="win32"))
+        monkeypatch.setattr(encryption, "_crypt32", unavailable_dll)
+        refused = False
+        try:
+            service_module.save_cfg({"GROQ_API_KEY": _SECRET})
+        except (encryption.SegredoIlegivel, OSError):
+            refused = True
+        after = path.read_bytes() if path.exists() else None
+        # Boolean observations prevent pytest from printing even synthetic secrets.
+        observations = (refused, after == before, after is not None and _SECRET.encode() in after)
+&gt;       assert observations == (True, True, False), (
+            "Windows save must refuse unavailable DPAPI, preserve disk, and never write plaintext"
+        )
+E       AssertionError: Windows save must refuse unavailable DPAPI, preserve disk, and never write plaintext
+E       assert (False, False, True) == (True, True, False)
+E         
+E         At index 0 diff: False != True
+E         Use -v to get more diff
+
+tests\test_v9_authorization_regressions.py:264: AssertionError</failure></testcase><testcase classname="tests.test_v9_authorization_regressions" name="test_v9_sec03_windows_without_dpapi_refuses_secret_save[existing-config]" time="0.006"><failure message="AssertionError: Windows save must refuse unavailable DPAPI, preserve disk, and never write plaintext&#10;assert (False, False, True) == (True, True, False)&#10;  &#10;  At index 0 diff: False != True&#10;  Use -v to get more diff">service_module = &lt;module 'service.app' from 'C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\service\\app.py'&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000195D7343500&gt;
+existing = True
+
+    @pytest.mark.parametrize(
+        "existing", [False, True], ids=["new-config", "existing-config"],
+    )
+    def test_v9_sec03_windows_without_dpapi_refuses_secret_save(service_module, monkeypatch, existing):
+        from service.api import segredos_em_repouso as encryption
+    
+        path = service_module.CFG_PATH
+        before = b'{"TRADINGAGENTS_DESK_CAPITAL": "100"}' if existing else None
+        if before is not None:
+            path.write_bytes(before)
+    
+        def unavailable_dll():
+            raise OSError("synthetic DPAPI loader failure")
+    
+        # Exercise real tem_protecao -&gt; cifrar -&gt; save_cfg. Do not replace cifrar
+        # with an exception: that would miss the plaintext fallback under audit.
+        monkeypatch.setattr(encryption, "sys", SimpleNamespace(platform="win32"))
+        monkeypatch.setattr(encryption, "_crypt32", unavailable_dll)
+        refused = False
+        try:
+            service_module.save_cfg({"GROQ_API_KEY": _SECRET})
+        except (encryption.SegredoIlegivel, OSError):
+            refused = True
+        after = path.read_bytes() if path.exists() else None
+        # Boolean observations prevent pytest from printing even synthetic secrets.
+        observations = (refused, after == before, after is not None and _SECRET.encode() in after)
+&gt;       assert observations == (True, True, False), (
+            "Windows save must refuse unavailable DPAPI, preserve disk, and never write plaintext"
+        )
+E       AssertionError: Windows save must refuse unavailable DPAPI, preserve disk, and never write plaintext
+E       assert (False, False, True) == (True, True, False)
+E         
+E         At index 0 diff: False != True
+E         Use -v to get more diff
+
+tests\test_v9_authorization_regressions.py:264: AssertionError</failure></testcase><testcase classname="tests.test_v9_authorization_regressions" name="test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[malformed-json]" time="0.167"><failure message="AssertionError: existing invalid/inaccessible owner storage is not a new installation&#10;assert {'setup_requi...icates': True} == {'setup_requi...cates': False}&#10;  &#10;  Differing items:&#10;  {'setup_required': True} != {'setup_required': False}&#10;  {'replacement_authenticates': True} != {'replacement_authenticates': False}&#10;  {'setup_rejected': False} != {'setup_rejected': True}&#10;  {'file_preserved': False} != {'file_preserved': True}&#10;  Use -v to get more diff">service_module = &lt;module 'service.app' from 'C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\service\\app.py'&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000195D7547D70&gt;
+damage = 'malformed-json'
+
+    @pytest.mark.parametrize(
+        "damage", ["malformed-json", "non-object", "missing-hash", "invalid-hash-type", "read-denied"],
+    )
+    def test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup(
+        service_module, monkeypatch, damage,
+    ):
+        credentials = service_module.OWNER_CREDENTIALS
+        path = credentials.caminho
+        if damage == "read-denied":
+            credentials.criar(_ORIGINAL_PASSWORD)
+        else:
+            path.write_text({
+                "malformed-json": "{",
+                "non-object": "[]",
+                "missing-hash": '{"versao": 1}',
+                "invalid-hash-type": '{"versao": 1, "senha_hash": 42}',
+            }[damage], encoding="utf-8")
+        before = path.read_bytes()
+        read_text = Path.read_text
+    
+        def denied_owner_read(self, *args, **kwargs):
+            if self == path:
+                raise PermissionError("synthetic owner read denied")
+            return read_text(self, *args, **kwargs)
+    
+        with monkeypatch.context() as read_failure:
+            if damage == "read-denied":
+                read_failure.setattr(Path, "read_text", denied_owner_read)
+            status = service_module.auth_status()
+            # No Authorization header and no recovery proof. The password/hash
+            # writer stays real, so an unauthorized replacement is observable.
+            response_status = _anonymous_setup(service_module)
+        observations = {
+            "setup_required": status["setup_required"],
+            "setup_rejected": response_status in {401, 403, 409, 503},
+            "file_preserved": path.read_bytes() == before,
+            "replacement_authenticates": credentials.verificar_senha(_PASSWORD),
+        }
+&gt;       assert observations == {
+            "setup_required": False,
+            "setup_rejected": True,
+            "file_preserved": True,
+            "replacement_authenticates": False,
+        }, "existing invalid/inaccessible owner storage is not a new installation"
+E       AssertionError: existing invalid/inaccessible owner storage is not a new installation
+E       assert {'setup_requi...icates': True} == {'setup_requi...cates': False}
+E         
+E         Differing items:
+E         {'setup_required': True} != {'setup_required': False}
+E         {'replacement_authenticates': True} != {'replacement_authenticates': False}
+E         {'setup_rejected': False} != {'setup_rejected': True}
+E         {'file_preserved': False} != {'file_preserved': True}
+E         Use -v to get more diff
+
+tests\test_v9_authorization_regressions.py:307: AssertionError</failure></testcase><testcase classname="tests.test_v9_authorization_regressions" name="test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[non-object]" time="0.181"><failure message="AssertionError: existing invalid/inaccessible owner storage is not a new installation&#10;assert {'setup_requi...icates': True} == {'setup_requi...cates': False}&#10;  &#10;  Differing items:&#10;  {'setup_required': True} != {'setup_required': False}&#10;  {'replacement_authenticates': True} != {'replacement_authenticates': False}&#10;  {'setup_rejected': False} != {'setup_rejected': True}&#10;  {'file_preserved': False} != {'file_preserved': True}&#10;  Use -v to get more diff">service_module = &lt;module 'service.app' from 'C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\service\\app.py'&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000195D7546FF0&gt;
+damage = 'non-object'
+
+    @pytest.mark.parametrize(
+        "damage", ["malformed-json", "non-object", "missing-hash", "invalid-hash-type", "read-denied"],
+    )
+    def test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup(
+        service_module, monkeypatch, damage,
+    ):
+        credentials = service_module.OWNER_CREDENTIALS
+        path = credentials.caminho
+        if damage == "read-denied":
+            credentials.criar(_ORIGINAL_PASSWORD)
+        else:
+            path.write_text({
+                "malformed-json": "{",
+                "non-object": "[]",
+                "missing-hash": '{"versao": 1}',
+                "invalid-hash-type": '{"versao": 1, "senha_hash": 42}',
+            }[damage], encoding="utf-8")
+        before = path.read_bytes()
+        read_text = Path.read_text
+    
+        def denied_owner_read(self, *args, **kwargs):
+            if self == path:
+                raise PermissionError("synthetic owner read denied")
+            return read_text(self, *args, **kwargs)
+    
+        with monkeypatch.context() as read_failure:
+            if damage == "read-denied":
+                read_failure.setattr(Path, "read_text", denied_owner_read)
+            status = service_module.auth_status()
+            # No Authorization header and no recovery proof. The password/hash
+            # writer stays real, so an unauthorized replacement is observable.
+            response_status = _anonymous_setup(service_module)
+        observations = {
+            "setup_required": status["setup_required"],
+            "setup_rejected": response_status in {401, 403, 409, 503},
+            "file_preserved": path.read_bytes() == before,
+            "replacement_authenticates": credentials.verificar_senha(_PASSWORD),
+        }
+&gt;       assert observations == {
+            "setup_required": False,
+            "setup_rejected": True,
+            "file_preserved": True,
+            "replacement_authenticates": False,
+        }, "existing invalid/inaccessible owner storage is not a new installation"
+E       AssertionError: existing invalid/inaccessible owner storage is not a new installation
+E       assert {'setup_requi...icates': True} == {'setup_requi...cates': False}
+E         
+E         Differing items:
+E         {'setup_required': True} != {'setup_required': False}
+E         {'replacement_authenticates': True} != {'replacement_authenticates': False}
+E         {'setup_rejected': False} != {'setup_rejected': True}
+E         {'file_preserved': False} != {'file_preserved': True}
+E         Use -v to get more diff
+
+tests\test_v9_authorization_regressions.py:307: AssertionError</failure></testcase><testcase classname="tests.test_v9_authorization_regressions" name="test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[missing-hash]" time="0.189"><failure message="AssertionError: existing invalid/inaccessible owner storage is not a new installation&#10;assert {'setup_requi...icates': True} == {'setup_requi...cates': False}&#10;  &#10;  Differing items:&#10;  {'setup_required': True} != {'setup_required': False}&#10;  {'replacement_authenticates': True} != {'replacement_authenticates': False}&#10;  {'setup_rejected': False} != {'setup_rejected': True}&#10;  {'file_preserved': False} != {'file_preserved': True}&#10;  Use -v to get more diff">service_module = &lt;module 'service.app' from 'C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\service\\app.py'&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000195D7547CE0&gt;
+damage = 'missing-hash'
+
+    @pytest.mark.parametrize(
+        "damage", ["malformed-json", "non-object", "missing-hash", "invalid-hash-type", "read-denied"],
+    )
+    def test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup(
+        service_module, monkeypatch, damage,
+    ):
+        credentials = service_module.OWNER_CREDENTIALS
+        path = credentials.caminho
+        if damage == "read-denied":
+            credentials.criar(_ORIGINAL_PASSWORD)
+        else:
+            path.write_text({
+                "malformed-json": "{",
+                "non-object": "[]",
+                "missing-hash": '{"versao": 1}',
+                "invalid-hash-type": '{"versao": 1, "senha_hash": 42}',
+            }[damage], encoding="utf-8")
+        before = path.read_bytes()
+        read_text = Path.read_text
+    
+        def denied_owner_read(self, *args, **kwargs):
+            if self == path:
+                raise PermissionError("synthetic owner read denied")
+            return read_text(self, *args, **kwargs)
+    
+        with monkeypatch.context() as read_failure:
+            if damage == "read-denied":
+                read_failure.setattr(Path, "read_text", denied_owner_read)
+            status = service_module.auth_status()
+            # No Authorization header and no recovery proof. The password/hash
+            # writer stays real, so an unauthorized replacement is observable.
+            response_status = _anonymous_setup(service_module)
+        observations = {
+            "setup_required": status["setup_required"],
+            "setup_rejected": response_status in {401, 403, 409, 503},
+            "file_preserved": path.read_bytes() == before,
+            "replacement_authenticates": credentials.verificar_senha(_PASSWORD),
+        }
+&gt;       assert observations == {
+            "setup_required": False,
+            "setup_rejected": True,
+            "file_preserved": True,
+            "replacement_authenticates": False,
+        }, "existing invalid/inaccessible owner storage is not a new installation"
+E       AssertionError: existing invalid/inaccessible owner storage is not a new installation
+E       assert {'setup_requi...icates': True} == {'setup_requi...cates': False}
+E         
+E         Differing items:
+E         {'setup_required': True} != {'setup_required': False}
+E         {'replacement_authenticates': True} != {'replacement_authenticates': False}
+E         {'setup_rejected': False} != {'setup_rejected': True}
+E         {'file_preserved': False} != {'file_preserved': True}
+E         Use -v to get more diff
+
+tests\test_v9_authorization_regressions.py:307: AssertionError</failure></testcase><testcase classname="tests.test_v9_authorization_regressions" name="test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[invalid-hash-type]" time="0.227"><failure message="AssertionError: existing invalid/inaccessible owner storage is not a new installation&#10;assert {'setup_requi...icates': True} == {'setup_requi...cates': False}&#10;  &#10;  Differing items:&#10;  {'setup_required': True} != {'setup_required': False}&#10;  {'replacement_authenticates': True} != {'replacement_authenticates': False}&#10;  {'setup_rejected': False} != {'setup_rejected': True}&#10;  {'file_preserved': False} != {'file_preserved': True}&#10;  Use -v to get more diff">service_module = &lt;module 'service.app' from 'C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\service\\app.py'&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000195D7547BC0&gt;
+damage = 'invalid-hash-type'
+
+    @pytest.mark.parametrize(
+        "damage", ["malformed-json", "non-object", "missing-hash", "invalid-hash-type", "read-denied"],
+    )
+    def test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup(
+        service_module, monkeypatch, damage,
+    ):
+        credentials = service_module.OWNER_CREDENTIALS
+        path = credentials.caminho
+        if damage == "read-denied":
+            credentials.criar(_ORIGINAL_PASSWORD)
+        else:
+            path.write_text({
+                "malformed-json": "{",
+                "non-object": "[]",
+                "missing-hash": '{"versao": 1}',
+                "invalid-hash-type": '{"versao": 1, "senha_hash": 42}',
+            }[damage], encoding="utf-8")
+        before = path.read_bytes()
+        read_text = Path.read_text
+    
+        def denied_owner_read(self, *args, **kwargs):
+            if self == path:
+                raise PermissionError("synthetic owner read denied")
+            return read_text(self, *args, **kwargs)
+    
+        with monkeypatch.context() as read_failure:
+            if damage == "read-denied":
+                read_failure.setattr(Path, "read_text", denied_owner_read)
+            status = service_module.auth_status()
+            # No Authorization header and no recovery proof. The password/hash
+            # writer stays real, so an unauthorized replacement is observable.
+            response_status = _anonymous_setup(service_module)
+        observations = {
+            "setup_required": status["setup_required"],
+            "setup_rejected": response_status in {401, 403, 409, 503},
+            "file_preserved": path.read_bytes() == before,
+            "replacement_authenticates": credentials.verificar_senha(_PASSWORD),
+        }
+&gt;       assert observations == {
+            "setup_required": False,
+            "setup_rejected": True,
+            "file_preserved": True,
+            "replacement_authenticates": False,
+        }, "existing invalid/inaccessible owner storage is not a new installation"
+E       AssertionError: existing invalid/inaccessible owner storage is not a new installation
+E       assert {'setup_requi...icates': True} == {'setup_requi...cates': False}
+E         
+E         Differing items:
+E         {'setup_required': True} != {'setup_required': False}
+E         {'replacement_authenticates': True} != {'replacement_authenticates': False}
+E         {'setup_rejected': False} != {'setup_rejected': True}
+E         {'file_preserved': False} != {'file_preserved': True}
+E         Use -v to get more diff
+
+tests\test_v9_authorization_regressions.py:307: AssertionError</failure></testcase><testcase classname="tests.test_v9_authorization_regressions" name="test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[read-denied]" time="0.367"><failure message="AssertionError: existing invalid/inaccessible owner storage is not a new installation&#10;assert {'setup_requi...icates': True} == {'setup_requi...cates': False}&#10;  &#10;  Differing items:&#10;  {'setup_required': True} != {'setup_required': False}&#10;  {'replacement_authenticates': True} != {'replacement_authenticates': False}&#10;  {'setup_rejected': False} != {'setup_rejected': True}&#10;  {'file_preserved': False} != {'file_preserved': True}&#10;  Use -v to get more diff">service_module = &lt;module 'service.app' from 'C:\\Users\\DZ23\\Documents\\Qoder\\2026-10-12\\2f7f19a4\\dz23-v9-audit\\service\\app.py'&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000195D754C1A0&gt;
+damage = 'read-denied'
+
+    @pytest.mark.parametrize(
+        "damage", ["malformed-json", "non-object", "missing-hash", "invalid-hash-type", "read-denied"],
+    )
+    def test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup(
+        service_module, monkeypatch, damage,
+    ):
+        credentials = service_module.OWNER_CREDENTIALS
+        path = credentials.caminho
+        if damage == "read-denied":
+            credentials.criar(_ORIGINAL_PASSWORD)
+        else:
+            path.write_text({
+                "malformed-json": "{",
+                "non-object": "[]",
+                "missing-hash": '{"versao": 1}',
+                "invalid-hash-type": '{"versao": 1, "senha_hash": 42}',
+            }[damage], encoding="utf-8")
+        before = path.read_bytes()
+        read_text = Path.read_text
+    
+        def denied_owner_read(self, *args, **kwargs):
+            if self == path:
+                raise PermissionError("synthetic owner read denied")
+            return read_text(self, *args, **kwargs)
+    
+        with monkeypatch.context() as read_failure:
+            if damage == "read-denied":
+                read_failure.setattr(Path, "read_text", denied_owner_read)
+            status = service_module.auth_status()
+            # No Authorization header and no recovery proof. The password/hash
+            # writer stays real, so an unauthorized replacement is observable.
+            response_status = _anonymous_setup(service_module)
+        observations = {
+            "setup_required": status["setup_required"],
+            "setup_rejected": response_status in {401, 403, 409, 503},
+            "file_preserved": path.read_bytes() == before,
+            "replacement_authenticates": credentials.verificar_senha(_PASSWORD),
+        }
+&gt;       assert observations == {
+            "setup_required": False,
+            "setup_rejected": True,
+            "file_preserved": True,
+            "replacement_authenticates": False,
+        }, "existing invalid/inaccessible owner storage is not a new installation"
+E       AssertionError: existing invalid/inaccessible owner storage is not a new installation
+E       assert {'setup_requi...icates': True} == {'setup_requi...cates': False}
+E         
+E         Differing items:
+E         {'setup_required': True} != {'setup_required': False}
+E         {'replacement_authenticates': True} != {'replacement_authenticates': False}
+E         {'setup_rejected': False} != {'setup_rejected': True}
+E         {'file_preserved': False} != {'file_preserved': True}
+E         Use -v to get more diff
+
+tests\test_v9_authorization_regressions.py:307: AssertionError</failure></testcase><testcase classname="tests.test_v9_authorization_regressions" name="test_v9_sec04_genuinely_missing_owner_allows_first_setup" time="0.192" /><testcase classname="tests.test_v9_authorization_regressions" name="test_v9_sec04_valid_existing_owner_rejects_anonymous_replacement" time="0.207" /><testcase classname="tests.test_modo_da_mesa.TestModoDaMesa" name="test_padrao_de_fabrica_e_ativo" time="0.004" /><testcase classname="tests.test_modo_da_mesa.TestModoDaMesa" name="test_observador_nao_executa_mas_propoe" time="0.034" /><testcase classname="tests.test_modo_da_mesa.TestModoDaMesa" name="test_pausada_nao_executa" time="0.014" /><testcase classname="tests.test_modo_da_mesa.TestModoDaMesa" name="test_bloqueada_exige_desbloqueio_explicito" time="0.023" /><testcase classname="tests.test_modo_da_mesa.TestModoDaMesa" name="test_persistencia_entre_instancias" time="0.025" /><testcase classname="tests.test_modo_da_mesa.TestModoDaMesa" name="test_estado_desconhecido_no_disco_vira_bloqueada" time="0.016" /><testcase classname="tests.test_modo_da_mesa.TestModoDaMesa" name="test_estado_invalido_recusado_com_422_na_origem" time="0.003" /><testcase classname="tests.test_modo_da_mesa.TestModoDaMesa" name="test_resumo_traz_rotulo_e_motivo_para_o_painel" time="0.003" /><testcase classname="tests.test_modo_da_mesa.TestPosseDeExecucao" name="test_primeiro_dono_assume_e_renova" time="0.027" /><testcase classname="tests.test_modo_da_mesa.TestPosseDeExecucao" name="test_segundo_dono_recusado_com_o_nome_do_primeiro" time="0.007" /><testcase classname="tests.test_modo_da_mesa.TestPosseDeExecucao" name="test_expiracao_libera_a_posse_por_ttl" time="0.028" /><testcase classname="tests.test_modo_da_mesa.TestPosseDeExecucao" name="test_libertar_devolve_a_posse" time="0.034" /><testcase classname="tests.test_modo_da_mesa.TestPosseDeExecucao" name="test_resumo_para_o_painel" time="0.008" /><testcase classname="tests.test_modo_da_mesa.TestPosseNoPostgres" name="test_corrida_entre_dois_donos_so_um_ganha" time="0.000"><skipped type="pytest.skip" message="sem DATABASE_URL — caminho postgres roda no CI">C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_modo_da_mesa.py:166: sem DATABASE_URL — caminho postgres roda no CI</skipped></testcase><testcase classname="tests.test_modo_da_mesa.TestGuardaNoServico" name="test_status_mostra_modo_ativo_e_posse" time="0.228" /><testcase classname="tests.test_modo_da_mesa.TestGuardaNoServico" name="test_observador_propoe_sem_submeter_ordem" time="0.221" /><testcase classname="tests.test_modo_da_mesa.TestGuardaNoServico" name="test_pausada_bloqueia_ciclo_com_motivo" time="0.204" /><testcase classname="tests.test_modo_da_mesa.TestGuardaNoServico" name="test_bloqueada_exige_desbloqueio_na_rota" time="0.282" /><testcase classname="tests.test_modo_da_mesa.TestGuardaNoServico" name="test_modo_invalido_422" time="0.181" /><testcase classname="tests.test_modo_da_mesa.TestGuardaNoServico" name="test_posse_de_outro_processo_bloqueia_execucao" time="0.195" /><testcase classname="tests.test_modo_da_mesa.TestGuardaNoServico" name="test_posse_vencida_libera_execucao" time="0.219" /><testcase classname="tests.test_modo_da_mesa.TestGuardaNoServico" name="test_reinicio_preserva_modo" time="0.223" /><testcase classname="tests.test_modo_da_mesa.TestGuardaNoServico" name="test_painel_tem_o_controle_de_modo" time="0.002" /><testcase classname="tests.test_modo_da_mesa.TestLacoRespeitaModo" name="test_laco_observa_sem_executar_e_bloqueia_quando_manda" time="0.262" /><testcase classname="tests.test_auditoria_sec1_segredos_em_repouso.TestProtecaoEmRepouso" name="test_segredo_nao_esta_legivel_para_quem_le_o_arquivo" time="0.276" /><testcase classname="tests.test_auditoria_sec1_segredos_em_repouso.TestProtecaoEmRepouso" name="test_leitura_devolve_o_segredo_original_apos_reinicio" time="0.342" /><testcase classname="tests.test_auditoria_sec1_segredos_em_repouso.TestProtecaoEmRepouso" name="test_ciclos_de_save_nao_corrompem_o_segredo" time="0.262" /><testcase classname="tests.test_auditoria_sec1_segredos_em_repouso.TestProtecaoEmRepouso" name="test_status_do_painel_e_honesto" time="0.160" /><testcase classname="tests.test_auditoria_sec1_segredos_em_repouso.TestProtecaoEmRepouso" name="test_falha_de_cifragem_aborta_o_save_sem_gravar_em_claro" time="0.190" /><testcase classname="tests.test_auditoria_sec1_segredos_em_repouso.TestMigracaoDoConfigLegado" name="test_migracao_preserva_todas_as_chaves" time="0.185" /><testcase classname="tests.test_auditoria_sec1_segredos_em_repouso.TestMigracaoDoConfigLegado" name="test_leitura_ilegivel_fica_intacta_e_reportada" time="0.189" /><testcase classname="tests.test_auditoria_sec1_segredos_em_repouso.TestMigracaoDoConfigLegado" name="test_token_ilegivel_sobrevive_a_saves_de_outras_chaves" time="0.239" /><testcase classname="tests.test_auditoria_sec1_segredos_em_repouso.TestMigracaoDoConfigLegado" name="test_recolar_o_segredo_recupera_o_cofre" time="0.183" /><testcase classname="tests.test_auditoria_sec1_segredos_em_repouso.TestMigracaoDoConfigLegado" name="test_sem_dpapi_atualiza_ilegiveis_so_da_chave_alterada[substituicao]" time="0.207" /><testcase classname="tests.test_auditoria_sec1_segredos_em_repouso.TestMigracaoDoConfigLegado" name="test_sem_dpapi_atualiza_ilegiveis_so_da_chave_alterada[exclusao]" time="0.200" /><testcase classname="tests.test_auditoria_sec1_segredos_em_repouso.TestMigracaoDoConfigLegado" name="test_blob_valido_ilegivel_aqui_nao_e_apagado" time="0.156" /><testcase classname="tests.test_auditoria_sec1_segredos_em_repouso.TestRoundtripDoModulo" name="test_ida_e_volta" time="0.001" /><testcase classname="tests.test_auditoria_sec1_segredos_em_repouso.TestRoundtripDoModulo" name="test_ilegivel_levanta_nunca_devolve_vazio" time="0.001" /><testcase classname="tests.test_auditoria_sec1_segredos_em_repouso.TestRoundtripDoModulo" name="test_valor_nao_cifrado_volta_como_esta" time="0.001" /><testcase classname="tests.test_auditoria_sec1_segredos_em_repouso.TestSemQuebraDeComportamento" name="test_nao_segredo_permanece_legivel_para_o_dono" time="0.179" /><testcase classname="tests.test_auditoria_sec1_segredos_em_repouso.TestSemQuebraDeComportamento" name="test_segredo_como_em_constante_de_plataforma" time="0.001" /></testsuite></testsuites>

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -103,6 +104,7 @@ class OrderRecord:
     avg_price: Decimal = Decimal("0")
     fees: Decimal = Decimal("0")
     seen_fills: set = field(default_factory=set)
+    fills_unresolved: bool = False
     external_id: str | None = None
     external_client_id: str = ""
     note: str = ""
@@ -312,6 +314,12 @@ class ExecutionCoordinator:
         self.reconciliacao_pendente = False
         self.motivo_bloqueio = ""
         self._by_key: dict[str, str] = {}     # idempotency_key -> order_id
+        # WAL do OMS (FIN-08): callback de gravação durável chamado ANTES de
+        # cada envio. None = nenhuma composição ligou um armazém; o serviço
+        # SEMPRE liga (app.py). Aqui a falha LEVANTA de propósito: sem prova
+        # durável um crash logo após o aceite da corretora perderia a
+        # identidade da ordem.
+        self.persistencia = None
 
     # -- envio ---------------------------------------------------------
     def exigir_reconciliacao(self, motivo: str) -> None:
@@ -365,7 +373,7 @@ class ExecutionCoordinator:
 
         # --- ORDENS: todas as não terminais, não apenas as UNKNOWN ---
         for rec in list(self.orders.values()):
-            if not rec.nao_terminal:
+            if not rec.nao_terminal and not rec.fills_unresolved:
                 continue
             # Prioridade da chave: o que a CORRETORA conhece primeiro.
             # external_id = id de exchange; external_client_id = `dz23-*`
@@ -560,6 +568,16 @@ class ExecutionCoordinator:
 
     def _aplicar_ordem_remota(self, rec, remota, relatorio: dict,
                               consultar_fills=None) -> None:
+        try:
+            with self._economic_transaction(rec):
+                self._atualizar_ordem_remota(rec, remota, relatorio, consultar_fills)
+        except BaseException:
+            rec.fills_unresolved = True
+            self.exigir_reconciliacao(f"{rec.order_id}: aplicação remota incompleta")
+            raise
+
+    def _atualizar_ordem_remota(self, rec, remota, relatorio: dict,
+                               consultar_fills=None) -> None:
         """Traz o que a corretora diz para dentro do OMS, do livro e do risco.
 
         Os efeitos econômicos vêm dos FILLS, nunca do acumulado: `filled` não
@@ -574,6 +592,12 @@ class ExecutionCoordinator:
                     f"({remota.get('motivo', 'sem motivo')}) — reserva mantida")
                 return
             if resultado == "CONFIRMED_NOT_FOUND":
+                if rec.fills_unresolved or rec.filled_qty:
+                    relatorio["divergencias"].append(
+                        f"{rec.order_id}: ausência não resolve execuções pendentes")
+                    relatorio["fills_status"] = "UNKNOWN"
+                    rec.fills_unresolved = True
+                    return
                 rec.carimbar_transicao(OrderState.REJECTED)
                 rec.note = "reconciliada: corretora CONFIRMA que não existe"
                 self._liberar_reserva_de(rec)
@@ -587,23 +611,32 @@ class ExecutionCoordinator:
             return
 
         estado = str(remota.get("status", "")).lower()
-        if estado in ("closed", "filled", "open", "partially_filled",
-                      "partial", "new"):
-            # Identidade da corretora ANTES dos fills: a consulta de
-            # execuções usa o id de exchange / clientOrderId DELA — adotar
-            # depois fazia a consulta sair com o argumento errado (FIN-3).
+        cancelada = estado in ("canceled", "cancelled", "rejected", "expired")
+        if cancelada or estado in ("closed", "filled", "open", "partially_filled",
+                                   "partial", "new"):
             rec.external_id = remota.get("id") or rec.external_id
             rec.external_client_id = (remota.get("client_order_id")
                                       or rec.external_client_id)
-            self._aplicar_fills_remotos(rec, remota, relatorio, consultar_fills)
+            if not self._aplicar_fills_remotos(rec, remota, relatorio, consultar_fills):
+                return
+            if cancelada:
+                rec.carimbar_transicao(OrderState.REJECTED if estado == "rejected"
+                                       else OrderState.CANCELLED)
+                rec.note = f"reconciliada: {estado} na corretora"
+                self._liberar_reserva_de(rec)
+                self.oms_version += 1
+            elif rec.state is OrderState.FILLED:
+                # Um fill aplicado durante divergência manteve a sobra.
+                # Só a concordância posterior pode devolvê-la.
+                self._liberar_reserva_de(rec)
         elif estado == "absent":
+            if rec.fills_unresolved or rec.filled_qty:
+                relatorio["divergencias"].append(
+                    f"{rec.order_id}: ausência não resolve execuções pendentes")
+                rec.fills_unresolved = True
+                return
             rec.carimbar_transicao(OrderState.CANCELLED)
             rec.note = "reconciliada: ausente na corretora"
-            self._liberar_reserva_de(rec)
-            self.oms_version += 1
-        elif estado in ("canceled", "cancelled", "rejected", "expired"):
-            rec.carimbar_transicao(OrderState.REJECTED)
-            rec.note = f"reconciliada: {estado} na corretora"
             self._liberar_reserva_de(rec)
             self.oms_version += 1
         else:
@@ -611,63 +644,131 @@ class ExecutionCoordinator:
                 f"{rec.order_id}: corretora reporta {estado!r} — ainda aberta")
 
     def _aplicar_fills_remotos(self, rec, remota: dict, relatorio: dict,
-                               consultar_fills) -> None:
-        """Aplica as EXECUÇÕES reais e confere o acumulado como invariante."""
+                               consultar_fills) -> bool:
+        """Aplica as EXECUÇÕES reais e confere o acumulado como invariante.
+
+        Devolve True SOMENTE quando a soma das execuções individuais fecha
+        exatamente com o acumulado reportado pela corretora. Qualquer leitura
+        incerta — execuções não consultadas, consulta que falhou, execução sem
+        identidade, ou total ausente/divergente — devolve False e marca a ordem
+        como NÃO RESOLVIDA: a cobertura permanece retida até a concordância real.
+        """
         acumulado = remota.get("filled")
         acumulado = Decimal(str(acumulado)) if acumulado is not None else None
         relatorio["_fills_exigidos"] = True
 
+        def _incerto(motivo: str, status: str) -> bool:
+            relatorio["divergencias"].append(motivo)
+            relatorio["fills_status"] = status
+            rec.fills_unresolved = True
+            return False
+
         if consultar_fills is None:
-            relatorio["divergencias"].append(
+            # Sem consulta de execuções, concluir só é seguro quando NADA
+            # indica execução: corretora TERMINAL sem total executado e sem
+            # qualquer execução local é cancelamento sem fill — a cobertura
+            # volta ao caixa. Qualquer indício de execução (total remoto
+            # positivo ou fills já aplicados) mantém a reserva presa até a
+            # concordância: cancelar em silêncio não pode perder um fill
+            # (FIN-3).
+            estado = str(remota.get("status", "")).lower()
+            if (estado in ("canceled", "cancelled", "rejected", "expired")
+                    and not rec.filled_qty
+                    and acumulado in (None, Decimal("0"))):
+                relatorio["fills_status"] = "MATCHED"
+                rec.fills_unresolved = False
+                return True
+            return _incerto(
                 f"{rec.order_id}: execuções não consultadas — não se cria "
-                "posição sem execução comprovada (RECONCILIACAO_INCOMPLETA)")
-            relatorio["fills_status"] = "UNKNOWN"
-            return
+                "posição sem execução comprovada (RECONCILIACAO_INCOMPLETA)",
+                "UNKNOWN")
         try:
             fills = consultar_fills(
                 rec.external_client_id or rec.client_order_id or rec.order_id,
                 rec.external_id or "")
         except Exception as exc:
-            relatorio["divergencias"].append(
+            return _incerto(
                 f"{rec.order_id}: consulta de execuções falhou "
-                f"({type(exc).__name__})")
-            relatorio["fills_status"] = "UNKNOWN"
-            return
+                f"({type(exc).__name__})", "UNKNOWN")
 
         aplicados = Decimal("0")
         for fill in fills or []:
             fid = str(fill.get("fill_id") or "")
             qtd = Decimal(str(fill.get("quantity") or 0))
             if not fid or qtd <= 0:
-                relatorio["divergencias"].append(
-                    f"{rec.order_id}: execução sem identificador ou quantidade")
-                relatorio["fills_status"] = "UNKNOWN"
-                return
+                return _incerto(
+                    f"{rec.order_id}: execução sem identificador ou quantidade",
+                    "UNKNOWN")
             aplicados += qtd
+            # A reconciliação NUNCA conclui a reserva: a sobra só pode voltar
+            # ao caixa quando o acumulado da corretora confirmar as execuções.
+            # Sem isto, um fill que completasse a quantidade devolveria a
+            # cobertura antes de a evidência remota concordar (FIN-3).
             self.aplicar_fill(
                 rec, side=(fill.get("side") or rec.lado or "buy"),
                 quantidade=qtd, preco=Decimal(str(fill.get("price") or 0)),
                 taxa=Decimal(str(fill.get("fee") or 0)), fill_id=fid,
-                fee_currency=fill.get("fee_currency") or "")
+                fee_currency=fill.get("fee_currency") or "",
+                fees=fill.get("fees"), fee_invalida=bool(fill.get("fee_invalida")),
+                fee_ambigua=fill.get("fee_ambigua"),
+                concluir_reserva=False)
 
-        if acumulado is not None and aplicados != acumulado:
+        if acumulado is None:
+            # Ausência de evidência não é evidência de ausência: sem total
+            # reportado não há como provar que a visão local está completa.
+            return _incerto(
+                f"{rec.order_id}: corretora não reporta total executado — "
+                "concordância não comprovada", "UNKNOWN")
+        if aplicados != acumulado:
             # O acumulado é INVARIANTE, não fonte: divergir significa que a
             # visão local está incompleta — e incompleta não é segura.
-            relatorio["divergencias"].append(
+            return _incerto(
                 f"FILLS_DIVERGEM {rec.order_id}: execuções somam {aplicados} "
-                f"e a corretora reporta {acumulado} acumulado")
-            relatorio["fills_status"] = "MISMATCH"
-            return
-        if relatorio["fills_status"] != "MISMATCH":
-            relatorio["fills_status"] = "MATCHED"
-        if acumulado is not None and rec.filled_qty >= (rec.quantidade or 0):
+                f"e a corretora reporta {acumulado} acumulado", "MISMATCH")
+
+        relatorio["fills_status"] = "MATCHED"
+        rec.fills_unresolved = False
+        if rec.filled_qty >= (rec.quantidade or 0):
             rec.note = "reconciliada: execuções aplicadas"
+        return True
+
+    @contextmanager
+    def _economic_transaction(self, rec):
+        with self.risk.economic_transaction(rec.reserva_id), self.ledger.economic_transaction():
+            order = {**vars(rec), "seen_fills": set(rec.seen_fills)}
+            state = (self.oms_version, self.perda_do_dia, self.dia_corrente,
+                     self.reconciliacao_pendente, self.motivo_bloqueio)
+            bridge = getattr(self.broker, "bridge", None)
+            bridge_loss = getattr(bridge, "realized_loss_today", None)
+            try:
+                yield
+            except BaseException:
+                rec.__dict__.clear()
+                rec.__dict__.update(order)
+                (self.oms_version, self.perda_do_dia, self.dia_corrente,
+                 self.reconciliacao_pendente, self.motivo_bloqueio) = state
+                if bridge_loss is not None:
+                    bridge.realized_loss_today = bridge_loss
+                raise
 
     def aplicar_fill(self, rec, *, side: str, quantidade: Decimal,
                      preco: Decimal, taxa: Decimal, fill_id: str,
                      fee_currency: str = "", fees: list | None = None,
                      fee_invalida: bool = False,
-                     fee_ambigua: dict | None = None) -> bool:
+                     fee_ambigua: dict | None = None,
+                     concluir_reserva: bool = True) -> bool:
+        with self._economic_transaction(rec):
+            return self._aplicar_fill(
+                rec, side=side, quantidade=quantidade, preco=preco, taxa=taxa,
+                fill_id=fill_id, fee_currency=fee_currency, fees=fees,
+                fee_invalida=fee_invalida, fee_ambigua=fee_ambigua,
+                concluir_reserva=concluir_reserva)
+
+    def _aplicar_fill(self, rec, *, side: str, quantidade: Decimal,
+                      preco: Decimal, taxa: Decimal, fill_id: str,
+                      fee_currency: str, fees: list | None,
+                      fee_invalida: bool, fee_ambigua: dict | None,
+                      concluir_reserva: bool) -> bool:
         """Operação canônica de execução — usada pelo fluxo normal E pela
         reconciliação.
 
@@ -682,7 +783,6 @@ class ExecutionCoordinator:
             raise ValueError("fill sem identificador não pode ser aplicado")
         if fill_id in rec.seen_fills:
             return False                    # mesmo fill nunca conta duas vezes
-        rec.seen_fills.add(fill_id)
         lado = (side or "").lower()
         instrumento = rec.instrumento
         # A taxa tem MOEDA. Quando não é a de cotação, ela NÃO entra no custo
@@ -752,7 +852,7 @@ class ExecutionCoordinator:
             reserva = self._reserva_de(rec)
             if reserva is not None:
                 alvo_total = rec.quantidade or quantidade
-                terminal = (rec.filled_qty + quantidade) >= alvo_total
+                terminal = concluir_reserva and (rec.filled_qty + quantidade) >= alvo_total
                 # CUSTO REAL da execução — é isto que sai do caixa, não a
                 # estimativa proporcional. Slippage e taxa entram aqui.
                 custo_real = (preco * quantidade + taxa_na_cotacao).quantize(
@@ -791,22 +891,22 @@ class ExecutionCoordinator:
                         f"além da cobertura reservada em {instrumento}")
         else:
             # SAÍDA: reduz a posição, realiza o resultado e alimenta o freio.
-            custo = self._custo_proporcional(instrumento, quantidade,
-                                             rec.agente)
-            if custo <= 0:
-                # Livro sem a posição (ex.: posição aberta fora deste livro).
-                # Usa o custo declarado pela saída, proporcional à fatia — e
-                # nunca zero, que transformaria a venda inteira em "lucro".
-                ref = getattr(rec, "cost_basis_ref", Decimal("0")) or Decimal("0")
-                alvo = rec.quantidade or quantidade
-                custo = (Decimal(str(ref)) * quantidade / alvo) if alvo else Decimal(str(ref))
+            consumos = self.ledger.fifo_consumption(
+                instrumento, quantidade,
+                None if rec.agente in self.PODEM_FECHAR_DE_TERCEIROS
+                else (rec.agente or "desconhecido"))
+            custo = sum((Decimal(c["cost_basis"]) for c in consumos), Decimal("0"))
+            # A taxa paga na ENTRADA ficou em FEES, fora do custo da posição.
+            # O freio diário mede o resultado round-trip e precisa contá-la.
+            taxa_entrada = self.ledger.entry_fee_of_consumptions(consumos)
             self.ledger.fill_sell(instrumento, quantidade, preco,
                                   taxa_na_cotacao,
                                   native_fees=taxas_nativas,
                                   cost_basis=custo, agent_id=rec.agente,
+                                  lot_consumptions=consumos,
                                   ref=rec.order_id)
             self.registrar_resultado_realizado(
-                (preco * quantidade) - custo - taxa_na_cotacao)
+                (preco * quantidade) - custo - taxa_na_cotacao - taxa_entrada)
 
         anterior = rec.filled_qty
         rec.filled_qty = anterior + quantidade
@@ -818,31 +918,9 @@ class ExecutionCoordinator:
         alvo = rec.quantidade
         rec.carimbar_transicao(OrderState.FILLED if alvo and rec.filled_qty >= alvo
                                else OrderState.PARTIALLY_FILLED)
+        rec.seen_fills.add(fill_id)
         self.oms_version += 1
         return True
-
-    def _custo_proporcional(self, instrumento: str, quantidade: Decimal,
-                            agent_id: str = "") -> Decimal:
-        """Custo de aquisição da fatia vendida.
-
-        Proporcional ao LOTE DO AGENTE quando ele tem lote — usar a posição
-        agregada misturava o custo de quem comprou mais caro com o de quem
-        comprou mais barato, e o resultado ia para o agente errado.
-        """
-        if agent_id:
-            qtd_lote = self.ledger.lot_quantity(instrumento, agent_id)
-            if qtd_lote > 0:
-                custo_lote = self.ledger.lot_cost(instrumento, agent_id)
-                return (custo_lote * quantidade / qtd_lote).quantize(
-                    Decimal("0.00000001"))
-        detalhe = self.ledger.open_positions_detail().get(instrumento)
-        if not detalhe:
-            return Decimal("0")
-        qtd = Decimal(str(detalhe["quantidade"]))
-        custo = Decimal(str(detalhe["custo_total"]))
-        if qtd <= 0:
-            return Decimal("0")
-        return (custo * quantidade / qtd).quantize(Decimal("0.00000001"))
 
     def liberar_reserva_restante(self, reservation_id: str, *, motivo: str,
                                  order_id: str = "") -> Decimal:
@@ -903,6 +981,36 @@ class ExecutionCoordinator:
         self.motivo_bloqueio = ""
         self.posicoes_restauradas = {}
 
+    def _persistir_antes_do_envio(self, ei, rec) -> None:
+        """WAL: a ordem precisa estar DURÁVEL antes da corretora vê-la.
+
+        Sem isto o único snapshot existente era o do ciclo anterior: um
+        crash entre o aceite externo e a gravação apagava a identidade da
+        ordem — ela vivia na corretora e não para a mesa (FIN-08). Falha
+        de gravação RECUSA o envio e devolve a cobertura, simétrico ao
+        caminho de exceção do envio.
+        """
+        if self.persistencia is None:
+            return
+        try:
+            self.persistencia()
+        except Exception as exc:
+            from .intents import Kind
+            rec.carimbar_transicao(OrderState.REJECTED)
+            rec.note = (f"persistência falhou antes do envio: "
+                        f"{type(exc).__name__}")[:200]
+            if ei.kind is Kind.ENTRY:
+                self.liberar_reserva_restante(
+                    ei.reservation_id,
+                    motivo=f"ordem não enviada: {rec.note}"[:120],
+                    order_id=rec.order_id)
+            self.oms_version += 1
+            raise ExecutionRefused(
+                "gravação do estado financeiro falhou antes do envio "
+                f"({type(exc).__name__}): a ordem NÃO saiu — sem "
+                "persistência confirmada um crash logo após o aceite da "
+                "corretora perderia a identidade da ordem") from None
+
     # ================================================== CAMINHO ÚNICO
     def submit_intent(self, ei) -> OrderRecord:
         """ÚNICO caminho de execução. Entrada e saída passam por aqui.
@@ -937,6 +1045,17 @@ class ExecutionCoordinator:
             self.mandate.assert_active(instrument=ei.instrument)
         except MandateError as exc:
             raise ExecutionRefused(f"mandato inativo: {exc}") from None
+
+        # 2b. VERSÃO — a decisão carrega a versão do mandato que a autorizou.
+        # Executá-la sob outra versão é obedecer a uma política que não é
+        # mais a vigente. A checagem vivia só no adaptador OrderIntent e o
+        # caminho único aceitava intenção presa a versão antiga.
+        versao = getattr(self.mandate, "version", 1)
+        if ei.mandate_version != versao:
+            raise ExecutionRefused(
+                f"intenção presa à versão {ei.mandate_version} do mandato, "
+                f"que está na versão {versao}: decisão antiga não autoriza "
+                "ordem atual")
 
         # 3. PORTÃO — UNKNOWN bloqueia risco novo, venda ou compra
         if self.reconciliacao_pendente:
@@ -1002,6 +1121,11 @@ class ExecutionCoordinator:
             if dura > 0:
                 self.ledger.reserve(dura, ref=rec.order_id,
                                     reservation_id=ei.reservation_id)
+
+        # 4c. WAL (FIN-08) — ordem + vínculo + caixa travado já formam um
+        # documento consistente; gravar aqui garante que um crash logo após
+        # o aceite da corretora ainda encontre a identidade da ordem.
+        self._persistir_antes_do_envio(ei, rec)
 
         # 5. ENVIO — carimbo do momento em que o comando sai (MO-2-C)
         rec.enviada_em = rec.enviada_em or utcnow().isoformat()
@@ -1185,6 +1309,20 @@ class ExecutionCoordinator:
                 f"reserva {ei.reservation_id} não está viva no risco: pode "
                 "ter sido liberada, consumida ou nunca existido")
 
+        # VALIDADE: a decisão carrega um prazo. A checagem vivia só em
+        # `RiskEngine.intent()`; o caminho único direto (copiloto, worker,
+        # API) enviava ordem coberta por reserva que já caducou.
+        expira_iso = reserva.get("expires_at")
+        if expira_iso:
+            try:
+                expira = datetime.fromisoformat(str(expira_iso))
+            except ValueError:
+                expira = None
+            if expira is not None and utcnow() >= expira:
+                raise ExecutionRefused(
+                    f"reserva {ei.reservation_id} expirou em {expira_iso}: "
+                    "decisão antiga não autoriza ordem atual")
+
         if reserva.get("instrument") != ei.instrument:
             raise ExecutionRefused(
                 f"reserva é do instrumento {reserva.get('instrument')} e a "
@@ -1233,6 +1371,29 @@ class ExecutionCoordinator:
                 f"quantidade {ei.quantity} maior que a parte ainda não "
                 f"executada da reserva ({qtd_restante})")
 
+    def _saidas_em_voo(self, instrumento: str, agente: str) -> Decimal:
+        """Quantidade já comprometida em vendas enviadas e ainda não terminais.
+
+        O lote permanece no livro até o fill (ou o cancelamento confirmado);
+        sem esta conta, cada nova venda via o lote inteiro e duas ordens
+        comprometiam a MESMA quantidade na corretora. Vendas de agentes
+        privilegiados contam para qualquer agente: elas podem consumir
+        qualquer lote, então pretendem a mesma quantidade que a nova saída.
+        """
+        privilegiado = agente in self.PODEM_FECHAR_DE_TERCEIROS
+        total = Decimal("0")
+        for r in self.orders.values():
+            if r.instrument != instrumento or (r.lado or "") != "sell":
+                continue
+            if r.state in TERMINAL:
+                continue
+            dono = r.agent_id or ""
+            if not (privilegiado or dono == agente
+                    or dono in self.PODEM_FECHAR_DE_TERCEIROS):
+                continue
+            total += max(r.quantity - r.filled_qty, Decimal("0"))
+        return total
+
     def _autorizar_saida(self, ei) -> None:
         """Regras que só valem para VENDA. Declaradas, não implícitas."""
         proprio = self.ledger.lot_quantity(ei.instrument, ei.agent_id)
@@ -1249,10 +1410,16 @@ class ExecutionCoordinator:
                 f"nenhuma posição conhecida em {ei.instrument}: saída "
                 "automática recusada. Posição aberta fora do sistema precisa "
                 "ser adotada por reconciliação antes de ser encerrada")
-        if ei.quantity > disponivel:
+        # SAÍDAS EM VOO: o lote continua no livro até o fill chegar, então
+        # duas vendas ACK veriam o MESMO lote livre — a segunda só falharia
+        # na corretora, depois do dano. O que está comprometido conta.
+        em_voo = self._saidas_em_voo(ei.instrument, ei.agent_id)
+        livre = disponivel - em_voo
+        if ei.quantity > livre:
             raise ExecutionRefused(
                 f"saída de {ei.quantity} maior que o lote disponível "
-                f"({disponivel}) em {ei.instrument} para {ei.agent_id}")
+                f"({livre} livre de {disponivel}) em {ei.instrument} para "
+                f"{ei.agent_id}: {em_voo} já comprometido em vendas em voo")
 
     @staticmethod
     def _montar_registro(*, order_id: str, state, instrument: str, side: str,
@@ -1555,6 +1722,10 @@ class ExecutionCoordinator:
                 "agente": r.agente,
                 "reserva_id": r.reserva_id,
                 "procedencia": r.procedencia,
+                # Evidência NÃO resolvida sobrevive ao reinício: se a execução
+                # remota não fechou com o acumulado, a ordem continua exigindo
+                # reconciliação depois do restart (FIN-3).
+                "fills_unresolved": bool(getattr(r, "fills_unresolved", False)),
                 # Sem isto, uma saída cujo custo não está no livro perderia a
                 # referência no reinício: prejuízo de 10 viraria "lucro" do
                 # valor inteiro da venda.
@@ -1718,7 +1889,7 @@ class ExecutionCoordinator:
         except (KeyError, ValueError):
             return None
         ref = od.get("custo_referencia")
-        return self._montar_registro(
+        rec = self._montar_registro(
             order_id=od.get("order_id", ""), state=estado,
             instrument=od.get("instrumento", ""), side=od.get("lado", ""),
             quantity=Decimal(str(od.get("quantidade") or 0)),
@@ -1741,6 +1912,10 @@ class ExecutionCoordinator:
             primeiro_fill_em=od.get("primeiro_fill_em", ""),
             terminal_em=od.get("terminal_em", ""),
             atualizada_em=od.get("atualizada_em", ""))
+        # Documento ANTIGO (sem o campo) reidrata como resolvido: nunca se
+        # INVENTA evidência pendente, mas a que foi persistida é restaurada.
+        rec.fills_unresolved = bool(od.get("fills_unresolved"))
+        return rec
 
     def pending_reconciliation(self) -> list[OrderRecord]:
         return [r for r in self.orders.values() if r.needs_reconciliation]

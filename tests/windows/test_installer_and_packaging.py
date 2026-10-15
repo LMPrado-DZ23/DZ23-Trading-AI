@@ -171,12 +171,14 @@ class TestSettingsAndPaperHomologation:
     def test_live_trading_hard_locked_fail_closed(self):
         import os
 
-        from service.api.diagnostics import run_diagnostics
         assert os.environ.get("REAL_MONEY_EXECUTION", "false").lower() == "false"
 
-        # Verify diagnostics API reports live trading as locked
-        diag_res = run_diagnostics()
-        assert diag_res["checks"]["live_trading_locked"] is True
+        # V9-SEC-06: o stub /v1/diagnostics/run (resposta fixa, sem auth) foi
+        # eliminado; o bloqueio é afirmado na fonte real — o gate fail-closed
+        # do próprio serviço.
+        import service.app as m
+
+        assert m.MESA_LIVE_LIBERADA is False
 
     def test_ai_key_masking_in_settings(self, tmp_path, monkeypatch):
         monkeypatch.setenv("ACCESS_PASSWORD", "s3nh4")

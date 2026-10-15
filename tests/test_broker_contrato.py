@@ -174,6 +174,23 @@ class TestConsultaDeExecucoes:
         assert f["fill_id"] == "t-1" and f["quantity"] == Decimal("0.3")
         assert isinstance(f["price"], Decimal) and f["fee_currency"] == "USDT"
 
+    def test_all_fee_components_survive_the_adapter(self):
+        """`order.fee` é UM componente; uma taxa dividida em `fees[]` (parte
+        na moeda de cotação, parte numa moeda nativa) precisa chegar inteira.
+        Antes o adaptador lia apenas `t['fee']` e a moeda nativa sumia — o
+        custo reportado ficava menor do que o real."""
+        a = adaptador(self.ComTrades([
+            {"id": "t-1", "order": "ex-1", "symbol": "BTC/USDT", "side": "buy",
+             "amount": 0.3, "price": 100,
+             "fees": [{"cost": 0.03, "currency": "USDT"},
+                      {"cost": 0.001, "currency": "BNB"}],
+             "timestamp": 1}]))
+        fill = a.fetch_order_fills("coid-1", "ex-1")[0]
+        assert fill["fees"] == [
+            {"cost": Decimal("0.03"), "currency": "USDT"},
+            {"cost": Decimal("0.001"), "currency": "BNB"},
+        ], "a moeda nativa da taxa desapareceu no adaptador"
+
     def test_fill_without_identifier_is_refused(self):
         a = adaptador(self.ComTrades([
             {"order": "ex-1", "amount": 0.3, "price": 100}]))

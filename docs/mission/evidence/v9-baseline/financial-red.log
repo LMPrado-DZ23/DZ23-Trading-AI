@@ -1,0 +1,3084 @@
+V9 isolated child: dotenv disabled; synthetic in-memory financial tests only
+Traceback (most recent call last):
+  File "<string>", line 35, in <module>
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\config\__init__.py", line 201, in main
+    return _main(args=args, plugins=plugins, prog="pytest.main()")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\config\__init__.py", line 223, in _main
+    config = _prepareconfig(new_args, plugins, prog=prog)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\config\__init__.py", line 410, in _prepareconfig
+    config: Config = pluginmanager.hook.pytest_cmdline_parse(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+    raise exception
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 139, in _multicall
+    teardown.throw(exception)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\helpconfig.py", line 124, in pytest_cmdline_parse
+    config = yield
+             ^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\config\__init__.py", line 1232, in pytest_cmdline_parse
+    self.parse(args)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\config\__init__.py", line 1605, in parse
+    self.hook.pytest_load_initial_conftests(
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+    raise exception
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 139, in _multicall
+    teardown.throw(exception)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\warnings.py", line 129, in pytest_load_initial_conftests
+    return (yield)
+            ^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 116, in _multicall
+    next(function_gen)  # first yield
+    ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\capture.py", line 170, in pytest_load_initial_conftests
+    capman.start_global_capturing()
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\capture.py", line 773, in start_global_capturing
+    self._global_capturing = _get_multicapture(self._method)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\capture.py", line 714, in _get_multicapture
+    return MultiCapture(in_=FDCapture(0), out=FDCapture(1), err=FDCapture(2))
+                            ^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\capture.py", line 489, in __init__
+    self.tmpfile = open(os.devnull, encoding="utf-8")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 31, in audit
+  File "<string>", line 14, in reject
+RuntimeError: V9 sandbox blocked read outside authorized roots
+
+=== RED RUN 2: Python-level capture, unchanged filesystem guard ===
+V9 isolated child: dotenv disabled; synthetic in-memory financial tests only
+INTERNALERROR> Traceback (most recent call last):
+INTERNALERROR>   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\main.py", line 326, in wrap_session
+INTERNALERROR>     config._do_configure()
+INTERNALERROR>   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\config\__init__.py", line 1205, in _do_configure
+INTERNALERROR>     self.hook.pytest_configure.call_historic(kwargs=dict(config=self))
+INTERNALERROR>   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_hooks.py", line 534, in call_historic
+INTERNALERROR>     res = self._hookexec(self.name, self._hookimpls.copy(), kwargs, False)
+INTERNALERROR>           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+INTERNALERROR>   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+INTERNALERROR>     return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+INTERNALERROR>            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+INTERNALERROR>   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+INTERNALERROR>     raise exception
+INTERNALERROR>   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+INTERNALERROR>     res = hook_impl.function(*args)
+INTERNALERROR>           ^^^^^^^^^^^^^^^^^^^^^^^^^
+INTERNALERROR>   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\logging.py", line 653, in pytest_configure
+INTERNALERROR>     config.pluginmanager.register(LoggingPlugin(config), "logging-plugin")
+INTERNALERROR>                                   ^^^^^^^^^^^^^^^^^^^^^
+INTERNALERROR>   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\logging.py", line 690, in __init__
+INTERNALERROR>     self.log_file_handler = _FileHandler(
+INTERNALERROR>                             ^^^^^^^^^^^^^
+INTERNALERROR>   File "C:\Program Files\Python312\Lib\logging\__init__.py", line 1231, in __init__
+INTERNALERROR>     StreamHandler.__init__(self, self._open())
+INTERNALERROR>                                  ^^^^^^^^^^^^
+INTERNALERROR>   File "C:\Program Files\Python312\Lib\logging\__init__.py", line 1263, in _open
+INTERNALERROR>     return open_func(self.baseFilename, self.mode,
+INTERNALERROR>            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+INTERNALERROR>   File "<string>", line 29, in audit
+INTERNALERROR>   File "<string>", line 14, in reject
+INTERNALERROR> RuntimeError: V9 sandbox blocked write outside authorized outputs
+V9_SANDBOX_DENIED_EVENTS=['write outside authorized outputs']
+
+=== RED RUN 3: pytest internal log redirected to disposable sandbox ===
+V9 isolated child: dotenv disabled; synthetic in-memory financial tests only
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Scripts\python.exe
+rootdir: C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit
+configfile: pyproject.toml
+collecting ... collected 11 items
+
+..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin01_partial_sale_uses_the_same_fifo_cost_as_live_lots FAILED [  9%]
+..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin01_two_sales_leave_no_cost_or_phantom_pnl FAILED [ 18%]
+..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin01_guardian_exit_consumes_the_original_owners_lots FAILED [ 27%]
+..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin02_failed_ledger_post_can_be_replayed_exactly_once[partial] FAILED [ 36%]
+..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin02_failed_ledger_post_can_be_replayed_exactly_once[terminal] FAILED [ 45%]
+..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_terminal_partial_imports_fills_before_releasing_remainder[canceled] FAILED [ 54%]
+..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_terminal_partial_imports_fills_before_releasing_remainder[cancelled] FAILED [ 63%]
+..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_terminal_partial_imports_fills_before_releasing_remainder[expired] FAILED [ 72%]
+..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_unverified_terminal_partial_keeps_capital_reserved[canceled] FAILED [ 81%]
+..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_unverified_terminal_partial_keeps_capital_reserved[expired] FAILED [ 90%]
+..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_cumulative_trade_mismatch_cannot_turn_safe_on_repeat FAILED [100%]
+
+================================== FAILURES ===================================
+________ test_fin01_partial_sale_uses_the_same_fifo_cost_as_live_lots _________
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x00000231424C6F00>
+
+    def test_fin01_partial_sale_uses_the_same_fifo_cost_as_live_lots(desk):
+        """Catch average-cost posting paired with FIFO lot reconstruction."""
+        _two_price_entry(desk)
+        sale = _sell_order(desk)
+        _fill(desk, sale, "sell-first", price="150")
+    
+        # FIFO: sell the 100 lot for 150, retain the 200 lot, realize +50.
+>       assert _position_state(desk.ledger) == {
+            "quantity": D("1"), "posted_cost": D("200"),
+            "lot_quantity": D("1"), "lot_cost": D("200"),
+            "pnl": D("50"), "cash": D("1850"),
+        }
+E       AssertionError: assert {'quantity': Decimal('1'), 'posted_cost': Decimal('150.00000000'), 'lot_quantity': Decimal('1'), 'lot_cost': Decimal('200.00000000'), 'pnl': Decimal('0'), 'cash': Decimal('1850.00000000')} == {'quantity': Decimal('1'), 'posted_cost': Decimal('200'), 'lot_quantity': Decimal('1'), 'lot_cost': Decimal('200'), 'pnl': Decimal('50'), 'cash': Decimal('1850')}
+E         
+E         Common items:
+E         {'cash': Decimal('1850.00000000'),
+E          'lot_cost': Decimal('200.00000000'),
+E          'lot_quantity': Decimal('1'),
+E          'quantity': Decimal('1')}
+E         Differing items:
+E         {'pnl': Decimal('0')} != {'pnl': Decimal('50')}
+E         {'posted_cost': Decimal('150.00000000')} != {'posted_cost': Decimal('200')}
+E         
+E         Full diff:
+E           {
+E               'quantity': Decimal('1'),
+E         -     'posted_cost': Decimal('200'),
+E         ?                             ^
+E         +     'posted_cost': Decimal('150.00000000'),
+E         ?                             ^^^^^^^^^^
+E               'lot_quantity': Decimal('1'),
+E         -     'lot_cost': Decimal('200'),
+E         +     'lot_cost': Decimal('200.00000000'),
+E         ?                             +++++++++
+E         -     'pnl': Decimal('50'),
+E         ?                     -
+E         +     'pnl': Decimal('0'),
+E         -     'cash': Decimal('1850'),
+E         +     'cash': Decimal('1850.00000000'),
+E         ?                          +++++++++
+E           }
+
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py:130: AssertionError
+______________ test_fin01_two_sales_leave_no_cost_or_phantom_pnl ______________
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x00000231424C2090>
+
+    def test_fin01_two_sales_leave_no_cost_or_phantom_pnl(desk):
+        """Catch a negative POSITION balance hidden by open_positions_detail."""
+        _two_price_entry(desk)
+        sale = _sell_order(desk)
+        _fill(desk, sale, "sell-first", price="150")
+        _fill(desk, sale, "sell-second", price="150")
+    
+        assert sale.state is OrderState.FILLED
+        assert sale.filled_qty == D("2")
+        assert desk.ledger.is_balanced()  # Double entry alone cannot prove correctness.
+        # 300 paid, 300 received: zero remaining cost and zero total P&L.
+>       assert _position_state(desk.ledger) == {
+            "quantity": D("0"), "posted_cost": D("0"),
+            "lot_quantity": D("0"), "lot_cost": D("0"),
+            "pnl": D("0"), "cash": D("2000"),
+        }
+E       AssertionError: assert {'quantity': Decimal('0'), 'posted_cost': Decimal('-50.00000000'), 'lot_quantity': Decimal('0'), 'lot_cost': Decimal('0E-8'), 'pnl': Decimal('-50.00000000'), 'cash': Decimal('2000.00000000')} == {'quantity': Decimal('0'), 'posted_cost': Decimal('0'), 'lot_quantity': Decimal('0'), 'lot_cost': Decimal('0'), 'pnl': Decimal('0'), 'cash': Decimal('2000')}
+E         
+E         Common items:
+E         {'cash': Decimal('2000.00000000'),
+E          'lot_cost': Decimal('0E-8'),
+E          'lot_quantity': Decimal('0'),
+E          'quantity': Decimal('0')}
+E         Differing items:
+E         {'pnl': Decimal('-50.00000000')} != {'pnl': Decimal('0')}
+E         {'posted_cost': Decimal('-50.00000000')} != {'posted_cost': Decimal('0')}
+E         
+E         Full diff:
+E           {
+E               'quantity': Decimal('0'),
+E         -     'posted_cost': Decimal('0'),
+E         +     'posted_cost': Decimal('-50.00000000'),
+E         ?                             +++++++++++
+E               'lot_quantity': Decimal('0'),
+E         -     'lot_cost': Decimal('0'),
+E         +     'lot_cost': Decimal('0E-8'),
+E         ?                           +++
+E         -     'pnl': Decimal('0'),
+E         +     'pnl': Decimal('-50.00000000'),
+E         ?                     +++++++++++
+E         -     'cash': Decimal('2000'),
+E         +     'cash': Decimal('2000.00000000'),
+E         ?                          +++++++++
+E           }
+
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py:148: AssertionError
+_________ test_fin01_guardian_exit_consumes_the_original_owners_lots __________
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x00000231424C1BE0>
+
+    def test_fin01_guardian_exit_consumes_the_original_owners_lots(desk):
+        """Catch guardian sales that close aggregate inventory but leave owner lots."""
+        # Seed two owners using real ledger transactions, as in test_crash_restart.
+        for agent, price in (("trader-A", "100"), ("trader-B", "200")):
+            desk.ledger.fill_buy(
+                INSTRUMENT, D("1"), D(price), D("0"), reserved=D("0"),
+                agent_id=agent, ref=f"seed-{agent}",
+            )
+        assert desk.ledger.position_quantity(INSTRUMENT) == D("2")
+        sale = _sell_order(desk, agent="position-guardian")
+        _fill(desk, sale, "guardian-sale", price="150", quantity="2")
+    
+        assert sale.state is OrderState.FILLED
+        assert desk.ledger.is_balanced()
+        observed = _position_state(desk.ledger)
+        for agent in ("trader-A", "trader-B"):
+            observed[f"{agent}_quantity"] = desk.ledger.lot_quantity(INSTRUMENT, agent)
+            observed[f"{agent}_cost"] = desk.ledger.lot_cost(INSTRUMENT, agent)
+>       assert observed == {
+            "quantity": D("0"), "posted_cost": D("0"),
+            "lot_quantity": D("0"), "lot_cost": D("0"),
+            "pnl": D("0"), "cash": D("2000"),
+            "trader-A_quantity": D("0"), "trader-A_cost": D("0"),
+            "trader-B_quantity": D("0"), "trader-B_cost": D("0"),
+        }
+E       AssertionError: assert {'quantity': Decimal('0'), 'posted_cost': Decimal('0E-8'), 'lot_quantity': Decimal('2'), 'lot_cost': Decimal('300.00000000'), 'pnl': Decimal('0'), 'cash': Decimal('2000.00000000'), 'trader-A_quantity': Decimal('1'), 'trader-A_cost': Decimal('100.00000000'), 'trader-B_quantity': Decimal('1'), 'trader-B_cost': Decimal('200.00000000')} == {'quantity': Decimal('0'), 'posted_cost': Decimal('0'), 'lot_quantity': Decimal('0'), 'lot_cost': Decimal('0'), 'pnl': Decimal('0'), 'cash': Decimal('2000'), 'trader-A_quantity': Decimal('0'), 'trader-A_cost': Decimal('0'), 'trader-B_quantity': Decimal('0'), 'trader-B_cost': Decimal('0')}
+E         
+E         Common items:
+E         {'cash': Decimal('2000.00000000'),
+E          'pnl': Decimal('0'),
+E          'posted_cost': Decimal('0E-8'),
+E          'quantity': Decimal('0')}
+E         Differing items:
+E         {'trader-A_quantity': Decimal('1')} != {'trader-A_quantity': Decimal('0')}
+E         {'lot_cost': Decimal('300.00000000')} != {'lot_cost': Decimal('0')}
+E         {'lot_quantity': Decimal('2')} != {'lot_quantity': Decimal('0')}
+E         {'trader-B_cost': Decimal('200.00000000')} != {'trader-B_cost': Decimal('0')}
+E         {'trader-A_cost': Decimal('100.00000000')} != {'trader-A_cost': Decimal('0')}
+E         {'trader-B_quantity': Decimal('1')} != {'trader-B_quantity': Decimal('0')}
+E         
+E         Full diff:
+E           {
+E               'quantity': Decimal('0'),
+E         -     'posted_cost': Decimal('0'),
+E         +     'posted_cost': Decimal('0E-8'),
+E         ?                              +++
+E         -     'lot_quantity': Decimal('0'),
+E         ?                              ^
+E         +     'lot_quantity': Decimal('2'),
+E         ?                              ^
+E         -     'lot_cost': Decimal('0'),
+E         +     'lot_cost': Decimal('300.00000000'),
+E         ?                          +++++++++++
+E               'pnl': Decimal('0'),
+E         -     'cash': Decimal('2000'),
+E         +     'cash': Decimal('2000.00000000'),
+E         ?                          +++++++++
+E         -     'trader-A_quantity': Decimal('0'),
+E         ?                                   ^
+E         +     'trader-A_quantity': Decimal('1'),
+E         ?                                   ^
+E         -     'trader-A_cost': Decimal('0'),
+E         +     'trader-A_cost': Decimal('100.00000000'),
+E         ?                               +++++++++++
+E         -     'trader-B_quantity': Decimal('0'),
+E         ?                                   ^
+E         +     'trader-B_quantity': Decimal('1'),
+E         ?                                   ^
+E         -     'trader-B_cost': Decimal('0'),
+E         +     'trader-B_cost': Decimal('200.00000000'),
+E         ?                               +++++++++++
+E           }
+
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py:173: AssertionError
+_____ test_fin02_failed_ledger_post_can_be_replayed_exactly_once[partial] _____
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x00000231424C2060>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000231424C3C20>
+notional = '220', remaining = '119', cash = '1780', released = '0'
+state = <OrderState.PARTIALLY_FILLED: 'partially_filled'>
+
+    @pytest.mark.parametrize(
+        "notional,remaining,cash,released,state",
+        [
+            ("220", "119", "1780", "0", OrderState.PARTIALLY_FILLED),
+            ("110", "0", "1899", "9", OrderState.FILLED),
+        ], ids=["partial", "terminal"],
+    )
+    def test_fin02_failed_ledger_post_can_be_replayed_exactly_once(
+        desk, monkeypatch, notional, remaining, cash, released, state,
+    ):
+        """Catch premature seen_fills and non-atomic risk consumption on failed post."""
+        rec = _buy_order(desk, notional=notional, price="110")
+        version = desk.oms_version
+        real_fill_buy = desk.ledger.fill_buy
+        fail_next = True
+    
+        def fail_once(*args, **kwargs):
+            nonlocal fail_next
+            if fail_next:
+                fail_next = False
+                raise LedgerError("V9 one-shot failure before ledger posting")
+            return real_fill_buy(*args, **kwargs)
+    
+        monkeypatch.setattr(desk.ledger, "fill_buy", fail_once)
+        with pytest.raises(LedgerError, match="V9 one-shot failure"):
+            _fill(desk, rec, "retry-fill", price="100", fee="1")
+    
+        _fill(desk, rec, "retry-fill", price="100", fee="1")
+        after_retry = deepcopy(desk.snapshot_estado())
+        _fill(desk, rec, "retry-fill", price="100", fee="1")
+        assert desk.snapshot_estado() == after_retry, "duplicate replay changed durable state"
+    
+        reservation = desk.risk.reserva(rec.reserva_id)
+        conclusion = desk.risk.incidentes_doc()["conclusoes"].get(rec.reserva_id, {})
+        consumed = (reservation.consumed_amount if reservation else
+                    D(conclusion.get("consumed_amount", "0")))
+        risk_quantity = (reservation.filled_quantity if reservation else
+                         D(conclusion.get("filled_quantity", "0")))
+        release_amount = sum(
+            (e.amount for tx in desk.ledger.transactions if tx.kind == "release"
+             for e in tx.entries if e.account == "CASH:USDT"), D("0"),
+        )
+        observed = {
+            "quantity": desk.ledger.position_quantity(INSTRUMENT),
+            "cost": desk.ledger.invested_cost(), "cash": desk.ledger.cash(),
+            "fees": desk.ledger.balance("FEES:USDT"),
+            "ledger_reserved": desk.ledger.reserved_cash(rec.reserva_id),
+            "risk_reserved": desk.risk.reserved_total,
+            "risk_consumed": consumed, "risk_filled": risk_quantity,
+            "released": release_amount,
+            "buy_posts": sum(tx.kind == "fill_buy" for tx in desk.ledger.transactions),
+            "order_filled": rec.filled_qty, "order_average": rec.avg_price,
+            "order_fees": rec.fees, "order_state": rec.state,
+            "seen": rec.seen_fills, "oms_updates": desk.oms_version - version,
+            "incidents": len(desk.risk.incidentes_doc()["incidentes"]),
+        }
+        # One unit costs 100 + 1 fee. Terminal budget 110 returns exactly 9;
+        # partial budget 220 retains 119 for the still-open second unit.
+>       assert observed == {
+            "quantity": D("1"), "cost": D("100"), "cash": D(cash),
+            "fees": D("1"), "ledger_reserved": D(remaining),
+            "risk_reserved": D(remaining), "risk_consumed": D("101"),
+            "risk_filled": D("1"), "released": D(released), "buy_posts": 1,
+            "order_filled": D("1"), "order_average": D("100"),
+            "order_fees": D("1"), "order_state": state,
+            "seen": {"retry-fill"}, "oms_updates": 1, "incidents": 0,
+        }
+E       AssertionError: assert {'quantity': Decimal('0'), 'cost': Decimal('0'), 'cash': Decimal('1780.00000000'), 'fees': Decimal('0'), 'ledger_reserved': Decimal('220.00000000'), 'risk_reserved': Decimal('119.00000000'), 'risk_consumed': Decimal('101.00000000'), 'risk_filled': Decimal('1'), 'released': Decimal('0'), 'buy_posts': 0, 'order_filled': Decimal('0'), 'order_average': Decimal('0'), 'order_fees': Decimal('0'), 'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>, 'seen': {'retry-fill'}, 'oms_updates': 0, 'incidents': 0} == {'quantity': Decimal('1'), 'cost': Decimal('100'), 'cash': Decimal('1780'), 'fees': Decimal('1'), 'ledger_reserved': Decimal('119'), 'risk_reserved': Decimal('119'), 'risk_consumed': Decimal('101'), 'risk_filled': Decimal('1'), 'released': Decimal('0'), 'buy_posts': 1, 'order_filled': Decimal('1'), 'order_average': Decimal('100'), 'order_fees': Decimal('1'), 'order_state': <OrderState.PARTIALLY_FILLED: 'partially_filled'>, 'seen': {'retry-fill'}, 'oms_updates': 1, 'incidents': 0}
+E         
+E         Common items:
+E         {'cash': Decimal('1780.00000000'),
+E          'incidents': 0,
+E          'released': Decimal('0'),
+E          'risk_consumed': Decimal('101.00000000'),
+E          'risk_filled': Decimal('1'),
+E          'risk_reserved': Decimal('119.00000000'),
+E          'seen': {'retry-fill'}}
+E         Differing items:
+E         {'buy_posts': 0} != {'buy_posts': 1}
+E         {'order_average': Decimal('0')} != {'order_average': Decimal('100')}
+E         {'fees': Decimal('0')} != {'fees': Decimal('1')}
+E         {'ledger_reserved': Decimal('220.00000000')} != {'ledger_reserved': Decimal('119')}
+E         {'order_fees': Decimal('0')} != {'order_fees': Decimal('1')}
+E         {'quantity': Decimal('0')} != {'quantity': Decimal('1')}
+E         {'order_filled': Decimal('0')} != {'order_filled': Decimal('1')}
+E         {'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>} != {'order_state': <OrderState.PARTIALLY_FILLED: 'partially_filled'>}
+E         {'oms_updates': 0} != {'oms_updates': 1}
+E         {'cost': Decimal('0')} != {'cost': Decimal('100')}
+E         
+E         Full diff:
+E           {
+E         -     'quantity': Decimal('1'),
+E         ?                          ^
+E         +     'quantity': Decimal('0'),
+E         ?                          ^
+E         -     'cost': Decimal('100'),
+E         ?                      --
+E         +     'cost': Decimal('0'),
+E         -     'cash': Decimal('1780'),
+E         +     'cash': Decimal('1780.00000000'),
+E         ?                          +++++++++
+E         -     'fees': Decimal('1'),
+E         ?                      ^
+E         +     'fees': Decimal('0'),
+E         ?                      ^
+E         -     'ledger_reserved': Decimal('119'),
+E         ?                                 ^^^
+E         +     'ledger_reserved': Decimal('220.00000000'),
+E         ?                                 ^^^^^^^^^^^^
+E         -     'risk_reserved': Decimal('119'),
+E         +     'risk_reserved': Decimal('119.00000000'),
+E         ?                                  +++++++++
+E         -     'risk_consumed': Decimal('101'),
+E         +     'risk_consumed': Decimal('101.00000000'),
+E         ?                                  +++++++++
+E               'risk_filled': Decimal('1'),
+E               'released': Decimal('0'),
+E         -     'buy_posts': 1,
+E         ?                  ^
+E         +     'buy_posts': 0,
+E         ?                  ^
+E         -     'order_filled': Decimal('1'),
+E         ?                              ^
+E         +     'order_filled': Decimal('0'),
+E         ?                              ^
+E         -     'order_average': Decimal('100'),
+E         ?                               --
+E         +     'order_average': Decimal('0'),
+E         -     'order_fees': Decimal('1'),
+E         ?                            ^
+E         +     'order_fees': Decimal('0'),
+E         ?                            ^
+E         -     'order_state': <OrderState.PARTIALLY_FILLED: 'partially_filled'>,
+E         +     'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>,
+E               'seen': {
+E                   'retry-fill',
+E               },
+E         -     'oms_updates': 1,
+E         ?                    ^
+E         +     'oms_updates': 0,
+E         ?                    ^
+E               'incidents': 0,
+E           }
+
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py:240: AssertionError
+____ test_fin02_failed_ledger_post_can_be_replayed_exactly_once[terminal] _____
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x00000231424C3590>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000231424C2240>
+notional = '110', remaining = '0', cash = '1899', released = '9'
+state = <OrderState.FILLED: 'filled'>
+
+    @pytest.mark.parametrize(
+        "notional,remaining,cash,released,state",
+        [
+            ("220", "119", "1780", "0", OrderState.PARTIALLY_FILLED),
+            ("110", "0", "1899", "9", OrderState.FILLED),
+        ], ids=["partial", "terminal"],
+    )
+    def test_fin02_failed_ledger_post_can_be_replayed_exactly_once(
+        desk, monkeypatch, notional, remaining, cash, released, state,
+    ):
+        """Catch premature seen_fills and non-atomic risk consumption on failed post."""
+        rec = _buy_order(desk, notional=notional, price="110")
+        version = desk.oms_version
+        real_fill_buy = desk.ledger.fill_buy
+        fail_next = True
+    
+        def fail_once(*args, **kwargs):
+            nonlocal fail_next
+            if fail_next:
+                fail_next = False
+                raise LedgerError("V9 one-shot failure before ledger posting")
+            return real_fill_buy(*args, **kwargs)
+    
+        monkeypatch.setattr(desk.ledger, "fill_buy", fail_once)
+        with pytest.raises(LedgerError, match="V9 one-shot failure"):
+            _fill(desk, rec, "retry-fill", price="100", fee="1")
+    
+        _fill(desk, rec, "retry-fill", price="100", fee="1")
+        after_retry = deepcopy(desk.snapshot_estado())
+        _fill(desk, rec, "retry-fill", price="100", fee="1")
+        assert desk.snapshot_estado() == after_retry, "duplicate replay changed durable state"
+    
+        reservation = desk.risk.reserva(rec.reserva_id)
+        conclusion = desk.risk.incidentes_doc()["conclusoes"].get(rec.reserva_id, {})
+        consumed = (reservation.consumed_amount if reservation else
+                    D(conclusion.get("consumed_amount", "0")))
+        risk_quantity = (reservation.filled_quantity if reservation else
+                         D(conclusion.get("filled_quantity", "0")))
+        release_amount = sum(
+            (e.amount for tx in desk.ledger.transactions if tx.kind == "release"
+             for e in tx.entries if e.account == "CASH:USDT"), D("0"),
+        )
+        observed = {
+            "quantity": desk.ledger.position_quantity(INSTRUMENT),
+            "cost": desk.ledger.invested_cost(), "cash": desk.ledger.cash(),
+            "fees": desk.ledger.balance("FEES:USDT"),
+            "ledger_reserved": desk.ledger.reserved_cash(rec.reserva_id),
+            "risk_reserved": desk.risk.reserved_total,
+            "risk_consumed": consumed, "risk_filled": risk_quantity,
+            "released": release_amount,
+            "buy_posts": sum(tx.kind == "fill_buy" for tx in desk.ledger.transactions),
+            "order_filled": rec.filled_qty, "order_average": rec.avg_price,
+            "order_fees": rec.fees, "order_state": rec.state,
+            "seen": rec.seen_fills, "oms_updates": desk.oms_version - version,
+            "incidents": len(desk.risk.incidentes_doc()["incidentes"]),
+        }
+        # One unit costs 100 + 1 fee. Terminal budget 110 returns exactly 9;
+        # partial budget 220 retains 119 for the still-open second unit.
+>       assert observed == {
+            "quantity": D("1"), "cost": D("100"), "cash": D(cash),
+            "fees": D("1"), "ledger_reserved": D(remaining),
+            "risk_reserved": D(remaining), "risk_consumed": D("101"),
+            "risk_filled": D("1"), "released": D(released), "buy_posts": 1,
+            "order_filled": D("1"), "order_average": D("100"),
+            "order_fees": D("1"), "order_state": state,
+            "seen": {"retry-fill"}, "oms_updates": 1, "incidents": 0,
+        }
+E       AssertionError: assert {'quantity': Decimal('0'), 'cost': Decimal('0'), 'cash': Decimal('1890.00000000'), 'fees': Decimal('0'), 'ledger_reserved': Decimal('110.00000000'), 'risk_reserved': Decimal('0'), 'risk_consumed': Decimal('101.00000000'), 'risk_filled': Decimal('1'), 'released': Decimal('0'), 'buy_posts': 0, 'order_filled': Decimal('0'), 'order_average': Decimal('0'), 'order_fees': Decimal('0'), 'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>, 'seen': {'retry-fill'}, 'oms_updates': 0, 'incidents': 0} == {'quantity': Decimal('1'), 'cost': Decimal('100'), 'cash': Decimal('1899'), 'fees': Decimal('1'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'risk_consumed': Decimal('101'), 'risk_filled': Decimal('1'), 'released': Decimal('9'), 'buy_posts': 1, 'order_filled': Decimal('1'), 'order_average': Decimal('100'), 'order_fees': Decimal('1'), 'order_state': <OrderState.FILLED: 'filled'>, 'seen': {'retry-fill'}, 'oms_updates': 1, 'incidents': 0}
+E         
+E         Common items:
+E         {'incidents': 0,
+E          'risk_consumed': Decimal('101.00000000'),
+E          'risk_filled': Decimal('1'),
+E          'risk_reserved': Decimal('0'),
+E          'seen': {'retry-fill'}}
+E         Differing items:
+E         {'buy_posts': 0} != {'buy_posts': 1}
+E         {'order_average': Decimal('0')} != {'order_average': Decimal('100')}
+E         {'fees': Decimal('0')} != {'fees': Decimal('1')}
+E         {'released': Decimal('0')} != {'released': Decimal('9')}
+E         {'ledger_reserved': Decimal('110.00000000')} != {'ledger_reserved': Decimal('0')}
+E         {'cash': Decimal('1890.00000000')} != {'cash': Decimal('1899')}
+E         {'order_fees': Decimal('0')} != {'order_fees': Decimal('1')}
+E         {'quantity': Decimal('0')} != {'quantity': Decimal('1')}
+E         {'order_filled': Decimal('0')} != {'order_filled': Decimal('1')}
+E         {'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>} != {'order_state': <OrderState.FILLED: 'filled'>}
+E         {'oms_updates': 0} != {'oms_updates': 1}
+E         {'cost': Decimal('0')} != {'cost': Decimal('100')}
+E         
+E         Full diff:
+E           {
+E         -     'quantity': Decimal('1'),
+E         ?                          ^
+E         +     'quantity': Decimal('0'),
+E         ?                          ^
+E         -     'cost': Decimal('100'),
+E         ?                      --
+E         +     'cost': Decimal('0'),
+E         -     'cash': Decimal('1899'),
+E         ?                         ^
+E         +     'cash': Decimal('1890.00000000'),
+E         ?                         ^^^^^^^^^^
+E         -     'fees': Decimal('1'),
+E         ?                      ^
+E         +     'fees': Decimal('0'),
+E         ?                      ^
+E         -     'ledger_reserved': Decimal('0'),
+E         +     'ledger_reserved': Decimal('110.00000000'),
+E         ?                                 +++++++++++
+E               'risk_reserved': Decimal('0'),
+E         -     'risk_consumed': Decimal('101'),
+E         +     'risk_consumed': Decimal('101.00000000'),
+E         ?                                  +++++++++
+E               'risk_filled': Decimal('1'),
+E         -     'released': Decimal('9'),
+E         ?                          ^
+E         +     'released': Decimal('0'),
+E         ?                          ^
+E         -     'buy_posts': 1,
+E         ?                  ^
+E         +     'buy_posts': 0,
+E         ?                  ^
+E         -     'order_filled': Decimal('1'),
+E         ?                              ^
+E         +     'order_filled': Decimal('0'),
+E         ?                              ^
+E         -     'order_average': Decimal('100'),
+E         ?                               --
+E         +     'order_average': Decimal('0'),
+E         -     'order_fees': Decimal('1'),
+E         ?                            ^
+E         +     'order_fees': Decimal('0'),
+E         ?                            ^
+E         -     'order_state': <OrderState.FILLED: 'filled'>,
+E         ?                                ^^^      ^^ ^
+E         +     'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>,
+E         ?                                ^^^^^^   +++   ^^^^^^ ^^^
+E               'seen': {
+E                   'retry-fill',
+E               },
+E         -     'oms_updates': 1,
+E         ?                    ^
+E         +     'oms_updates': 0,
+E         ?                    ^
+E               'incidents': 0,
+E           }
+
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py:240: AssertionError
+_ test_fin03_terminal_partial_imports_fills_before_releasing_remainder[canceled] _
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x00000231424C3530>
+status = 'canceled'
+
+    @pytest.mark.parametrize("status", ["canceled", "cancelled", "expired"])
+    def test_fin03_terminal_partial_imports_fills_before_releasing_remainder(desk, status):
+        """Catch terminal handling that refunds the whole reservation and loses a fill."""
+        rec = _buy_order(desk)
+        assert rec.quantidade == D("2")
+        assert desk.ledger.reserved_cash(rec.reserva_id) == D("200")
+        reports = [_reconcile(
+            desk, rec, status=status, cumulative="1", remote_quantity="1",
+            fills=[_remote_fill("1")],
+        ) for _ in range(2)]
+        conclusion = desk.risk.incidentes_doc()["conclusoes"].get(rec.reserva_id, {})
+        observed = {
+            "quantity": desk.ledger.position_quantity(INSTRUMENT),
+            "cost": desk.ledger.invested_cost(), "cash": desk.ledger.cash(),
+            "ledger_reserved": desk.ledger.reserved_cash(rec.reserva_id),
+            "risk_reserved": desk.risk.reserved_total,
+            "consumed": D(conclusion.get("consumed_amount", "0")),
+            "released": D(conclusion.get("sobra_liberada", "0")),
+            "filled": rec.filled_qty, "seen": rec.seen_fills, "open": rec.open,
+            "posting_order": [tx.kind for tx in desk.ledger.transactions],
+            "safe": [report["seguro"] for report in reports],
+        }
+>       assert observed == {
+            "quantity": D("1"), "cost": D("100"), "cash": D("1900"),
+            "ledger_reserved": D("0"), "risk_reserved": D("0"),
+            "consumed": D("100"), "released": D("100"),
+            "filled": D("1"), "seen": {"remote-trade"}, "open": False,
+            "posting_order": ["opening", "reserve", "fill_buy", "release"],
+            "safe": [True, True],
+        }
+E       AssertionError: assert {'quantity': Decimal('0'), 'cost': Decimal('0'), 'cash': Decimal('2000.00000000'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('0'), 'released': Decimal('200.00000000'), 'filled': Decimal('0'), 'seen': set(), 'open': False, 'posting_order': ['opening', 'reserve', 'release'], 'safe': [False, False]} == {'quantity': Decimal('1'), 'cost': Decimal('100'), 'cash': Decimal('1900'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('100'), 'released': Decimal('100'), 'filled': Decimal('1'), 'seen': {'remote-trade'}, 'open': False, 'posting_order': ['opening', 'reserve', 'fill_buy', 'release'], 'safe': [True, True]}
+E         
+E         Common items:
+E         {'ledger_reserved': Decimal('0'), 'open': False, 'risk_reserved': Decimal('0')}
+E         Differing items:
+E         {'released': Decimal('200.00000000')} != {'released': Decimal('100')}
+E         {'seen': set()} != {'seen': {'remote-trade'}}
+E         {'consumed': Decimal('0')} != {'consumed': Decimal('100')}
+E         {'quantity': Decimal('0')} != {'quantity': Decimal('1')}
+E         {'safe': [False, False]} != {'safe': [True, True]}
+E         {'posting_order': ['opening', 'reserve', 'release']} != {'posting_order': ['opening', 'reserve', 'fill_buy', 'release']}
+E         {'cash': Decimal('2000.00000000')} != {'cash': Decimal('1900')}
+E         {'cost': Decimal('0')} != {'cost': Decimal('100')}
+E         {'filled': Decimal('0')} != {'filled': Decimal('1')}
+E         
+E         Full diff:
+E           {
+E         -     'quantity': Decimal('1'),
+E         ?                          ^
+E         +     'quantity': Decimal('0'),
+E         ?                          ^
+E         -     'cost': Decimal('100'),
+E         ?                      --
+E         +     'cost': Decimal('0'),
+E         -     'cash': Decimal('1900'),
+E         ?                      ^^
+E         +     'cash': Decimal('2000.00000000'),
+E         ?                      ^^^^^^^^^^^
+E               'ledger_reserved': Decimal('0'),
+E               'risk_reserved': Decimal('0'),
+E         -     'consumed': Decimal('100'),
+E         ?                          --
+E         +     'consumed': Decimal('0'),
+E         -     'released': Decimal('100'),
+E         ?                          ^
+E         +     'released': Decimal('200.00000000'),
+E         ?                          ^^^^^^^^^^
+E         -     'filled': Decimal('1'),
+E         ?                        ^
+E         +     'filled': Decimal('0'),
+E         ?                        ^
+E         -     'seen': {
+E         ?             ^
+E         +     'seen': set(),
+E         ?             ^^^^^^
+E         -         'remote-trade',
+E         -     },
+E               'open': False,
+E               'posting_order': [
+E                   'opening',
+E                   'reserve',
+E         -         'fill_buy',
+E                   'release',
+E               ],
+E               'safe': [
+E         -         True,
+E         -         True,
+E         +         False,
+E         +         False,
+E               ],
+E           }
+
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py:306: AssertionError
+_ test_fin03_terminal_partial_imports_fills_before_releasing_remainder[cancelled] _
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x00000231424C0920>
+status = 'cancelled'
+
+    @pytest.mark.parametrize("status", ["canceled", "cancelled", "expired"])
+    def test_fin03_terminal_partial_imports_fills_before_releasing_remainder(desk, status):
+        """Catch terminal handling that refunds the whole reservation and loses a fill."""
+        rec = _buy_order(desk)
+        assert rec.quantidade == D("2")
+        assert desk.ledger.reserved_cash(rec.reserva_id) == D("200")
+        reports = [_reconcile(
+            desk, rec, status=status, cumulative="1", remote_quantity="1",
+            fills=[_remote_fill("1")],
+        ) for _ in range(2)]
+        conclusion = desk.risk.incidentes_doc()["conclusoes"].get(rec.reserva_id, {})
+        observed = {
+            "quantity": desk.ledger.position_quantity(INSTRUMENT),
+            "cost": desk.ledger.invested_cost(), "cash": desk.ledger.cash(),
+            "ledger_reserved": desk.ledger.reserved_cash(rec.reserva_id),
+            "risk_reserved": desk.risk.reserved_total,
+            "consumed": D(conclusion.get("consumed_amount", "0")),
+            "released": D(conclusion.get("sobra_liberada", "0")),
+            "filled": rec.filled_qty, "seen": rec.seen_fills, "open": rec.open,
+            "posting_order": [tx.kind for tx in desk.ledger.transactions],
+            "safe": [report["seguro"] for report in reports],
+        }
+>       assert observed == {
+            "quantity": D("1"), "cost": D("100"), "cash": D("1900"),
+            "ledger_reserved": D("0"), "risk_reserved": D("0"),
+            "consumed": D("100"), "released": D("100"),
+            "filled": D("1"), "seen": {"remote-trade"}, "open": False,
+            "posting_order": ["opening", "reserve", "fill_buy", "release"],
+            "safe": [True, True],
+        }
+E       AssertionError: assert {'quantity': Decimal('0'), 'cost': Decimal('0'), 'cash': Decimal('2000.00000000'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('0'), 'released': Decimal('200.00000000'), 'filled': Decimal('0'), 'seen': set(), 'open': False, 'posting_order': ['opening', 'reserve', 'release'], 'safe': [False, False]} == {'quantity': Decimal('1'), 'cost': Decimal('100'), 'cash': Decimal('1900'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('100'), 'released': Decimal('100'), 'filled': Decimal('1'), 'seen': {'remote-trade'}, 'open': False, 'posting_order': ['opening', 'reserve', 'fill_buy', 'release'], 'safe': [True, True]}
+E         
+E         Common items:
+E         {'ledger_reserved': Decimal('0'), 'open': False, 'risk_reserved': Decimal('0')}
+E         Differing items:
+E         {'released': Decimal('200.00000000')} != {'released': Decimal('100')}
+E         {'seen': set()} != {'seen': {'remote-trade'}}
+E         {'consumed': Decimal('0')} != {'consumed': Decimal('100')}
+E         {'quantity': Decimal('0')} != {'quantity': Decimal('1')}
+E         {'safe': [False, False]} != {'safe': [True, True]}
+E         {'posting_order': ['opening', 'reserve', 'release']} != {'posting_order': ['opening', 'reserve', 'fill_buy', 'release']}
+E         {'cash': Decimal('2000.00000000')} != {'cash': Decimal('1900')}
+E         {'cost': Decimal('0')} != {'cost': Decimal('100')}
+E         {'filled': Decimal('0')} != {'filled': Decimal('1')}
+E         
+E         Full diff:
+E           {
+E         -     'quantity': Decimal('1'),
+E         ?                          ^
+E         +     'quantity': Decimal('0'),
+E         ?                          ^
+E         -     'cost': Decimal('100'),
+E         ?                      --
+E         +     'cost': Decimal('0'),
+E         -     'cash': Decimal('1900'),
+E         ?                      ^^
+E         +     'cash': Decimal('2000.00000000'),
+E         ?                      ^^^^^^^^^^^
+E               'ledger_reserved': Decimal('0'),
+E               'risk_reserved': Decimal('0'),
+E         -     'consumed': Decimal('100'),
+E         ?                          --
+E         +     'consumed': Decimal('0'),
+E         -     'released': Decimal('100'),
+E         ?                          ^
+E         +     'released': Decimal('200.00000000'),
+E         ?                          ^^^^^^^^^^
+E         -     'filled': Decimal('1'),
+E         ?                        ^
+E         +     'filled': Decimal('0'),
+E         ?                        ^
+E         -     'seen': {
+E         ?             ^
+E         +     'seen': set(),
+E         ?             ^^^^^^
+E         -         'remote-trade',
+E         -     },
+E               'open': False,
+E               'posting_order': [
+E                   'opening',
+E                   'reserve',
+E         -         'fill_buy',
+E                   'release',
+E               ],
+E               'safe': [
+E         -         True,
+E         -         True,
+E         +         False,
+E         +         False,
+E               ],
+E           }
+
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py:306: AssertionError
+_ test_fin03_terminal_partial_imports_fills_before_releasing_remainder[expired] _
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x00000231424C0C20>
+status = 'expired'
+
+    @pytest.mark.parametrize("status", ["canceled", "cancelled", "expired"])
+    def test_fin03_terminal_partial_imports_fills_before_releasing_remainder(desk, status):
+        """Catch terminal handling that refunds the whole reservation and loses a fill."""
+        rec = _buy_order(desk)
+        assert rec.quantidade == D("2")
+        assert desk.ledger.reserved_cash(rec.reserva_id) == D("200")
+        reports = [_reconcile(
+            desk, rec, status=status, cumulative="1", remote_quantity="1",
+            fills=[_remote_fill("1")],
+        ) for _ in range(2)]
+        conclusion = desk.risk.incidentes_doc()["conclusoes"].get(rec.reserva_id, {})
+        observed = {
+            "quantity": desk.ledger.position_quantity(INSTRUMENT),
+            "cost": desk.ledger.invested_cost(), "cash": desk.ledger.cash(),
+            "ledger_reserved": desk.ledger.reserved_cash(rec.reserva_id),
+            "risk_reserved": desk.risk.reserved_total,
+            "consumed": D(conclusion.get("consumed_amount", "0")),
+            "released": D(conclusion.get("sobra_liberada", "0")),
+            "filled": rec.filled_qty, "seen": rec.seen_fills, "open": rec.open,
+            "posting_order": [tx.kind for tx in desk.ledger.transactions],
+            "safe": [report["seguro"] for report in reports],
+        }
+>       assert observed == {
+            "quantity": D("1"), "cost": D("100"), "cash": D("1900"),
+            "ledger_reserved": D("0"), "risk_reserved": D("0"),
+            "consumed": D("100"), "released": D("100"),
+            "filled": D("1"), "seen": {"remote-trade"}, "open": False,
+            "posting_order": ["opening", "reserve", "fill_buy", "release"],
+            "safe": [True, True],
+        }
+E       AssertionError: assert {'quantity': Decimal('0'), 'cost': Decimal('0'), 'cash': Decimal('2000.00000000'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('0'), 'released': Decimal('200.00000000'), 'filled': Decimal('0'), 'seen': set(), 'open': False, 'posting_order': ['opening', 'reserve', 'release'], 'safe': [False, False]} == {'quantity': Decimal('1'), 'cost': Decimal('100'), 'cash': Decimal('1900'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('100'), 'released': Decimal('100'), 'filled': Decimal('1'), 'seen': {'remote-trade'}, 'open': False, 'posting_order': ['opening', 'reserve', 'fill_buy', 'release'], 'safe': [True, True]}
+E         
+E         Common items:
+E         {'ledger_reserved': Decimal('0'), 'open': False, 'risk_reserved': Decimal('0')}
+E         Differing items:
+E         {'released': Decimal('200.00000000')} != {'released': Decimal('100')}
+E         {'seen': set()} != {'seen': {'remote-trade'}}
+E         {'consumed': Decimal('0')} != {'consumed': Decimal('100')}
+E         {'quantity': Decimal('0')} != {'quantity': Decimal('1')}
+E         {'safe': [False, False]} != {'safe': [True, True]}
+E         {'posting_order': ['opening', 'reserve', 'release']} != {'posting_order': ['opening', 'reserve', 'fill_buy', 'release']}
+E         {'cash': Decimal('2000.00000000')} != {'cash': Decimal('1900')}
+E         {'cost': Decimal('0')} != {'cost': Decimal('100')}
+E         {'filled': Decimal('0')} != {'filled': Decimal('1')}
+E         
+E         Full diff:
+E           {
+E         -     'quantity': Decimal('1'),
+E         ?                          ^
+E         +     'quantity': Decimal('0'),
+E         ?                          ^
+E         -     'cost': Decimal('100'),
+E         ?                      --
+E         +     'cost': Decimal('0'),
+E         -     'cash': Decimal('1900'),
+E         ?                      ^^
+E         +     'cash': Decimal('2000.00000000'),
+E         ?                      ^^^^^^^^^^^
+E               'ledger_reserved': Decimal('0'),
+E               'risk_reserved': Decimal('0'),
+E         -     'consumed': Decimal('100'),
+E         ?                          --
+E         +     'consumed': Decimal('0'),
+E         -     'released': Decimal('100'),
+E         ?                          ^
+E         +     'released': Decimal('200.00000000'),
+E         ?                          ^^^^^^^^^^
+E         -     'filled': Decimal('1'),
+E         ?                        ^
+E         +     'filled': Decimal('0'),
+E         ?                        ^
+E         -     'seen': {
+E         ?             ^
+E         +     'seen': set(),
+E         ?             ^^^^^^
+E         -         'remote-trade',
+E         -     },
+E               'open': False,
+E               'posting_order': [
+E                   'opening',
+E                   'reserve',
+E         -         'fill_buy',
+E                   'release',
+E               ],
+E               'safe': [
+E         -         True,
+E         -         True,
+E         +         False,
+E         +         False,
+E               ],
+E           }
+
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py:306: AssertionError
+___ test_fin03_unverified_terminal_partial_keeps_capital_reserved[canceled] ___
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x00000231424C6F30>
+status = 'canceled'
+
+    @pytest.mark.parametrize("status", ["canceled", "expired"])
+    def test_fin03_unverified_terminal_partial_keeps_capital_reserved(desk, status):
+        """Catch terminal release before a failing trades query has been resolved."""
+        rec = _buy_order(desk)
+        reports = [_reconcile(
+            desk, rec, status=status, cumulative="1", remote_quantity="1",
+            fills=RuntimeError("synthetic trades query unavailable"),
+        ) for _ in range(2)]
+        assert all(report["seguro"] is False for report in reports)
+        assert desk.reconciliacao_pendente is True
+>       assert {
+            "ledger_reserved": desk.ledger.reserved_cash(rec.reserva_id),
+            "risk_reserved": desk.risk.reserved_total,
+            "cash": desk.ledger.cash(),
+            "quantity": desk.ledger.position_quantity(INSTRUMENT),
+        } == {
+            "ledger_reserved": D("200"), "risk_reserved": D("200"),
+            "cash": D("1800"), "quantity": D("0"),
+        }
+E       AssertionError: assert {'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'cash': Decimal('2000.00000000'), 'quantity': Decimal('0')} == {'ledger_reserved': Decimal('200'), 'risk_reserved': Decimal('200'), 'cash': Decimal('1800'), 'quantity': Decimal('0')}
+E         
+E         Common items:
+E         {'quantity': Decimal('0')}
+E         Differing items:
+E         {'cash': Decimal('2000.00000000')} != {'cash': Decimal('1800')}
+E         {'ledger_reserved': Decimal('0')} != {'ledger_reserved': Decimal('200')}
+E         {'risk_reserved': Decimal('0')} != {'risk_reserved': Decimal('200')}
+E         
+E         Full diff:
+E           {
+E         -     'ledger_reserved': Decimal('200'),
+E         ?                                 --
+E         +     'ledger_reserved': Decimal('0'),
+E         -     'risk_reserved': Decimal('200'),
+E         ?                               --
+E         +     'risk_reserved': Decimal('0'),
+E         -     'cash': Decimal('1800'),
+E         ?                      ^^
+E         +     'cash': Decimal('2000.00000000'),
+E         ?                      ^^^^^^^^^^^
+E               'quantity': Decimal('0'),
+E           }
+
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py:327: AssertionError
+___ test_fin03_unverified_terminal_partial_keeps_capital_reserved[expired] ____
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x00000231424DA060>
+status = 'expired'
+
+    @pytest.mark.parametrize("status", ["canceled", "expired"])
+    def test_fin03_unverified_terminal_partial_keeps_capital_reserved(desk, status):
+        """Catch terminal release before a failing trades query has been resolved."""
+        rec = _buy_order(desk)
+        reports = [_reconcile(
+            desk, rec, status=status, cumulative="1", remote_quantity="1",
+            fills=RuntimeError("synthetic trades query unavailable"),
+        ) for _ in range(2)]
+        assert all(report["seguro"] is False for report in reports)
+        assert desk.reconciliacao_pendente is True
+>       assert {
+            "ledger_reserved": desk.ledger.reserved_cash(rec.reserva_id),
+            "risk_reserved": desk.risk.reserved_total,
+            "cash": desk.ledger.cash(),
+            "quantity": desk.ledger.position_quantity(INSTRUMENT),
+        } == {
+            "ledger_reserved": D("200"), "risk_reserved": D("200"),
+            "cash": D("1800"), "quantity": D("0"),
+        }
+E       AssertionError: assert {'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'cash': Decimal('2000.00000000'), 'quantity': Decimal('0')} == {'ledger_reserved': Decimal('200'), 'risk_reserved': Decimal('200'), 'cash': Decimal('1800'), 'quantity': Decimal('0')}
+E         
+E         Common items:
+E         {'quantity': Decimal('0')}
+E         Differing items:
+E         {'cash': Decimal('2000.00000000')} != {'cash': Decimal('1800')}
+E         {'ledger_reserved': Decimal('0')} != {'ledger_reserved': Decimal('200')}
+E         {'risk_reserved': Decimal('0')} != {'risk_reserved': Decimal('200')}
+E         
+E         Full diff:
+E           {
+E         -     'ledger_reserved': Decimal('200'),
+E         ?                                 --
+E         +     'ledger_reserved': Decimal('0'),
+E         -     'risk_reserved': Decimal('200'),
+E         ?                               --
+E         +     'risk_reserved': Decimal('0'),
+E         -     'cash': Decimal('1800'),
+E         ?                      ^^
+E         +     'cash': Decimal('2000.00000000'),
+E         ?                      ^^^^^^^^^^^
+E               'quantity': Decimal('0'),
+E           }
+
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py:327: AssertionError
+_______ test_fin03_cumulative_trade_mismatch_cannot_turn_safe_on_repeat _______
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x00000231424DB890>
+
+    def test_fin03_cumulative_trade_mismatch_cannot_turn_safe_on_repeat(desk):
+        """Catch unresolved FILLS_DIVERGEM disappearing when the local order fills."""
+        rec = _buy_order(desk)
+        reports = []
+        states = []
+        for _ in range(3):
+            reports.append(_reconcile(
+                desk, rec, status="closed", cumulative="1.5", remote_quantity="2",
+                fills=[_remote_fill("2")],
+            ))
+            states.append(rec.state.value)
+    
+        assert reports[0]["fills_status"] == "MISMATCH"
+        assert any("FILLS_DIVERGEM" in d for d in reports[0]["divergencias"])
+        assert rec.filled_qty == desk.ledger.position_quantity(INSTRUMENT) == D("2")
+        assert desk.ledger.invested_cost() == D("200")
+        assert desk.ledger.cash() == D("1800")
+        assert sum(tx.kind == "fill_buy" for tx in desk.ledger.transactions) == 1
+        assert desk.ledger.is_balanced()
+        observed = {
+            "safe": [report["seguro"] for report in reports],
+            "fills_status": [report["fills_status"] for report in reports],
+            "gate_closed": desk.reconciliacao_pendente,
+            "report_authorizes_execution": desk.relatorio_valido()[0],
+        }
+>       assert observed == {
+            "safe": [False, False, False],
+            "fills_status": ["MISMATCH", "MISMATCH", "MISMATCH"],
+            "gate_closed": True, "report_authorizes_execution": False,
+        }, f"unresolved remote cumulative 1.5 vs trades 2; local states={states}; {observed}"
+E       AssertionError: unresolved remote cumulative 1.5 vs trades 2; local states=['filled', 'filled', 'filled']; {'safe': [False, True, True], 'fills_status': ['MISMATCH', 'NAO_APLICAVEL', 'NAO_APLICAVEL'], 'gate_closed': False, 'report_authorizes_execution': True}
+E       assert {'safe': [False, True, True], 'fills_status': ['MISMATCH', 'NAO_APLICAVEL', 'NAO_APLICAVEL'], 'gate_closed': False, 'report_authorizes_execution': True} == {'safe': [False, False, False], 'fills_status': ['MISMATCH', 'MISMATCH', 'MISMATCH'], 'gate_closed': True, 'report_authorizes_execution': False}
+E         
+E         Differing items:
+E         {'gate_closed': False} != {'gate_closed': True}
+E         {'safe': [False, True, True]} != {'safe': [False, False, False]}
+E         {'report_authorizes_execution': True} != {'report_authorizes_execution': False}
+E         {'fills_status': ['MISMATCH', 'NAO_APLICAVEL', 'NAO_APLICAVEL']} != {'fills_status': ['MISMATCH', 'MISMATCH', 'MISMATCH']}
+E         
+E         Full diff:
+E           {
+E               'safe': [
+E                   False,
+E         -         False,
+E         -         False,
+E         +         True,
+E         +         True,
+E               ],
+E               'fills_status': [
+E                   'MISMATCH',
+E         -         'MISMATCH',
+E         -         'MISMATCH',
+E         +         'NAO_APLICAVEL',
+E         +         'NAO_APLICAVEL',
+E               ],
+E         -     'gate_closed': True,
+E         ?                    ^^^
+E         +     'gate_closed': False,
+E         ?                    ^^^^
+E         -     'report_authorizes_execution': False,
+E         ?                                    ^^^^
+E         +     'report_authorizes_execution': True,
+E         ?                                    ^^^
+E           }
+
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py:363: AssertionError
+- generated xml file: C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\docs\mission\evidence\v9-baseline\financial-red.xml -
+=========================== short test summary info ===========================
+FAILED ..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin01_partial_sale_uses_the_same_fifo_cost_as_live_lots - AssertionError: assert {'quantity': Decimal('1'), 'posted_cost': Decimal('150.00000000'), 'lot_quantity': Decimal('1'), 'lot_cost': Decimal('200.00000000'), 'pnl': Decimal('0'), 'cash': Decimal('1850.00000000')} == {'quantity': Decimal('1'), 'posted_cost': Decimal('200'), 'lot_quantity': Decimal('1'), 'lot_cost': Decimal('200'), 'pnl': Decimal('50'), 'cash': Decimal('1850')}
+  
+  Common items:
+  {'cash': Decimal('1850.00000000'),
+   'lot_cost': Decimal('200.00000000'),
+   'lot_quantity': Decimal('1'),
+   'quantity': Decimal('1')}
+  Differing items:
+  {'pnl': Decimal('0')} != {'pnl': Decimal('50')}
+  {'posted_cost': Decimal('150.00000000')} != {'posted_cost': Decimal('200')}
+  
+  Full diff:
+    {
+        'quantity': Decimal('1'),
+  -     'posted_cost': Decimal('200'),
+  ?                             ^
+  +     'posted_cost': Decimal('150.00000000'),
+  ?                             ^^^^^^^^^^
+        'lot_quantity': Decimal('1'),
+  -     'lot_cost': Decimal('200'),
+  +     'lot_cost': Decimal('200.00000000'),
+  ?                             +++++++++
+  -     'pnl': Decimal('50'),
+  ?                     -
+  +     'pnl': Decimal('0'),
+  -     'cash': Decimal('1850'),
+  +     'cash': Decimal('1850.00000000'),
+  ?                          +++++++++
+    }
+FAILED ..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin01_two_sales_leave_no_cost_or_phantom_pnl - AssertionError: assert {'quantity': Decimal('0'), 'posted_cost': Decimal('-50.00000000'), 'lot_quantity': Decimal('0'), 'lot_cost': Decimal('0E-8'), 'pnl': Decimal('-50.00000000'), 'cash': Decimal('2000.00000000')} == {'quantity': Decimal('0'), 'posted_cost': Decimal('0'), 'lot_quantity': Decimal('0'), 'lot_cost': Decimal('0'), 'pnl': Decimal('0'), 'cash': Decimal('2000')}
+  
+  Common items:
+  {'cash': Decimal('2000.00000000'),
+   'lot_cost': Decimal('0E-8'),
+   'lot_quantity': Decimal('0'),
+   'quantity': Decimal('0')}
+  Differing items:
+  {'pnl': Decimal('-50.00000000')} != {'pnl': Decimal('0')}
+  {'posted_cost': Decimal('-50.00000000')} != {'posted_cost': Decimal('0')}
+  
+  Full diff:
+    {
+        'quantity': Decimal('0'),
+  -     'posted_cost': Decimal('0'),
+  +     'posted_cost': Decimal('-50.00000000'),
+  ?                             +++++++++++
+        'lot_quantity': Decimal('0'),
+  -     'lot_cost': Decimal('0'),
+  +     'lot_cost': Decimal('0E-8'),
+  ?                           +++
+  -     'pnl': Decimal('0'),
+  +     'pnl': Decimal('-50.00000000'),
+  ?                     +++++++++++
+  -     'cash': Decimal('2000'),
+  +     'cash': Decimal('2000.00000000'),
+  ?                          +++++++++
+    }
+FAILED ..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin01_guardian_exit_consumes_the_original_owners_lots - AssertionError: assert {'quantity': Decimal('0'), 'posted_cost': Decimal('0E-8'), 'lot_quantity': Decimal('2'), 'lot_cost': Decimal('300.00000000'), 'pnl': Decimal('0'), 'cash': Decimal('2000.00000000'), 'trader-A_quantity': Decimal('1'), 'trader-A_cost': Decimal('100.00000000'), 'trader-B_quantity': Decimal('1'), 'trader-B_cost': Decimal('200.00000000')} == {'quantity': Decimal('0'), 'posted_cost': Decimal('0'), 'lot_quantity': Decimal('0'), 'lot_cost': Decimal('0'), 'pnl': Decimal('0'), 'cash': Decimal('2000'), 'trader-A_quantity': Decimal('0'), 'trader-A_cost': Decimal('0'), 'trader-B_quantity': Decimal('0'), 'trader-B_cost': Decimal('0')}
+  
+  Common items:
+  {'cash': Decimal('2000.00000000'),
+   'pnl': Decimal('0'),
+   'posted_cost': Decimal('0E-8'),
+   'quantity': Decimal('0')}
+  Differing items:
+  {'trader-A_quantity': Decimal('1')} != {'trader-A_quantity': Decimal('0')}
+  {'lot_cost': Decimal('300.00000000')} != {'lot_cost': Decimal('0')}
+  {'lot_quantity': Decimal('2')} != {'lot_quantity': Decimal('0')}
+  {'trader-B_cost': Decimal('200.00000000')} != {'trader-B_cost': Decimal('0')}
+  {'trader-A_cost': Decimal('100.00000000')} != {'trader-A_cost': Decimal('0')}
+  {'trader-B_quantity': Decimal('1')} != {'trader-B_quantity': Decimal('0')}
+  
+  Full diff:
+    {
+        'quantity': Decimal('0'),
+  -     'posted_cost': Decimal('0'),
+  +     'posted_cost': Decimal('0E-8'),
+  ?                              +++
+  -     'lot_quantity': Decimal('0'),
+  ?                              ^
+  +     'lot_quantity': Decimal('2'),
+  ?                              ^
+  -     'lot_cost': Decimal('0'),
+  +     'lot_cost': Decimal('300.00000000'),
+  ?                          +++++++++++
+        'pnl': Decimal('0'),
+  -     'cash': Decimal('2000'),
+  +     'cash': Decimal('2000.00000000'),
+  ?                          +++++++++
+  -     'trader-A_quantity': Decimal('0'),
+  ?                                   ^
+  +     'trader-A_quantity': Decimal('1'),
+  ?                                   ^
+  -     'trader-A_cost': Decimal('0'),
+  +     'trader-A_cost': Decimal('100.00000000'),
+  ?                               +++++++++++
+  -     'trader-B_quantity': Decimal('0'),
+  ?                                   ^
+  +     'trader-B_quantity': Decimal('1'),
+  ?                                   ^
+  -     'trader-B_cost': Decimal('0'),
+  +     'trader-B_cost': Decimal('200.00000000'),
+  ?                               +++++++++++
+    }
+FAILED ..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin02_failed_ledger_post_can_be_replayed_exactly_once[partial] - AssertionError: assert {'quantity': Decimal('0'), 'cost': Decimal('0'), 'cash': Decimal('1780.00000000'), 'fees': Decimal('0'), 'ledger_reserved': Decimal('220.00000000'), 'risk_reserved': Decimal('119.00000000'), 'risk_consumed': Decimal('101.00000000'), 'risk_filled': Decimal('1'), 'released': Decimal('0'), 'buy_posts': 0, 'order_filled': Decimal('0'), 'order_average': Decimal('0'), 'order_fees': Decimal('0'), 'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>, 'seen': {'retry-fill'}, 'oms_updates': 0, 'incidents': 0} == {'quantity': Decimal('1'), 'cost': Decimal('100'), 'cash': Decimal('1780'), 'fees': Decimal('1'), 'ledger_reserved': Decimal('119'), 'risk_reserved': Decimal('119'), 'risk_consumed': Decimal('101'), 'risk_filled': Decimal('1'), 'released': Decimal('0'), 'buy_posts': 1, 'order_filled': Decimal('1'), 'order_average': Decimal('100'), 'order_fees': Decimal('1'), 'order_state': <OrderState.PARTIALLY_FILLED: 'partially_filled'>, 'seen': {'retry-fill'}, 'oms_updates': 1, 'incidents': 0}
+  
+  Common items:
+  {'cash': Decimal('1780.00000000'),
+   'incidents': 0,
+   'released': Decimal('0'),
+   'risk_consumed': Decimal('101.00000000'),
+   'risk_filled': Decimal('1'),
+   'risk_reserved': Decimal('119.00000000'),
+   'seen': {'retry-fill'}}
+  Differing items:
+  {'buy_posts': 0} != {'buy_posts': 1}
+  {'order_average': Decimal('0')} != {'order_average': Decimal('100')}
+  {'fees': Decimal('0')} != {'fees': Decimal('1')}
+  {'ledger_reserved': Decimal('220.00000000')} != {'ledger_reserved': Decimal('119')}
+  {'order_fees': Decimal('0')} != {'order_fees': Decimal('1')}
+  {'quantity': Decimal('0')} != {'quantity': Decimal('1')}
+  {'order_filled': Decimal('0')} != {'order_filled': Decimal('1')}
+  {'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>} != {'order_state': <OrderState.PARTIALLY_FILLED: 'partially_filled'>}
+  {'oms_updates': 0} != {'oms_updates': 1}
+  {'cost': Decimal('0')} != {'cost': Decimal('100')}
+  
+  Full diff:
+    {
+  -     'quantity': Decimal('1'),
+  ?                          ^
+  +     'quantity': Decimal('0'),
+  ?                          ^
+  -     'cost': Decimal('100'),
+  ?                      --
+  +     'cost': Decimal('0'),
+  -     'cash': Decimal('1780'),
+  +     'cash': Decimal('1780.00000000'),
+  ?                          +++++++++
+  -     'fees': Decimal('1'),
+  ?                      ^
+  +     'fees': Decimal('0'),
+  ?                      ^
+  -     'ledger_reserved': Decimal('119'),
+  ?                                 ^^^
+  +     'ledger_reserved': Decimal('220.00000000'),
+  ?                                 ^^^^^^^^^^^^
+  -     'risk_reserved': Decimal('119'),
+  +     'risk_reserved': Decimal('119.00000000'),
+  ?                                  +++++++++
+  -     'risk_consumed': Decimal('101'),
+  +     'risk_consumed': Decimal('101.00000000'),
+  ?                                  +++++++++
+        'risk_filled': Decimal('1'),
+        'released': Decimal('0'),
+  -     'buy_posts': 1,
+  ?                  ^
+  +     'buy_posts': 0,
+  ?                  ^
+  -     'order_filled': Decimal('1'),
+  ?                              ^
+  +     'order_filled': Decimal('0'),
+  ?                              ^
+  -     'order_average': Decimal('100'),
+  ?                               --
+  +     'order_average': Decimal('0'),
+  -     'order_fees': Decimal('1'),
+  ?                            ^
+  +     'order_fees': Decimal('0'),
+  ?                            ^
+  -     'order_state': <OrderState.PARTIALLY_FILLED: 'partially_filled'>,
+  +     'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>,
+        'seen': {
+            'retry-fill',
+        },
+  -     'oms_updates': 1,
+  ?                    ^
+  +     'oms_updates': 0,
+  ?                    ^
+        'incidents': 0,
+    }
+FAILED ..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin02_failed_ledger_post_can_be_replayed_exactly_once[terminal] - AssertionError: assert {'quantity': Decimal('0'), 'cost': Decimal('0'), 'cash': Decimal('1890.00000000'), 'fees': Decimal('0'), 'ledger_reserved': Decimal('110.00000000'), 'risk_reserved': Decimal('0'), 'risk_consumed': Decimal('101.00000000'), 'risk_filled': Decimal('1'), 'released': Decimal('0'), 'buy_posts': 0, 'order_filled': Decimal('0'), 'order_average': Decimal('0'), 'order_fees': Decimal('0'), 'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>, 'seen': {'retry-fill'}, 'oms_updates': 0, 'incidents': 0} == {'quantity': Decimal('1'), 'cost': Decimal('100'), 'cash': Decimal('1899'), 'fees': Decimal('1'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'risk_consumed': Decimal('101'), 'risk_filled': Decimal('1'), 'released': Decimal('9'), 'buy_posts': 1, 'order_filled': Decimal('1'), 'order_average': Decimal('100'), 'order_fees': Decimal('1'), 'order_state': <OrderState.FILLED: 'filled'>, 'seen': {'retry-fill'}, 'oms_updates': 1, 'incidents': 0}
+  
+  Common items:
+  {'incidents': 0,
+   'risk_consumed': Decimal('101.00000000'),
+   'risk_filled': Decimal('1'),
+   'risk_reserved': Decimal('0'),
+   'seen': {'retry-fill'}}
+  Differing items:
+  {'buy_posts': 0} != {'buy_posts': 1}
+  {'order_average': Decimal('0')} != {'order_average': Decimal('100')}
+  {'fees': Decimal('0')} != {'fees': Decimal('1')}
+  {'released': Decimal('0')} != {'released': Decimal('9')}
+  {'ledger_reserved': Decimal('110.00000000')} != {'ledger_reserved': Decimal('0')}
+  {'cash': Decimal('1890.00000000')} != {'cash': Decimal('1899')}
+  {'order_fees': Decimal('0')} != {'order_fees': Decimal('1')}
+  {'quantity': Decimal('0')} != {'quantity': Decimal('1')}
+  {'order_filled': Decimal('0')} != {'order_filled': Decimal('1')}
+  {'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>} != {'order_state': <OrderState.FILLED: 'filled'>}
+  {'oms_updates': 0} != {'oms_updates': 1}
+  {'cost': Decimal('0')} != {'cost': Decimal('100')}
+  
+  Full diff:
+    {
+  -     'quantity': Decimal('1'),
+  ?                          ^
+  +     'quantity': Decimal('0'),
+  ?                          ^
+  -     'cost': Decimal('100'),
+  ?                      --
+  +     'cost': Decimal('0'),
+  -     'cash': Decimal('1899'),
+  ?                         ^
+  +     'cash': Decimal('1890.00000000'),
+  ?                         ^^^^^^^^^^
+  -     'fees': Decimal('1'),
+  ?                      ^
+  +     'fees': Decimal('0'),
+  ?                      ^
+  -     'ledger_reserved': Decimal('0'),
+  +     'ledger_reserved': Decimal('110.00000000'),
+  ?                                 +++++++++++
+        'risk_reserved': Decimal('0'),
+  -     'risk_consumed': Decimal('101'),
+  +     'risk_consumed': Decimal('101.00000000'),
+  ?                                  +++++++++
+        'risk_filled': Decimal('1'),
+  -     'released': Decimal('9'),
+  ?                          ^
+  +     'released': Decimal('0'),
+  ?                          ^
+  -     'buy_posts': 1,
+  ?                  ^
+  +     'buy_posts': 0,
+  ?                  ^
+  -     'order_filled': Decimal('1'),
+  ?                              ^
+  +     'order_filled': Decimal('0'),
+  ?                              ^
+  -     'order_average': Decimal('100'),
+  ?                               --
+  +     'order_average': Decimal('0'),
+  -     'order_fees': Decimal('1'),
+  ?                            ^
+  +     'order_fees': Decimal('0'),
+  ?                            ^
+  -     'order_state': <OrderState.FILLED: 'filled'>,
+  ?                                ^^^      ^^ ^
+  +     'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>,
+  ?                                ^^^^^^   +++   ^^^^^^ ^^^
+        'seen': {
+            'retry-fill',
+        },
+  -     'oms_updates': 1,
+  ?                    ^
+  +     'oms_updates': 0,
+  ?                    ^
+        'incidents': 0,
+    }
+FAILED ..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_terminal_partial_imports_fills_before_releasing_remainder[canceled] - AssertionError: assert {'quantity': Decimal('0'), 'cost': Decimal('0'), 'cash': Decimal('2000.00000000'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('0'), 'released': Decimal('200.00000000'), 'filled': Decimal('0'), 'seen': set(), 'open': False, 'posting_order': ['opening', 'reserve', 'release'], 'safe': [False, False]} == {'quantity': Decimal('1'), 'cost': Decimal('100'), 'cash': Decimal('1900'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('100'), 'released': Decimal('100'), 'filled': Decimal('1'), 'seen': {'remote-trade'}, 'open': False, 'posting_order': ['opening', 'reserve', 'fill_buy', 'release'], 'safe': [True, True]}
+  
+  Common items:
+  {'ledger_reserved': Decimal('0'), 'open': False, 'risk_reserved': Decimal('0')}
+  Differing items:
+  {'released': Decimal('200.00000000')} != {'released': Decimal('100')}
+  {'seen': set()} != {'seen': {'remote-trade'}}
+  {'consumed': Decimal('0')} != {'consumed': Decimal('100')}
+  {'quantity': Decimal('0')} != {'quantity': Decimal('1')}
+  {'safe': [False, False]} != {'safe': [True, True]}
+  {'posting_order': ['opening', 'reserve', 'release']} != {'posting_order': ['opening', 'reserve', 'fill_buy', 'release']}
+  {'cash': Decimal('2000.00000000')} != {'cash': Decimal('1900')}
+  {'cost': Decimal('0')} != {'cost': Decimal('100')}
+  {'filled': Decimal('0')} != {'filled': Decimal('1')}
+  
+  Full diff:
+    {
+  -     'quantity': Decimal('1'),
+  ?                          ^
+  +     'quantity': Decimal('0'),
+  ?                          ^
+  -     'cost': Decimal('100'),
+  ?                      --
+  +     'cost': Decimal('0'),
+  -     'cash': Decimal('1900'),
+  ?                      ^^
+  +     'cash': Decimal('2000.00000000'),
+  ?                      ^^^^^^^^^^^
+        'ledger_reserved': Decimal('0'),
+        'risk_reserved': Decimal('0'),
+  -     'consumed': Decimal('100'),
+  ?                          --
+  +     'consumed': Decimal('0'),
+  -     'released': Decimal('100'),
+  ?                          ^
+  +     'released': Decimal('200.00000000'),
+  ?                          ^^^^^^^^^^
+  -     'filled': Decimal('1'),
+  ?                        ^
+  +     'filled': Decimal('0'),
+  ?                        ^
+  -     'seen': {
+  ?             ^
+  +     'seen': set(),
+  ?             ^^^^^^
+  -         'remote-trade',
+  -     },
+        'open': False,
+        'posting_order': [
+            'opening',
+            'reserve',
+  -         'fill_buy',
+            'release',
+        ],
+        'safe': [
+  -         True,
+  -         True,
+  +         False,
+  +         False,
+        ],
+    }
+FAILED ..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_terminal_partial_imports_fills_before_releasing_remainder[cancelled] - AssertionError: assert {'quantity': Decimal('0'), 'cost': Decimal('0'), 'cash': Decimal('2000.00000000'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('0'), 'released': Decimal('200.00000000'), 'filled': Decimal('0'), 'seen': set(), 'open': False, 'posting_order': ['opening', 'reserve', 'release'], 'safe': [False, False]} == {'quantity': Decimal('1'), 'cost': Decimal('100'), 'cash': Decimal('1900'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('100'), 'released': Decimal('100'), 'filled': Decimal('1'), 'seen': {'remote-trade'}, 'open': False, 'posting_order': ['opening', 'reserve', 'fill_buy', 'release'], 'safe': [True, True]}
+  
+  Common items:
+  {'ledger_reserved': Decimal('0'), 'open': False, 'risk_reserved': Decimal('0')}
+  Differing items:
+  {'released': Decimal('200.00000000')} != {'released': Decimal('100')}
+  {'seen': set()} != {'seen': {'remote-trade'}}
+  {'consumed': Decimal('0')} != {'consumed': Decimal('100')}
+  {'quantity': Decimal('0')} != {'quantity': Decimal('1')}
+  {'safe': [False, False]} != {'safe': [True, True]}
+  {'posting_order': ['opening', 'reserve', 'release']} != {'posting_order': ['opening', 'reserve', 'fill_buy', 'release']}
+  {'cash': Decimal('2000.00000000')} != {'cash': Decimal('1900')}
+  {'cost': Decimal('0')} != {'cost': Decimal('100')}
+  {'filled': Decimal('0')} != {'filled': Decimal('1')}
+  
+  Full diff:
+    {
+  -     'quantity': Decimal('1'),
+  ?                          ^
+  +     'quantity': Decimal('0'),
+  ?                          ^
+  -     'cost': Decimal('100'),
+  ?                      --
+  +     'cost': Decimal('0'),
+  -     'cash': Decimal('1900'),
+  ?                      ^^
+  +     'cash': Decimal('2000.00000000'),
+  ?                      ^^^^^^^^^^^
+        'ledger_reserved': Decimal('0'),
+        'risk_reserved': Decimal('0'),
+  -     'consumed': Decimal('100'),
+  ?                          --
+  +     'consumed': Decimal('0'),
+  -     'released': Decimal('100'),
+  ?                          ^
+  +     'released': Decimal('200.00000000'),
+  ?                          ^^^^^^^^^^
+  -     'filled': Decimal('1'),
+  ?                        ^
+  +     'filled': Decimal('0'),
+  ?                        ^
+  -     'seen': {
+  ?             ^
+  +     'seen': set(),
+  ?             ^^^^^^
+  -         'remote-trade',
+  -     },
+        'open': False,
+        'posting_order': [
+            'opening',
+            'reserve',
+  -         'fill_buy',
+            'release',
+        ],
+        'safe': [
+  -         True,
+  -         True,
+  +         False,
+  +         False,
+        ],
+    }
+FAILED ..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_terminal_partial_imports_fills_before_releasing_remainder[expired] - AssertionError: assert {'quantity': Decimal('0'), 'cost': Decimal('0'), 'cash': Decimal('2000.00000000'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('0'), 'released': Decimal('200.00000000'), 'filled': Decimal('0'), 'seen': set(), 'open': False, 'posting_order': ['opening', 'reserve', 'release'], 'safe': [False, False]} == {'quantity': Decimal('1'), 'cost': Decimal('100'), 'cash': Decimal('1900'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('100'), 'released': Decimal('100'), 'filled': Decimal('1'), 'seen': {'remote-trade'}, 'open': False, 'posting_order': ['opening', 'reserve', 'fill_buy', 'release'], 'safe': [True, True]}
+  
+  Common items:
+  {'ledger_reserved': Decimal('0'), 'open': False, 'risk_reserved': Decimal('0')}
+  Differing items:
+  {'released': Decimal('200.00000000')} != {'released': Decimal('100')}
+  {'seen': set()} != {'seen': {'remote-trade'}}
+  {'consumed': Decimal('0')} != {'consumed': Decimal('100')}
+  {'quantity': Decimal('0')} != {'quantity': Decimal('1')}
+  {'safe': [False, False]} != {'safe': [True, True]}
+  {'posting_order': ['opening', 'reserve', 'release']} != {'posting_order': ['opening', 'reserve', 'fill_buy', 'release']}
+  {'cash': Decimal('2000.00000000')} != {'cash': Decimal('1900')}
+  {'cost': Decimal('0')} != {'cost': Decimal('100')}
+  {'filled': Decimal('0')} != {'filled': Decimal('1')}
+  
+  Full diff:
+    {
+  -     'quantity': Decimal('1'),
+  ?                          ^
+  +     'quantity': Decimal('0'),
+  ?                          ^
+  -     'cost': Decimal('100'),
+  ?                      --
+  +     'cost': Decimal('0'),
+  -     'cash': Decimal('1900'),
+  ?                      ^^
+  +     'cash': Decimal('2000.00000000'),
+  ?                      ^^^^^^^^^^^
+        'ledger_reserved': Decimal('0'),
+        'risk_reserved': Decimal('0'),
+  -     'consumed': Decimal('100'),
+  ?                          --
+  +     'consumed': Decimal('0'),
+  -     'released': Decimal('100'),
+  ?                          ^
+  +     'released': Decimal('200.00000000'),
+  ?                          ^^^^^^^^^^
+  -     'filled': Decimal('1'),
+  ?                        ^
+  +     'filled': Decimal('0'),
+  ?                        ^
+  -     'seen': {
+  ?             ^
+  +     'seen': set(),
+  ?             ^^^^^^
+  -         'remote-trade',
+  -     },
+        'open': False,
+        'posting_order': [
+            'opening',
+            'reserve',
+  -         'fill_buy',
+            'release',
+        ],
+        'safe': [
+  -         True,
+  -         True,
+  +         False,
+  +         False,
+        ],
+    }
+FAILED ..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_unverified_terminal_partial_keeps_capital_reserved[canceled] - AssertionError: assert {'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'cash': Decimal('2000.00000000'), 'quantity': Decimal('0')} == {'ledger_reserved': Decimal('200'), 'risk_reserved': Decimal('200'), 'cash': Decimal('1800'), 'quantity': Decimal('0')}
+  
+  Common items:
+  {'quantity': Decimal('0')}
+  Differing items:
+  {'cash': Decimal('2000.00000000')} != {'cash': Decimal('1800')}
+  {'ledger_reserved': Decimal('0')} != {'ledger_reserved': Decimal('200')}
+  {'risk_reserved': Decimal('0')} != {'risk_reserved': Decimal('200')}
+  
+  Full diff:
+    {
+  -     'ledger_reserved': Decimal('200'),
+  ?                                 --
+  +     'ledger_reserved': Decimal('0'),
+  -     'risk_reserved': Decimal('200'),
+  ?                               --
+  +     'risk_reserved': Decimal('0'),
+  -     'cash': Decimal('1800'),
+  ?                      ^^
+  +     'cash': Decimal('2000.00000000'),
+  ?                      ^^^^^^^^^^^
+        'quantity': Decimal('0'),
+    }
+FAILED ..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_unverified_terminal_partial_keeps_capital_reserved[expired] - AssertionError: assert {'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'cash': Decimal('2000.00000000'), 'quantity': Decimal('0')} == {'ledger_reserved': Decimal('200'), 'risk_reserved': Decimal('200'), 'cash': Decimal('1800'), 'quantity': Decimal('0')}
+  
+  Common items:
+  {'quantity': Decimal('0')}
+  Differing items:
+  {'cash': Decimal('2000.00000000')} != {'cash': Decimal('1800')}
+  {'ledger_reserved': Decimal('0')} != {'ledger_reserved': Decimal('200')}
+  {'risk_reserved': Decimal('0')} != {'risk_reserved': Decimal('200')}
+  
+  Full diff:
+    {
+  -     'ledger_reserved': Decimal('200'),
+  ?                                 --
+  +     'ledger_reserved': Decimal('0'),
+  -     'risk_reserved': Decimal('200'),
+  ?                               --
+  +     'risk_reserved': Decimal('0'),
+  -     'cash': Decimal('1800'),
+  ?                      ^^
+  +     'cash': Decimal('2000.00000000'),
+  ?                      ^^^^^^^^^^^
+        'quantity': Decimal('0'),
+    }
+FAILED ..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_cumulative_trade_mismatch_cannot_turn_safe_on_repeat - AssertionError: unresolved remote cumulative 1.5 vs trades 2; local states=['filled', 'filled', 'filled']; {'safe': [False, True, True], 'fills_status': ['MISMATCH', 'NAO_APLICAVEL', 'NAO_APLICAVEL'], 'gate_closed': False, 'report_authorizes_execution': True}
+assert {'safe': [False, True, True], 'fills_status': ['MISMATCH', 'NAO_APLICAVEL', 'NAO_APLICAVEL'], 'gate_closed': False, 'report_authorizes_execution': True} == {'safe': [False, False, False], 'fills_status': ['MISMATCH', 'MISMATCH', 'MISMATCH'], 'gate_closed': True, 'report_authorizes_execution': False}
+  
+  Differing items:
+  {'gate_closed': False} != {'gate_closed': True}
+  {'safe': [False, True, True]} != {'safe': [False, False, False]}
+  {'report_authorizes_execution': True} != {'report_authorizes_execution': False}
+  {'fills_status': ['MISMATCH', 'NAO_APLICAVEL', 'NAO_APLICAVEL']} != {'fills_status': ['MISMATCH', 'MISMATCH', 'MISMATCH']}
+  
+  Full diff:
+    {
+        'safe': [
+            False,
+  -         False,
+  -         False,
+  +         True,
+  +         True,
+        ],
+        'fills_status': [
+            'MISMATCH',
+  -         'MISMATCH',
+  -         'MISMATCH',
+  +         'NAO_APLICAVEL',
+  +         'NAO_APLICAVEL',
+        ],
+  -     'gate_closed': True,
+  ?                    ^^^
+  +     'gate_closed': False,
+  ?                    ^^^^
+  -     'report_authorizes_execution': False,
+  ?                                    ^^^^
+  +     'report_authorizes_execution': True,
+  ?                                    ^^^
+    }
+============================= 11 failed in 0.37s ==============================
+V9_SANDBOX_DENIED_EVENTS=[]
+
+=== RED RUN 4: repeat unchanged tests in a fresh sandbox ===
+V9 isolated child: dotenv disabled; synthetic in-memory financial tests only
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Scripts\python.exe
+rootdir: C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit
+configfile: pyproject.toml
+collecting ... collected 11 items
+
+..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin01_partial_sale_uses_the_same_fifo_cost_as_live_lots FAILED [  9%]
+..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin01_two_sales_leave_no_cost_or_phantom_pnl FAILED [ 18%]
+..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin01_guardian_exit_consumes_the_original_owners_lots FAILED [ 27%]
+..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin02_failed_ledger_post_can_be_replayed_exactly_once[partial] FAILED [ 36%]
+..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin02_failed_ledger_post_can_be_replayed_exactly_once[terminal] FAILED [ 45%]
+..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_terminal_partial_imports_fills_before_releasing_remainder[canceled] FAILED [ 54%]
+..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_terminal_partial_imports_fills_before_releasing_remainder[cancelled] FAILED [ 63%]
+..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_terminal_partial_imports_fills_before_releasing_remainder[expired] FAILED [ 72%]
+..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_unverified_terminal_partial_keeps_capital_reserved[canceled] FAILED [ 81%]
+..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_unverified_terminal_partial_keeps_capital_reserved[expired] FAILED [ 90%]
+..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_cumulative_trade_mismatch_cannot_turn_safe_on_repeat FAILED [100%]
+
+================================== FAILURES ===================================
+________ test_fin01_partial_sale_uses_the_same_fifo_cost_as_live_lots _________
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x000001ED872C0380>
+
+    def test_fin01_partial_sale_uses_the_same_fifo_cost_as_live_lots(desk):
+        """Catch average-cost posting paired with FIFO lot reconstruction."""
+        _two_price_entry(desk)
+        sale = _sell_order(desk)
+        _fill(desk, sale, "sell-first", price="150")
+    
+        # FIFO: sell the 100 lot for 150, retain the 200 lot, realize +50.
+>       assert _position_state(desk.ledger) == {
+            "quantity": D("1"), "posted_cost": D("200"),
+            "lot_quantity": D("1"), "lot_cost": D("200"),
+            "pnl": D("50"), "cash": D("1850"),
+        }
+E       AssertionError: assert {'quantity': Decimal('1'), 'posted_cost': Decimal('150.00000000'), 'lot_quantity': Decimal('1'), 'lot_cost': Decimal('200.00000000'), 'pnl': Decimal('0'), 'cash': Decimal('1850.00000000')} == {'quantity': Decimal('1'), 'posted_cost': Decimal('200'), 'lot_quantity': Decimal('1'), 'lot_cost': Decimal('200'), 'pnl': Decimal('50'), 'cash': Decimal('1850')}
+E         
+E         Common items:
+E         {'cash': Decimal('1850.00000000'),
+E          'lot_cost': Decimal('200.00000000'),
+E          'lot_quantity': Decimal('1'),
+E          'quantity': Decimal('1')}
+E         Differing items:
+E         {'pnl': Decimal('0')} != {'pnl': Decimal('50')}
+E         {'posted_cost': Decimal('150.00000000')} != {'posted_cost': Decimal('200')}
+E         
+E         Full diff:
+E           {
+E               'quantity': Decimal('1'),
+E         -     'posted_cost': Decimal('200'),
+E         ?                             ^
+E         +     'posted_cost': Decimal('150.00000000'),
+E         ?                             ^^^^^^^^^^
+E               'lot_quantity': Decimal('1'),
+E         -     'lot_cost': Decimal('200'),
+E         +     'lot_cost': Decimal('200.00000000'),
+E         ?                             +++++++++
+E         -     'pnl': Decimal('50'),
+E         ?                     -
+E         +     'pnl': Decimal('0'),
+E         -     'cash': Decimal('1850'),
+E         +     'cash': Decimal('1850.00000000'),
+E         ?                          +++++++++
+E           }
+
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py:130: AssertionError
+______________ test_fin01_two_sales_leave_no_cost_or_phantom_pnl ______________
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x000001ED872C3A40>
+
+    def test_fin01_two_sales_leave_no_cost_or_phantom_pnl(desk):
+        """Catch a negative POSITION balance hidden by open_positions_detail."""
+        _two_price_entry(desk)
+        sale = _sell_order(desk)
+        _fill(desk, sale, "sell-first", price="150")
+        _fill(desk, sale, "sell-second", price="150")
+    
+        assert sale.state is OrderState.FILLED
+        assert sale.filled_qty == D("2")
+        assert desk.ledger.is_balanced()  # Double entry alone cannot prove correctness.
+        # 300 paid, 300 received: zero remaining cost and zero total P&L.
+>       assert _position_state(desk.ledger) == {
+            "quantity": D("0"), "posted_cost": D("0"),
+            "lot_quantity": D("0"), "lot_cost": D("0"),
+            "pnl": D("0"), "cash": D("2000"),
+        }
+E       AssertionError: assert {'quantity': Decimal('0'), 'posted_cost': Decimal('-50.00000000'), 'lot_quantity': Decimal('0'), 'lot_cost': Decimal('0E-8'), 'pnl': Decimal('-50.00000000'), 'cash': Decimal('2000.00000000')} == {'quantity': Decimal('0'), 'posted_cost': Decimal('0'), 'lot_quantity': Decimal('0'), 'lot_cost': Decimal('0'), 'pnl': Decimal('0'), 'cash': Decimal('2000')}
+E         
+E         Common items:
+E         {'cash': Decimal('2000.00000000'),
+E          'lot_cost': Decimal('0E-8'),
+E          'lot_quantity': Decimal('0'),
+E          'quantity': Decimal('0')}
+E         Differing items:
+E         {'pnl': Decimal('-50.00000000')} != {'pnl': Decimal('0')}
+E         {'posted_cost': Decimal('-50.00000000')} != {'posted_cost': Decimal('0')}
+E         
+E         Full diff:
+E           {
+E               'quantity': Decimal('0'),
+E         -     'posted_cost': Decimal('0'),
+E         +     'posted_cost': Decimal('-50.00000000'),
+E         ?                             +++++++++++
+E               'lot_quantity': Decimal('0'),
+E         -     'lot_cost': Decimal('0'),
+E         +     'lot_cost': Decimal('0E-8'),
+E         ?                           +++
+E         -     'pnl': Decimal('0'),
+E         +     'pnl': Decimal('-50.00000000'),
+E         ?                     +++++++++++
+E         -     'cash': Decimal('2000'),
+E         +     'cash': Decimal('2000.00000000'),
+E         ?                          +++++++++
+E           }
+
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py:148: AssertionError
+_________ test_fin01_guardian_exit_consumes_the_original_owners_lots __________
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x000001ED872C2AB0>
+
+    def test_fin01_guardian_exit_consumes_the_original_owners_lots(desk):
+        """Catch guardian sales that close aggregate inventory but leave owner lots."""
+        # Seed two owners using real ledger transactions, as in test_crash_restart.
+        for agent, price in (("trader-A", "100"), ("trader-B", "200")):
+            desk.ledger.fill_buy(
+                INSTRUMENT, D("1"), D(price), D("0"), reserved=D("0"),
+                agent_id=agent, ref=f"seed-{agent}",
+            )
+        assert desk.ledger.position_quantity(INSTRUMENT) == D("2")
+        sale = _sell_order(desk, agent="position-guardian")
+        _fill(desk, sale, "guardian-sale", price="150", quantity="2")
+    
+        assert sale.state is OrderState.FILLED
+        assert desk.ledger.is_balanced()
+        observed = _position_state(desk.ledger)
+        for agent in ("trader-A", "trader-B"):
+            observed[f"{agent}_quantity"] = desk.ledger.lot_quantity(INSTRUMENT, agent)
+            observed[f"{agent}_cost"] = desk.ledger.lot_cost(INSTRUMENT, agent)
+>       assert observed == {
+            "quantity": D("0"), "posted_cost": D("0"),
+            "lot_quantity": D("0"), "lot_cost": D("0"),
+            "pnl": D("0"), "cash": D("2000"),
+            "trader-A_quantity": D("0"), "trader-A_cost": D("0"),
+            "trader-B_quantity": D("0"), "trader-B_cost": D("0"),
+        }
+E       AssertionError: assert {'quantity': Decimal('0'), 'posted_cost': Decimal('0E-8'), 'lot_quantity': Decimal('2'), 'lot_cost': Decimal('300.00000000'), 'pnl': Decimal('0'), 'cash': Decimal('2000.00000000'), 'trader-A_quantity': Decimal('1'), 'trader-A_cost': Decimal('100.00000000'), 'trader-B_quantity': Decimal('1'), 'trader-B_cost': Decimal('200.00000000')} == {'quantity': Decimal('0'), 'posted_cost': Decimal('0'), 'lot_quantity': Decimal('0'), 'lot_cost': Decimal('0'), 'pnl': Decimal('0'), 'cash': Decimal('2000'), 'trader-A_quantity': Decimal('0'), 'trader-A_cost': Decimal('0'), 'trader-B_quantity': Decimal('0'), 'trader-B_cost': Decimal('0')}
+E         
+E         Common items:
+E         {'cash': Decimal('2000.00000000'),
+E          'pnl': Decimal('0'),
+E          'posted_cost': Decimal('0E-8'),
+E          'quantity': Decimal('0')}
+E         Differing items:
+E         {'lot_quantity': Decimal('2')} != {'lot_quantity': Decimal('0')}
+E         {'trader-B_cost': Decimal('200.00000000')} != {'trader-B_cost': Decimal('0')}
+E         {'trader-A_cost': Decimal('100.00000000')} != {'trader-A_cost': Decimal('0')}
+E         {'trader-B_quantity': Decimal('1')} != {'trader-B_quantity': Decimal('0')}
+E         {'lot_cost': Decimal('300.00000000')} != {'lot_cost': Decimal('0')}
+E         {'trader-A_quantity': Decimal('1')} != {'trader-A_quantity': Decimal('0')}
+E         
+E         Full diff:
+E           {
+E               'quantity': Decimal('0'),
+E         -     'posted_cost': Decimal('0'),
+E         +     'posted_cost': Decimal('0E-8'),
+E         ?                              +++
+E         -     'lot_quantity': Decimal('0'),
+E         ?                              ^
+E         +     'lot_quantity': Decimal('2'),
+E         ?                              ^
+E         -     'lot_cost': Decimal('0'),
+E         +     'lot_cost': Decimal('300.00000000'),
+E         ?                          +++++++++++
+E               'pnl': Decimal('0'),
+E         -     'cash': Decimal('2000'),
+E         +     'cash': Decimal('2000.00000000'),
+E         ?                          +++++++++
+E         -     'trader-A_quantity': Decimal('0'),
+E         ?                                   ^
+E         +     'trader-A_quantity': Decimal('1'),
+E         ?                                   ^
+E         -     'trader-A_cost': Decimal('0'),
+E         +     'trader-A_cost': Decimal('100.00000000'),
+E         ?                               +++++++++++
+E         -     'trader-B_quantity': Decimal('0'),
+E         ?                                   ^
+E         +     'trader-B_quantity': Decimal('1'),
+E         ?                                   ^
+E         -     'trader-B_cost': Decimal('0'),
+E         +     'trader-B_cost': Decimal('200.00000000'),
+E         ?                               +++++++++++
+E           }
+
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py:173: AssertionError
+_____ test_fin02_failed_ledger_post_can_be_replayed_exactly_once[partial] _____
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x000001ED872C8A40>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001ED872C3FE0>
+notional = '220', remaining = '119', cash = '1780', released = '0'
+state = <OrderState.PARTIALLY_FILLED: 'partially_filled'>
+
+    @pytest.mark.parametrize(
+        "notional,remaining,cash,released,state",
+        [
+            ("220", "119", "1780", "0", OrderState.PARTIALLY_FILLED),
+            ("110", "0", "1899", "9", OrderState.FILLED),
+        ], ids=["partial", "terminal"],
+    )
+    def test_fin02_failed_ledger_post_can_be_replayed_exactly_once(
+        desk, monkeypatch, notional, remaining, cash, released, state,
+    ):
+        """Catch premature seen_fills and non-atomic risk consumption on failed post."""
+        rec = _buy_order(desk, notional=notional, price="110")
+        version = desk.oms_version
+        real_fill_buy = desk.ledger.fill_buy
+        fail_next = True
+    
+        def fail_once(*args, **kwargs):
+            nonlocal fail_next
+            if fail_next:
+                fail_next = False
+                raise LedgerError("V9 one-shot failure before ledger posting")
+            return real_fill_buy(*args, **kwargs)
+    
+        monkeypatch.setattr(desk.ledger, "fill_buy", fail_once)
+        with pytest.raises(LedgerError, match="V9 one-shot failure"):
+            _fill(desk, rec, "retry-fill", price="100", fee="1")
+    
+        _fill(desk, rec, "retry-fill", price="100", fee="1")
+        after_retry = deepcopy(desk.snapshot_estado())
+        _fill(desk, rec, "retry-fill", price="100", fee="1")
+        assert desk.snapshot_estado() == after_retry, "duplicate replay changed durable state"
+    
+        reservation = desk.risk.reserva(rec.reserva_id)
+        conclusion = desk.risk.incidentes_doc()["conclusoes"].get(rec.reserva_id, {})
+        consumed = (reservation.consumed_amount if reservation else
+                    D(conclusion.get("consumed_amount", "0")))
+        risk_quantity = (reservation.filled_quantity if reservation else
+                         D(conclusion.get("filled_quantity", "0")))
+        release_amount = sum(
+            (e.amount for tx in desk.ledger.transactions if tx.kind == "release"
+             for e in tx.entries if e.account == "CASH:USDT"), D("0"),
+        )
+        observed = {
+            "quantity": desk.ledger.position_quantity(INSTRUMENT),
+            "cost": desk.ledger.invested_cost(), "cash": desk.ledger.cash(),
+            "fees": desk.ledger.balance("FEES:USDT"),
+            "ledger_reserved": desk.ledger.reserved_cash(rec.reserva_id),
+            "risk_reserved": desk.risk.reserved_total,
+            "risk_consumed": consumed, "risk_filled": risk_quantity,
+            "released": release_amount,
+            "buy_posts": sum(tx.kind == "fill_buy" for tx in desk.ledger.transactions),
+            "order_filled": rec.filled_qty, "order_average": rec.avg_price,
+            "order_fees": rec.fees, "order_state": rec.state,
+            "seen": rec.seen_fills, "oms_updates": desk.oms_version - version,
+            "incidents": len(desk.risk.incidentes_doc()["incidentes"]),
+        }
+        # One unit costs 100 + 1 fee. Terminal budget 110 returns exactly 9;
+        # partial budget 220 retains 119 for the still-open second unit.
+>       assert observed == {
+            "quantity": D("1"), "cost": D("100"), "cash": D(cash),
+            "fees": D("1"), "ledger_reserved": D(remaining),
+            "risk_reserved": D(remaining), "risk_consumed": D("101"),
+            "risk_filled": D("1"), "released": D(released), "buy_posts": 1,
+            "order_filled": D("1"), "order_average": D("100"),
+            "order_fees": D("1"), "order_state": state,
+            "seen": {"retry-fill"}, "oms_updates": 1, "incidents": 0,
+        }
+E       AssertionError: assert {'quantity': Decimal('0'), 'cost': Decimal('0'), 'cash': Decimal('1780.00000000'), 'fees': Decimal('0'), 'ledger_reserved': Decimal('220.00000000'), 'risk_reserved': Decimal('119.00000000'), 'risk_consumed': Decimal('101.00000000'), 'risk_filled': Decimal('1'), 'released': Decimal('0'), 'buy_posts': 0, 'order_filled': Decimal('0'), 'order_average': Decimal('0'), 'order_fees': Decimal('0'), 'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>, 'seen': {'retry-fill'}, 'oms_updates': 0, 'incidents': 0} == {'quantity': Decimal('1'), 'cost': Decimal('100'), 'cash': Decimal('1780'), 'fees': Decimal('1'), 'ledger_reserved': Decimal('119'), 'risk_reserved': Decimal('119'), 'risk_consumed': Decimal('101'), 'risk_filled': Decimal('1'), 'released': Decimal('0'), 'buy_posts': 1, 'order_filled': Decimal('1'), 'order_average': Decimal('100'), 'order_fees': Decimal('1'), 'order_state': <OrderState.PARTIALLY_FILLED: 'partially_filled'>, 'seen': {'retry-fill'}, 'oms_updates': 1, 'incidents': 0}
+E         
+E         Common items:
+E         {'cash': Decimal('1780.00000000'),
+E          'incidents': 0,
+E          'released': Decimal('0'),
+E          'risk_consumed': Decimal('101.00000000'),
+E          'risk_filled': Decimal('1'),
+E          'risk_reserved': Decimal('119.00000000'),
+E          'seen': {'retry-fill'}}
+E         Differing items:
+E         {'order_filled': Decimal('0')} != {'order_filled': Decimal('1')}
+E         {'quantity': Decimal('0')} != {'quantity': Decimal('1')}
+E         {'cost': Decimal('0')} != {'cost': Decimal('100')}
+E         {'ledger_reserved': Decimal('220.00000000')} != {'ledger_reserved': Decimal('119')}
+E         {'buy_posts': 0} != {'buy_posts': 1}
+E         {'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>} != {'order_state': <OrderState.PARTIALLY_FILLED: 'partially_filled'>}
+E         {'fees': Decimal('0')} != {'fees': Decimal('1')}
+E         {'oms_updates': 0} != {'oms_updates': 1}
+E         {'order_average': Decimal('0')} != {'order_average': Decimal('100')}
+E         {'order_fees': Decimal('0')} != {'order_fees': Decimal('1')}
+E         
+E         Full diff:
+E           {
+E         -     'quantity': Decimal('1'),
+E         ?                          ^
+E         +     'quantity': Decimal('0'),
+E         ?                          ^
+E         -     'cost': Decimal('100'),
+E         ?                      --
+E         +     'cost': Decimal('0'),
+E         -     'cash': Decimal('1780'),
+E         +     'cash': Decimal('1780.00000000'),
+E         ?                          +++++++++
+E         -     'fees': Decimal('1'),
+E         ?                      ^
+E         +     'fees': Decimal('0'),
+E         ?                      ^
+E         -     'ledger_reserved': Decimal('119'),
+E         ?                                 ^^^
+E         +     'ledger_reserved': Decimal('220.00000000'),
+E         ?                                 ^^^^^^^^^^^^
+E         -     'risk_reserved': Decimal('119'),
+E         +     'risk_reserved': Decimal('119.00000000'),
+E         ?                                  +++++++++
+E         -     'risk_consumed': Decimal('101'),
+E         +     'risk_consumed': Decimal('101.00000000'),
+E         ?                                  +++++++++
+E               'risk_filled': Decimal('1'),
+E               'released': Decimal('0'),
+E         -     'buy_posts': 1,
+E         ?                  ^
+E         +     'buy_posts': 0,
+E         ?                  ^
+E         -     'order_filled': Decimal('1'),
+E         ?                              ^
+E         +     'order_filled': Decimal('0'),
+E         ?                              ^
+E         -     'order_average': Decimal('100'),
+E         ?                               --
+E         +     'order_average': Decimal('0'),
+E         -     'order_fees': Decimal('1'),
+E         ?                            ^
+E         +     'order_fees': Decimal('0'),
+E         ?                            ^
+E         -     'order_state': <OrderState.PARTIALLY_FILLED: 'partially_filled'>,
+E         +     'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>,
+E               'seen': {
+E                   'retry-fill',
+E               },
+E         -     'oms_updates': 1,
+E         ?                    ^
+E         +     'oms_updates': 0,
+E         ?                    ^
+E               'incidents': 0,
+E           }
+
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py:240: AssertionError
+____ test_fin02_failed_ledger_post_can_be_replayed_exactly_once[terminal] _____
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x000001ED872C8230>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001ED872CB3E0>
+notional = '110', remaining = '0', cash = '1899', released = '9'
+state = <OrderState.FILLED: 'filled'>
+
+    @pytest.mark.parametrize(
+        "notional,remaining,cash,released,state",
+        [
+            ("220", "119", "1780", "0", OrderState.PARTIALLY_FILLED),
+            ("110", "0", "1899", "9", OrderState.FILLED),
+        ], ids=["partial", "terminal"],
+    )
+    def test_fin02_failed_ledger_post_can_be_replayed_exactly_once(
+        desk, monkeypatch, notional, remaining, cash, released, state,
+    ):
+        """Catch premature seen_fills and non-atomic risk consumption on failed post."""
+        rec = _buy_order(desk, notional=notional, price="110")
+        version = desk.oms_version
+        real_fill_buy = desk.ledger.fill_buy
+        fail_next = True
+    
+        def fail_once(*args, **kwargs):
+            nonlocal fail_next
+            if fail_next:
+                fail_next = False
+                raise LedgerError("V9 one-shot failure before ledger posting")
+            return real_fill_buy(*args, **kwargs)
+    
+        monkeypatch.setattr(desk.ledger, "fill_buy", fail_once)
+        with pytest.raises(LedgerError, match="V9 one-shot failure"):
+            _fill(desk, rec, "retry-fill", price="100", fee="1")
+    
+        _fill(desk, rec, "retry-fill", price="100", fee="1")
+        after_retry = deepcopy(desk.snapshot_estado())
+        _fill(desk, rec, "retry-fill", price="100", fee="1")
+        assert desk.snapshot_estado() == after_retry, "duplicate replay changed durable state"
+    
+        reservation = desk.risk.reserva(rec.reserva_id)
+        conclusion = desk.risk.incidentes_doc()["conclusoes"].get(rec.reserva_id, {})
+        consumed = (reservation.consumed_amount if reservation else
+                    D(conclusion.get("consumed_amount", "0")))
+        risk_quantity = (reservation.filled_quantity if reservation else
+                         D(conclusion.get("filled_quantity", "0")))
+        release_amount = sum(
+            (e.amount for tx in desk.ledger.transactions if tx.kind == "release"
+             for e in tx.entries if e.account == "CASH:USDT"), D("0"),
+        )
+        observed = {
+            "quantity": desk.ledger.position_quantity(INSTRUMENT),
+            "cost": desk.ledger.invested_cost(), "cash": desk.ledger.cash(),
+            "fees": desk.ledger.balance("FEES:USDT"),
+            "ledger_reserved": desk.ledger.reserved_cash(rec.reserva_id),
+            "risk_reserved": desk.risk.reserved_total,
+            "risk_consumed": consumed, "risk_filled": risk_quantity,
+            "released": release_amount,
+            "buy_posts": sum(tx.kind == "fill_buy" for tx in desk.ledger.transactions),
+            "order_filled": rec.filled_qty, "order_average": rec.avg_price,
+            "order_fees": rec.fees, "order_state": rec.state,
+            "seen": rec.seen_fills, "oms_updates": desk.oms_version - version,
+            "incidents": len(desk.risk.incidentes_doc()["incidentes"]),
+        }
+        # One unit costs 100 + 1 fee. Terminal budget 110 returns exactly 9;
+        # partial budget 220 retains 119 for the still-open second unit.
+>       assert observed == {
+            "quantity": D("1"), "cost": D("100"), "cash": D(cash),
+            "fees": D("1"), "ledger_reserved": D(remaining),
+            "risk_reserved": D(remaining), "risk_consumed": D("101"),
+            "risk_filled": D("1"), "released": D(released), "buy_posts": 1,
+            "order_filled": D("1"), "order_average": D("100"),
+            "order_fees": D("1"), "order_state": state,
+            "seen": {"retry-fill"}, "oms_updates": 1, "incidents": 0,
+        }
+E       AssertionError: assert {'quantity': Decimal('0'), 'cost': Decimal('0'), 'cash': Decimal('1890.00000000'), 'fees': Decimal('0'), 'ledger_reserved': Decimal('110.00000000'), 'risk_reserved': Decimal('0'), 'risk_consumed': Decimal('101.00000000'), 'risk_filled': Decimal('1'), 'released': Decimal('0'), 'buy_posts': 0, 'order_filled': Decimal('0'), 'order_average': Decimal('0'), 'order_fees': Decimal('0'), 'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>, 'seen': {'retry-fill'}, 'oms_updates': 0, 'incidents': 0} == {'quantity': Decimal('1'), 'cost': Decimal('100'), 'cash': Decimal('1899'), 'fees': Decimal('1'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'risk_consumed': Decimal('101'), 'risk_filled': Decimal('1'), 'released': Decimal('9'), 'buy_posts': 1, 'order_filled': Decimal('1'), 'order_average': Decimal('100'), 'order_fees': Decimal('1'), 'order_state': <OrderState.FILLED: 'filled'>, 'seen': {'retry-fill'}, 'oms_updates': 1, 'incidents': 0}
+E         
+E         Common items:
+E         {'incidents': 0,
+E          'risk_consumed': Decimal('101.00000000'),
+E          'risk_filled': Decimal('1'),
+E          'risk_reserved': Decimal('0'),
+E          'seen': {'retry-fill'}}
+E         Differing items:
+E         {'order_filled': Decimal('0')} != {'order_filled': Decimal('1')}
+E         {'quantity': Decimal('0')} != {'quantity': Decimal('1')}
+E         {'cost': Decimal('0')} != {'cost': Decimal('100')}
+E         {'ledger_reserved': Decimal('110.00000000')} != {'ledger_reserved': Decimal('0')}
+E         {'cash': Decimal('1890.00000000')} != {'cash': Decimal('1899')}
+E         {'buy_posts': 0} != {'buy_posts': 1}
+E         {'released': Decimal('0')} != {'released': Decimal('9')}
+E         {'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>} != {'order_state': <OrderState.FILLED: 'filled'>}
+E         {'fees': Decimal('0')} != {'fees': Decimal('1')}
+E         {'oms_updates': 0} != {'oms_updates': 1}
+E         {'order_average': Decimal('0')} != {'order_average': Decimal('100')}
+E         {'order_fees': Decimal('0')} != {'order_fees': Decimal('1')}
+E         
+E         Full diff:
+E           {
+E         -     'quantity': Decimal('1'),
+E         ?                          ^
+E         +     'quantity': Decimal('0'),
+E         ?                          ^
+E         -     'cost': Decimal('100'),
+E         ?                      --
+E         +     'cost': Decimal('0'),
+E         -     'cash': Decimal('1899'),
+E         ?                         ^
+E         +     'cash': Decimal('1890.00000000'),
+E         ?                         ^^^^^^^^^^
+E         -     'fees': Decimal('1'),
+E         ?                      ^
+E         +     'fees': Decimal('0'),
+E         ?                      ^
+E         -     'ledger_reserved': Decimal('0'),
+E         +     'ledger_reserved': Decimal('110.00000000'),
+E         ?                                 +++++++++++
+E               'risk_reserved': Decimal('0'),
+E         -     'risk_consumed': Decimal('101'),
+E         +     'risk_consumed': Decimal('101.00000000'),
+E         ?                                  +++++++++
+E               'risk_filled': Decimal('1'),
+E         -     'released': Decimal('9'),
+E         ?                          ^
+E         +     'released': Decimal('0'),
+E         ?                          ^
+E         -     'buy_posts': 1,
+E         ?                  ^
+E         +     'buy_posts': 0,
+E         ?                  ^
+E         -     'order_filled': Decimal('1'),
+E         ?                              ^
+E         +     'order_filled': Decimal('0'),
+E         ?                              ^
+E         -     'order_average': Decimal('100'),
+E         ?                               --
+E         +     'order_average': Decimal('0'),
+E         -     'order_fees': Decimal('1'),
+E         ?                            ^
+E         +     'order_fees': Decimal('0'),
+E         ?                            ^
+E         -     'order_state': <OrderState.FILLED: 'filled'>,
+E         ?                                ^^^      ^^ ^
+E         +     'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>,
+E         ?                                ^^^^^^   +++   ^^^^^^ ^^^
+E               'seen': {
+E                   'retry-fill',
+E               },
+E         -     'oms_updates': 1,
+E         ?                    ^
+E         +     'oms_updates': 0,
+E         ?                    ^
+E               'incidents': 0,
+E           }
+
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py:240: AssertionError
+_ test_fin03_terminal_partial_imports_fills_before_releasing_remainder[canceled] _
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x000001ED872C3C20>
+status = 'canceled'
+
+    @pytest.mark.parametrize("status", ["canceled", "cancelled", "expired"])
+    def test_fin03_terminal_partial_imports_fills_before_releasing_remainder(desk, status):
+        """Catch terminal handling that refunds the whole reservation and loses a fill."""
+        rec = _buy_order(desk)
+        assert rec.quantidade == D("2")
+        assert desk.ledger.reserved_cash(rec.reserva_id) == D("200")
+        reports = [_reconcile(
+            desk, rec, status=status, cumulative="1", remote_quantity="1",
+            fills=[_remote_fill("1")],
+        ) for _ in range(2)]
+        conclusion = desk.risk.incidentes_doc()["conclusoes"].get(rec.reserva_id, {})
+        observed = {
+            "quantity": desk.ledger.position_quantity(INSTRUMENT),
+            "cost": desk.ledger.invested_cost(), "cash": desk.ledger.cash(),
+            "ledger_reserved": desk.ledger.reserved_cash(rec.reserva_id),
+            "risk_reserved": desk.risk.reserved_total,
+            "consumed": D(conclusion.get("consumed_amount", "0")),
+            "released": D(conclusion.get("sobra_liberada", "0")),
+            "filled": rec.filled_qty, "seen": rec.seen_fills, "open": rec.open,
+            "posting_order": [tx.kind for tx in desk.ledger.transactions],
+            "safe": [report["seguro"] for report in reports],
+        }
+>       assert observed == {
+            "quantity": D("1"), "cost": D("100"), "cash": D("1900"),
+            "ledger_reserved": D("0"), "risk_reserved": D("0"),
+            "consumed": D("100"), "released": D("100"),
+            "filled": D("1"), "seen": {"remote-trade"}, "open": False,
+            "posting_order": ["opening", "reserve", "fill_buy", "release"],
+            "safe": [True, True],
+        }
+E       AssertionError: assert {'quantity': Decimal('0'), 'cost': Decimal('0'), 'cash': Decimal('2000.00000000'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('0'), 'released': Decimal('200.00000000'), 'filled': Decimal('0'), 'seen': set(), 'open': False, 'posting_order': ['opening', 'reserve', 'release'], 'safe': [False, False]} == {'quantity': Decimal('1'), 'cost': Decimal('100'), 'cash': Decimal('1900'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('100'), 'released': Decimal('100'), 'filled': Decimal('1'), 'seen': {'remote-trade'}, 'open': False, 'posting_order': ['opening', 'reserve', 'fill_buy', 'release'], 'safe': [True, True]}
+E         
+E         Common items:
+E         {'ledger_reserved': Decimal('0'), 'open': False, 'risk_reserved': Decimal('0')}
+E         Differing items:
+E         {'quantity': Decimal('0')} != {'quantity': Decimal('1')}
+E         {'cost': Decimal('0')} != {'cost': Decimal('100')}
+E         {'safe': [False, False]} != {'safe': [True, True]}
+E         {'cash': Decimal('2000.00000000')} != {'cash': Decimal('1900')}
+E         {'released': Decimal('200.00000000')} != {'released': Decimal('100')}
+E         {'seen': set()} != {'seen': {'remote-trade'}}
+E         {'filled': Decimal('0')} != {'filled': Decimal('1')}
+E         {'posting_order': ['opening', 'reserve', 'release']} != {'posting_order': ['opening', 'reserve', 'fill_buy', 'release']}
+E         {'consumed': Decimal('0')} != {'consumed': Decimal('100')}
+E         
+E         Full diff:
+E           {
+E         -     'quantity': Decimal('1'),
+E         ?                          ^
+E         +     'quantity': Decimal('0'),
+E         ?                          ^
+E         -     'cost': Decimal('100'),
+E         ?                      --
+E         +     'cost': Decimal('0'),
+E         -     'cash': Decimal('1900'),
+E         ?                      ^^
+E         +     'cash': Decimal('2000.00000000'),
+E         ?                      ^^^^^^^^^^^
+E               'ledger_reserved': Decimal('0'),
+E               'risk_reserved': Decimal('0'),
+E         -     'consumed': Decimal('100'),
+E         ?                          --
+E         +     'consumed': Decimal('0'),
+E         -     'released': Decimal('100'),
+E         ?                          ^
+E         +     'released': Decimal('200.00000000'),
+E         ?                          ^^^^^^^^^^
+E         -     'filled': Decimal('1'),
+E         ?                        ^
+E         +     'filled': Decimal('0'),
+E         ?                        ^
+E         -     'seen': {
+E         ?             ^
+E         +     'seen': set(),
+E         ?             ^^^^^^
+E         -         'remote-trade',
+E         -     },
+E               'open': False,
+E               'posting_order': [
+E                   'opening',
+E                   'reserve',
+E         -         'fill_buy',
+E                   'release',
+E               ],
+E               'safe': [
+E         -         True,
+E         -         True,
+E         +         False,
+E         +         False,
+E               ],
+E           }
+
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py:306: AssertionError
+_ test_fin03_terminal_partial_imports_fills_before_releasing_remainder[cancelled] _
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x000001ED872C3590>
+status = 'cancelled'
+
+    @pytest.mark.parametrize("status", ["canceled", "cancelled", "expired"])
+    def test_fin03_terminal_partial_imports_fills_before_releasing_remainder(desk, status):
+        """Catch terminal handling that refunds the whole reservation and loses a fill."""
+        rec = _buy_order(desk)
+        assert rec.quantidade == D("2")
+        assert desk.ledger.reserved_cash(rec.reserva_id) == D("200")
+        reports = [_reconcile(
+            desk, rec, status=status, cumulative="1", remote_quantity="1",
+            fills=[_remote_fill("1")],
+        ) for _ in range(2)]
+        conclusion = desk.risk.incidentes_doc()["conclusoes"].get(rec.reserva_id, {})
+        observed = {
+            "quantity": desk.ledger.position_quantity(INSTRUMENT),
+            "cost": desk.ledger.invested_cost(), "cash": desk.ledger.cash(),
+            "ledger_reserved": desk.ledger.reserved_cash(rec.reserva_id),
+            "risk_reserved": desk.risk.reserved_total,
+            "consumed": D(conclusion.get("consumed_amount", "0")),
+            "released": D(conclusion.get("sobra_liberada", "0")),
+            "filled": rec.filled_qty, "seen": rec.seen_fills, "open": rec.open,
+            "posting_order": [tx.kind for tx in desk.ledger.transactions],
+            "safe": [report["seguro"] for report in reports],
+        }
+>       assert observed == {
+            "quantity": D("1"), "cost": D("100"), "cash": D("1900"),
+            "ledger_reserved": D("0"), "risk_reserved": D("0"),
+            "consumed": D("100"), "released": D("100"),
+            "filled": D("1"), "seen": {"remote-trade"}, "open": False,
+            "posting_order": ["opening", "reserve", "fill_buy", "release"],
+            "safe": [True, True],
+        }
+E       AssertionError: assert {'quantity': Decimal('0'), 'cost': Decimal('0'), 'cash': Decimal('2000.00000000'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('0'), 'released': Decimal('200.00000000'), 'filled': Decimal('0'), 'seen': set(), 'open': False, 'posting_order': ['opening', 'reserve', 'release'], 'safe': [False, False]} == {'quantity': Decimal('1'), 'cost': Decimal('100'), 'cash': Decimal('1900'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('100'), 'released': Decimal('100'), 'filled': Decimal('1'), 'seen': {'remote-trade'}, 'open': False, 'posting_order': ['opening', 'reserve', 'fill_buy', 'release'], 'safe': [True, True]}
+E         
+E         Common items:
+E         {'ledger_reserved': Decimal('0'), 'open': False, 'risk_reserved': Decimal('0')}
+E         Differing items:
+E         {'quantity': Decimal('0')} != {'quantity': Decimal('1')}
+E         {'cost': Decimal('0')} != {'cost': Decimal('100')}
+E         {'safe': [False, False]} != {'safe': [True, True]}
+E         {'cash': Decimal('2000.00000000')} != {'cash': Decimal('1900')}
+E         {'released': Decimal('200.00000000')} != {'released': Decimal('100')}
+E         {'seen': set()} != {'seen': {'remote-trade'}}
+E         {'filled': Decimal('0')} != {'filled': Decimal('1')}
+E         {'posting_order': ['opening', 'reserve', 'release']} != {'posting_order': ['opening', 'reserve', 'fill_buy', 'release']}
+E         {'consumed': Decimal('0')} != {'consumed': Decimal('100')}
+E         
+E         Full diff:
+E           {
+E         -     'quantity': Decimal('1'),
+E         ?                          ^
+E         +     'quantity': Decimal('0'),
+E         ?                          ^
+E         -     'cost': Decimal('100'),
+E         ?                      --
+E         +     'cost': Decimal('0'),
+E         -     'cash': Decimal('1900'),
+E         ?                      ^^
+E         +     'cash': Decimal('2000.00000000'),
+E         ?                      ^^^^^^^^^^^
+E               'ledger_reserved': Decimal('0'),
+E               'risk_reserved': Decimal('0'),
+E         -     'consumed': Decimal('100'),
+E         ?                          --
+E         +     'consumed': Decimal('0'),
+E         -     'released': Decimal('100'),
+E         ?                          ^
+E         +     'released': Decimal('200.00000000'),
+E         ?                          ^^^^^^^^^^
+E         -     'filled': Decimal('1'),
+E         ?                        ^
+E         +     'filled': Decimal('0'),
+E         ?                        ^
+E         -     'seen': {
+E         ?             ^
+E         +     'seen': set(),
+E         ?             ^^^^^^
+E         -         'remote-trade',
+E         -     },
+E               'open': False,
+E               'posting_order': [
+E                   'opening',
+E                   'reserve',
+E         -         'fill_buy',
+E                   'release',
+E               ],
+E               'safe': [
+E         -         True,
+E         -         True,
+E         +         False,
+E         +         False,
+E               ],
+E           }
+
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py:306: AssertionError
+_ test_fin03_terminal_partial_imports_fills_before_releasing_remainder[expired] _
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x000001ED872C1BE0>
+status = 'expired'
+
+    @pytest.mark.parametrize("status", ["canceled", "cancelled", "expired"])
+    def test_fin03_terminal_partial_imports_fills_before_releasing_remainder(desk, status):
+        """Catch terminal handling that refunds the whole reservation and loses a fill."""
+        rec = _buy_order(desk)
+        assert rec.quantidade == D("2")
+        assert desk.ledger.reserved_cash(rec.reserva_id) == D("200")
+        reports = [_reconcile(
+            desk, rec, status=status, cumulative="1", remote_quantity="1",
+            fills=[_remote_fill("1")],
+        ) for _ in range(2)]
+        conclusion = desk.risk.incidentes_doc()["conclusoes"].get(rec.reserva_id, {})
+        observed = {
+            "quantity": desk.ledger.position_quantity(INSTRUMENT),
+            "cost": desk.ledger.invested_cost(), "cash": desk.ledger.cash(),
+            "ledger_reserved": desk.ledger.reserved_cash(rec.reserva_id),
+            "risk_reserved": desk.risk.reserved_total,
+            "consumed": D(conclusion.get("consumed_amount", "0")),
+            "released": D(conclusion.get("sobra_liberada", "0")),
+            "filled": rec.filled_qty, "seen": rec.seen_fills, "open": rec.open,
+            "posting_order": [tx.kind for tx in desk.ledger.transactions],
+            "safe": [report["seguro"] for report in reports],
+        }
+>       assert observed == {
+            "quantity": D("1"), "cost": D("100"), "cash": D("1900"),
+            "ledger_reserved": D("0"), "risk_reserved": D("0"),
+            "consumed": D("100"), "released": D("100"),
+            "filled": D("1"), "seen": {"remote-trade"}, "open": False,
+            "posting_order": ["opening", "reserve", "fill_buy", "release"],
+            "safe": [True, True],
+        }
+E       AssertionError: assert {'quantity': Decimal('0'), 'cost': Decimal('0'), 'cash': Decimal('2000.00000000'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('0'), 'released': Decimal('200.00000000'), 'filled': Decimal('0'), 'seen': set(), 'open': False, 'posting_order': ['opening', 'reserve', 'release'], 'safe': [False, False]} == {'quantity': Decimal('1'), 'cost': Decimal('100'), 'cash': Decimal('1900'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('100'), 'released': Decimal('100'), 'filled': Decimal('1'), 'seen': {'remote-trade'}, 'open': False, 'posting_order': ['opening', 'reserve', 'fill_buy', 'release'], 'safe': [True, True]}
+E         
+E         Common items:
+E         {'ledger_reserved': Decimal('0'), 'open': False, 'risk_reserved': Decimal('0')}
+E         Differing items:
+E         {'quantity': Decimal('0')} != {'quantity': Decimal('1')}
+E         {'cost': Decimal('0')} != {'cost': Decimal('100')}
+E         {'safe': [False, False]} != {'safe': [True, True]}
+E         {'cash': Decimal('2000.00000000')} != {'cash': Decimal('1900')}
+E         {'released': Decimal('200.00000000')} != {'released': Decimal('100')}
+E         {'seen': set()} != {'seen': {'remote-trade'}}
+E         {'filled': Decimal('0')} != {'filled': Decimal('1')}
+E         {'posting_order': ['opening', 'reserve', 'release']} != {'posting_order': ['opening', 'reserve', 'fill_buy', 'release']}
+E         {'consumed': Decimal('0')} != {'consumed': Decimal('100')}
+E         
+E         Full diff:
+E           {
+E         -     'quantity': Decimal('1'),
+E         ?                          ^
+E         +     'quantity': Decimal('0'),
+E         ?                          ^
+E         -     'cost': Decimal('100'),
+E         ?                      --
+E         +     'cost': Decimal('0'),
+E         -     'cash': Decimal('1900'),
+E         ?                      ^^
+E         +     'cash': Decimal('2000.00000000'),
+E         ?                      ^^^^^^^^^^^
+E               'ledger_reserved': Decimal('0'),
+E               'risk_reserved': Decimal('0'),
+E         -     'consumed': Decimal('100'),
+E         ?                          --
+E         +     'consumed': Decimal('0'),
+E         -     'released': Decimal('100'),
+E         ?                          ^
+E         +     'released': Decimal('200.00000000'),
+E         ?                          ^^^^^^^^^^
+E         -     'filled': Decimal('1'),
+E         ?                        ^
+E         +     'filled': Decimal('0'),
+E         ?                        ^
+E         -     'seen': {
+E         ?             ^
+E         +     'seen': set(),
+E         ?             ^^^^^^
+E         -         'remote-trade',
+E         -     },
+E               'open': False,
+E               'posting_order': [
+E                   'opening',
+E                   'reserve',
+E         -         'fill_buy',
+E                   'release',
+E               ],
+E               'safe': [
+E         -         True,
+E         -         True,
+E         +         False,
+E         +         False,
+E               ],
+E           }
+
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py:306: AssertionError
+___ test_fin03_unverified_terminal_partial_keeps_capital_reserved[canceled] ___
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x000001ED872CAC30>
+status = 'canceled'
+
+    @pytest.mark.parametrize("status", ["canceled", "expired"])
+    def test_fin03_unverified_terminal_partial_keeps_capital_reserved(desk, status):
+        """Catch terminal release before a failing trades query has been resolved."""
+        rec = _buy_order(desk)
+        reports = [_reconcile(
+            desk, rec, status=status, cumulative="1", remote_quantity="1",
+            fills=RuntimeError("synthetic trades query unavailable"),
+        ) for _ in range(2)]
+        assert all(report["seguro"] is False for report in reports)
+        assert desk.reconciliacao_pendente is True
+>       assert {
+            "ledger_reserved": desk.ledger.reserved_cash(rec.reserva_id),
+            "risk_reserved": desk.risk.reserved_total,
+            "cash": desk.ledger.cash(),
+            "quantity": desk.ledger.position_quantity(INSTRUMENT),
+        } == {
+            "ledger_reserved": D("200"), "risk_reserved": D("200"),
+            "cash": D("1800"), "quantity": D("0"),
+        }
+E       AssertionError: assert {'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'cash': Decimal('2000.00000000'), 'quantity': Decimal('0')} == {'ledger_reserved': Decimal('200'), 'risk_reserved': Decimal('200'), 'cash': Decimal('1800'), 'quantity': Decimal('0')}
+E         
+E         Common items:
+E         {'quantity': Decimal('0')}
+E         Differing items:
+E         {'ledger_reserved': Decimal('0')} != {'ledger_reserved': Decimal('200')}
+E         {'cash': Decimal('2000.00000000')} != {'cash': Decimal('1800')}
+E         {'risk_reserved': Decimal('0')} != {'risk_reserved': Decimal('200')}
+E         
+E         Full diff:
+E           {
+E         -     'ledger_reserved': Decimal('200'),
+E         ?                                 --
+E         +     'ledger_reserved': Decimal('0'),
+E         -     'risk_reserved': Decimal('200'),
+E         ?                               --
+E         +     'risk_reserved': Decimal('0'),
+E         -     'cash': Decimal('1800'),
+E         ?                      ^^
+E         +     'cash': Decimal('2000.00000000'),
+E         ?                      ^^^^^^^^^^^
+E               'quantity': Decimal('0'),
+E           }
+
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py:327: AssertionError
+___ test_fin03_unverified_terminal_partial_keeps_capital_reserved[expired] ____
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x000001ED872C9D00>
+status = 'expired'
+
+    @pytest.mark.parametrize("status", ["canceled", "expired"])
+    def test_fin03_unverified_terminal_partial_keeps_capital_reserved(desk, status):
+        """Catch terminal release before a failing trades query has been resolved."""
+        rec = _buy_order(desk)
+        reports = [_reconcile(
+            desk, rec, status=status, cumulative="1", remote_quantity="1",
+            fills=RuntimeError("synthetic trades query unavailable"),
+        ) for _ in range(2)]
+        assert all(report["seguro"] is False for report in reports)
+        assert desk.reconciliacao_pendente is True
+>       assert {
+            "ledger_reserved": desk.ledger.reserved_cash(rec.reserva_id),
+            "risk_reserved": desk.risk.reserved_total,
+            "cash": desk.ledger.cash(),
+            "quantity": desk.ledger.position_quantity(INSTRUMENT),
+        } == {
+            "ledger_reserved": D("200"), "risk_reserved": D("200"),
+            "cash": D("1800"), "quantity": D("0"),
+        }
+E       AssertionError: assert {'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'cash': Decimal('2000.00000000'), 'quantity': Decimal('0')} == {'ledger_reserved': Decimal('200'), 'risk_reserved': Decimal('200'), 'cash': Decimal('1800'), 'quantity': Decimal('0')}
+E         
+E         Common items:
+E         {'quantity': Decimal('0')}
+E         Differing items:
+E         {'ledger_reserved': Decimal('0')} != {'ledger_reserved': Decimal('200')}
+E         {'cash': Decimal('2000.00000000')} != {'cash': Decimal('1800')}
+E         {'risk_reserved': Decimal('0')} != {'risk_reserved': Decimal('200')}
+E         
+E         Full diff:
+E           {
+E         -     'ledger_reserved': Decimal('200'),
+E         ?                                 --
+E         +     'ledger_reserved': Decimal('0'),
+E         -     'risk_reserved': Decimal('200'),
+E         ?                               --
+E         +     'risk_reserved': Decimal('0'),
+E         -     'cash': Decimal('1800'),
+E         ?                      ^^
+E         +     'cash': Decimal('2000.00000000'),
+E         ?                      ^^^^^^^^^^^
+E               'quantity': Decimal('0'),
+E           }
+
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py:327: AssertionError
+_______ test_fin03_cumulative_trade_mismatch_cannot_turn_safe_on_repeat _______
+
+desk = <tradingagents.desk.execution.ExecutionCoordinator object at 0x000001ED872C8B00>
+
+    def test_fin03_cumulative_trade_mismatch_cannot_turn_safe_on_repeat(desk):
+        """Catch unresolved FILLS_DIVERGEM disappearing when the local order fills."""
+        rec = _buy_order(desk)
+        reports = []
+        states = []
+        for _ in range(3):
+            reports.append(_reconcile(
+                desk, rec, status="closed", cumulative="1.5", remote_quantity="2",
+                fills=[_remote_fill("2")],
+            ))
+            states.append(rec.state.value)
+    
+        assert reports[0]["fills_status"] == "MISMATCH"
+        assert any("FILLS_DIVERGEM" in d for d in reports[0]["divergencias"])
+        assert rec.filled_qty == desk.ledger.position_quantity(INSTRUMENT) == D("2")
+        assert desk.ledger.invested_cost() == D("200")
+        assert desk.ledger.cash() == D("1800")
+        assert sum(tx.kind == "fill_buy" for tx in desk.ledger.transactions) == 1
+        assert desk.ledger.is_balanced()
+        observed = {
+            "safe": [report["seguro"] for report in reports],
+            "fills_status": [report["fills_status"] for report in reports],
+            "gate_closed": desk.reconciliacao_pendente,
+            "report_authorizes_execution": desk.relatorio_valido()[0],
+        }
+>       assert observed == {
+            "safe": [False, False, False],
+            "fills_status": ["MISMATCH", "MISMATCH", "MISMATCH"],
+            "gate_closed": True, "report_authorizes_execution": False,
+        }, f"unresolved remote cumulative 1.5 vs trades 2; local states={states}; {observed}"
+E       AssertionError: unresolved remote cumulative 1.5 vs trades 2; local states=['filled', 'filled', 'filled']; {'safe': [False, True, True], 'fills_status': ['MISMATCH', 'NAO_APLICAVEL', 'NAO_APLICAVEL'], 'gate_closed': False, 'report_authorizes_execution': True}
+E       assert {'safe': [False, True, True], 'fills_status': ['MISMATCH', 'NAO_APLICAVEL', 'NAO_APLICAVEL'], 'gate_closed': False, 'report_authorizes_execution': True} == {'safe': [False, False, False], 'fills_status': ['MISMATCH', 'MISMATCH', 'MISMATCH'], 'gate_closed': True, 'report_authorizes_execution': False}
+E         
+E         Differing items:
+E         {'fills_status': ['MISMATCH', 'NAO_APLICAVEL', 'NAO_APLICAVEL']} != {'fills_status': ['MISMATCH', 'MISMATCH', 'MISMATCH']}
+E         {'safe': [False, True, True]} != {'safe': [False, False, False]}
+E         {'gate_closed': False} != {'gate_closed': True}
+E         {'report_authorizes_execution': True} != {'report_authorizes_execution': False}
+E         
+E         Full diff:
+E           {
+E               'safe': [
+E                   False,
+E         -         False,
+E         -         False,
+E         +         True,
+E         +         True,
+E               ],
+E               'fills_status': [
+E                   'MISMATCH',
+E         -         'MISMATCH',
+E         -         'MISMATCH',
+E         +         'NAO_APLICAVEL',
+E         +         'NAO_APLICAVEL',
+E               ],
+E         -     'gate_closed': True,
+E         ?                    ^^^
+E         +     'gate_closed': False,
+E         ?                    ^^^^
+E         -     'report_authorizes_execution': False,
+E         ?                                    ^^^^
+E         +     'report_authorizes_execution': True,
+E         ?                                    ^^^
+E           }
+
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py:363: AssertionError
+- generated xml file: C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\docs\mission\evidence\v9-baseline\financial-red.xml -
+=========================== short test summary info ===========================
+FAILED ..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin01_partial_sale_uses_the_same_fifo_cost_as_live_lots - AssertionError: assert {'quantity': Decimal('1'), 'posted_cost': Decimal('150.00000000'), 'lot_quantity': Decimal('1'), 'lot_cost': Decimal('200.00000000'), 'pnl': Decimal('0'), 'cash': Decimal('1850.00000000')} == {'quantity': Decimal('1'), 'posted_cost': Decimal('200'), 'lot_quantity': Decimal('1'), 'lot_cost': Decimal('200'), 'pnl': Decimal('50'), 'cash': Decimal('1850')}
+  
+  Common items:
+  {'cash': Decimal('1850.00000000'),
+   'lot_cost': Decimal('200.00000000'),
+   'lot_quantity': Decimal('1'),
+   'quantity': Decimal('1')}
+  Differing items:
+  {'pnl': Decimal('0')} != {'pnl': Decimal('50')}
+  {'posted_cost': Decimal('150.00000000')} != {'posted_cost': Decimal('200')}
+  
+  Full diff:
+    {
+        'quantity': Decimal('1'),
+  -     'posted_cost': Decimal('200'),
+  ?                             ^
+  +     'posted_cost': Decimal('150.00000000'),
+  ?                             ^^^^^^^^^^
+        'lot_quantity': Decimal('1'),
+  -     'lot_cost': Decimal('200'),
+  +     'lot_cost': Decimal('200.00000000'),
+  ?                             +++++++++
+  -     'pnl': Decimal('50'),
+  ?                     -
+  +     'pnl': Decimal('0'),
+  -     'cash': Decimal('1850'),
+  +     'cash': Decimal('1850.00000000'),
+  ?                          +++++++++
+    }
+FAILED ..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin01_two_sales_leave_no_cost_or_phantom_pnl - AssertionError: assert {'quantity': Decimal('0'), 'posted_cost': Decimal('-50.00000000'), 'lot_quantity': Decimal('0'), 'lot_cost': Decimal('0E-8'), 'pnl': Decimal('-50.00000000'), 'cash': Decimal('2000.00000000')} == {'quantity': Decimal('0'), 'posted_cost': Decimal('0'), 'lot_quantity': Decimal('0'), 'lot_cost': Decimal('0'), 'pnl': Decimal('0'), 'cash': Decimal('2000')}
+  
+  Common items:
+  {'cash': Decimal('2000.00000000'),
+   'lot_cost': Decimal('0E-8'),
+   'lot_quantity': Decimal('0'),
+   'quantity': Decimal('0')}
+  Differing items:
+  {'pnl': Decimal('-50.00000000')} != {'pnl': Decimal('0')}
+  {'posted_cost': Decimal('-50.00000000')} != {'posted_cost': Decimal('0')}
+  
+  Full diff:
+    {
+        'quantity': Decimal('0'),
+  -     'posted_cost': Decimal('0'),
+  +     'posted_cost': Decimal('-50.00000000'),
+  ?                             +++++++++++
+        'lot_quantity': Decimal('0'),
+  -     'lot_cost': Decimal('0'),
+  +     'lot_cost': Decimal('0E-8'),
+  ?                           +++
+  -     'pnl': Decimal('0'),
+  +     'pnl': Decimal('-50.00000000'),
+  ?                     +++++++++++
+  -     'cash': Decimal('2000'),
+  +     'cash': Decimal('2000.00000000'),
+  ?                          +++++++++
+    }
+FAILED ..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin01_guardian_exit_consumes_the_original_owners_lots - AssertionError: assert {'quantity': Decimal('0'), 'posted_cost': Decimal('0E-8'), 'lot_quantity': Decimal('2'), 'lot_cost': Decimal('300.00000000'), 'pnl': Decimal('0'), 'cash': Decimal('2000.00000000'), 'trader-A_quantity': Decimal('1'), 'trader-A_cost': Decimal('100.00000000'), 'trader-B_quantity': Decimal('1'), 'trader-B_cost': Decimal('200.00000000')} == {'quantity': Decimal('0'), 'posted_cost': Decimal('0'), 'lot_quantity': Decimal('0'), 'lot_cost': Decimal('0'), 'pnl': Decimal('0'), 'cash': Decimal('2000'), 'trader-A_quantity': Decimal('0'), 'trader-A_cost': Decimal('0'), 'trader-B_quantity': Decimal('0'), 'trader-B_cost': Decimal('0')}
+  
+  Common items:
+  {'cash': Decimal('2000.00000000'),
+   'pnl': Decimal('0'),
+   'posted_cost': Decimal('0E-8'),
+   'quantity': Decimal('0')}
+  Differing items:
+  {'lot_quantity': Decimal('2')} != {'lot_quantity': Decimal('0')}
+  {'trader-B_cost': Decimal('200.00000000')} != {'trader-B_cost': Decimal('0')}
+  {'trader-A_cost': Decimal('100.00000000')} != {'trader-A_cost': Decimal('0')}
+  {'trader-B_quantity': Decimal('1')} != {'trader-B_quantity': Decimal('0')}
+  {'lot_cost': Decimal('300.00000000')} != {'lot_cost': Decimal('0')}
+  {'trader-A_quantity': Decimal('1')} != {'trader-A_quantity': Decimal('0')}
+  
+  Full diff:
+    {
+        'quantity': Decimal('0'),
+  -     'posted_cost': Decimal('0'),
+  +     'posted_cost': Decimal('0E-8'),
+  ?                              +++
+  -     'lot_quantity': Decimal('0'),
+  ?                              ^
+  +     'lot_quantity': Decimal('2'),
+  ?                              ^
+  -     'lot_cost': Decimal('0'),
+  +     'lot_cost': Decimal('300.00000000'),
+  ?                          +++++++++++
+        'pnl': Decimal('0'),
+  -     'cash': Decimal('2000'),
+  +     'cash': Decimal('2000.00000000'),
+  ?                          +++++++++
+  -     'trader-A_quantity': Decimal('0'),
+  ?                                   ^
+  +     'trader-A_quantity': Decimal('1'),
+  ?                                   ^
+  -     'trader-A_cost': Decimal('0'),
+  +     'trader-A_cost': Decimal('100.00000000'),
+  ?                               +++++++++++
+  -     'trader-B_quantity': Decimal('0'),
+  ?                                   ^
+  +     'trader-B_quantity': Decimal('1'),
+  ?                                   ^
+  -     'trader-B_cost': Decimal('0'),
+  +     'trader-B_cost': Decimal('200.00000000'),
+  ?                               +++++++++++
+    }
+FAILED ..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin02_failed_ledger_post_can_be_replayed_exactly_once[partial] - AssertionError: assert {'quantity': Decimal('0'), 'cost': Decimal('0'), 'cash': Decimal('1780.00000000'), 'fees': Decimal('0'), 'ledger_reserved': Decimal('220.00000000'), 'risk_reserved': Decimal('119.00000000'), 'risk_consumed': Decimal('101.00000000'), 'risk_filled': Decimal('1'), 'released': Decimal('0'), 'buy_posts': 0, 'order_filled': Decimal('0'), 'order_average': Decimal('0'), 'order_fees': Decimal('0'), 'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>, 'seen': {'retry-fill'}, 'oms_updates': 0, 'incidents': 0} == {'quantity': Decimal('1'), 'cost': Decimal('100'), 'cash': Decimal('1780'), 'fees': Decimal('1'), 'ledger_reserved': Decimal('119'), 'risk_reserved': Decimal('119'), 'risk_consumed': Decimal('101'), 'risk_filled': Decimal('1'), 'released': Decimal('0'), 'buy_posts': 1, 'order_filled': Decimal('1'), 'order_average': Decimal('100'), 'order_fees': Decimal('1'), 'order_state': <OrderState.PARTIALLY_FILLED: 'partially_filled'>, 'seen': {'retry-fill'}, 'oms_updates': 1, 'incidents': 0}
+  
+  Common items:
+  {'cash': Decimal('1780.00000000'),
+   'incidents': 0,
+   'released': Decimal('0'),
+   'risk_consumed': Decimal('101.00000000'),
+   'risk_filled': Decimal('1'),
+   'risk_reserved': Decimal('119.00000000'),
+   'seen': {'retry-fill'}}
+  Differing items:
+  {'order_filled': Decimal('0')} != {'order_filled': Decimal('1')}
+  {'quantity': Decimal('0')} != {'quantity': Decimal('1')}
+  {'cost': Decimal('0')} != {'cost': Decimal('100')}
+  {'ledger_reserved': Decimal('220.00000000')} != {'ledger_reserved': Decimal('119')}
+  {'buy_posts': 0} != {'buy_posts': 1}
+  {'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>} != {'order_state': <OrderState.PARTIALLY_FILLED: 'partially_filled'>}
+  {'fees': Decimal('0')} != {'fees': Decimal('1')}
+  {'oms_updates': 0} != {'oms_updates': 1}
+  {'order_average': Decimal('0')} != {'order_average': Decimal('100')}
+  {'order_fees': Decimal('0')} != {'order_fees': Decimal('1')}
+  
+  Full diff:
+    {
+  -     'quantity': Decimal('1'),
+  ?                          ^
+  +     'quantity': Decimal('0'),
+  ?                          ^
+  -     'cost': Decimal('100'),
+  ?                      --
+  +     'cost': Decimal('0'),
+  -     'cash': Decimal('1780'),
+  +     'cash': Decimal('1780.00000000'),
+  ?                          +++++++++
+  -     'fees': Decimal('1'),
+  ?                      ^
+  +     'fees': Decimal('0'),
+  ?                      ^
+  -     'ledger_reserved': Decimal('119'),
+  ?                                 ^^^
+  +     'ledger_reserved': Decimal('220.00000000'),
+  ?                                 ^^^^^^^^^^^^
+  -     'risk_reserved': Decimal('119'),
+  +     'risk_reserved': Decimal('119.00000000'),
+  ?                                  +++++++++
+  -     'risk_consumed': Decimal('101'),
+  +     'risk_consumed': Decimal('101.00000000'),
+  ?                                  +++++++++
+        'risk_filled': Decimal('1'),
+        'released': Decimal('0'),
+  -     'buy_posts': 1,
+  ?                  ^
+  +     'buy_posts': 0,
+  ?                  ^
+  -     'order_filled': Decimal('1'),
+  ?                              ^
+  +     'order_filled': Decimal('0'),
+  ?                              ^
+  -     'order_average': Decimal('100'),
+  ?                               --
+  +     'order_average': Decimal('0'),
+  -     'order_fees': Decimal('1'),
+  ?                            ^
+  +     'order_fees': Decimal('0'),
+  ?                            ^
+  -     'order_state': <OrderState.PARTIALLY_FILLED: 'partially_filled'>,
+  +     'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>,
+        'seen': {
+            'retry-fill',
+        },
+  -     'oms_updates': 1,
+  ?                    ^
+  +     'oms_updates': 0,
+  ?                    ^
+        'incidents': 0,
+    }
+FAILED ..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin02_failed_ledger_post_can_be_replayed_exactly_once[terminal] - AssertionError: assert {'quantity': Decimal('0'), 'cost': Decimal('0'), 'cash': Decimal('1890.00000000'), 'fees': Decimal('0'), 'ledger_reserved': Decimal('110.00000000'), 'risk_reserved': Decimal('0'), 'risk_consumed': Decimal('101.00000000'), 'risk_filled': Decimal('1'), 'released': Decimal('0'), 'buy_posts': 0, 'order_filled': Decimal('0'), 'order_average': Decimal('0'), 'order_fees': Decimal('0'), 'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>, 'seen': {'retry-fill'}, 'oms_updates': 0, 'incidents': 0} == {'quantity': Decimal('1'), 'cost': Decimal('100'), 'cash': Decimal('1899'), 'fees': Decimal('1'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'risk_consumed': Decimal('101'), 'risk_filled': Decimal('1'), 'released': Decimal('9'), 'buy_posts': 1, 'order_filled': Decimal('1'), 'order_average': Decimal('100'), 'order_fees': Decimal('1'), 'order_state': <OrderState.FILLED: 'filled'>, 'seen': {'retry-fill'}, 'oms_updates': 1, 'incidents': 0}
+  
+  Common items:
+  {'incidents': 0,
+   'risk_consumed': Decimal('101.00000000'),
+   'risk_filled': Decimal('1'),
+   'risk_reserved': Decimal('0'),
+   'seen': {'retry-fill'}}
+  Differing items:
+  {'order_filled': Decimal('0')} != {'order_filled': Decimal('1')}
+  {'quantity': Decimal('0')} != {'quantity': Decimal('1')}
+  {'cost': Decimal('0')} != {'cost': Decimal('100')}
+  {'ledger_reserved': Decimal('110.00000000')} != {'ledger_reserved': Decimal('0')}
+  {'cash': Decimal('1890.00000000')} != {'cash': Decimal('1899')}
+  {'buy_posts': 0} != {'buy_posts': 1}
+  {'released': Decimal('0')} != {'released': Decimal('9')}
+  {'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>} != {'order_state': <OrderState.FILLED: 'filled'>}
+  {'fees': Decimal('0')} != {'fees': Decimal('1')}
+  {'oms_updates': 0} != {'oms_updates': 1}
+  {'order_average': Decimal('0')} != {'order_average': Decimal('100')}
+  {'order_fees': Decimal('0')} != {'order_fees': Decimal('1')}
+  
+  Full diff:
+    {
+  -     'quantity': Decimal('1'),
+  ?                          ^
+  +     'quantity': Decimal('0'),
+  ?                          ^
+  -     'cost': Decimal('100'),
+  ?                      --
+  +     'cost': Decimal('0'),
+  -     'cash': Decimal('1899'),
+  ?                         ^
+  +     'cash': Decimal('1890.00000000'),
+  ?                         ^^^^^^^^^^
+  -     'fees': Decimal('1'),
+  ?                      ^
+  +     'fees': Decimal('0'),
+  ?                      ^
+  -     'ledger_reserved': Decimal('0'),
+  +     'ledger_reserved': Decimal('110.00000000'),
+  ?                                 +++++++++++
+        'risk_reserved': Decimal('0'),
+  -     'risk_consumed': Decimal('101'),
+  +     'risk_consumed': Decimal('101.00000000'),
+  ?                                  +++++++++
+        'risk_filled': Decimal('1'),
+  -     'released': Decimal('9'),
+  ?                          ^
+  +     'released': Decimal('0'),
+  ?                          ^
+  -     'buy_posts': 1,
+  ?                  ^
+  +     'buy_posts': 0,
+  ?                  ^
+  -     'order_filled': Decimal('1'),
+  ?                              ^
+  +     'order_filled': Decimal('0'),
+  ?                              ^
+  -     'order_average': Decimal('100'),
+  ?                               --
+  +     'order_average': Decimal('0'),
+  -     'order_fees': Decimal('1'),
+  ?                            ^
+  +     'order_fees': Decimal('0'),
+  ?                            ^
+  -     'order_state': <OrderState.FILLED: 'filled'>,
+  ?                                ^^^      ^^ ^
+  +     'order_state': <OrderState.ACKNOWLEDGED: 'acknowledged'>,
+  ?                                ^^^^^^   +++   ^^^^^^ ^^^
+        'seen': {
+            'retry-fill',
+        },
+  -     'oms_updates': 1,
+  ?                    ^
+  +     'oms_updates': 0,
+  ?                    ^
+        'incidents': 0,
+    }
+FAILED ..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_terminal_partial_imports_fills_before_releasing_remainder[canceled] - AssertionError: assert {'quantity': Decimal('0'), 'cost': Decimal('0'), 'cash': Decimal('2000.00000000'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('0'), 'released': Decimal('200.00000000'), 'filled': Decimal('0'), 'seen': set(), 'open': False, 'posting_order': ['opening', 'reserve', 'release'], 'safe': [False, False]} == {'quantity': Decimal('1'), 'cost': Decimal('100'), 'cash': Decimal('1900'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('100'), 'released': Decimal('100'), 'filled': Decimal('1'), 'seen': {'remote-trade'}, 'open': False, 'posting_order': ['opening', 'reserve', 'fill_buy', 'release'], 'safe': [True, True]}
+  
+  Common items:
+  {'ledger_reserved': Decimal('0'), 'open': False, 'risk_reserved': Decimal('0')}
+  Differing items:
+  {'quantity': Decimal('0')} != {'quantity': Decimal('1')}
+  {'cost': Decimal('0')} != {'cost': Decimal('100')}
+  {'safe': [False, False]} != {'safe': [True, True]}
+  {'cash': Decimal('2000.00000000')} != {'cash': Decimal('1900')}
+  {'released': Decimal('200.00000000')} != {'released': Decimal('100')}
+  {'seen': set()} != {'seen': {'remote-trade'}}
+  {'filled': Decimal('0')} != {'filled': Decimal('1')}
+  {'posting_order': ['opening', 'reserve', 'release']} != {'posting_order': ['opening', 'reserve', 'fill_buy', 'release']}
+  {'consumed': Decimal('0')} != {'consumed': Decimal('100')}
+  
+  Full diff:
+    {
+  -     'quantity': Decimal('1'),
+  ?                          ^
+  +     'quantity': Decimal('0'),
+  ?                          ^
+  -     'cost': Decimal('100'),
+  ?                      --
+  +     'cost': Decimal('0'),
+  -     'cash': Decimal('1900'),
+  ?                      ^^
+  +     'cash': Decimal('2000.00000000'),
+  ?                      ^^^^^^^^^^^
+        'ledger_reserved': Decimal('0'),
+        'risk_reserved': Decimal('0'),
+  -     'consumed': Decimal('100'),
+  ?                          --
+  +     'consumed': Decimal('0'),
+  -     'released': Decimal('100'),
+  ?                          ^
+  +     'released': Decimal('200.00000000'),
+  ?                          ^^^^^^^^^^
+  -     'filled': Decimal('1'),
+  ?                        ^
+  +     'filled': Decimal('0'),
+  ?                        ^
+  -     'seen': {
+  ?             ^
+  +     'seen': set(),
+  ?             ^^^^^^
+  -         'remote-trade',
+  -     },
+        'open': False,
+        'posting_order': [
+            'opening',
+            'reserve',
+  -         'fill_buy',
+            'release',
+        ],
+        'safe': [
+  -         True,
+  -         True,
+  +         False,
+  +         False,
+        ],
+    }
+FAILED ..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_terminal_partial_imports_fills_before_releasing_remainder[cancelled] - AssertionError: assert {'quantity': Decimal('0'), 'cost': Decimal('0'), 'cash': Decimal('2000.00000000'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('0'), 'released': Decimal('200.00000000'), 'filled': Decimal('0'), 'seen': set(), 'open': False, 'posting_order': ['opening', 'reserve', 'release'], 'safe': [False, False]} == {'quantity': Decimal('1'), 'cost': Decimal('100'), 'cash': Decimal('1900'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('100'), 'released': Decimal('100'), 'filled': Decimal('1'), 'seen': {'remote-trade'}, 'open': False, 'posting_order': ['opening', 'reserve', 'fill_buy', 'release'], 'safe': [True, True]}
+  
+  Common items:
+  {'ledger_reserved': Decimal('0'), 'open': False, 'risk_reserved': Decimal('0')}
+  Differing items:
+  {'quantity': Decimal('0')} != {'quantity': Decimal('1')}
+  {'cost': Decimal('0')} != {'cost': Decimal('100')}
+  {'safe': [False, False]} != {'safe': [True, True]}
+  {'cash': Decimal('2000.00000000')} != {'cash': Decimal('1900')}
+  {'released': Decimal('200.00000000')} != {'released': Decimal('100')}
+  {'seen': set()} != {'seen': {'remote-trade'}}
+  {'filled': Decimal('0')} != {'filled': Decimal('1')}
+  {'posting_order': ['opening', 'reserve', 'release']} != {'posting_order': ['opening', 'reserve', 'fill_buy', 'release']}
+  {'consumed': Decimal('0')} != {'consumed': Decimal('100')}
+  
+  Full diff:
+    {
+  -     'quantity': Decimal('1'),
+  ?                          ^
+  +     'quantity': Decimal('0'),
+  ?                          ^
+  -     'cost': Decimal('100'),
+  ?                      --
+  +     'cost': Decimal('0'),
+  -     'cash': Decimal('1900'),
+  ?                      ^^
+  +     'cash': Decimal('2000.00000000'),
+  ?                      ^^^^^^^^^^^
+        'ledger_reserved': Decimal('0'),
+        'risk_reserved': Decimal('0'),
+  -     'consumed': Decimal('100'),
+  ?                          --
+  +     'consumed': Decimal('0'),
+  -     'released': Decimal('100'),
+  ?                          ^
+  +     'released': Decimal('200.00000000'),
+  ?                          ^^^^^^^^^^
+  -     'filled': Decimal('1'),
+  ?                        ^
+  +     'filled': Decimal('0'),
+  ?                        ^
+  -     'seen': {
+  ?             ^
+  +     'seen': set(),
+  ?             ^^^^^^
+  -         'remote-trade',
+  -     },
+        'open': False,
+        'posting_order': [
+            'opening',
+            'reserve',
+  -         'fill_buy',
+            'release',
+        ],
+        'safe': [
+  -         True,
+  -         True,
+  +         False,
+  +         False,
+        ],
+    }
+FAILED ..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_terminal_partial_imports_fills_before_releasing_remainder[expired] - AssertionError: assert {'quantity': Decimal('0'), 'cost': Decimal('0'), 'cash': Decimal('2000.00000000'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('0'), 'released': Decimal('200.00000000'), 'filled': Decimal('0'), 'seen': set(), 'open': False, 'posting_order': ['opening', 'reserve', 'release'], 'safe': [False, False]} == {'quantity': Decimal('1'), 'cost': Decimal('100'), 'cash': Decimal('1900'), 'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'consumed': Decimal('100'), 'released': Decimal('100'), 'filled': Decimal('1'), 'seen': {'remote-trade'}, 'open': False, 'posting_order': ['opening', 'reserve', 'fill_buy', 'release'], 'safe': [True, True]}
+  
+  Common items:
+  {'ledger_reserved': Decimal('0'), 'open': False, 'risk_reserved': Decimal('0')}
+  Differing items:
+  {'quantity': Decimal('0')} != {'quantity': Decimal('1')}
+  {'cost': Decimal('0')} != {'cost': Decimal('100')}
+  {'safe': [False, False]} != {'safe': [True, True]}
+  {'cash': Decimal('2000.00000000')} != {'cash': Decimal('1900')}
+  {'released': Decimal('200.00000000')} != {'released': Decimal('100')}
+  {'seen': set()} != {'seen': {'remote-trade'}}
+  {'filled': Decimal('0')} != {'filled': Decimal('1')}
+  {'posting_order': ['opening', 'reserve', 'release']} != {'posting_order': ['opening', 'reserve', 'fill_buy', 'release']}
+  {'consumed': Decimal('0')} != {'consumed': Decimal('100')}
+  
+  Full diff:
+    {
+  -     'quantity': Decimal('1'),
+  ?                          ^
+  +     'quantity': Decimal('0'),
+  ?                          ^
+  -     'cost': Decimal('100'),
+  ?                      --
+  +     'cost': Decimal('0'),
+  -     'cash': Decimal('1900'),
+  ?                      ^^
+  +     'cash': Decimal('2000.00000000'),
+  ?                      ^^^^^^^^^^^
+        'ledger_reserved': Decimal('0'),
+        'risk_reserved': Decimal('0'),
+  -     'consumed': Decimal('100'),
+  ?                          --
+  +     'consumed': Decimal('0'),
+  -     'released': Decimal('100'),
+  ?                          ^
+  +     'released': Decimal('200.00000000'),
+  ?                          ^^^^^^^^^^
+  -     'filled': Decimal('1'),
+  ?                        ^
+  +     'filled': Decimal('0'),
+  ?                        ^
+  -     'seen': {
+  ?             ^
+  +     'seen': set(),
+  ?             ^^^^^^
+  -         'remote-trade',
+  -     },
+        'open': False,
+        'posting_order': [
+            'opening',
+            'reserve',
+  -         'fill_buy',
+            'release',
+        ],
+        'safe': [
+  -         True,
+  -         True,
+  +         False,
+  +         False,
+        ],
+    }
+FAILED ..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_unverified_terminal_partial_keeps_capital_reserved[canceled] - AssertionError: assert {'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'cash': Decimal('2000.00000000'), 'quantity': Decimal('0')} == {'ledger_reserved': Decimal('200'), 'risk_reserved': Decimal('200'), 'cash': Decimal('1800'), 'quantity': Decimal('0')}
+  
+  Common items:
+  {'quantity': Decimal('0')}
+  Differing items:
+  {'ledger_reserved': Decimal('0')} != {'ledger_reserved': Decimal('200')}
+  {'cash': Decimal('2000.00000000')} != {'cash': Decimal('1800')}
+  {'risk_reserved': Decimal('0')} != {'risk_reserved': Decimal('200')}
+  
+  Full diff:
+    {
+  -     'ledger_reserved': Decimal('200'),
+  ?                                 --
+  +     'ledger_reserved': Decimal('0'),
+  -     'risk_reserved': Decimal('200'),
+  ?                               --
+  +     'risk_reserved': Decimal('0'),
+  -     'cash': Decimal('1800'),
+  ?                      ^^
+  +     'cash': Decimal('2000.00000000'),
+  ?                      ^^^^^^^^^^^
+        'quantity': Decimal('0'),
+    }
+FAILED ..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_unverified_terminal_partial_keeps_capital_reserved[expired] - AssertionError: assert {'ledger_reserved': Decimal('0'), 'risk_reserved': Decimal('0'), 'cash': Decimal('2000.00000000'), 'quantity': Decimal('0')} == {'ledger_reserved': Decimal('200'), 'risk_reserved': Decimal('200'), 'cash': Decimal('1800'), 'quantity': Decimal('0')}
+  
+  Common items:
+  {'quantity': Decimal('0')}
+  Differing items:
+  {'ledger_reserved': Decimal('0')} != {'ledger_reserved': Decimal('200')}
+  {'cash': Decimal('2000.00000000')} != {'cash': Decimal('1800')}
+  {'risk_reserved': Decimal('0')} != {'risk_reserved': Decimal('200')}
+  
+  Full diff:
+    {
+  -     'ledger_reserved': Decimal('200'),
+  ?                                 --
+  +     'ledger_reserved': Decimal('0'),
+  -     'risk_reserved': Decimal('200'),
+  ?                               --
+  +     'risk_reserved': Decimal('0'),
+  -     'cash': Decimal('1800'),
+  ?                      ^^
+  +     'cash': Decimal('2000.00000000'),
+  ?                      ^^^^^^^^^^^
+        'quantity': Decimal('0'),
+    }
+FAILED ..\..\..\..\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_financial_regressions.py::test_fin03_cumulative_trade_mismatch_cannot_turn_safe_on_repeat - AssertionError: unresolved remote cumulative 1.5 vs trades 2; local states=['filled', 'filled', 'filled']; {'safe': [False, True, True], 'fills_status': ['MISMATCH', 'NAO_APLICAVEL', 'NAO_APLICAVEL'], 'gate_closed': False, 'report_authorizes_execution': True}
+assert {'safe': [False, True, True], 'fills_status': ['MISMATCH', 'NAO_APLICAVEL', 'NAO_APLICAVEL'], 'gate_closed': False, 'report_authorizes_execution': True} == {'safe': [False, False, False], 'fills_status': ['MISMATCH', 'MISMATCH', 'MISMATCH'], 'gate_closed': True, 'report_authorizes_execution': False}
+  
+  Differing items:
+  {'fills_status': ['MISMATCH', 'NAO_APLICAVEL', 'NAO_APLICAVEL']} != {'fills_status': ['MISMATCH', 'MISMATCH', 'MISMATCH']}
+  {'safe': [False, True, True]} != {'safe': [False, False, False]}
+  {'gate_closed': False} != {'gate_closed': True}
+  {'report_authorizes_execution': True} != {'report_authorizes_execution': False}
+  
+  Full diff:
+    {
+        'safe': [
+            False,
+  -         False,
+  -         False,
+  +         True,
+  +         True,
+        ],
+        'fills_status': [
+            'MISMATCH',
+  -         'MISMATCH',
+  -         'MISMATCH',
+  +         'NAO_APLICAVEL',
+  +         'NAO_APLICAVEL',
+        ],
+  -     'gate_closed': True,
+  ?                    ^^^
+  +     'gate_closed': False,
+  ?                    ^^^^
+  -     'report_authorizes_execution': False,
+  ?                                    ^^^^
+  +     'report_authorizes_execution': True,
+  ?                                    ^^^
+    }
+============================= 11 failed in 0.38s ==============================
+V9_SANDBOX_DENIED_EVENTS=[]
+
+=== NEW TEST FILE LINT ===
+All checks passed!

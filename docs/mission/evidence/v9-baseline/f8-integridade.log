@@ -1,0 +1,15 @@
+== V9 F8.5 — verificação de integridade dos artefatos ==
+data_utc: 2026-10-15T11:28:46Z
+head: 2b7754a94cc1e4233ad95ac6fa377be4078e5055
+comando: PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe tools/v9_f8_integridade.py docs/mission/evidence/v9-baseline/f8-integridade.json
+exit: 0
+
+resultado:
+- 385 artefatos em docs/mission/evidence/v9-baseline/ com sha256 RECOMPUTADO nesta execução (manifesto completo arquivo -> sha256 em f8-integridade.json).
+- 44 hashes de 64 hex registrados nos documentos de docs/mission/*.md:
+  - 38 verificados OK — batem byte a byte com um arquivo real do diretório de evidências;
+  - 6 referências externas conhecidas — digests de binários Windows produzidos pelo CI (Setup/zip, runs 38437252278 / 38450504893 / 38467455263) e o agregado canônico dos 17 achados gitleaks; esses artefatos não são armazenados no repo (não há arquivo local para bater) e cada caso está anotado no relatório com o contexto da citação;
+  - 0 (zero) hashes órfãos.
+- 345 artefatos sem hash citado em documento: permanecem cobertos pelo manifesto (a classificação cita os hashes-chave; o manifesto é o registro integral do diretório).
+
+nota de escopo: a ferramenta é somente leitura; não altera nenhum artefato. O próprio relatório (f8-integridade.json) é excluído do manifesto para não autorreferenciar hash defasado.

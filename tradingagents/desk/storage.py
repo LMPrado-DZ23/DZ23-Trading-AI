@@ -24,7 +24,10 @@ import threading
 import time
 from pathlib import Path
 
-_WRITE_LOCK = threading.Lock()
+# Reentrant: a checagem de posse e a gravação atômica acontecem sob o MESMO
+# lock (sem janela entre ler-vencido e escrever), e a gravação re-adquire o
+# lock. Com `Lock` simples isso travaria a própria thread.
+_WRITE_LOCK = threading.RLock()
 
 # Caracteres legítimos numa CHAVE lógica que o NTFS proíbe num NOME de
 # arquivo (`|` dava EINVAL no mkstemp; `:` e `/` também não passam). O `%`
@@ -102,6 +105,72 @@ def escrever_json_atomico(caminho: Path, documento: dict) -> None:
             raise
 
 
+# Prazo e passo do rodízio de tentativas da trava entre processos.
+_PRAZO_TRAVA_S = 10.0
+_PASSO_TRAVA_S = 0.02
+
+
+def _travar_fd(fd: int) -> None:
+    """Trava 1 byte do fd, sem bloquear. OSError = disputa em andamento."""
+    if os.name == "nt":
+        import msvcrt
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+    else:
+        import fcntl
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def _destravar_fd(fd: int) -> None:
+    if os.name == "nt":
+        import msvcrt
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+    else:
+        import fcntl
+        fcntl.flock(fd, fcntl.LOCK_UN)
+
+
+@contextlib.contextmanager
+def _trava_entre_processos(caminho_trava, prazo_s: float = _PRAZO_TRAVA_S):
+    """Trava de arquivo do SISTEMA OPERACIONAL, entre processos.
+
+    O `_WRITE_LOCK` deste módulo serializa threads de UM processo; dois
+    processos (o PC do dono e o servidor) não se enxergam por ele. Sem uma
+    trava que o SO arbitre, os dois leem "posse livre", os dois gravam e os
+    dois confirmam — dois executores da mesma mesa (reproduzido com dois
+    processos reais em `tests/test_v9_posse_dois_processos.py`).
+
+    A trava é do SO (byte-range lock) e morre com o processo: não existe
+    trava órfã para limpar. Estourar o prazo LEVANTA TimeoutError — quem
+    chama decide recusar (fail-closed), nunca prosseguir sem ela.
+    """
+    caminho_trava = Path(caminho_trava)
+    caminho_trava.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(caminho_trava), os.O_RDWR | os.O_CREAT)
+    try:
+        if os.fstat(fd).st_size == 0:
+            os.write(fd, b"\0")    # o SO trava BYTES; arquivo vazio não serve
+        limite = time.monotonic() + prazo_s
+        while True:
+            try:
+                _travar_fd(fd)
+                break
+            except OSError:
+                if time.monotonic() >= limite:
+                    raise TimeoutError(
+                        f"trava entre processos indisponível em "
+                        f"{prazo_s:.0f}s ({caminho_trava.name})") from None
+                time.sleep(_PASSO_TRAVA_S)
+        try:
+            yield
+        finally:
+            with contextlib.suppress(OSError):
+                _destravar_fd(fd)
+    finally:
+        os.close(fd)
+
+
 class ArmazemDeEstado:
     """Chave→documento JSON, por inquilino."""
 
@@ -156,10 +225,18 @@ class ArmazemDeEstado:
         caminho = self._caminho(tenant_id, chave)
         if not caminho.exists():
             return None
-        try:
-            return json.loads(caminho.read_text(encoding="utf-8"))
-        except ValueError:
-            return None
+        # No Windows o leitor é negado enquanto o escritor faz o os.replace
+        # (negação transitória, medida em v9-test03-probe.log): mesma
+        # paciência do escritor (10 × 5 ms) e falha visível se persistir.
+        for tentativa in range(10):
+            try:
+                return json.loads(caminho.read_text(encoding="utf-8"))
+            except ValueError:
+                return None
+            except PermissionError:
+                if tentativa == 9:
+                    raise
+                time.sleep(0.005)
 
     def salvar(self, tenant_id: str, chave: str, documento: dict) -> str:
         """Devolve onde gravou — o painel mostra isso ao dono."""
@@ -186,11 +263,24 @@ class ArmazemDeEstado:
         No postgres a checagem vai para o SQL (UPSERT condicional): dois
         processos disputando a mesma corrida não podem ambos "ganhar" — é o
         que torna a posse exclusiva entre máquinas que compartilham o banco.
-        No arquivo, checa antes e CONFERE depois da escrita (o replace é
-        atômico); suficiente para os processos desta máquina.
+        No arquivo, a seção crítica inteira (checar → gravar → conferir)
+        roda sob a trava entre processos do SISTEMA OPERACIONAL (ver
+        `_trava_entre_processos`): o lock de escrita é de threads de UM
+        processo; dois processos reais não se enxergam por ele e ambos
+        "ler livre, gravar, confirmar" — dois executores. Com a trava, o
+        segundo enxerga o dono recém-gravado e RECUSA. O lock de escrita
+        continua por fora, para as threads. A leitura de verificação segue
+        como prova durável da escrita; se a trava entre processos não for
+        obtida a tempo, a posse NÃO é concedida (fail-closed).
 
         Invariante do documento: `expira_em` é epoch (float); `dono` é texto.
         Devolve (ganhou, onde).
+
+        FAIL-CLOSED (V9-SEC-01): a posse exclusiva só é concedida quando o
+        destino durável a CONFIRMA. Se o banco compartilhado está indisponível
+        NÃO caímos para arquivo local — isso concederia a mesma mesa a dois
+        donos. E se a leitura de verificação do arquivo falha, a escrita
+        proposta NÃO conta como prova de posse.
         """
         if self.backend == "postgres":
             try:
@@ -210,27 +300,59 @@ class ArmazemDeEstado:
                 return ganhou, "postgres"
             except Exception as exc:
                 self.aviso = (f"falha ao gravar posse no banco "
-                              f"({type(exc).__name__}); conferido em arquivo local")
+                              f"({type(exc).__name__}); posse NÃO concedida — "
+                              "sem banco compartilhado a exclusividade não é "
+                              "garantível")
+                return False, "postgres"
         caminho = self._caminho(tenant_id, chave)
-        atual = None
-        if caminho.exists():
-            try:
-                atual = json.loads(caminho.read_text(encoding="utf-8"))
-            except ValueError:
-                atual = None
-        if isinstance(atual, dict) and atual.get("dono") != dono:
-            try:
-                expira = float(atual.get("expira_em") or 0)
-            except (TypeError, ValueError):
-                expira = 0.0
-            if expira > agora_epoch:
-                return False, "arquivo"
-        escrever_json_atomico(caminho, documento)
+        trava = caminho.with_name(caminho.name + ".trava")
         try:
-            lido = json.loads(caminho.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            lido = documento
-        return lido.get("dono") == dono, "arquivo"
+            with _WRITE_LOCK, _trava_entre_processos(trava):
+                atual = None
+                if caminho.exists():
+                    try:
+                        atual = json.loads(caminho.read_text(encoding="utf-8"))
+                    except ValueError:
+                        atual = None
+                if isinstance(atual, dict) and atual.get("dono") != dono:
+                    try:
+                        expira = float(atual.get("expira_em") or 0)
+                    except (TypeError, ValueError):
+                        expira = 0.0
+                    if expira > agora_epoch:
+                        return False, "arquivo"
+                escrever_json_atomico(caminho, documento)
+                try:
+                    lido = json.loads(caminho.read_text(encoding="utf-8"))
+                    return lido.get("dono") == dono, "arquivo"
+                except (OSError, ValueError):
+                    # A leitura de verificação falhou: a escrita não é
+                    # verificável, logo não é prova de posse durável.
+                    return False, "arquivo"
+        except TimeoutError as exc:
+            # Fail-closed: sem a trava entre processos, dois donos poderiam
+            # "vencer" a mesma corrida. Recusar é a resposta segura.
+            self.aviso = (f"trava entre processos indisponível ({exc}); "
+                          "posse NÃO concedida")
+            return False, "arquivo"
+
+    def contem(self, tenant_id: str, chave: str) -> bool:
+        """A chave existe no destino durável?
+
+        Distingue 'ausente' de 'presente porém inválido' — o fail-closed do
+        modo da mesa precisa saber se um documento ilegível é uma instalação
+        nova (nunca gravada) ou uma gravação corrompida no disco.
+        """
+        if self.backend == "postgres":
+            try:
+                with self._conectar() as c, c.cursor() as cur:
+                    cur.execute("SELECT 1 FROM dz23_desk_state "
+                                "WHERE tenant_id=%s AND chave=%s",
+                                (tenant_id, chave))
+                    return cur.fetchone() is not None
+            except Exception:
+                pass
+        return self._caminho(tenant_id, chave).exists()
 
     def listar(self, tenant_id: str) -> list[str]:
         if self.backend == "postgres":

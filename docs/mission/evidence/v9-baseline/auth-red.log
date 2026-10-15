@@ -1,0 +1,685 @@
+Traceback (most recent call last):
+  File "<string>", line 57, in <module>
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\config\__init__.py", line 201, in main
+    return _main(args=args, plugins=plugins, prog="pytest.main()")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\config\__init__.py", line 223, in _main
+    config = _prepareconfig(new_args, plugins, prog=prog)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\config\__init__.py", line 410, in _prepareconfig
+    config: Config = pluginmanager.hook.pytest_cmdline_parse(
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+    raise exception
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 139, in _multicall
+    teardown.throw(exception)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\helpconfig.py", line 124, in pytest_cmdline_parse
+    config = yield
+             ^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\config\__init__.py", line 1232, in pytest_cmdline_parse
+    self.parse(args)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\config\__init__.py", line 1605, in parse
+    self.hook.pytest_load_initial_conftests(
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+    raise exception
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 139, in _multicall
+    teardown.throw(exception)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\warnings.py", line 129, in pytest_load_initial_conftests
+    return (yield)
+            ^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 116, in _multicall
+    next(function_gen)  # first yield
+    ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\capture.py", line 170, in pytest_load_initial_conftests
+    capman.start_global_capturing()
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\capture.py", line 773, in start_global_capturing
+    self._global_capturing = _get_multicapture(self._method)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\capture.py", line 714, in _get_multicapture
+    return MultiCapture(in_=FDCapture(0), out=FDCapture(1), err=FDCapture(2))
+                            ^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\capture.py", line 489, in __init__
+    self.tmpfile = open(os.devnull, encoding="utf-8")
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 39, in audit
+  File "<string>", line 29, in check_path
+IsolationViolation: filesystem access outside authorized sandbox/code paths
+V9 isolation guard violations: 1
+
+=== isolated invocation 1 ===
+INTERNALERROR> Traceback (most recent call last):
+INTERNALERROR>   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\main.py", line 326, in wrap_session
+INTERNALERROR>     config._do_configure()
+INTERNALERROR>   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\config\__init__.py", line 1205, in _do_configure
+INTERNALERROR>     self.hook.pytest_configure.call_historic(kwargs=dict(config=self))
+INTERNALERROR>   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_hooks.py", line 534, in call_historic
+INTERNALERROR>     res = self._hookexec(self.name, self._hookimpls.copy(), kwargs, False)
+INTERNALERROR>           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+INTERNALERROR>   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+INTERNALERROR>     return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+INTERNALERROR>            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+INTERNALERROR>   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+INTERNALERROR>     raise exception
+INTERNALERROR>   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+INTERNALERROR>     res = hook_impl.function(*args)
+INTERNALERROR>           ^^^^^^^^^^^^^^^^^^^^^^^^^
+INTERNALERROR>   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\logging.py", line 653, in pytest_configure
+INTERNALERROR>     config.pluginmanager.register(LoggingPlugin(config), "logging-plugin")
+INTERNALERROR>                                   ^^^^^^^^^^^^^^^^^^^^^
+INTERNALERROR>   File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\logging.py", line 690, in __init__
+INTERNALERROR>     self.log_file_handler = _FileHandler(
+INTERNALERROR>                             ^^^^^^^^^^^^^
+INTERNALERROR>   File "C:\Program Files\Python312\Lib\logging\__init__.py", line 1231, in __init__
+INTERNALERROR>     StreamHandler.__init__(self, self._open())
+INTERNALERROR>                                  ^^^^^^^^^^^^
+INTERNALERROR>   File "C:\Program Files\Python312\Lib\logging\__init__.py", line 1263, in _open
+INTERNALERROR>     return open_func(self.baseFilename, self.mode,
+INTERNALERROR>            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+INTERNALERROR>   File "<string>", line 40, in audit
+INTERNALERROR>   File "<string>", line 30, in check_path
+INTERNALERROR> IsolationViolation: filesystem access outside authorized sandbox/code paths
+V9 isolation guard violations: 1
+
+=== isolated invocation 2 ===
+FFFF.FFFFF..FFFFFFFFF                                                    [100%]C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <function BaseEventLoop.__del__ at 0x000001F8ED94C5E0>
+
+Traceback (most recent call last):
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\config\__init__.py", line 229, in _main
+    ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+    raise exception
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\main.py", line 377, in pytest_cmdline_main
+    return wrap_session(config, _main)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\main.py", line 365, in wrap_session
+    config.hook.pytest_sessionfinish(
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+    raise exception
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 139, in _multicall
+    teardown.throw(exception)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\logging.py", line 888, in pytest_sessionfinish
+    return (yield)
+            ^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 139, in _multicall
+    teardown.throw(exception)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\terminal.py", line 961, in pytest_sessionfinish
+    result = yield
+             ^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 139, in _multicall
+    teardown.throw(exception)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\warnings.py", line 119, in pytest_sessionfinish
+    return (yield)
+            ^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\junitxml.py", line 650, in pytest_sessionfinish
+    os.makedirs(dirname, exist_ok=True)
+  File "<frozen os>", line 225, in makedirs
+  File "<string>", line 45, in audit
+  File "<string>", line 31, in check_path
+IsolationViolation: filesystem access outside authorized sandbox/code paths
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Program Files\Python312\Lib\asyncio\base_events.py", line 732, in __del__
+    self.close()
+  File "C:\Program Files\Python312\Lib\asyncio\proactor_events.py", line 697, in close
+    self._close_self_pipe()
+  File "C:\Program Files\Python312\Lib\asyncio\proactor_events.py", line 779, in _close_self_pipe
+    self._ssock.close()
+    ^^^^^^^^^^^
+AttributeError: 'ProactorEventLoop' object has no attribute '_ssock'
+
+Enable tracemalloc to get traceback where the object was allocated.
+See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+  warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+Traceback (most recent call last):
+  File "<string>", line 59, in <module>
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\config\__init__.py", line 201, in main
+    return _main(args=args, plugins=plugins, prog="pytest.main()")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\config\__init__.py", line 229, in _main
+    ret: ExitCode | int = config.hook.pytest_cmdline_main(config=config)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+    raise exception
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\main.py", line 377, in pytest_cmdline_main
+    return wrap_session(config, _main)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\main.py", line 365, in wrap_session
+    config.hook.pytest_sessionfinish(
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 167, in _multicall
+    raise exception
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 139, in _multicall
+    teardown.throw(exception)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\logging.py", line 888, in pytest_sessionfinish
+    return (yield)
+            ^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 139, in _multicall
+    teardown.throw(exception)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\terminal.py", line 961, in pytest_sessionfinish
+    result = yield
+             ^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 139, in _multicall
+    teardown.throw(exception)
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\warnings.py", line 119, in pytest_sessionfinish
+    return (yield)
+            ^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\pluggy\_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\junitxml.py", line 650, in pytest_sessionfinish
+    os.makedirs(dirname, exist_ok=True)
+  File "<frozen os>", line 225, in makedirs
+  File "<string>", line 45, in audit
+  File "<string>", line 31, in check_path
+IsolationViolation: filesystem access outside authorized sandbox/code paths
+V9 isolation guard violations: 8
+
+=== isolated invocation 3 ===
+FFFF.FFFFF..FFFFFFF..                                                    [100%]
+================================== FAILURES ===================================
+______ test_v9_sec01_postgres_write_outage_cannot_grant_local_ownership _______
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:110: in test_v9_sec01_postgres_write_outage_cannot_grant_local_ownership
+    assert (first, second, local_lease.exists()) == (True, False, False), (
+E   AssertionError: central owner remains unexpired; a PostgreSQL outage must not grant a local lease
+E   assert (True, True, True) == (True, False, False)
+E     
+E     At index 1 diff: True != False
+E     Use -v to get more diff
+___ test_v9_sec01_unverified_file_write_never_grants_ownership[read-denied] ___
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:131: in test_v9_sec01_unverified_file_write_never_grants_ownership
+    assert granted is False, "a proposed document is not proof of durable ownership"
+E   AssertionError: a proposed document is not proof of durable ownership
+E   assert True is False
+_ test_v9_sec01_unverified_file_write_never_grants_ownership[malformed-json] __
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:131: in test_v9_sec01_unverified_file_write_never_grants_ownership
+    assert granted is False, "a proposed document is not proof of durable ownership"
+E   AssertionError: a proposed document is not proof of durable ownership
+E   assert True is False
+________________ test_v9_sec01_file_contenders_cannot_both_win ________________
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:175: in test_v9_sec01_file_contenders_cannot_both_win
+    assert sum(winners) == 1, f"one unexpired lease yielded {sum(winners)} successful owners"
+E   AssertionError: one unexpired lease yielded 2 successful owners
+E   assert 2 == 1
+E    +  where 2 = sum([True, True])
+____ test_v9_sec02_existing_invalid_mode_blocks_execution[malformed-json] _____
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:195: in test_v9_sec02_existing_invalid_mode_blocks_execution
+    assert mode.pode_executar()[0] is False, "invalid existing mode must not enable execution"
+E   AssertionError: invalid existing mode must not enable execution
+E   assert True is False
+_________ test_v9_sec02_existing_invalid_mode_blocks_execution[array] _________
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:195: in test_v9_sec02_existing_invalid_mode_blocks_execution
+    assert mode.pode_executar()[0] is False, "invalid existing mode must not enable execution"
+E   AssertionError: invalid existing mode must not enable execution
+E   assert True is False
+_________ test_v9_sec02_existing_invalid_mode_blocks_execution[null] __________
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:195: in test_v9_sec02_existing_invalid_mode_blocks_execution
+    assert mode.pode_executar()[0] is False, "invalid existing mode must not enable execution"
+E   AssertionError: invalid existing mode must not enable execution
+E   assert True is False
+________ test_v9_sec02_existing_invalid_mode_blocks_execution[string] _________
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:195: in test_v9_sec02_existing_invalid_mode_blocks_execution
+    assert mode.pode_executar()[0] is False, "invalid existing mode must not enable execution"
+E   AssertionError: invalid existing mode must not enable execution
+E   assert True is False
+________ test_v9_sec02_existing_invalid_mode_blocks_execution[number] _________
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:195: in test_v9_sec02_existing_invalid_mode_blocks_execution
+    assert mode.pode_executar()[0] is False, "invalid existing mode must not enable execution"
+E   AssertionError: invalid existing mode must not enable execution
+E   assert True is False
+_____ test_v9_sec03_windows_without_dpapi_refuses_secret_save[new-config] _____
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:285: in test_v9_sec03_windows_without_dpapi_refuses_secret_save
+    assert observations == (True, True, False), (
+E   AssertionError: Windows save must refuse unavailable DPAPI, preserve disk, and never write plaintext
+E   assert (False, False, True) == (True, True, False)
+E     
+E     At index 0 diff: False != True
+E     Use -v to get more diff
+__ test_v9_sec03_windows_without_dpapi_refuses_secret_save[existing-config] ___
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:285: in test_v9_sec03_windows_without_dpapi_refuses_secret_save
+    assert observations == (True, True, False), (
+E   AssertionError: Windows save must refuse unavailable DPAPI, preserve disk, and never write plaintext
+E   assert (False, False, True) == (True, True, False)
+E     
+E     At index 0 diff: False != True
+E     Use -v to get more diff
+_ test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[malformed-json] _
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:328: in test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup
+    assert observations == {
+E   AssertionError: existing invalid/inaccessible owner storage is not a new installation
+E   assert {'setup_requi...icates': True} == {'setup_requi...cates': False}
+E     
+E     Differing items:
+E     {'file_preserved': False} != {'file_preserved': True}
+E     {'setup_rejected': False} != {'setup_rejected': True}
+E     {'replacement_authenticates': True} != {'replacement_authenticates': False}
+E     {'setup_required': True} != {'setup_required': False}
+E     Use -v to get more diff
+_ test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[non-object] _
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:328: in test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup
+    assert observations == {
+E   AssertionError: existing invalid/inaccessible owner storage is not a new installation
+E   assert {'setup_requi...icates': True} == {'setup_requi...cates': False}
+E     
+E     Differing items:
+E     {'file_preserved': False} != {'file_preserved': True}
+E     {'setup_rejected': False} != {'setup_rejected': True}
+E     {'replacement_authenticates': True} != {'replacement_authenticates': False}
+E     {'setup_required': True} != {'setup_required': False}
+E     Use -v to get more diff
+_ test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[missing-hash] _
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:328: in test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup
+    assert observations == {
+E   AssertionError: existing invalid/inaccessible owner storage is not a new installation
+E   assert {'setup_requi...icates': True} == {'setup_requi...cates': False}
+E     
+E     Differing items:
+E     {'file_preserved': False} != {'file_preserved': True}
+E     {'setup_rejected': False} != {'setup_rejected': True}
+E     {'replacement_authenticates': True} != {'replacement_authenticates': False}
+E     {'setup_required': True} != {'setup_required': False}
+E     Use -v to get more diff
+_ test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[invalid-hash-type] _
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:328: in test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup
+    assert observations == {
+E   AssertionError: existing invalid/inaccessible owner storage is not a new installation
+E   assert {'setup_requi...icates': True} == {'setup_requi...cates': False}
+E     
+E     Differing items:
+E     {'file_preserved': False} != {'file_preserved': True}
+E     {'setup_rejected': False} != {'setup_rejected': True}
+E     {'replacement_authenticates': True} != {'replacement_authenticates': False}
+E     {'setup_required': True} != {'setup_required': False}
+E     Use -v to get more diff
+_ test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[read-denied] _
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:328: in test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup
+    assert observations == {
+E   AssertionError: existing invalid/inaccessible owner storage is not a new installation
+E   assert {'setup_requi...icates': True} == {'setup_requi...cates': False}
+E     
+E     Differing items:
+E     {'file_preserved': False} != {'file_preserved': True}
+E     {'setup_rejected': False} != {'setup_rejected': True}
+E     {'replacement_authenticates': True} != {'replacement_authenticates': False}
+E     {'setup_required': True} != {'setup_required': False}
+E     Use -v to get more diff
+=========================== short test summary info ===========================
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec01_postgres_write_outage_cannot_grant_local_ownership
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec01_unverified_file_write_never_grants_ownership[read-denied]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec01_unverified_file_write_never_grants_ownership[malformed-json]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec01_file_contenders_cannot_both_win
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec02_existing_invalid_mode_blocks_execution[malformed-json]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec02_existing_invalid_mode_blocks_execution[array]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec02_existing_invalid_mode_blocks_execution[null]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec02_existing_invalid_mode_blocks_execution[string]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec02_existing_invalid_mode_blocks_execution[number]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec03_windows_without_dpapi_refuses_secret_save[new-config]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec03_windows_without_dpapi_refuses_secret_save[existing-config]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[malformed-json]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[non-object]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[missing-hash]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[invalid-hash-type]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[read-denied]
+16 failed, 5 passed in 1.94s
+V9 isolation guard violations: 0
+
+=== isolated invocation 4 ===
+
+=== isolated invocation 5 ===
+FFFF.FFFFF..FFFFFFF..                                                    [100%]
+================================== FAILURES ===================================
+______ test_v9_sec01_postgres_write_outage_cannot_grant_local_ownership _______
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:110: in test_v9_sec01_postgres_write_outage_cannot_grant_local_ownership
+    assert (first, second, local_lease.exists()) == (True, False, False), (
+E   AssertionError: central owner remains unexpired; a PostgreSQL outage must not grant a local lease
+E   assert (True, True, True) == (True, False, False)
+E     
+E     At index 1 diff: True != False
+E     Use -v to get more diff
+___ test_v9_sec01_unverified_file_write_never_grants_ownership[read-denied] ___
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:131: in test_v9_sec01_unverified_file_write_never_grants_ownership
+    assert granted is False, "a proposed document is not proof of durable ownership"
+E   AssertionError: a proposed document is not proof of durable ownership
+E   assert True is False
+_ test_v9_sec01_unverified_file_write_never_grants_ownership[malformed-json] __
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:131: in test_v9_sec01_unverified_file_write_never_grants_ownership
+    assert granted is False, "a proposed document is not proof of durable ownership"
+E   AssertionError: a proposed document is not proof of durable ownership
+E   assert True is False
+________________ test_v9_sec01_file_contenders_cannot_both_win ________________
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:175: in test_v9_sec01_file_contenders_cannot_both_win
+    assert sum(winners) == 1, f"one unexpired lease yielded {sum(winners)} successful owners"
+E   AssertionError: one unexpired lease yielded 2 successful owners
+E   assert 2 == 1
+E    +  where 2 = sum([True, True])
+____ test_v9_sec02_existing_invalid_mode_blocks_execution[malformed-json] _____
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:195: in test_v9_sec02_existing_invalid_mode_blocks_execution
+    assert mode.pode_executar()[0] is False, "invalid existing mode must not enable execution"
+E   AssertionError: invalid existing mode must not enable execution
+E   assert True is False
+_________ test_v9_sec02_existing_invalid_mode_blocks_execution[array] _________
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:195: in test_v9_sec02_existing_invalid_mode_blocks_execution
+    assert mode.pode_executar()[0] is False, "invalid existing mode must not enable execution"
+E   AssertionError: invalid existing mode must not enable execution
+E   assert True is False
+_________ test_v9_sec02_existing_invalid_mode_blocks_execution[null] __________
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:195: in test_v9_sec02_existing_invalid_mode_blocks_execution
+    assert mode.pode_executar()[0] is False, "invalid existing mode must not enable execution"
+E   AssertionError: invalid existing mode must not enable execution
+E   assert True is False
+________ test_v9_sec02_existing_invalid_mode_blocks_execution[string] _________
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:195: in test_v9_sec02_existing_invalid_mode_blocks_execution
+    assert mode.pode_executar()[0] is False, "invalid existing mode must not enable execution"
+E   AssertionError: invalid existing mode must not enable execution
+E   assert True is False
+________ test_v9_sec02_existing_invalid_mode_blocks_execution[number] _________
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:195: in test_v9_sec02_existing_invalid_mode_blocks_execution
+    assert mode.pode_executar()[0] is False, "invalid existing mode must not enable execution"
+E   AssertionError: invalid existing mode must not enable execution
+E   assert True is False
+_____ test_v9_sec03_windows_without_dpapi_refuses_secret_save[new-config] _____
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:285: in test_v9_sec03_windows_without_dpapi_refuses_secret_save
+    assert observations == (True, True, False), (
+E   AssertionError: Windows save must refuse unavailable DPAPI, preserve disk, and never write plaintext
+E   assert (False, False, True) == (True, True, False)
+E     
+E     At index 0 diff: False != True
+E     Use -v to get more diff
+__ test_v9_sec03_windows_without_dpapi_refuses_secret_save[existing-config] ___
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:285: in test_v9_sec03_windows_without_dpapi_refuses_secret_save
+    assert observations == (True, True, False), (
+E   AssertionError: Windows save must refuse unavailable DPAPI, preserve disk, and never write plaintext
+E   assert (False, False, True) == (True, True, False)
+E     
+E     At index 0 diff: False != True
+E     Use -v to get more diff
+_ test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[malformed-json] _
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:328: in test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup
+    assert observations == {
+E   AssertionError: existing invalid/inaccessible owner storage is not a new installation
+E   assert {'setup_requi...icates': True} == {'setup_requi...cates': False}
+E     
+E     Differing items:
+E     {'setup_rejected': False} != {'setup_rejected': True}
+E     {'setup_required': True} != {'setup_required': False}
+E     {'replacement_authenticates': True} != {'replacement_authenticates': False}
+E     {'file_preserved': False} != {'file_preserved': True}
+E     Use -v to get more diff
+_ test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[non-object] _
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:328: in test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup
+    assert observations == {
+E   AssertionError: existing invalid/inaccessible owner storage is not a new installation
+E   assert {'setup_requi...icates': True} == {'setup_requi...cates': False}
+E     
+E     Differing items:
+E     {'setup_rejected': False} != {'setup_rejected': True}
+E     {'setup_required': True} != {'setup_required': False}
+E     {'replacement_authenticates': True} != {'replacement_authenticates': False}
+E     {'file_preserved': False} != {'file_preserved': True}
+E     Use -v to get more diff
+_ test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[missing-hash] _
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:328: in test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup
+    assert observations == {
+E   AssertionError: existing invalid/inaccessible owner storage is not a new installation
+E   assert {'setup_requi...icates': True} == {'setup_requi...cates': False}
+E     
+E     Differing items:
+E     {'setup_rejected': False} != {'setup_rejected': True}
+E     {'setup_required': True} != {'setup_required': False}
+E     {'replacement_authenticates': True} != {'replacement_authenticates': False}
+E     {'file_preserved': False} != {'file_preserved': True}
+E     Use -v to get more diff
+_ test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[invalid-hash-type] _
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:328: in test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup
+    assert observations == {
+E   AssertionError: existing invalid/inaccessible owner storage is not a new installation
+E   assert {'setup_requi...icates': True} == {'setup_requi...cates': False}
+E     
+E     Differing items:
+E     {'setup_rejected': False} != {'setup_rejected': True}
+E     {'setup_required': True} != {'setup_required': False}
+E     {'replacement_authenticates': True} != {'replacement_authenticates': False}
+E     {'file_preserved': False} != {'file_preserved': True}
+E     Use -v to get more diff
+_ test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[read-denied] _
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:328: in test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup
+    assert observations == {
+E   AssertionError: existing invalid/inaccessible owner storage is not a new installation
+E   assert {'setup_requi...icates': True} == {'setup_requi...cates': False}
+E     
+E     Differing items:
+E     {'setup_rejected': False} != {'setup_rejected': True}
+E     {'setup_required': True} != {'setup_required': False}
+E     {'replacement_authenticates': True} != {'replacement_authenticates': False}
+E     {'file_preserved': False} != {'file_preserved': True}
+E     Use -v to get more diff
+=========================== short test summary info ===========================
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec01_postgres_write_outage_cannot_grant_local_ownership
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec01_unverified_file_write_never_grants_ownership[read-denied]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec01_unverified_file_write_never_grants_ownership[malformed-json]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec01_file_contenders_cannot_both_win
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec02_existing_invalid_mode_blocks_execution[malformed-json]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec02_existing_invalid_mode_blocks_execution[array]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec02_existing_invalid_mode_blocks_execution[null]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec02_existing_invalid_mode_blocks_execution[string]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec02_existing_invalid_mode_blocks_execution[number]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec03_windows_without_dpapi_refuses_secret_save[new-config]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec03_windows_without_dpapi_refuses_secret_save[existing-config]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[malformed-json]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[non-object]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[missing-hash]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[invalid-hash-type]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[read-denied]
+16 failed, 5 passed in 1.60s
+V9 isolation guard violations: 0
+SIM102 Use a single `if` statement instead of nested `if` statements
+   --> C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:154:9
+    |
+153 |       def ordered_write(destination, document):
+154 | /         if destination == path and document["dono"] == "owner-b":
+155 | |             if not first_finished.wait(timeout=10):
+    | |___________________________________________________^
+156 |                   raise RuntimeError("lease interleaving did not complete")
+157 |           atomic_write(destination, document)
+    |
+help: Combine `if` statements using `and`
+
+Found 1 error.
+
+=== isolated invocation 6 ===
+FFFF.FFFFF..FFFFFFF..                                                    [100%]
+================================== FAILURES ===================================
+______ test_v9_sec01_postgres_write_outage_cannot_grant_local_ownership _______
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:110: in test_v9_sec01_postgres_write_outage_cannot_grant_local_ownership
+    assert (first, second, local_lease.exists()) == (True, False, False), (
+E   AssertionError: central owner remains unexpired; a PostgreSQL outage must not grant a local lease
+E   assert (True, True, True) == (True, False, False)
+E     
+E     At index 1 diff: True != False
+E     Use -v to get more diff
+___ test_v9_sec01_unverified_file_write_never_grants_ownership[read-denied] ___
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:131: in test_v9_sec01_unverified_file_write_never_grants_ownership
+    assert granted is False, "a proposed document is not proof of durable ownership"
+E   AssertionError: a proposed document is not proof of durable ownership
+E   assert True is False
+_ test_v9_sec01_unverified_file_write_never_grants_ownership[malformed-json] __
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:131: in test_v9_sec01_unverified_file_write_never_grants_ownership
+    assert granted is False, "a proposed document is not proof of durable ownership"
+E   AssertionError: a proposed document is not proof of durable ownership
+E   assert True is False
+________________ test_v9_sec01_file_contenders_cannot_both_win ________________
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:175: in test_v9_sec01_file_contenders_cannot_both_win
+    assert sum(winners) == 1, f"one unexpired lease yielded {sum(winners)} successful owners"
+E   AssertionError: one unexpired lease yielded 2 successful owners
+E   assert 2 == 1
+E    +  where 2 = sum([True, True])
+____ test_v9_sec02_existing_invalid_mode_blocks_execution[malformed-json] _____
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:195: in test_v9_sec02_existing_invalid_mode_blocks_execution
+    assert mode.pode_executar()[0] is False, "invalid existing mode must not enable execution"
+E   AssertionError: invalid existing mode must not enable execution
+E   assert True is False
+_________ test_v9_sec02_existing_invalid_mode_blocks_execution[array] _________
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:195: in test_v9_sec02_existing_invalid_mode_blocks_execution
+    assert mode.pode_executar()[0] is False, "invalid existing mode must not enable execution"
+E   AssertionError: invalid existing mode must not enable execution
+E   assert True is False
+_________ test_v9_sec02_existing_invalid_mode_blocks_execution[null] __________
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:195: in test_v9_sec02_existing_invalid_mode_blocks_execution
+    assert mode.pode_executar()[0] is False, "invalid existing mode must not enable execution"
+E   AssertionError: invalid existing mode must not enable execution
+E   assert True is False
+________ test_v9_sec02_existing_invalid_mode_blocks_execution[string] _________
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:195: in test_v9_sec02_existing_invalid_mode_blocks_execution
+    assert mode.pode_executar()[0] is False, "invalid existing mode must not enable execution"
+E   AssertionError: invalid existing mode must not enable execution
+E   assert True is False
+________ test_v9_sec02_existing_invalid_mode_blocks_execution[number] _________
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:195: in test_v9_sec02_existing_invalid_mode_blocks_execution
+    assert mode.pode_executar()[0] is False, "invalid existing mode must not enable execution"
+E   AssertionError: invalid existing mode must not enable execution
+E   assert True is False
+_____ test_v9_sec03_windows_without_dpapi_refuses_secret_save[new-config] _____
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:285: in test_v9_sec03_windows_without_dpapi_refuses_secret_save
+    assert observations == (True, True, False), (
+E   AssertionError: Windows save must refuse unavailable DPAPI, preserve disk, and never write plaintext
+E   assert (False, False, True) == (True, True, False)
+E     
+E     At index 0 diff: False != True
+E     Use -v to get more diff
+__ test_v9_sec03_windows_without_dpapi_refuses_secret_save[existing-config] ___
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:285: in test_v9_sec03_windows_without_dpapi_refuses_secret_save
+    assert observations == (True, True, False), (
+E   AssertionError: Windows save must refuse unavailable DPAPI, preserve disk, and never write plaintext
+E   assert (False, False, True) == (True, True, False)
+E     
+E     At index 0 diff: False != True
+E     Use -v to get more diff
+_ test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[malformed-json] _
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:328: in test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup
+    assert observations == {
+E   AssertionError: existing invalid/inaccessible owner storage is not a new installation
+E   assert {'setup_requi...icates': True} == {'setup_requi...cates': False}
+E     
+E     Differing items:
+E     {'setup_required': True} != {'setup_required': False}
+E     {'replacement_authenticates': True} != {'replacement_authenticates': False}
+E     {'file_preserved': False} != {'file_preserved': True}
+E     {'setup_rejected': False} != {'setup_rejected': True}
+E     Use -v to get more diff
+_ test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[non-object] _
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:328: in test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup
+    assert observations == {
+E   AssertionError: existing invalid/inaccessible owner storage is not a new installation
+E   assert {'setup_requi...icates': True} == {'setup_requi...cates': False}
+E     
+E     Differing items:
+E     {'setup_required': True} != {'setup_required': False}
+E     {'replacement_authenticates': True} != {'replacement_authenticates': False}
+E     {'file_preserved': False} != {'file_preserved': True}
+E     {'setup_rejected': False} != {'setup_rejected': True}
+E     Use -v to get more diff
+_ test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[missing-hash] _
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:328: in test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup
+    assert observations == {
+E   AssertionError: existing invalid/inaccessible owner storage is not a new installation
+E   assert {'setup_requi...icates': True} == {'setup_requi...cates': False}
+E     
+E     Differing items:
+E     {'setup_required': True} != {'setup_required': False}
+E     {'replacement_authenticates': True} != {'replacement_authenticates': False}
+E     {'file_preserved': False} != {'file_preserved': True}
+E     {'setup_rejected': False} != {'setup_rejected': True}
+E     Use -v to get more diff
+_ test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[invalid-hash-type] _
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:328: in test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup
+    assert observations == {
+E   AssertionError: existing invalid/inaccessible owner storage is not a new installation
+E   assert {'setup_requi...icates': True} == {'setup_requi...cates': False}
+E     
+E     Differing items:
+E     {'setup_required': True} != {'setup_required': False}
+E     {'replacement_authenticates': True} != {'replacement_authenticates': False}
+E     {'file_preserved': False} != {'file_preserved': True}
+E     {'setup_rejected': False} != {'setup_rejected': True}
+E     Use -v to get more diff
+_ test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[read-denied] _
+C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py:328: in test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup
+    assert observations == {
+E   AssertionError: existing invalid/inaccessible owner storage is not a new installation
+E   assert {'setup_requi...icates': True} == {'setup_requi...cates': False}
+E     
+E     Differing items:
+E     {'setup_required': True} != {'setup_required': False}
+E     {'replacement_authenticates': True} != {'replacement_authenticates': False}
+E     {'file_preserved': False} != {'file_preserved': True}
+E     {'setup_rejected': False} != {'setup_rejected': True}
+E     Use -v to get more diff
+=========================== short test summary info ===========================
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec01_postgres_write_outage_cannot_grant_local_ownership
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec01_unverified_file_write_never_grants_ownership[read-denied]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec01_unverified_file_write_never_grants_ownership[malformed-json]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec01_file_contenders_cannot_both_win
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec02_existing_invalid_mode_blocks_execution[malformed-json]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec02_existing_invalid_mode_blocks_execution[array]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec02_existing_invalid_mode_blocks_execution[null]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec02_existing_invalid_mode_blocks_execution[string]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec02_existing_invalid_mode_blocks_execution[number]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec03_windows_without_dpapi_refuses_secret_save[new-config]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec03_windows_without_dpapi_refuses_secret_save[existing-config]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[malformed-json]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[non-object]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[missing-hash]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[invalid-hash-type]
+FAILED ..\..\..\..\..\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_v9_authorization_regressions.py::test_v9_sec04_existing_owner_storage_never_reopens_anonymous_setup[read-denied]
+16 failed, 5 passed in 1.58s
+V9 isolation guard violations: 0
+All checks passed!

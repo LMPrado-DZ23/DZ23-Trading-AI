@@ -1,0 +1,143 @@
+== V9 gitleaks dir — CONFIRMAÇÃO 6 (árvore final congelada do fechamento: com os registros completos das confirmações 3–5 — logs/relatórios em evidence/v9-baseline/ — as linhas #1–#7 da tabela da triagem, as citações das confirmações 2–5 na baseline e a linha F8.2 da matriz atualizada) — 2026-10-15T10:09Z ==
+comando: docker run --rm -i -v <worktree>:/repo -v <evidence>/v9-baseline:/config -v <temp>:/out ghcr.io/gitleaks/gitleaks:latest dir /repo --config=/config/v9-gitleaks-dir.toml --no-banner --redact --report-format=json --report-path=/out/v9-gitleaks-dir-confirmacao6-report.json -v
+resultado: 17 achados — conjunto de fingerprints idêntico às varreduras anteriores e as 17 entradas do report byte a byte IDÊNTICAS às da varredura #2 (sha256 canônico das entradas ordenadas por fingerprint = 3582b2af52bf64e837665988d46aa175893fa93486d3c1867dcbb225801b77f4, igual em TODAS as execuções comparadas); o report completo difere do #2 e do da confirmação 5 apenas na ORDEM de serialização das entradas (mesmo tamanho, 9650 bytes; primeira divergência de ordem vs #2 no índice 9). Nenhum achado em arquivo novo, editado ou de evidência (v9-e2e-final, triagem, matriz, baseline, registros das varreduras — incl. a linha F8.2 da matriz e a linha #7 da triagem).
+Finding:     OPENAI_API_KEY=
+               [1;3;mREDACTED[0m
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.725481
+File:        /repo/.env.enterprise.example
+Line:        31
+Fingerprint: /repo/.env.enterprise.example:generic-api-key:31
+
+Finding:     GROQ_API_KEY=
+             [1;3;mREDACTED[0m
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.625000
+File:        /repo/.env.enterprise.example
+Line:        35
+Fingerprint: /repo/.env.enterprise.example:generic-api-key:35
+
+Finding:     c = WooviClient(token="[1;3;mREDACTED[0m", transport=explode)
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     4.168296
+File:        /repo/tests/test_billing_woovi.py
+Line:        127
+Fingerprint: /repo/tests/test_billing_woovi.py:generic-api-key:127
+
+Finding:     ....dict(os.environ, {"OPENAI_API_KEY": "[1;3;mREDACTED[0m"}):
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.734522
+File:        /repo/tests/test_llm_transport_timeouts.py
+Line:        57
+Fingerprint: /repo/tests/test_llm_transport_timeouts.py:generic-api-key:57
+
+Finding:     "AZURE_OPENAI_API_KEY": "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.906891
+File:        /repo/tests/test_llm_transport_timeouts.py
+Line:        78
+Fingerprint: /repo/tests/test_llm_transport_timeouts.py:generic-api-key:78
+
+Finding:     ...ent("gemini-3-pro", api_key="[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.932138
+File:        /repo/tests/test_llm_transport_timeouts.py
+Line:        126
+Fingerprint: /repo/tests/test_llm_transport_timeouts.py:generic-api-key:126
+
+Finding:     SECRET = "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     4.088779
+File:        /repo/tests/test_security_fase0_r3.py
+Line:        19
+Fingerprint: /repo/tests/test_security_fase0_r3.py:generic-api-key:19
+
+Finding:     SECRET = "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.916127
+File:        /repo/tests/test_security_fase0_r2.py
+Line:        23
+Fingerprint: /repo/tests/test_security_fase0_r2.py:generic-api-key:23
+
+Finding:     ....dict(os.environ, {"X_API_KEY": "[1;3;mREDACTED[0m"}):
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.589898
+File:        /repo/tests/test_security_fase0_r11.py
+Line:        144
+Fingerprint: /repo/tests/test_security_fase0_r11.py:generic-api-key:144
+
+Finding:     ....dict(os.environ, {"OPENAI_API_KEY": "[1;3;mREDACTED[0m"}):
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.734522
+File:        /repo/tests/test_security_fase0_r5.py
+Line:        132
+Fingerprint: /repo/tests/test_security_fase0_r5.py:generic-api-key:132
+
+Finding:     "OPENAI_API_KEY": "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.664498
+File:        /repo/tests/test_security_fase0_r7.py
+Line:        43
+Fingerprint: /repo/tests/test_security_fase0_r7.py:generic-api-key:43
+
+Finding:     "OPENAI_API_KEY": "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.664498
+File:        /repo/tests/test_security_fase0_r7.py
+Line:        51
+Fingerprint: /repo/tests/test_security_fase0_r7.py:generic-api-key:51
+
+Finding:     "AZURE_OPENAI_API_KEY": "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.906891
+File:        /repo/tests/test_security_fase0_r7.py
+Line:        65
+Fingerprint: /repo/tests/test_security_fase0_r7.py:generic-api-key:65
+
+Finding:     "AZURE_OPENAI_API_KEY": "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.906891
+File:        /repo/tests/test_security_fase0_r7.py
+Line:        75
+Fingerprint: /repo/tests/test_security_fase0_r7.py:generic-api-key:75
+
+Finding:     "OPENAI_COMPATIBLE_API_KEY": "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.681881
+File:        /repo/tests/test_security_fase0_wiring.py
+Line:        130
+Fingerprint: /repo/tests/test_security_fase0_wiring.py:generic-api-key:130
+
+Finding:     "AZURE_OPENAI_API_KEY": "[1;3;mREDACTED[0m"
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     3.906891
+File:        /repo/tests/test_security_fase0_r8.py
+Line:        21
+Fingerprint: /repo/tests/test_security_fase0_r8.py:generic-api-key:21
+
+Finding:     '{"token": "[1;3;mREDACTED[0m", "password": "hunte...
+Secret:      [1;3;mREDACTED[0m
+RuleID:      generic-api-key
+Entropy:     4.000000
+File:        /repo/tests/test_security_fase0_r8.py
+Line:        182
+Fingerprint: /repo/tests/test_security_fase0_r8.py:generic-api-key:182
+
+[90m10:09AM[0m [32mINF[0m [1mscanned ~11964047 bytes (11.96 MB) in 4.11s[0m
+[90m10:09AM[0m [33mWRN[0m [1mleaks found: 17[0m

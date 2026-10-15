@@ -1,0 +1,146 @@
+.................................................FFFF..F................ [ 25%]
+........................................................................ [ 50%]
+........................................................................ [ 75%]
+......................................................................   [100%]
+================================== FAILURES ===================================
+_ TestTerminalRemotoLiberaCapital.test_every_terminal_status_releases_the_reservation[canceled] _
+
+self = <tests.test_reconciliacao_adversarial.TestTerminalRemotoLiberaCapital object at 0x000001F5E5F8B950>
+estado = 'canceled'
+
+    @pytest.mark.parametrize("estado", ["canceled", "cancelled", "rejected",
+                                        "expired"])
+    def test_every_terminal_status_releases_the_reservation(self, estado):
+        m, risco, _, coord = sistema()
+        res = reserva(risco)
+        coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
+        assert risco.reserved_total == Decimal("150.00")
+        coord.reconciliar(lambda coid: {"status": estado},
+                          consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
+>       assert risco.reserved_total == Decimal("0"), (
+            f"status {estado} deixou capital preso")
+E       AssertionError: status canceled deixou capital preso
+E       assert Decimal('150.00') == Decimal('0')
+E        +  where Decimal('150.00') = <tradingagents.desk.risk.RiskEngine object at 0x000001F5E5AF0E30>.reserved_total
+E        +  and   Decimal('0') = Decimal('0')
+
+tests\test_reconciliacao_adversarial.py:208: AssertionError
+_ TestTerminalRemotoLiberaCapital.test_every_terminal_status_releases_the_reservation[cancelled] _
+
+self = <tests.test_reconciliacao_adversarial.TestTerminalRemotoLiberaCapital object at 0x000001F5E5F8B740>
+estado = 'cancelled'
+
+    @pytest.mark.parametrize("estado", ["canceled", "cancelled", "rejected",
+                                        "expired"])
+    def test_every_terminal_status_releases_the_reservation(self, estado):
+        m, risco, _, coord = sistema()
+        res = reserva(risco)
+        coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
+        assert risco.reserved_total == Decimal("150.00")
+        coord.reconciliar(lambda coid: {"status": estado},
+                          consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
+>       assert risco.reserved_total == Decimal("0"), (
+            f"status {estado} deixou capital preso")
+E       AssertionError: status cancelled deixou capital preso
+E       assert Decimal('150.00') == Decimal('0')
+E        +  where Decimal('150.00') = <tradingagents.desk.risk.RiskEngine object at 0x000001F5E5B07E00>.reserved_total
+E        +  and   Decimal('0') = Decimal('0')
+
+tests\test_reconciliacao_adversarial.py:208: AssertionError
+_ TestTerminalRemotoLiberaCapital.test_every_terminal_status_releases_the_reservation[rejected] _
+
+self = <tests.test_reconciliacao_adversarial.TestTerminalRemotoLiberaCapital object at 0x000001F5E5F8B590>
+estado = 'rejected'
+
+    @pytest.mark.parametrize("estado", ["canceled", "cancelled", "rejected",
+                                        "expired"])
+    def test_every_terminal_status_releases_the_reservation(self, estado):
+        m, risco, _, coord = sistema()
+        res = reserva(risco)
+        coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
+        assert risco.reserved_total == Decimal("150.00")
+        coord.reconciliar(lambda coid: {"status": estado},
+                          consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
+>       assert risco.reserved_total == Decimal("0"), (
+            f"status {estado} deixou capital preso")
+E       AssertionError: status rejected deixou capital preso
+E       assert Decimal('150.00') == Decimal('0')
+E        +  where Decimal('150.00') = <tradingagents.desk.risk.RiskEngine object at 0x000001F5E5B78DD0>.reserved_total
+E        +  and   Decimal('0') = Decimal('0')
+
+tests\test_reconciliacao_adversarial.py:208: AssertionError
+_ TestTerminalRemotoLiberaCapital.test_every_terminal_status_releases_the_reservation[expired] _
+
+self = <tests.test_reconciliacao_adversarial.TestTerminalRemotoLiberaCapital object at 0x000001F5E5F8B4A0>
+estado = 'expired'
+
+    @pytest.mark.parametrize("estado", ["canceled", "cancelled", "rejected",
+                                        "expired"])
+    def test_every_terminal_status_releases_the_reservation(self, estado):
+        m, risco, _, coord = sistema()
+        res = reserva(risco)
+        coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
+        assert risco.reserved_total == Decimal("150.00")
+        coord.reconciliar(lambda coid: {"status": estado},
+                          consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
+>       assert risco.reserved_total == Decimal("0"), (
+            f"status {estado} deixou capital preso")
+E       AssertionError: status expired deixou capital preso
+E       assert Decimal('150.00') == Decimal('0')
+E        +  where Decimal('150.00') = <tradingagents.desk.risk.RiskEngine object at 0x000001F5E5B78560>.reserved_total
+E        +  and   Decimal('0') = Decimal('0')
+
+tests\test_reconciliacao_adversarial.py:208: AssertionError
+_ TestFrescorDoRelatorio.test_oms_version_changes_after_a_financial_mutation __
+
+self = <tests.test_reconciliacao_adversarial.TestFrescorDoRelatorio object at 0x000001F5E5E32510>
+
+    def test_oms_version_changes_after_a_financial_mutation(self):
+        m, risco, _, coord = sistema()
+        res = reserva(risco)
+        coord.restaurar_estado(doc_com_ordem(OrderState.ACKNOWLEDGED, res))
+        rel = coord.reconciliar(lambda coid: {"status": "canceled"},
+                                consultar_posicoes=lambda: {}, consultar_ordens_abertas=lambda: [])
+        versao_no_relatorio = rel["oms_version"]
+        # nova mutação financeira
+>       res2 = reserva(risco)
+               ^^^^^^^^^^^^^^
+
+tests\test_reconciliacao_adversarial.py:243: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\test_reconciliacao_adversarial.py:40: in reserva
+    return risco.reserve(p, Decimal(preco), agent_id="trader-trend")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <tradingagents.desk.risk.RiskEngine object at 0x000001F5E5C280B0>
+proposal = TradeProposal(agent_id='trader-trend', strategy='trend_following', instrument='BTC/USDT', action=<Action.BUY: 'buy'>, ...None, created_at=datetime.datetime(2026, 10, 15, 3, 5, 49, 679589, tzinfo=datetime.timezone.utc), schema='dz23.desk/1')
+price = Decimal('100'), agent_id = 'trader-trend'
+
+    def reserve(self, proposal: TradeProposal, price: Decimal, *,
+                agent_id: str | None = None) -> RiskReservation:
+        if price <= 0 or not price.is_finite():
+            raise RiskVeto("preço inválido")
+        self.mandate.assert_active(instrument=proposal.instrument)
+        if proposal.action is Action.SELL:
+            raise RiskVeto("venda a descoberto não existe em spot; use redução de posição")
+        pct = min(proposal.desired_exposure_pct, self.mandate.max_position_pct)
+        if pct <= 0:
+            raise RiskVeto("exposição desejada nula")
+        with self._lock:  # atômico: duas propostas não travam o mesmo capital
+            # Posições ABERTAS contam para o limite: uma posição preenchida
+            # sem reserva continua sendo uma posição.
+            if len(self.open_instruments()) >= self.mandate.max_open_positions:
+                raise RiskVeto("limite de posições simultâneas atingido")
+            if proposal.instrument in self.open_instruments():
+>               raise RiskVeto(f"já há reserva ativa para {proposal.instrument}")
+E               tradingagents.desk.risk.RiskVeto: já há reserva ativa para BTC/USDT
+
+tradingagents\desk\risk.py:222: RiskVeto
+=========================== short test summary info ===========================
+FAILED tests/test_reconciliacao_adversarial.py::TestTerminalRemotoLiberaCapital::test_every_terminal_status_releases_the_reservation[canceled]
+FAILED tests/test_reconciliacao_adversarial.py::TestTerminalRemotoLiberaCapital::test_every_terminal_status_releases_the_reservation[cancelled]
+FAILED tests/test_reconciliacao_adversarial.py::TestTerminalRemotoLiberaCapital::test_every_terminal_status_releases_the_reservation[rejected]
+FAILED tests/test_reconciliacao_adversarial.py::TestTerminalRemotoLiberaCapital::test_every_terminal_status_releases_the_reservation[expired]
+FAILED tests/test_reconciliacao_adversarial.py::TestFrescorDoRelatorio::test_oms_version_changes_after_a_financial_mutation
+5 failed, 281 passed in 2.82s

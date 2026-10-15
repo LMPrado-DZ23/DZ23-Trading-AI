@@ -1,0 +1,4 @@
+...........s.....                                                        [100%]
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_auditoria_sec1_segredos_em_repouso.py:247: sem DPAPI não há blob válido-de-outra-máquina a forjar
+16 passed, 1 skipped in 6.39s

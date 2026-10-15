@@ -1,0 +1,39 @@
+FF.                                                                      [100%]
+================================== FAILURES ===================================
+_______ test_fin07_oversized_notional_is_refused_by_projected_exposure ________
+
+    def test_fin07_oversized_notional_is_refused_by_projected_exposure():
+        """Notional 2× o patrimônio com stop estreito: o risco por trade cabe, mas
+        a cobertura PROJETADA estoura o teto — o motor antigo aprovava."""
+        decision = _mercado_decision(quantity="20", stop="99.9", target="101")
+        result = RiskDeMercado().evaluate(
+            decision, _mercado_portfolio(equity="1000", gross="0"),
+            _mercado_snapshot())
+>       assert result.status.value == "REJECT"
+E       AssertionError: assert 'APPROVE' == 'REJECT'
+E         
+E         - REJECT
+E         + APPROVE
+
+tests\test_v9_financial_regressions.py:680: AssertionError
+____ test_fin07_stop_distance_risk_is_refused_even_when_declared_is_small _____
+
+    def test_fin07_stop_distance_risk_is_refused_even_when_declared_is_small():
+        """Risco declarado ínfimo (0,01%) mas risco EFETIVO 5% pela distância ao
+        stop: o teto por trade tem de pegar o risco REAL, não o declarado."""
+        decision = _mercado_decision(quantity="50", stop="90", target="115",
+                                     declared_risk="0.0001")
+        result = RiskDeMercado().evaluate(
+            decision, _mercado_portfolio(equity="10000", gross="0"),
+            _mercado_snapshot())
+>       assert result.status.value == "REJECT"
+E       AssertionError: assert 'APPROVE' == 'REJECT'
+E         
+E         - REJECT
+E         + APPROVE
+
+tests\test_v9_financial_regressions.py:693: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_v9_financial_regressions.py::test_fin07_oversized_notional_is_refused_by_projected_exposure
+FAILED tests/test_v9_financial_regressions.py::test_fin07_stop_distance_risk_is_refused_even_when_declared_is_small
+2 failed, 1 passed, 27 deselected in 0.39s

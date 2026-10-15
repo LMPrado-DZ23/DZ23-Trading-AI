@@ -1,0 +1,17 @@
+# V9 — configuração da varredura de segredos em modo dir (arquivos atuais, inclui alterações não commitadas).
+# Exclui apenas diretórios não-código (VCS, virtualenv, caches, módulos instalados):
+# o restante da árvore é varrido integralmente com as regras padrão do gitleaks.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "V9: pular VCS, .venv, node_modules e caches"
+paths = [
+  '''\.git/''',
+  '''\.venv/''',
+  '''node_modules/''',
+  '''\.pytest_cache/''',
+  '''\.ruff_cache/''',
+  '''\.mypy_cache/''',
+  '''__pycache__/''',
+]

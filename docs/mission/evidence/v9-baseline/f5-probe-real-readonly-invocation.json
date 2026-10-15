@@ -1,0 +1,1 @@
+{"comando": "PYTHONIOENCODING=utf-8 ./.venv/Scripts/python.exe tools/v9_f5_probe_conectores.py", "exit": 0, "data_utc": "2026-10-15T11:12:54Z", "nota": "Fora do executor hermetico de proposito: rede real read-only, sem credenciais, sem ordens."}

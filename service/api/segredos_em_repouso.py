@@ -83,6 +83,16 @@ def tem_protecao() -> bool:
         return False
 
 
+def protecao_exigida() -> bool:
+    """Nesta plataforma a proteção do segredo é OBRIGATÓRIA?
+
+    Windows: sim — a razão deste módulo existir é jamais deixar credencial em
+    texto claro no disco (chmod não é ACL no NTFS). Sem DPAPI aqui, gravar em
+    claro seria pior que recusar. POSIX: não — ali o 0600 é proteção real.
+    """
+    return sys.platform == "win32"
+
+
 def _blob_de(dados: bytes) -> tuple[_BLOB, ctypes.Array]:
     buf = ctypes.create_string_buffer(dados, len(dados))
     return _BLOB(len(dados), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char))), buf
@@ -118,8 +128,16 @@ def cifrar(valor: str) -> str:
     consegue decifrar de volta NÃO é gravado (o chamador decide o que fazer
     com a falha). POSIX: devolve como está — a proteção ali é o 0600 do
     arquivo, e fingir criptografia caseira seria pior que nenhuma.
+
+    Windows SEM DPAPI disponível: RECUSA. Devolver texto claro seria escrever
+    o segredo legível em disco — exatamente o achado SEC-1 que este módulo
+    corrige. Fail-closed também vale para o path de gravação.
     """
     if not tem_protecao():
+        if protecao_exigida():
+            raise SegredoIlegivel(
+                "Windows sem DPAPI disponível: gravar o segredo em texto claro "
+                "seria pior que recusar — nada foi gravado no disco")
         return valor
     blob = _dpapi(valor.encode("utf-8"), proteger=True)
     token = PREFIXO + base64.b64encode(blob).decode("ascii")
@@ -185,4 +203,4 @@ def status() -> dict:
 
 
 __all__ = ["PREFIXO", "SegredoIlegivel", "cifrar", "decifrar", "e_cifrado",
-           "status", "tem_protecao"]
+           "status", "tem_protecao", "protecao_exigida"]

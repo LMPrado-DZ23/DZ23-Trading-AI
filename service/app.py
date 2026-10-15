@@ -24,7 +24,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from service.api import diagnostics, security_center, segredos_em_repouso
+from service.api import segredos_em_repouso
 from service.api.ia_uso import RegistroDeUso
 from service.api.owner_credentials import CredenciaisDoDono, erro_de_senha
 from tradingagents.agency import AgencyTask, build_llm_handler
@@ -257,8 +257,6 @@ _DESK_EFFECTIVE_DEFAULTS = {
 }
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
-app.include_router(diagnostics.router)
-app.include_router(security_center.router)
 bearer = HTTPBearer(auto_error=False)
 
 # ── GATE G2 — BLOQUEIO INCONDICIONAL DA SUPERFÍCIE SaaS ─────────────────────
@@ -459,7 +457,9 @@ def auth_status():
         "bootstrap_required": bool(MULTI_TENANT_ENABLED and TENANT_STORE and TENANT_STORE.tenant_count() == 0),
         "live_trading": False,
         # Primeira execução (nenhuma senha criada): o painel abre o assistente.
-        "setup_required": (not OWNER_CREDENTIALS.existe()) and not PASSWORD,
+        # Presença FÍSICA do arquivo (mesmo ilegível) bloqueia o assistente —
+        # storage existente não é instalação nova (V9-SEC-04).
+        "setup_required": (not OWNER_CREDENTIALS.arquivo_presente()) and not PASSWORD,
     }
 
 
@@ -476,7 +476,7 @@ async def owner_setup(req: Request):
     if erro:
         raise HTTPException(422, erro)
     with _SETUP_LOCK:
-        if PASSWORD or OWNER_CREDENTIALS.existe():
+        if PASSWORD or OWNER_CREDENTIALS.arquivo_presente():
             raise HTTPException(409, "senha do dono já configurada")
         codigo = OWNER_CREDENTIALS.criar(senha)
     return {"ok": True, "codigo_recuperacao": codigo}
@@ -701,6 +701,8 @@ def _segredos_do_disco(do_disco: dict, tenant_id: str, path: Path) -> None:
     for chave in SECRETish:
         valor = do_disco.get(chave)
         if not segredos_em_repouso.e_cifrado(valor):
+            # Ausente ou legível em claro: o diagnóstico anterior ficou obsoleto.
+            registry.pop(chave, None)
             continue
         try:
             do_disco[chave] = segredos_em_repouso.decifrar(valor)
@@ -2681,9 +2683,17 @@ def _desk_boot(tenant_id: str) -> dict:
             "ia_modelo": cfg.get("TRADINGAGENTS_LLM_PROVIDER") or "",
             "manual": copiloto, "snaps_fn": snaps_fn}
 
+    def _gravar_oms():
+        armazem.salvar(tenant_id, "oms", coord.snapshot_estado())
+
+    # WAL do OMS (FIN-08): gravação SÍNCRONA ligada ao coordenador. Aqui a
+    # falha LEVANTA de propósito — o coordenador recusa a ordem que a
+    # gravação não conseguiu tornar durável antes do envio.
+    coord.persistencia = _gravar_oms
+
     def _persistir_oms():
         try:
-            armazem.salvar(tenant_id, "oms", coord.snapshot_estado())
+            _gravar_oms()
         except Exception:
             HEALTH["avisos"].append(
                 "não foi possível persistir o estado financeiro da mesa")

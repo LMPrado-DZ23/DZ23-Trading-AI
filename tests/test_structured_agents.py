@@ -7,6 +7,7 @@ behavior we added for the Trader, Research Manager, and Sentiment Analyst
 so they share the same deterministic output shape.
 """
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -393,6 +394,18 @@ def _structured_sentiment_llm(captured: dict, report: SentimentReport | None = N
 
 @pytest.mark.unit
 class TestSentimentAnalystAgent:
+    @pytest.fixture(autouse=True)
+    def _offline_prefetchers(self, monkeypatch):
+        """Hermetic isolation: the node pre-fetches news/StockTwits/Reddit
+        from the live network, which these tests must never touch (they cover
+        the structured-output path and the free-text fallback). The fetchers
+        are patched in the module namespace the node resolves at call time."""
+        import tradingagents.agents.analysts.sentiment_analyst as sa
+
+        monkeypatch.setattr(sa, "fetch_stocktwits_messages", lambda *a, **k: "<stocktwits offline>")
+        monkeypatch.setattr(sa, "fetch_reddit_posts", lambda *a, **k: "<reddit offline>")
+        monkeypatch.setattr(sa, "get_news", SimpleNamespace(func=lambda *a, **k: "<news offline>"))
+
     def test_structured_path_produces_rendered_markdown(self):
         captured = {}
         report = SentimentReport(

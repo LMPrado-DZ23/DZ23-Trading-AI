@@ -1,0 +1,57 @@
+..F.F......F.                                                            [100%]
+================================== FAILURES ===================================
+__________ test_reconciliation_runs_and_reports_safe_without_remote ___________
+
+api = <starlette.testclient.TestClient object at 0x000001A5FB24B9E0>
+
+    def test_reconciliation_runs_and_reports_safe_without_remote(api):
+        r = api.post("/v1/execution/reconciliation", headers=_auth())
+        assert r.status_code == 200, r.text
+        body = r.json()
+>       assert body["safe"] is True
+E       assert False is True
+
+tests\test_v9_f8_rotas_financeiras_http.py:118: AssertionError
+___ test_paper_execution_blocked_by_gate_then_accepted_after_reconciliation ___
+
+api = <starlette.testclient.TestClient object at 0x000001A5FB336210>
+
+    def test_paper_execution_blocked_by_gate_then_accepted_after_reconciliation(api):
+        body = _decision_body()
+        blocked = api.post("/v1/execution/paper", headers=_auth(), json=body)
+        assert blocked.status_code == 423, blocked.text
+        assert "reconcilia" in blocked.json()["detail"].lower()
+    
+        assert api.post("/v1/execution/reconciliation",
+                        headers=_auth()).status_code == 200
+    
+        r = api.post("/v1/execution/paper", headers=_auth(), json=body)
+>       assert r.status_code == 200, r.text
+E       AssertionError: {"detail":"execução bloqueada: reconciliação não está MATCHED"}
+E       assert 423 == 200
+E        +  where 423 = <Response [423 Locked]>.status_code
+
+tests\test_v9_f8_rotas_financeiras_http.py:145: AssertionError
+________________ test_readyz_reports_real_state_and_never_dies ________________
+
+api = <starlette.testclient.TestClient object at 0x000001A5FB822330>
+
+    def test_readyz_reports_real_state_and_never_dies(api):
+        r = api.get("/readyz")
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["status"] == "ready"
+        assert body["kill_switch"] is False
+        assert body["paper"]["status"] == "READY"
+>       assert body["paper"]["environment"] == "paper"
+E       AssertionError: assert 'PAPER' == 'paper'
+E         
+E         - paper
+E         + PAPER
+
+tests\test_v9_f8_rotas_financeiras_http.py:226: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_v9_f8_rotas_financeiras_http.py::test_reconciliation_runs_and_reports_safe_without_remote
+FAILED tests/test_v9_f8_rotas_financeiras_http.py::test_paper_execution_blocked_by_gate_then_accepted_after_reconciliation
+FAILED tests/test_v9_f8_rotas_financeiras_http.py::test_readyz_reports_real_state_and_never_dies
+3 failed, 10 passed in 31.92s

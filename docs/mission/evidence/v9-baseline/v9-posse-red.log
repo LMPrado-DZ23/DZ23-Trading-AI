@@ -1,0 +1,33 @@
+F..                                                                      [100%]
+================================== FAILURES ===================================
+_____________ test_corrida_entre_dois_processos_um_unico_vencedor _____________
+
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/pytest-of-DZ23/pytest-479/test_corrida_entre_dois_proces0')
+
+    def test_corrida_entre_dois_processos_um_unico_vencedor(tmp_path):
+        estado = tmp_path / "estado"
+        marcador = str(tmp_path / "janela.p1")
+        p1 = _iniciar(_cfg(tmp_path, "pc-dono", atraso=8.0, marcador=marcador,
+                           estado=estado))
+        limite = time.monotonic() + 60
+        while not Path(marcador).exists():
+            assert time.monotonic() < limite, (
+                "P1 não chegou à janela leitura->escrita")
+            time.sleep(0.05)
+        p2 = _iniciar(_cfg(tmp_path, "oracle-01", atraso=0.0,
+                           marcador=marcador, estado=estado))
+        r2 = _colher(p2)
+        r1 = _colher(p1)
+    
+        ganhadores = _vencedores([r1, r2])
+>       assert len(ganhadores) == 1, (
+            f"os DOIS processos acreditaram ter a posse da mesma mesa "
+            f"(dois executores): {r1} | {r2}")
+E       AssertionError: os DOIS processos acreditaram ter a posse da mesma mesa (dois executores): {'dono': 'pc-dono', 'ok': True, 'motivo': ''} | {'dono': 'oracle-01', 'ok': True, 'motivo': ''}
+E       assert 2 == 1
+E        +  where 2 = len([{'dono': 'pc-dono', 'ok': True, 'motivo': ''}, {'dono': 'oracle-01', 'ok': True, 'motivo': ''}])
+
+tests\test_v9_posse_dois_processos.py:111: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_v9_posse_dois_processos.py::test_corrida_entre_dois_processos_um_unico_vencedor
+1 failed, 2 passed in 17.43s

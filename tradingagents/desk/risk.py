@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import threading
 import uuid
+from contextlib import contextmanager
+from copy import deepcopy
 from decimal import ROUND_DOWN, Decimal
 
 from .models import (
@@ -120,7 +122,8 @@ class RiskEngine:
         """
         self.mandate = mandate
         self.carteira = carteira
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
+        self._economic_undo: list[dict] = []
         self._reservations: dict[str, RiskReservation] = {}
         self._concluidas: dict[str, dict] = {}
         self._deficits: dict[str, Decimal] = {}
@@ -310,6 +313,35 @@ class RiskEngine:
             self._reservations[reservation_id] = atualizada
             return atualizada.remaining_amount
 
+    @contextmanager
+    def economic_transaction(self, reservation_id: str):
+        """Rollback da reserva e apenas dos incidentes tocados pela operação."""
+        with self._lock:
+            reserva = self._reservations.get(reservation_id)
+            conclusao = deepcopy(self._concluidas.get(reservation_id))
+            incidentes = {}
+            self._economic_undo.append(incidentes)
+            try:
+                yield
+            except BaseException:
+                for mapping, key, value in (
+                    (self._reservations, reservation_id, reserva),
+                    (self._concluidas, reservation_id, conclusao),
+                    *((self._incidentes, key, value) for key, value in incidentes.items()),
+                ):
+                    if value is None:
+                        mapping.pop(key, None)
+                    else:
+                        mapping[key] = value
+                raise
+            finally:
+                self._economic_undo.pop()
+
+    def _remember_incident(self, key: str) -> None:
+        for undo in self._economic_undo:
+            if key not in undo:
+                undo[key] = deepcopy(self._incidentes.get(key))
+
     # ------------------------------------------------ custo real vs cobertura
     def registrar_execucao(self, reservation_id: str, *, custo: Decimal,
                            quantidade: Decimal, terminal: bool) -> dict:
@@ -350,7 +382,9 @@ class RiskEngine:
                     reservation_id=reservation_id,
                     evidence=f"execução custou {custo} contra cobertura {limite}")
 
-            if terminal or atualizada.remaining_quantity <= 0:
+            # O executor só confirma terminalidade após conferir os fills;
+            # quantidade completa com evidência divergente mantém a sobra.
+            if terminal:
                 sobra = atualizada.remaining_amount
                 # Conclusão fica registrada: apagar a reserva sem deixar
                 # rastro tiraria a única evidência do consumo terminal.
@@ -442,6 +476,7 @@ class RiskEngine:
         ocorrencia = {"amount": str(amount), "order_id": order_id,
                       "reservation_id": reservation_id,
                       "at": utcnow().isoformat(), "evidence": evidence}
+        self._remember_incident(chave)
         existente = self._incidentes.get(chave)
         if existente and existente["status"] == "OPEN":
             # Mesma violação econômica: soma o total e GUARDA a origem de
@@ -795,6 +830,7 @@ class RiskEngine:
                       "fill_id": fill_id, "instrumento": instrumento,
                       "at": utcnow().isoformat(),
                       "evidence": f"taxa de {quantidade} {moeda} sem cotação"}
+        self._remember_incident(chave)
         existente = self._incidentes.get(chave)
         if existente and existente["status"] == "OPEN":
             existente["fee_amount"] = str(
@@ -837,6 +873,7 @@ class RiskEngine:
                       "fill_id": fill_id, "instrumento": instrumento,
                       "at": utcnow().isoformat(),
                       "evidence": motivo or f"taxa de {quantidade} sem moeda"}
+        self._remember_incident(chave)
         existente = self._incidentes.get(chave)
         if existente and existente["status"] in self.ESTADOS_BLOQUEANTES:
             existente["fee_amount"] = str(
@@ -878,6 +915,7 @@ class RiskEngine:
         """
         import uuid as _uuid
         chave = f"FEE_COMPONENTS_AMBIGUOUS:{fill_id or order_id}"
+        self._remember_incident(chave)
         existente = self._incidentes.get(chave)
         if existente and existente["status"] in self.ESTADOS_BLOQUEANTES:
             return existente["incident_id"]
@@ -1372,10 +1410,10 @@ class RiskEngine:
     def conversao_acumulada(self) -> Decimal:
         """Passivo acumulado das taxas valoradas e ainda não financiadas.
 
-        Fica numa conta própria (FX:CONVERSION) e NÃO vira resultado de
-        trader: o que a estratégia fez e o que a conversão cambial fez são
-        coisas diferentes, e somar as duas premiaria ou puniria o agente por
-        um câmbio que ele não escolheu.
+        Fica em LIABILITY:FEE_FUNDING e NÃO vira resultado de trader: o que a
+        estratégia fez e o que a conversão cambial fez são coisas diferentes,
+        e somar as duas premiaria ou puniria o agente por um câmbio que ele
+        não escolheu. O aporte do ativo descoberto quita este passivo.
         """
         if self.carteira is None:
             return Decimal("0")

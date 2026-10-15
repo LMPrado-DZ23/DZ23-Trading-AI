@@ -1,0 +1,26 @@
+{
+    "max_open_trades": 1,
+    "stake_currency": "USDT",
+    "stake_amount": 100,
+    "tradable_balance_ratio": 1.0,
+    "amend_last_stake_amount": false,
+    "dry_run": true,
+    "dry_run_wallet": 1000,
+    "trading_mode": "spot",
+    "timeframe": "1h",
+    "fee": 0.001,
+    "dataformat_ohlcv": "json",
+    "exchange": {
+        "name": "binance",
+        "key": "",
+        "secret": "",
+        "pair_whitelist": ["BTC/USDT"],
+        "pair_blacklist": []
+    },
+    "pairlists": [{"method": "StaticPairList"}],
+    "entry_pricing": {"price_side": "same", "use_order_book": false, "order_book_top": 1},
+    "exit_pricing": {"price_side": "same", "use_order_book": false, "order_book_top": 1},
+    "bot_name": "dz23-fq2-round1",
+    "initial_state": "running",
+    "internals": {"process_throttle_secs": 5}
+}

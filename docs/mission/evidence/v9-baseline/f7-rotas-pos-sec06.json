@@ -1,0 +1,1990 @@
+{
+  "resumo": {
+    "rotas_total": 146,
+    "com_referencia_ui": 79,
+    "sem_referencia_ui": 67,
+    "com_referencia_teste": 131,
+    "sem_referencia_teste": 15,
+    "sem_ui_e_sem_teste": 13,
+    "com_marcador_depends": 121,
+    "sem_marcador_depends": 25
+  },
+  "rotas": [
+    {
+      "metodo": "GET",
+      "rota": "/",
+      "funcao": "index",
+      "origem": "service/app.py",
+      "linha": 987,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/app",
+      "funcao": "aplicacao",
+      "origem": "service/app.py",
+      "linha": 995,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/app/",
+      "funcao": "aplicacao",
+      "origem": "service/app.py",
+      "linha": 995,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/favicon.ico",
+      "funcao": "favicon",
+      "origem": "service/app.py",
+      "linha": 1020,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/floor",
+      "funcao": "floor",
+      "origem": "service/app.py",
+      "linha": 1403,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/healthz",
+      "funcao": "hz",
+      "origem": "service/app.py",
+      "linha": 965,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/manifest.webmanifest",
+      "funcao": "manifest",
+      "origem": "service/app.py",
+      "linha": 1046,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/metrics",
+      "funcao": "metrics",
+      "origem": "service/app.py",
+      "linha": 983,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": false
+    },
+    {
+      "metodo": "GET",
+      "rota": "/publico/{tenant_id}",
+      "funcao": "pagina_publica",
+      "origem": "service/app.py",
+      "linha": 4755,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/readyz",
+      "funcao": "readyz",
+      "origem": "service/app.py",
+      "linha": 977,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/static/marca/{arquivo}",
+      "funcao": "marca",
+      "origem": "service/app.py",
+      "linha": 1001,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/static/vendor/lightweight-charts/{arquivo}",
+      "funcao": "vendor_lightweight_charts",
+      "origem": "service/app.py",
+      "linha": 1025,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/sw.js",
+      "funcao": "service_worker",
+      "origem": "service/app.py",
+      "linha": 1053,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/admin/database",
+      "funcao": "database_health",
+      "origem": "service/app.py",
+      "linha": 3858,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/admin/tenants",
+      "funcao": "create_tenant",
+      "origem": "service/app.py",
+      "linha": 538,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/admin/users",
+      "funcao": "list_tenant_users",
+      "origem": "service/app.py",
+      "linha": 568,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/admin/users",
+      "funcao": "create_tenant_user",
+      "origem": "service/app.py",
+      "linha": 550,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/agency/agents/{agent_id}/status",
+      "funcao": "agency_agent_status",
+      "origem": "service/app.py",
+      "linha": 1617,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": false
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/agency/events",
+      "funcao": "agency_events",
+      "origem": "service/app.py",
+      "linha": 1419,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/agency/health",
+      "funcao": "agency_health",
+      "origem": "service/app.py",
+      "linha": 1426,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/agency/meetings",
+      "funcao": "agency_meeting",
+      "origem": "service/app.py",
+      "linha": 1630,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": false
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/agency/meetings/{meeting_id}/votes",
+      "funcao": "agency_vote",
+      "origem": "service/app.py",
+      "linha": 1640,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": false
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/agency/memory",
+      "funcao": "agency_memory",
+      "origem": "service/app.py",
+      "linha": 1461,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": false
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/agency/missions",
+      "funcao": "agency_missions",
+      "origem": "service/app.py",
+      "linha": 1468,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/agency/missions",
+      "funcao": "agency_create_mission",
+      "origem": "service/app.py",
+      "linha": 1473,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/agency/snapshot",
+      "funcao": "agency_snapshot",
+      "origem": "service/app.py",
+      "linha": 1409,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/agency/stream",
+      "funcao": "agency_stream",
+      "origem": "service/app.py",
+      "linha": 1653,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": false
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/agency/tasks",
+      "funcao": "agency_tasks",
+      "origem": "service/app.py",
+      "linha": 1454,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/agency/tasks",
+      "funcao": "agency_submit_task",
+      "origem": "service/app.py",
+      "linha": 1488,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/agency/tasks/run",
+      "funcao": "agency_run_tasks",
+      "origem": "service/app.py",
+      "linha": 1524,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/agency/tasks/{task_id}/approve",
+      "funcao": "agency_approve_task",
+      "origem": "service/app.py",
+      "linha": 1513,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": false
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/agency/worker/start",
+      "funcao": "agency_worker_start",
+      "origem": "service/app.py",
+      "linha": 1549,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/agency/worker/status",
+      "funcao": "agency_worker_status",
+      "origem": "service/app.py",
+      "linha": 1541,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/agency/worker/stop",
+      "funcao": "agency_worker_stop",
+      "origem": "service/app.py",
+      "linha": 1570,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/ai/modelos",
+      "funcao": "ai_listar_modelos",
+      "origem": "service/app.py",
+      "linha": 1207,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/ai/provedores",
+      "funcao": "ai_listar_provedores",
+      "origem": "service/app.py",
+      "linha": 1189,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/ai/testar",
+      "funcao": "ai_testar_provedor",
+      "origem": "service/app.py",
+      "linha": 1194,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/ai/uso",
+      "funcao": "ai_uso",
+      "origem": "service/app.py",
+      "linha": 1217,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/alertas",
+      "funcao": "listar_alertas",
+      "origem": "service/app.py",
+      "linha": 4160,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/alertas/verificar",
+      "funcao": "disparar_alertas",
+      "origem": "service/app.py",
+      "linha": 4192,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": false
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/app/quit",
+      "funcao": "app_quit",
+      "origem": "service/app.py",
+      "linha": 416,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/auth/bootstrap",
+      "funcao": "tenant_bootstrap",
+      "origem": "service/app.py",
+      "linha": 424,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/auth/login",
+      "funcao": "tenant_login",
+      "origem": "service/app.py",
+      "linha": 442,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/auth/logout",
+      "funcao": "tenant_logout",
+      "origem": "service/app.py",
+      "linha": 531,
+      "depends": [
+        "auth",
+        "bearer"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/auth/me",
+      "funcao": "auth_me",
+      "origem": "service/app.py",
+      "linha": 524,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/auth/oauth/providers",
+      "funcao": "oauth_providers",
+      "origem": "service/app.py",
+      "linha": 2081,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/auth/oauth/{provider}/callback",
+      "funcao": "oauth_callback",
+      "origem": "service/app.py",
+      "linha": 2099,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/auth/oauth/{provider}/start",
+      "funcao": "oauth_start",
+      "origem": "service/app.py",
+      "linha": 2088,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/auth/recover",
+      "funcao": "owner_recover",
+      "origem": "service/app.py",
+      "linha": 486,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/auth/recovery-code",
+      "funcao": "owner_new_recovery_code",
+      "origem": "service/app.py",
+      "linha": 514,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/auth/setup",
+      "funcao": "owner_setup",
+      "origem": "service/app.py",
+      "linha": 470,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/auth/signup",
+      "funcao": "tenant_signup",
+      "origem": "service/app.py",
+      "linha": 1949,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/auth/signup-status",
+      "funcao": "signup_status",
+      "origem": "service/app.py",
+      "linha": 1940,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/auth/status",
+      "funcao": "auth_status",
+      "origem": "service/app.py",
+      "linha": 454,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/backup",
+      "funcao": "backup_now",
+      "origem": "service/app.py",
+      "linha": 3795,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/backups",
+      "funcao": "list_backups",
+      "origem": "service/app.py",
+      "linha": 3808,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": false
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/billing/checkout",
+      "funcao": "billing_checkout",
+      "origem": "service/app.py",
+      "linha": 1859,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/billing/planos",
+      "funcao": "billing_plans",
+      "origem": "service/app.py",
+      "linha": 1843,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/billing/status",
+      "funcao": "billing_status",
+      "origem": "service/app.py",
+      "linha": 1851,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/broker/order",
+      "funcao": "broker_order",
+      "origem": "service/app.py",
+      "linha": 1397,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": false
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/broker/status",
+      "funcao": "broker_status",
+      "origem": "service/app.py",
+      "linha": 1379,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/config",
+      "funcao": "get_cfg",
+      "origem": "service/app.py",
+      "linha": 1089,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/config",
+      "funcao": "set_cfg",
+      "origem": "service/app.py",
+      "linha": 1109,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/desk/aprendizado",
+      "funcao": "desk_learning",
+      "origem": "service/app.py",
+      "linha": 4053,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/desk/avaliacao",
+      "funcao": "desk_evaluation",
+      "origem": "service/app.py",
+      "linha": 3140,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/desk/cycle",
+      "funcao": "desk_cycle",
+      "origem": "service/app.py",
+      "linha": 2976,
+      "depends": [
+        "auth",
+        "require_plan"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/desk/evolucao",
+      "funcao": "desk_evolucao",
+      "origem": "service/app.py",
+      "linha": 3277,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/desk/feed",
+      "funcao": "desk_feed",
+      "origem": "service/app.py",
+      "linha": 3114,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/desk/modo",
+      "funcao": "desk_modo_obter",
+      "origem": "service/app.py",
+      "linha": 3020,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/desk/modo",
+      "funcao": "desk_modo_definir",
+      "origem": "service/app.py",
+      "linha": 3027,
+      "depends": [
+        "auth",
+        "require_plan"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/desk/reconciliar",
+      "funcao": "desk_reconciliar",
+      "origem": "service/app.py",
+      "linha": 4888,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/desk/scheduler/{action}",
+      "funcao": "desk_scheduler",
+      "origem": "service/app.py",
+      "linha": 3001,
+      "depends": [
+        "auth",
+        "require_plan"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/desk/status",
+      "funcao": "desk_status",
+      "origem": "service/app.py",
+      "linha": 2923,
+      "depends": [
+        "auth",
+        "require_plan"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/desk/traders/{agent_id}/pausar",
+      "funcao": "desk_trader_pausar",
+      "origem": "service/app.py",
+      "linha": 3074,
+      "depends": [
+        "auth",
+        "require_plan"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/desk/traders/{agent_id}/promover",
+      "funcao": "desk_trader_promover",
+      "origem": "service/app.py",
+      "linha": 3050,
+      "depends": [
+        "auth",
+        "require_plan"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/desk/traders/{agent_id}/retomar",
+      "funcao": "desk_trader_retomar",
+      "origem": "service/app.py",
+      "linha": 3094,
+      "depends": [
+        "auth",
+        "require_plan"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/desk/traders/{agent_id}/sala",
+      "funcao": "desk_trader_sala",
+      "origem": "service/app.py",
+      "linha": 3288,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/desk/traders/{agent_id}/sala/leitura",
+      "funcao": "desk_trader_sala_leitura",
+      "origem": "service/app.py",
+      "linha": 3296,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/desk/viabilidade",
+      "funcao": "desk_viability",
+      "origem": "service/app.py",
+      "linha": 4070,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/escola/avaliar",
+      "funcao": "escola_avaliar",
+      "origem": "service/app.py",
+      "linha": 3508,
+      "depends": [
+        "auth",
+        "require_plan"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/escola/central",
+      "funcao": "escola_central",
+      "origem": "service/app.py",
+      "linha": 3385,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/escola/certificacao",
+      "funcao": "escola_certificacao",
+      "origem": "service/app.py",
+      "linha": 3485,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/escola/maestro",
+      "funcao": "escola_maestro",
+      "origem": "service/app.py",
+      "linha": 3540,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/escola/maestro/{acao}",
+      "funcao": "escola_maestro_acao",
+      "origem": "service/app.py",
+      "linha": 3546,
+      "depends": [
+        "auth",
+        "require_plan"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/escola/pilotos",
+      "funcao": "escola_pilotos",
+      "origem": "service/app.py",
+      "linha": 3680,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/escola/pilotos/solicitar",
+      "funcao": "escola_piloto_solicitar",
+      "origem": "service/app.py",
+      "linha": 3693,
+      "depends": [
+        "auth",
+        "require_plan"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/escola/pilotos/{agent_id}/autorizar",
+      "funcao": "escola_piloto_autorizar",
+      "origem": "service/app.py",
+      "linha": 3764,
+      "depends": [
+        "auth",
+        "require_plan"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/escola/pilotos/{agent_id}/revogar",
+      "funcao": "escola_piloto_revogar",
+      "origem": "service/app.py",
+      "linha": 3782,
+      "depends": [
+        "auth",
+        "require_plan"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/escola/salas",
+      "funcao": "escola_salas",
+      "origem": "service/app.py",
+      "linha": 3391,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/escola/salas",
+      "funcao": "escola_abrir_sala",
+      "origem": "service/app.py",
+      "linha": 3401,
+      "depends": [
+        "auth",
+        "require_plan"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/escola/salas/conhecimento",
+      "funcao": "escola_adotar_conhecimento",
+      "origem": "service/app.py",
+      "linha": 3437,
+      "depends": [
+        "auth",
+        "require_plan"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/escola/salas/detalhe",
+      "funcao": "escola_sala_detalhe",
+      "origem": "service/app.py",
+      "linha": 3417,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/escola/salas/pacote",
+      "funcao": "escola_pacote",
+      "origem": "service/app.py",
+      "linha": 3426,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/execution/health",
+      "funcao": "execution_health",
+      "origem": "service/app.py",
+      "linha": 1709,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/execution/kill-switch",
+      "funcao": "execution_kill_switch",
+      "origem": "service/app.py",
+      "linha": 1721,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/execution/paper",
+      "funcao": "paper_execution",
+      "origem": "service/app.py",
+      "linha": 1667,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": false
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/execution/reconciliation",
+      "funcao": "execution_reconciliation",
+      "origem": "service/app.py",
+      "linha": 1715,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": false
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/execution/shadow",
+      "funcao": "shadow_summary",
+      "origem": "service/app.py",
+      "linha": 1690,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": false
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/execution/shadow",
+      "funcao": "shadow_execution",
+      "origem": "service/app.py",
+      "linha": 1695,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": false
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/jobs",
+      "funcao": "list_jobs",
+      "origem": "service/app.py",
+      "linha": 1298,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/jobs",
+      "funcao": "new_job",
+      "origem": "service/app.py",
+      "linha": 1278,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/jobs/health",
+      "funcao": "jobs_health",
+      "origem": "service/app.py",
+      "linha": 1304,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/jobs/{jid}",
+      "funcao": "get_job",
+      "origem": "service/app.py",
+      "linha": 1309,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/jobs/{jid}/cancel",
+      "funcao": "cancel",
+      "origem": "service/app.py",
+      "linha": 1317,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": false
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/live/liberar",
+      "funcao": "live_resume",
+      "origem": "service/app.py",
+      "linha": 4022,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/live/parada-emergencia",
+      "funcao": "live_emergency",
+      "origem": "service/app.py",
+      "linha": 3994,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/live/status",
+      "funcao": "live_status",
+      "origem": "service/app.py",
+      "linha": 3952,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/maestro/painel",
+      "funcao": "maestro_painel",
+      "origem": "service/app.py",
+      "linha": 3590,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/manual/alerts/{alerta_id}/ack",
+      "funcao": "manual_ack",
+      "origem": "service/app.py",
+      "linha": 4663,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/manual/modo",
+      "funcao": "manual_modo_obter",
+      "origem": "service/app.py",
+      "linha": 4467,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "PUT",
+      "rota": "/v1/manual/modo",
+      "funcao": "manual_modo_definir",
+      "origem": "service/app.py",
+      "linha": 4473,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/manual/monitor/health",
+      "funcao": "manual_monitor_health",
+      "origem": "service/app.py",
+      "linha": 4676,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/manual/positions",
+      "funcao": "manual_listar_posicoes",
+      "origem": "service/app.py",
+      "linha": 4516,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/manual/positions",
+      "funcao": "manual_criar_posicao",
+      "origem": "service/app.py",
+      "linha": 4488,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/manual/positions/{posicao_id}",
+      "funcao": "manual_obter_posicao",
+      "origem": "service/app.py",
+      "linha": 4535,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/manual/positions/{posicao_id}/alerts",
+      "funcao": "manual_alertas_da_posicao",
+      "origem": "service/app.py",
+      "linha": 4640,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/manual/positions/{posicao_id}/events",
+      "funcao": "manual_registrar_evento",
+      "origem": "service/app.py",
+      "linha": 4550,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "PUT",
+      "rota": "/v1/manual/positions/{posicao_id}/monitoring-policy",
+      "funcao": "manual_definir_politica",
+      "origem": "service/app.py",
+      "linha": 4575,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/manual/positions/{posicao_id}/pause",
+      "funcao": "manual_pausar",
+      "origem": "service/app.py",
+      "linha": 4597,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/manual/positions/{posicao_id}/resume",
+      "funcao": "manual_retomar",
+      "origem": "service/app.py",
+      "linha": 4610,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/manual/positions/{posicao_id}/revisao",
+      "funcao": "manual_revisao",
+      "origem": "service/app.py",
+      "linha": 4622,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/manual/sinais",
+      "funcao": "manual_sinais",
+      "origem": "service/app.py",
+      "linha": 4692,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/mudanca/exportar",
+      "funcao": "exportar_tudo",
+      "origem": "service/app.py",
+      "linha": 4796,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/mudanca/importar",
+      "funcao": "importar_tudo",
+      "origem": "service/app.py",
+      "linha": 4828,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/notificacoes/canais",
+      "funcao": "canais_de_notificacao",
+      "origem": "service/app.py",
+      "linha": 4211,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/notificacoes/inbox",
+      "funcao": "inbox_de_notificacoes",
+      "origem": "service/app.py",
+      "linha": 4287,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/notificacoes/matriz",
+      "funcao": "ler_matriz_de_notificacao",
+      "origem": "service/app.py",
+      "linha": 4313,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "PUT",
+      "rota": "/v1/notificacoes/matriz",
+      "funcao": "salvar_matriz_de_notificacao",
+      "origem": "service/app.py",
+      "linha": 4320,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/notificacoes/testar",
+      "funcao": "testar_canal_de_notificacao",
+      "origem": "service/app.py",
+      "linha": 4232,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/notificacoes/{alerta_id}/ack",
+      "funcao": "ack_de_notificacao",
+      "origem": "service/app.py",
+      "linha": 4302,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/office/events",
+      "funcao": "office_events",
+      "origem": "service/app.py",
+      "linha": 1600,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/office/snapshot",
+      "funcao": "office_snapshot",
+      "origem": "service/app.py",
+      "linha": 1578,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/personal/exchanges",
+      "funcao": "personal_exchanges",
+      "origem": "service/app.py",
+      "linha": 1326,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/personal/exchanges/{exchange_id}/capabilities",
+      "funcao": "personal_exchange_capabilities",
+      "origem": "service/app.py",
+      "linha": 1358,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/primeiros-passos",
+      "funcao": "onboarding",
+      "origem": "service/app.py",
+      "linha": 3818,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/push/assinar",
+      "funcao": "push_assinar",
+      "origem": "service/app.py",
+      "linha": 4376,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/push/cancelar",
+      "funcao": "push_cancelar",
+      "origem": "service/app.py",
+      "linha": 4415,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/push/estado",
+      "funcao": "push_estado",
+      "origem": "service/app.py",
+      "linha": 4337,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/push/vapid/gerar",
+      "funcao": "push_vapid_gerar",
+      "origem": "service/app.py",
+      "linha": 4350,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/quant/status",
+      "funcao": "quant_status",
+      "origem": "service/app.py",
+      "linha": 4110,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/setup/aplicar",
+      "funcao": "setup_aplicar",
+      "origem": "service/app.py",
+      "linha": 1242,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/setup/diagnostico",
+      "funcao": "setup_diagnostico",
+      "origem": "service/app.py",
+      "linha": 1267,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/setup/estado",
+      "funcao": "setup_estado",
+      "origem": "service/app.py",
+      "linha": 1228,
+      "depends": [
+        "auth"
+      ],
+      "tem_depends": true,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "GET",
+      "rota": "/v1/status/operacao",
+      "funcao": "status_operacao",
+      "origem": "service/app.py",
+      "linha": 2019,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": true,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/telegram/webhook",
+      "funcao": "webhook_telegram",
+      "origem": "service/app.py",
+      "linha": 4433,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": false,
+      "tem_teste": true
+    },
+    {
+      "metodo": "POST",
+      "rota": "/v1/webhooks/woovi",
+      "funcao": "woovi_webhook",
+      "origem": "service/app.py",
+      "linha": 1876,
+      "depends": [],
+      "tem_depends": false,
+      "tem_ui": false,
+      "tem_teste": true
+    }
+  ],
+  "sem_referencia_ui": [
+    "GET /healthz (service/app.py:965)",
+    "GET /metrics (service/app.py:983)",
+    "GET /publico/{tenant_id} (service/app.py:4755)",
+    "GET /v1/admin/database (service/app.py:3858)",
+    "POST /v1/admin/tenants (service/app.py:538)",
+    "GET /v1/admin/users (service/app.py:568)",
+    "POST /v1/admin/users (service/app.py:550)",
+    "POST /v1/agency/agents/{agent_id}/status (service/app.py:1617)",
+    "POST /v1/agency/meetings (service/app.py:1630)",
+    "POST /v1/agency/meetings/{meeting_id}/votes (service/app.py:1640)",
+    "GET /v1/agency/memory (service/app.py:1461)",
+    "GET /v1/agency/stream (service/app.py:1653)",
+    "POST /v1/agency/tasks/run (service/app.py:1524)",
+    "POST /v1/agency/tasks/{task_id}/approve (service/app.py:1513)",
+    "POST /v1/agency/worker/start (service/app.py:1549)",
+    "GET /v1/agency/worker/status (service/app.py:1541)",
+    "POST /v1/agency/worker/stop (service/app.py:1570)",
+    "POST /v1/alertas/verificar (service/app.py:4192)",
+    "POST /v1/auth/bootstrap (service/app.py:424)",
+    "POST /v1/auth/login (service/app.py:442)",
+    "GET /v1/auth/oauth/providers (service/app.py:2081)",
+    "GET /v1/auth/oauth/{provider}/callback (service/app.py:2099)",
+    "GET /v1/auth/oauth/{provider}/start (service/app.py:2088)",
+    "POST /v1/auth/signup (service/app.py:1949)",
+    "GET /v1/auth/signup-status (service/app.py:1940)",
+    "GET /v1/backups (service/app.py:3808)",
+    "POST /v1/billing/checkout (service/app.py:1859)",
+    "GET /v1/billing/planos (service/app.py:1843)",
+    "GET /v1/billing/status (service/app.py:1851)",
+    "POST /v1/broker/order (service/app.py:1397)",
+    "GET /v1/desk/evolucao (service/app.py:3277)",
+    "POST /v1/desk/scheduler/{action} (service/app.py:3001)",
+    "POST /v1/desk/traders/{agent_id}/pausar (service/app.py:3074)",
+    "POST /v1/desk/traders/{agent_id}/promover (service/app.py:3050)",
+    "POST /v1/desk/traders/{agent_id}/retomar (service/app.py:3094)",
+    "GET /v1/desk/traders/{agent_id}/sala (service/app.py:3288)",
+    "POST /v1/desk/traders/{agent_id}/sala/leitura (service/app.py:3296)",
+    "POST /v1/escola/avaliar (service/app.py:3508)",
+    "GET /v1/escola/certificacao (service/app.py:3485)",
+    "GET /v1/escola/maestro (service/app.py:3540)",
+    "POST /v1/escola/maestro/{acao} (service/app.py:3546)",
+    "POST /v1/escola/pilotos/solicitar (service/app.py:3693)",
+    "POST /v1/escola/pilotos/{agent_id}/autorizar (service/app.py:3764)",
+    "POST /v1/escola/pilotos/{agent_id}/revogar (service/app.py:3782)",
+    "POST /v1/escola/salas/conhecimento (service/app.py:3437)",
+    "GET /v1/escola/salas/detalhe (service/app.py:3417)",
+    "GET /v1/escola/salas/pacote (service/app.py:3426)",
+    "POST /v1/execution/paper (service/app.py:1667)",
+    "POST /v1/execution/reconciliation (service/app.py:1715)",
+    "POST /v1/jobs/{jid}/cancel (service/app.py:1317)",
+    "POST /v1/live/liberar (service/app.py:4022)",
+    "POST /v1/manual/alerts/{alerta_id}/ack (service/app.py:4663)",
+    "GET /v1/manual/positions/{posicao_id} (service/app.py:4535)",
+    "GET /v1/manual/positions/{posicao_id}/alerts (service/app.py:4640)",
+    "POST /v1/manual/positions/{posicao_id}/events (service/app.py:4550)",
+    "PUT /v1/manual/positions/{posicao_id}/monitoring-policy (service/app.py:4575)",
+    "POST /v1/manual/positions/{posicao_id}/pause (service/app.py:4597)",
+    "POST /v1/manual/positions/{posicao_id}/resume (service/app.py:4610)",
+    "POST /v1/manual/positions/{posicao_id}/revisao (service/app.py:4622)",
+    "POST /v1/mudanca/importar (service/app.py:4828)",
+    "POST /v1/notificacoes/{alerta_id}/ack (service/app.py:4302)",
+    "GET /v1/office/events (service/app.py:1600)",
+    "GET /v1/office/snapshot (service/app.py:1578)",
+    "GET /v1/personal/exchanges/{exchange_id}/capabilities (service/app.py:1358)",
+    "GET /v1/setup/diagnostico (service/app.py:1267)",
+    "POST /v1/telegram/webhook (service/app.py:4433)",
+    "POST /v1/webhooks/woovi (service/app.py:1876)"
+  ],
+  "sem_referencia_teste": [
+    "GET /metrics (service/app.py:983)",
+    "POST /v1/agency/agents/{agent_id}/status (service/app.py:1617)",
+    "POST /v1/agency/meetings (service/app.py:1630)",
+    "POST /v1/agency/meetings/{meeting_id}/votes (service/app.py:1640)",
+    "GET /v1/agency/memory (service/app.py:1461)",
+    "GET /v1/agency/stream (service/app.py:1653)",
+    "POST /v1/agency/tasks/{task_id}/approve (service/app.py:1513)",
+    "POST /v1/alertas/verificar (service/app.py:4192)",
+    "GET /v1/backups (service/app.py:3808)",
+    "POST /v1/broker/order (service/app.py:1397)",
+    "POST /v1/execution/paper (service/app.py:1667)",
+    "POST /v1/execution/reconciliation (service/app.py:1715)",
+    "GET /v1/execution/shadow (service/app.py:1690)",
+    "POST /v1/execution/shadow (service/app.py:1695)",
+    "POST /v1/jobs/{jid}/cancel (service/app.py:1317)"
+  ],
+  "sem_marcador_depends": [
+    "GET / (service/app.py:987)",
+    "GET /app (service/app.py:995)",
+    "GET /app/ (service/app.py:995)",
+    "GET /favicon.ico (service/app.py:1020)",
+    "GET /floor (service/app.py:1403)",
+    "GET /healthz (service/app.py:965)",
+    "GET /manifest.webmanifest (service/app.py:1046)",
+    "GET /publico/{tenant_id} (service/app.py:4755)",
+    "GET /readyz (service/app.py:977)",
+    "GET /static/marca/{arquivo} (service/app.py:1001)",
+    "GET /static/vendor/lightweight-charts/{arquivo} (service/app.py:1025)",
+    "GET /sw.js (service/app.py:1053)",
+    "POST /v1/auth/bootstrap (service/app.py:424)",
+    "POST /v1/auth/login (service/app.py:442)",
+    "GET /v1/auth/oauth/providers (service/app.py:2081)",
+    "GET /v1/auth/oauth/{provider}/callback (service/app.py:2099)",
+    "GET /v1/auth/oauth/{provider}/start (service/app.py:2088)",
+    "POST /v1/auth/recover (service/app.py:486)",
+    "POST /v1/auth/setup (service/app.py:470)",
+    "POST /v1/auth/signup (service/app.py:1949)",
+    "GET /v1/auth/signup-status (service/app.py:1940)",
+    "GET /v1/auth/status (service/app.py:454)",
+    "GET /v1/status/operacao (service/app.py:2019)",
+    "POST /v1/telegram/webhook (service/app.py:4433)",
+    "POST /v1/webhooks/woovi (service/app.py:1876)"
+  ]
+}

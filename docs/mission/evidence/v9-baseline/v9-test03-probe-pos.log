@@ -1,0 +1,3 @@
+SONDA V9-TEST-03 — escrita atômica x leitura concorrente (Windows/NTFS)
+{"fase1_leitor_ingenuo": {"ciclos": 500, "leitor": {"ok": 32960, "negada_pelo_so": 387, "recuperou_apos_1ms": 160, "recuperou_imediato": 224, "nao_recuperou_2_tentativas": 3}, "erros_de_escrita": 2, "thread_encerrou": true, "final_valido": true}}
+{"fase2_carregar_producao": {"ciclos": 500, "carregar": {"vazio": 36, "ok": 9577}, "erros_de_salvar": 0, "thread_encerrou": true}}

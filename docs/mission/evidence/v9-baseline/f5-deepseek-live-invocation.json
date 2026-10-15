@@ -1,0 +1,1 @@
+{"comando": "./.venv/Scripts/python.exe -m pytest tests/test_deepseek_reasoning.py -k TestDeepSeekLiveStructuredOutput -v", "exit": 0, "data_utc": "2026-10-15T11:13:05Z", "nota": "Fora do executor hermetico de proposito: chamada real unica ao backend DeepSeek com credencial do proprietario ja presente no ambiente; nenhum valor de chave foi logado."}

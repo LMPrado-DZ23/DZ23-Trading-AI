@@ -1,0 +1,27 @@
+........                                                                 [100%]
+============================== warnings summary ===============================
+tests/test_escrita_atomica.py::TestEscritaAtomica::test_file_is_always_complete_and_valid
+  C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\.venv\Lib\site-packages\_pytest\threadexception.py:58: PytestUnhandledThreadExceptionWarning: Exception in thread Thread-1 (leitor)
+  
+  Traceback (most recent call last):
+    File "C:\Program Files\Python312\Lib\threading.py", line 1075, in _bootstrap_inner
+      self.run()
+    File "C:\Program Files\Python312\Lib\threading.py", line 1012, in run
+      self._target(*self._args, **self._kwargs)
+    File "C:\Users\DZ23\Documents\Qoder\2026-10-12\2f7f19a4\dz23-v9-audit\tests\test_escrita_atomica.py", line 45, in leitor
+      json.loads(alvo.read_text())
+                 ^^^^^^^^^^^^^^^^
+    File "C:\Program Files\Python312\Lib\pathlib.py", line 1027, in read_text
+      with self.open(mode='r', encoding=encoding, errors=errors) as f:
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "C:\Program Files\Python312\Lib\pathlib.py", line 1013, in open
+      return io.open(self, mode, buffering, encoding, errors, newline)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  PermissionError: [Errno 13] Permission denied: 'C:\\Users\\DZ23\\AppData\\Local\\Temp\\dz23-v9-v9-test03-repro-907o37o4\\tmp\\pytest-of-unknown\\pytest-0\\test_file_is_always_complete_a0\\estado.json'
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnhandledThreadExceptionWarning(msg))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+8 passed, 1 warning in 2.05s

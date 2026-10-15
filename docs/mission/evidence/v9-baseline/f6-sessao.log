@@ -1,0 +1,4 @@
+..............................s...                                       [100%]
+=========================== short test summary info ===========================
+SKIPPED [1] tests\test_desk_backup.py:58: POSIX permissions (600) are not natively supported on Windows NTFS
+33 passed, 1 skipped in 5.52s

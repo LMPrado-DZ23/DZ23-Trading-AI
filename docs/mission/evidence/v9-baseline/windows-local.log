@@ -1,0 +1,4 @@
+<string>:4: SyntaxWarning: invalid escape sequence '\D'
+<string>:5: SyntaxWarning: invalid escape sequence '\D'
+.........................................................                [100%]
+57 passed, 1 deselected in 13.18s

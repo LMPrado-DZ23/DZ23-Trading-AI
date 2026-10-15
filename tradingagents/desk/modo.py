@@ -18,9 +18,11 @@ corrompido nunca reabre a execução sozinho.
 
 Limite honesto da posse: o arrendamento vive no armazém. Com backend
 postgres a disputa é atômica (UPSERT condicional) e vale entre máquinas;
-com backend arquivo vale para os processos desta máquina — PC e Oracle em
-máquinas diferentes só se coordenam pelo estado COMPARTILHADO (migração
-exige banco ou desligamento do processo antigo; ver DEPLOY.md).
+com backend arquivo vale para os processos desta máquina (a corrida de
+posse é arbitrada por trava de arquivo do SO — `storage._trava_entre_processos`);
+PC e Oracle em máquinas diferentes só se coordenam pelo estado
+COMPARTILHADO (migração exige banco ou desligamento do processo antigo;
+ver DEPLOY.md).
 """
 from __future__ import annotations
 
@@ -81,19 +83,27 @@ class ModoDaMesa:
     # -- leitura -------------------------------------------------------
     def _ler(self) -> dict:
         doc = self._armazem.carregar(self._tenant, self.CHAVE)
-        if not isinstance(doc, dict):
+        if isinstance(doc, dict):
+            try:
+                EstadoDaMesa(doc.get("estado"))
+            except ValueError:
+                # fail-closed: valor desconhecido no disco não reabre a execução
+                return {"estado": EstadoDaMesa.BLOQUEADA.value,
+                        "motivo": (f"estado desconhecido no disco "
+                                   f"({doc.get('estado')!r}) — desbloqueie "
+                                   "conscientemente"),
+                        "por": "sistema", "em": doc.get("em", "")}
+            return doc
+        # Não é um documento válido. Instalação NOVA (a chave nunca foi
+        # gravada) mantém o padrão de fábrica. Documento PRESENTE porém
+        # inválido é fail-closed: um disco corrompido não reabre a execução.
+        if not self._armazem.contem(self._tenant, self.CHAVE):
             return {"estado": EstadoDaMesa.ATIVA.value, "motivo": "",
                     "por": "sistema", "em": ""}
-        try:
-            EstadoDaMesa(doc.get("estado"))
-        except ValueError:
-            # fail-closed: valor desconhecido no disco não reabre a execução
-            return {"estado": EstadoDaMesa.BLOQUEADA.value,
-                    "motivo": (f"estado desconhecido no disco "
-                               f"({doc.get('estado')!r}) — desbloqueie "
-                               "conscientemente"),
-                    "por": "sistema", "em": doc.get("em", "")}
-        return doc
+        return {"estado": EstadoDaMesa.BLOQUEADA.value,
+                "motivo": ("documento de modo inválido no disco — desbloqueie "
+                           "conscientemente"),
+                "por": "sistema", "em": ""}
 
     @property
     def estado(self) -> EstadoDaMesa:

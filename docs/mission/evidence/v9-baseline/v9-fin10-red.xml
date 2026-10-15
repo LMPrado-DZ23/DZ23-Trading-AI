@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="2" skipped="0" tests="2" time="0.294" timestamp="2026-10-15T00:22:04.130199-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_v9_financial_regressions" name="test_fin10_long_without_quote_keeps_book_value" time="0.003"><failure message="AssertionError: assert {'equity': De... Decimal('1')} == {'equity': De... Decimal('1')}&#10;  &#10;  Omitting 2 identical items, use -vv to show&#10;  Differing items:&#10;  {'gross_exposure': Decimal('0')} != {'gross_exposure': Decimal('200')}&#10;  {'equity': Decimal('99800')} != {'equity': Decimal('100000')}&#10;  Use -v to get more diff">def test_fin10_long_without_quote_keeps_book_value():
+        """Catch a held paper position vanishing from equity when no quote is available."""
+        adapter = PaperAdapter()
+        adapter.submit(_paper_request("fin10-buy", Side.BUY, "100"), risk_approved=True)
+        metrics = adapter.mark_to_market({})
+&gt;       assert metrics == {
+            "equity": D("100000"), "unrealized_pnl": D("0"),
+            "gross_exposure": D("200"), "positions": D("1"),
+        }
+E       AssertionError: assert {'equity': De... Decimal('1')} == {'equity': De... Decimal('1')}
+E         
+E         Omitting 2 identical items, use -vv to show
+E         Differing items:
+E         {'gross_exposure': Decimal('0')} != {'gross_exposure': Decimal('200')}
+E         {'equity': Decimal('99800')} != {'equity': Decimal('100000')}
+E         Use -v to get more diff
+
+tests\test_v9_financial_regressions.py:556: AssertionError</failure></testcase><testcase classname="tests.test_v9_financial_regressions" name="test_fin10_opening_a_short_from_flat_is_refused" time="0.001"><failure message="Failed: DID NOT RAISE ValueError">def test_fin10_opening_a_short_from_flat_is_refused():
+        """Catch an initial paper short whose notional is added as positive equity."""
+        adapter = PaperAdapter()
+        before = deepcopy(adapter.reconciliation_snapshot())
+&gt;       with pytest.raises(ValueError, match="short não habilitado"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_v9_financial_regressions.py:566: Failed</failure></testcase></testsuite></testsuites>
