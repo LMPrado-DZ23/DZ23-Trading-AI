@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="7" skipped="0" tests="7" time="0.268" timestamp="2026-10-15T12:04:38.226975-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_v9_quant06_repromocao.TestCicloNaoAnulaRollback" name="test_ciclo_que_reverte_nao_repromove_no_mesmo_ciclo" time="0.005"><failure message="AssertionError: assert [{'agent_id':...vido': False}] == []&#10;  &#10;  Left contains one more item: {'agent_id': 'trader-momentum', 'assinatura': '6536c5895b7534f727a19bbd35ff55eca878ca388f0b0c2b2a1d2f20189b03de', 'de': '283971d46c54125021d03cf7375d5989cf66e327d264c808ff25c59f0d6510e0', 'ja_promovido': False}&#10;  Use -v to get more diff">self = &lt;tests.test_v9_quant06_repromocao.TestCicloNaoAnulaRollback object at 0x0000025D7D181310&gt;
+
+    def test_ciclo_que_reverte_nao_repromove_no_mesmo_ciclo(self):
+        evo, _ = _evo_revertido()
+        resumo = evo.ciclo()
+        assert any(e["tipo"] == "rollback" for e in resumo["rollback"])
+&gt;       assert resumo["promocao"] == []
+E       AssertionError: assert [{'agent_id':...vido': False}] == []
+E         
+E         Left contains one more item: {'agent_id': 'trader-momentum', 'assinatura': '6536c5895b7534f727a19bbd35ff55eca878ca388f0b0c2b2a1d2f20189b03de', 'de': '283971d46c54125021d03cf7375d5989cf66e327d264c808ff25c59f0d6510e0', 'ja_promovido': False}
+E         Use -v to get more diff
+
+tests\test_v9_quant06_repromocao.py:113: AssertionError</failure></testcase><testcase classname="tests.test_v9_quant06_repromocao.TestCicloNaoAnulaRollback" name="test_evidencia_revertida_continua_bloqueada_nos_ciclos_seguintes" time="0.003"><failure message="AssertionError: assert '6536c5895b75...d2f20189b03de' == '283971d46c54...5c59f0d6510e0'&#10;  &#10;  - 283971d46c54125021d03cf7375d5989cf66e327d264c808ff25c59f0d6510e0&#10;  + 6536c5895b7534f727a19bbd35ff55eca878ca388f0b0c2b2a1d2f20189b03de">self = &lt;tests.test_v9_quant06_repromocao.TestCicloNaoAnulaRollback object at 0x0000025D7D1821B0&gt;
+
+    def test_evidencia_revertida_continua_bloqueada_nos_ciclos_seguintes(
+            self):
+        evo, exp = _evo_revertido()
+        evo.ciclo()
+        resumo2 = evo.ciclo()
+        assert resumo2["promocao"] == []
+&gt;       assert (evo.versao_vigente("trader-momentum")["assinatura"]
+                == _base().assinatura())
+E       AssertionError: assert '6536c5895b75...d2f20189b03de' == '283971d46c54...5c59f0d6510e0'
+E         
+E         - 283971d46c54125021d03cf7375d5989cf66e327d264c808ff25c59f0d6510e0
+E         + 6536c5895b7534f727a19bbd35ff55eca878ca388f0b0c2b2a1d2f20189b03de
+
+tests\test_v9_quant06_repromocao.py:123: AssertionError</failure></testcase><testcase classname="tests.test_v9_quant06_repromocao.TestCicloNaoAnulaRollback" name="test_promocao_manual_de_evidencia_revertida_e_recusada" time="0.002"><failure message="Failed: DID NOT RAISE ValueError">self = &lt;tests.test_v9_quant06_repromocao.TestCicloNaoAnulaRollback object at 0x0000025D7D182990&gt;
+
+    def test_promocao_manual_de_evidencia_revertida_e_recusada(self):
+        evo, exp = _evo_revertido()
+        evo.vigiar()
+&gt;       with pytest.raises(ValueError, match="revogad"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_v9_quant06_repromocao.py:131: Failed</failure></testcase><testcase classname="tests.test_v9_quant06_repromocao.TestTraderSuspensoNaoPromove" name="test_ciclo_nao_promove_trader_suspenso_no_mesmo_ciclo" time="0.002"><failure message="AssertionError: assert [{'agent_id':...vido': False}] == []&#10;  &#10;  Left contains one more item: {'agent_id': 'trader-momentum', 'assinatura': '6536c5895b7534f727a19bbd35ff55eca878ca388f0b0c2b2a1d2f20189b03de', 'de': '283971d46c54125021d03cf7375d5989cf66e327d264c808ff25c59f0d6510e0', 'ja_promovido': False}&#10;  Use -v to get more diff">self = &lt;tests.test_v9_quant06_repromocao.TestTraderSuspensoNaoPromove object at 0x0000025D7D1811C0&gt;
+
+    def test_ciclo_nao_promove_trader_suspenso_no_mesmo_ciclo(self):
+        evo, _ = _evo_suspenso()
+        resumo = evo.ciclo()
+        assert any(e["tipo"] == "suspensao" for e in resumo["suspensao"])
+&gt;       assert resumo["promocao"] == []
+E       AssertionError: assert [{'agent_id':...vido': False}] == []
+E         
+E         Left contains one more item: {'agent_id': 'trader-momentum', 'assinatura': '6536c5895b7534f727a19bbd35ff55eca878ca388f0b0c2b2a1d2f20189b03de', 'de': '283971d46c54125021d03cf7375d5989cf66e327d264c808ff25c59f0d6510e0', 'ja_promovido': False}
+E         Use -v to get more diff
+
+tests\test_v9_quant06_repromocao.py:140: AssertionError</failure></testcase><testcase classname="tests.test_v9_quant06_repromocao.TestTraderSuspensoNaoPromove" name="test_promocao_manual_com_trader_suspenso_e_recusada" time="0.002"><failure message="Failed: DID NOT RAISE ValueError">self = &lt;tests.test_v9_quant06_repromocao.TestTraderSuspensoNaoPromove object at 0x0000025D7D182BD0&gt;
+
+    def test_promocao_manual_com_trader_suspenso_e_recusada(self):
+        evo, exp = _evo_suspenso()
+        evo.vigiar()
+&gt;       with pytest.raises(ValueError, match="suspens"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_v9_quant06_repromocao.py:146: Failed</failure></testcase><testcase classname="tests.test_v9_quant06_repromocao.TestNovaEvidenciaEOutrosTraders" name="test_nova_evidencia_permite_promocao_de_novo" time="0.003"><failure message="assert 0 == 1&#10; +  where 0 = len([])">self = &lt;tests.test_v9_quant06_repromocao.TestNovaEvidenciaEOutrosTraders object at 0x0000025D7D182FC0&gt;
+
+    def test_nova_evidencia_permite_promocao_de_novo(self):
+        evo, _ = _evo_revertido()
+        evo.ciclo()  # rollback + revogação da evidência antiga
+        novo = _exp(id="X-007")
+        _aprovado(evo, novo)
+        resumo = evo.ciclo()
+&gt;       assert len(resumo["promocao"]) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests\test_v9_quant06_repromocao.py:157: AssertionError</failure></testcase><testcase classname="tests.test_v9_quant06_repromocao.TestNovaEvidenciaEOutrosTraders" name="test_rollback_de_um_trader_nao_bloqueia_promocao_de_outro" time="0.003"><failure message="AssertionError: assert ['trader-scal...der-momentum'] == ['trader-scalping']&#10;  &#10;  Left contains one more item: 'trader-momentum'&#10;  Use -v to get more diff">self = &lt;tests.test_v9_quant06_repromocao.TestNovaEvidenciaEOutrosTraders object at 0x0000025D7D183350&gt;
+
+    def test_rollback_de_um_trader_nao_bloqueia_promocao_de_outro(self):
+        evo, _ = _evo_revertido()
+        outro = _exp(id="X-008", trader="trader-scalping")
+        _aprovado(evo, outro)
+        resumo = evo.ciclo()
+&gt;       assert ([p["agent_id"] for p in resumo["promocao"]]
+                == ["trader-scalping"])
+E       AssertionError: assert ['trader-scal...der-momentum'] == ['trader-scalping']
+E         
+E         Left contains one more item: 'trader-momentum'
+E         Use -v to get more diff
+
+tests\test_v9_quant06_repromocao.py:169: AssertionError</failure></testcase></testsuite></testsuites>

@@ -602,6 +602,14 @@ class EvolucaoAutonoma:
         if not resultado.get("aprovado"):
             raise ValueError(
                 "veredito não aprovado — promoção exige prova estatística")
+        if resultado.get("revogado"):
+            raise ValueError(
+                "evidência revogada por deterioração — repromover exige "
+                "experimento novo")
+        if registro["trader"] in self._suspensoes:
+            raise ValueError(
+                "trader suspenso por deterioração — promoção bloqueada "
+                "até reabilitar com motivo")
         return self._promover_registro(registro, resultado, assinatura,
                                        agora or datetime.now(timezone.utc))
 
@@ -639,10 +647,12 @@ class EvolucaoAutonoma:
             eventos.setdefault(evento["tipo"], []).append(evento)
         for assinatura in sorted(self._resultados):
             resultado = self._resultados[assinatura]
-            if not resultado.get("aprovado"):
+            if not resultado.get("aprovado") or resultado.get("revogado"):
                 continue
             registro = self._experimentos.get(assinatura)
             if registro is None:
+                continue
+            if registro["trader"] in self._suspensoes:
                 continue
             estado = self._versoes.get(registro["trader"]) or {}
             if estado.get("atual") == registro["assinatura_challenger"]:
@@ -692,9 +702,20 @@ class EvolucaoAutonoma:
                            "marcador": 0})
             anterior = estado.get("anterior") or ""
             if anterior:
+                revertida = estado.get("atual", "")
                 estado["atual"] = anterior
                 estado["anterior"] = ""
                 estado["marcador"] = len(entradas)
+                # evidência que promoveu a versão revertida fica revogada —
+                # sem isto o ciclo seguinte repromoveria o challenger que o
+                # próprio vigia acabou de derrubar.
+                for assinatura, resultado in self._resultados.items():
+                    registro = self._experimentos.get(assinatura)
+                    if (registro is not None
+                            and registro.get("trader") == agent_id
+                            and registro.get("assinatura_challenger")
+                            == revertida):
+                        resultado["revogado"] = True
                 evento = {"tipo": "rollback", "agent_id": agent_id,
                           "volta_para": anterior, "motivo": motivo,
                           "em": agora.isoformat()}

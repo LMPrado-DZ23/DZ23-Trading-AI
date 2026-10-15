@@ -1,0 +1,115 @@
+FFFFFFF                                                                  [100%]
+================================== FAILURES ===================================
+_ TestCicloNaoAnulaRollback.test_ciclo_que_reverte_nao_repromove_no_mesmo_ciclo _
+
+self = <tests.test_v9_quant06_repromocao.TestCicloNaoAnulaRollback object at 0x0000025D7D181310>
+
+    def test_ciclo_que_reverte_nao_repromove_no_mesmo_ciclo(self):
+        evo, _ = _evo_revertido()
+        resumo = evo.ciclo()
+        assert any(e["tipo"] == "rollback" for e in resumo["rollback"])
+>       assert resumo["promocao"] == []
+E       AssertionError: assert [{'agent_id':...vido': False}] == []
+E         
+E         Left contains one more item: {'agent_id': 'trader-momentum', 'assinatura': '6536c5895b7534f727a19bbd35ff55eca878ca388f0b0c2b2a1d2f20189b03de', 'de': '283971d46c54125021d03cf7375d5989cf66e327d264c808ff25c59f0d6510e0', 'ja_promovido': False}
+E         Use -v to get more diff
+
+tests\test_v9_quant06_repromocao.py:113: AssertionError
+_ TestCicloNaoAnulaRollback.test_evidencia_revertida_continua_bloqueada_nos_ciclos_seguintes _
+
+self = <tests.test_v9_quant06_repromocao.TestCicloNaoAnulaRollback object at 0x0000025D7D1821B0>
+
+    def test_evidencia_revertida_continua_bloqueada_nos_ciclos_seguintes(
+            self):
+        evo, exp = _evo_revertido()
+        evo.ciclo()
+        resumo2 = evo.ciclo()
+        assert resumo2["promocao"] == []
+>       assert (evo.versao_vigente("trader-momentum")["assinatura"]
+                == _base().assinatura())
+E       AssertionError: assert '6536c5895b75...d2f20189b03de' == '283971d46c54...5c59f0d6510e0'
+E         
+E         - 283971d46c54125021d03cf7375d5989cf66e327d264c808ff25c59f0d6510e0
+E         + 6536c5895b7534f727a19bbd35ff55eca878ca388f0b0c2b2a1d2f20189b03de
+
+tests\test_v9_quant06_repromocao.py:123: AssertionError
+_ TestCicloNaoAnulaRollback.test_promocao_manual_de_evidencia_revertida_e_recusada _
+
+self = <tests.test_v9_quant06_repromocao.TestCicloNaoAnulaRollback object at 0x0000025D7D182990>
+
+    def test_promocao_manual_de_evidencia_revertida_e_recusada(self):
+        evo, exp = _evo_revertido()
+        evo.vigiar()
+>       with pytest.raises(ValueError, match="revogad"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_v9_quant06_repromocao.py:131: Failed
+_ TestTraderSuspensoNaoPromove.test_ciclo_nao_promove_trader_suspenso_no_mesmo_ciclo _
+
+self = <tests.test_v9_quant06_repromocao.TestTraderSuspensoNaoPromove object at 0x0000025D7D1811C0>
+
+    def test_ciclo_nao_promove_trader_suspenso_no_mesmo_ciclo(self):
+        evo, _ = _evo_suspenso()
+        resumo = evo.ciclo()
+        assert any(e["tipo"] == "suspensao" for e in resumo["suspensao"])
+>       assert resumo["promocao"] == []
+E       AssertionError: assert [{'agent_id':...vido': False}] == []
+E         
+E         Left contains one more item: {'agent_id': 'trader-momentum', 'assinatura': '6536c5895b7534f727a19bbd35ff55eca878ca388f0b0c2b2a1d2f20189b03de', 'de': '283971d46c54125021d03cf7375d5989cf66e327d264c808ff25c59f0d6510e0', 'ja_promovido': False}
+E         Use -v to get more diff
+
+tests\test_v9_quant06_repromocao.py:140: AssertionError
+_ TestTraderSuspensoNaoPromove.test_promocao_manual_com_trader_suspenso_e_recusada _
+
+self = <tests.test_v9_quant06_repromocao.TestTraderSuspensoNaoPromove object at 0x0000025D7D182BD0>
+
+    def test_promocao_manual_com_trader_suspenso_e_recusada(self):
+        evo, exp = _evo_suspenso()
+        evo.vigiar()
+>       with pytest.raises(ValueError, match="suspens"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests\test_v9_quant06_repromocao.py:146: Failed
+_ TestNovaEvidenciaEOutrosTraders.test_nova_evidencia_permite_promocao_de_novo _
+
+self = <tests.test_v9_quant06_repromocao.TestNovaEvidenciaEOutrosTraders object at 0x0000025D7D182FC0>
+
+    def test_nova_evidencia_permite_promocao_de_novo(self):
+        evo, _ = _evo_revertido()
+        evo.ciclo()  # rollback + revogação da evidência antiga
+        novo = _exp(id="X-007")
+        _aprovado(evo, novo)
+        resumo = evo.ciclo()
+>       assert len(resumo["promocao"]) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests\test_v9_quant06_repromocao.py:157: AssertionError
+_ TestNovaEvidenciaEOutrosTraders.test_rollback_de_um_trader_nao_bloqueia_promocao_de_outro _
+
+self = <tests.test_v9_quant06_repromocao.TestNovaEvidenciaEOutrosTraders object at 0x0000025D7D183350>
+
+    def test_rollback_de_um_trader_nao_bloqueia_promocao_de_outro(self):
+        evo, _ = _evo_revertido()
+        outro = _exp(id="X-008", trader="trader-scalping")
+        _aprovado(evo, outro)
+        resumo = evo.ciclo()
+>       assert ([p["agent_id"] for p in resumo["promocao"]]
+                == ["trader-scalping"])
+E       AssertionError: assert ['trader-scal...der-momentum'] == ['trader-scalping']
+E         
+E         Left contains one more item: 'trader-momentum'
+E         Use -v to get more diff
+
+tests\test_v9_quant06_repromocao.py:169: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_v9_quant06_repromocao.py::TestCicloNaoAnulaRollback::test_ciclo_que_reverte_nao_repromove_no_mesmo_ciclo
+FAILED tests/test_v9_quant06_repromocao.py::TestCicloNaoAnulaRollback::test_evidencia_revertida_continua_bloqueada_nos_ciclos_seguintes
+FAILED tests/test_v9_quant06_repromocao.py::TestCicloNaoAnulaRollback::test_promocao_manual_de_evidencia_revertida_e_recusada
+FAILED tests/test_v9_quant06_repromocao.py::TestTraderSuspensoNaoPromove::test_ciclo_nao_promove_trader_suspenso_no_mesmo_ciclo
+FAILED tests/test_v9_quant06_repromocao.py::TestTraderSuspensoNaoPromove::test_promocao_manual_com_trader_suspenso_e_recusada
+FAILED tests/test_v9_quant06_repromocao.py::TestNovaEvidenciaEOutrosTraders::test_nova_evidencia_permite_promocao_de_novo
+FAILED tests/test_v9_quant06_repromocao.py::TestNovaEvidenciaEOutrosTraders::test_rollback_de_um_trader_nao_bloqueia_promocao_de_outro
+7 failed in 0.33s
