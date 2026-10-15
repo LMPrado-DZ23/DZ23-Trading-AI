@@ -181,7 +181,8 @@ class TestCapacidadesVisiveisNoModoSimples:
 
     def test_capacidades_derivam_de_fontes_reais_e_levam_a_cada_tela(self):
         html = _html()
-        trecho = _trecho(html, "async function capacidadesLoad(", tam=3600)
+        trecho = _trecho(html, "async function capacidadesLoad(",
+                         "async function preparoRealLoad(")
         assert "'/v1/config'" in trecho, (
             "estado das capacidades precisa vir da configuração real")
         assert "'/v1/status/operacao'" in trecho, (
@@ -194,7 +195,8 @@ class TestCapacidadesVisiveisNoModoSimples:
 
     def test_bloqueio_do_live_vem_do_servidor_nao_de_selo_fixo(self):
         html = _html()
-        trecho = _trecho(html, "async function capacidadesLoad(", tam=3600)
+        trecho = _trecho(html, "async function capacidadesLoad(",
+                         "async function preparoRealLoad(")
         assert "bloqueado por segurança" in trecho
         assert "operacao_real" in trecho, (
             "o motivo do bloqueio do LIVE precisa vir de /v1/status/operacao")

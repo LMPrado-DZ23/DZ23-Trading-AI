@@ -216,18 +216,37 @@ const opReal=(so.ok&&so.data&&so.data.operacao_real)?so.data.operacao_real:{};
 const temIA=['OPENAI_API_KEY','ANTHROPIC_API_KEY','GOOGLE_API_KEY','DEEPSEEK_API_KEY','GROQ_API_KEY','MISTRAL_API_KEY','OPENROUTER_API_KEY','OPENAI_COMPATIBLE_API_KEY'].some(sta)||val('TRADINGAGENTS_LLM_PROVIDER')==='ollama';
 const temCorretora=sta('EXCHANGE_API_KEY')&&sta('EXCHANGE_API_SECRET');
 const temTelegram=sta('ALERTA_TELEGRAM_TOKEN')&&sta('ALERTA_TELEGRAM_CHAT');
-const https=location.protocol==='https:';
+const cn=await api('/v1/notificacoes/canais');
+const canais=(cn.ok&&cn.data&&Array.isArray(cn.data.canais))?cn.data.canais:[];
+const canal=n=>canais.find(c=>c.nome===n)||null;
+const teste=c=>(c&&c.ultimo_teste)?(' Último teste do canal: '+String(c.ultimo_teste).slice(0,16)+'.'):'';
+const perm='permissão de notificação '+pwaPermissaoTexto();
+const seguro=!!window.isSecureContext,temSW='serviceWorker' in navigator,temPush='PushManager' in window&&'Notification' in window;
+const win=canal('windows'),painel=canal('painel'),wp=canal('webpush');
+const externos=['telegram','discord','whatsapp'].map(canal).filter(Boolean);
+const externosConf=externos.filter(c=>c.configurado);
+let pcCab,pushCab,extCab;
+if(!win)pcCab=['warn','estado indisponível','não foi possível ler o estado dos alertas no PC agora — confira em Configuração › Notificações.'];
+else if(!win.disponivel)pcCab=['warn','só no Windows',win.detalhe+' — este servidor não é Windows; a Caixa de entrada do painel continua recebendo os alertas.'+(painel?(' '+painel.detalhe+'.'):'')];
+else if(!win.configurado)pcCab=['warn','configuração necessária',win.detalhe+' — ligue o canal em Configuração › Notificações.'];
+else pcCab=['ok','disponível',win.detalhe+' — teste a entrega em Configuração › Notificações para confirmar.'+teste(win)];
+if(!wp)pushCab=['warn','configuração necessária','não foi possível ler o estado do push agora — abra Configuração › Aplicativo para conferir.'];
+else if(!seguro||!temSW||!temPush)pushCab=['warn','navegador sem suporte',(!seguro?'push e instalação exigem HTTPS ou localhost — neste endereço o navegador não permite.':'este navegador não suporta Service Worker + Push.')+' '+wp.detalhe+'.'];
+else if(wp.configurado)pushCab=['ok','ativo',wp.detalhe+' — '+perm+'.'+teste(wp)];
+else pushCab=['warn','configuração necessária',wp.detalhe+' — '+perm+'. Inscreva o aparelho em Configuração › Aplicativo.'];
+if(externos.length)extCab=externosConf.length?['ok','configurado',externosConf.map(c=>c.nome).join(', ')+' configurado(s) — confirme a entrega com Testar em Configuração › Notificações.'+externosConf.map(teste).join('')]:['warn','configuração necessária',externos.map(c=>c.nome+': '+c.detalhe).join('; ')+'.'];
+else extCab=temTelegram?['ok','configurado','Telegram configurado — use Testar em Configuração › Notificações para confirmar a entrega.']:['warn','configuração necessária','Telegram é o canal principal: token + chat em Configuração › Notificações.'];
 const cap=(nome,classe,estado,detalhe,pagina)=>'<div class="event"><b>'+escapeHtml(nome)+' — <span class="'+classe+'">'+escapeHtml(estado)+'</span></b><small>'+escapeHtml(detalhe)+'</small>'+(pagina?'<div class="actions"><button class="btn secondary" data-abrir="'+pagina+'" onclick="abrirPagina(\''+pagina+'\')">Abrir</button></div>':'')+'</div>';
 const itens=[
 ['Mesa de Agentes (PAPER)','ok','disponível','10 traders + Maestro em ciclos simulados; nada sai para corretora. Ligar/pausar no passo 3 acima.','mesa'],
-['Análises multiagente',temIA?'ok':'warn',temIA?'disponível':'configuração necessária',temIA?'Pesquisas com IA multiagente — provedor configurado.':'Pede uma chave de IA (ou Ollama local) em Configuração; o Testar valida de verdade.','analysis'],
-['Corretora (TESTNET)',temCorretora?'ok':'warn',temCorretora?'disponível':'configuração necessária',temCorretora?'Chaves Testnet salvas — valide em Configuração › Corretora sandbox.':'Cole as chaves Testnet em Configuração; esta versão NÃO aceita LIVE.','config'],
+['Análises multiagente',temIA?'ok':'warn',temIA?'configurada':'configuração necessária',temIA?'Provedor de IA configurado — use Testar em Configuração para confirmar que a chave responde de verdade.':'Pede uma chave de IA (ou Ollama local) em Configuração; o Testar valida de verdade.','analysis'],
+['Corretora (TESTNET)',temCorretora?'ok':'warn',temCorretora?'configurada':'configuração necessária',temCorretora?'Chaves Testnet salvas — valide com o teste de conexão em Configuração › Corretora sandbox; esta versão NÃO aceita LIVE.':'Cole as chaves Testnet em Configuração; esta versão NÃO aceita LIVE.','config'],
 ['Copiloto de sinais (Minhas Operações)','ok','disponível','Registre o que você JÁ executou: ele acompanha, calcula e alerta — nunca envia ordens.','manual'],
 ['Risco e execução','ok','disponível','KillSwitch e shadow trading; limites aplicados por código no servidor, nunca pela IA.','risk'],
 ['Trading Floor','ok','disponível','Read model de agentes, desks, reuniões e eventos da mesa.','floor'],
-['Alertas no PC','ok','disponível','Toast nativo do Windows e Caixa de entrada funcionam agora, sem configuração.','config'],
-['Alertas externos (Telegram/Discord/WhatsApp/e-mail)',temTelegram?'ok':'warn',temTelegram?'disponível':'configuração necessária',temTelegram?'Telegram configurado; Discord/WhatsApp/e-mail são opcionais.':'Telegram é o canal principal: token + chat em Configuração › Notificações.','config'],
-['Aplicativo no celular e push',https?'ok':'warn',https?'disponível':'configuração necessária',https?'HTTPS ativo: instalação e push liberados neste endereço.':'Push e instalação no celular exigem HTTPS público (infra externa pendente); neste PC tudo funciona agora.','config'],
+['Alertas no PC',pcCab[0],pcCab[1],pcCab[2],'config'],
+['Alertas externos (Telegram/Discord/WhatsApp/e-mail)',extCab[0],extCab[1],extCab[2],'config'],
+['Aplicativo no celular e push',pushCab[0],pushCab[1],pushCab[2],'config'],
 ['Dinheiro real (LIVE)','bad','bloqueado por segurança','Servidor: '+(opReal.estado||'—')+(opReal.motivo?(' — '+opReal.motivo):'')+'. Só destrava com homologação e autorização explícita do proprietário.','mesa'],
 ['IQ Option e corretoras fora do catálogo','muted','ainda não implementado','Conector experimental, não validado e sem CCXT — fora da operação até ser construído e passar por revisão independente.',null],
 ];

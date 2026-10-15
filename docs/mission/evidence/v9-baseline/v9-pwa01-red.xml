@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="9.044" timestamp="2026-10-15T12:43:16.013829-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.e2e.test_fm6_app_isolado" name="test_fm6_03c_capacidades_distingue_suporte_configuracao_permissao_teste" time="8.649"><failure message="AssertionError: Locator expected to contain text 'VAPID'&#10;Actual value: Aplicativo no celular e push — configuração necessáriaPush e instalação no celular exigem HTTPS público (infra externa pendente); neste PC tudo funciona agora.Abrir &#10;Call log:&#10;  - Expect &quot;to_contain_text&quot; locator(&quot;#capacidadesLista&quot;).locator(&quot;.event&quot;).filter(has_text=&quot;Aplicativo no celular e push&quot;) with timeout 5000ms&#10;  - waiting for locator(&quot;#capacidadesLista&quot;).locator(&quot;.event&quot;).filter(has_text=&quot;Aplicativo no celular e push&quot;)&#10;    14 × locator resolved to &lt;div class=&quot;event&quot;&gt;…&lt;/div&gt;&#10;       - unexpected value &quot;Aplicativo no celular e push — configuração necessáriaPush e instalação no celular exigem HTTPS público (infra externa pendente); neste PC tudo funciona agora.Abrir&quot;&#10;&#10;Aria snapshot:&#10;- text: Aplicativo no celular e push — configuração necessária Push e instalação no celular exigem HTTPS público (infra externa pendente); neste PC tudo funciona agora.&#10;- button &quot;Abrir&quot;">page = &lt;Page url='http://127.0.0.1:56490/app'&gt;
+mesa_url = 'http://127.0.0.1:56490', senha = 's3nh4-dz23-e2e'
+evidence_dir = WindowsPath('C:/Users/DZ23/Documents/Qoder/2026-10-12/2f7f19a4/dz23-v9-audit/docs/mission/evidence/v9-baseline/screenshots')
+
+    def test_fm6_03c_capacidades_distingue_suporte_configuracao_permissao_teste(
+            page, mesa_url, senha, evidence_dir):
+        # V9-PWA-01: o cartão de capacidades não pode tratar HTTPS como capacidade
+        # de push, nem presença de chave como capacidade operacional, nem prometer
+        # toast do Windows fora do Windows. Cada cartão distingue SUPORTE (existe
+        # neste endereço/navegador), CONFIGURAÇÃO (chaves/inscrição), PERMISSÃO
+        # (navegador) e TESTE (entrega confirmada pelo backend).
+        entrar_como_dono(page, mesa_url, senha)
+        caps = page.locator("#capacidadesLista")
+        expect(caps).to_be_visible(timeout=15000)
+        push = caps.locator(".event", has_text="Aplicativo no celular e push")
+        pc = caps.locator(".event", has_text="Alertas no PC")
+    
+        # 1) Servidor recém-criado: localhost é contexto seguro, mas SEM chaves
+        # VAPID geradas e SEM inscrição. Dizer "liberados" só porque o endereço é
+        # seguro é a sobre-promessa — falta configurar, inscrever e autorizar.
+        expect(push).to_contain_text("configuração necessária")
+&gt;       expect(push).to_contain_text("VAPID")
+E       AssertionError: Locator expected to contain text 'VAPID'
+E       Actual value: Aplicativo no celular e push — configuração necessáriaPush e instalação no celular exigem HTTPS público (infra externa pendente); neste PC tudo funciona agora.Abrir 
+E       Call log:
+E         - Expect "to_contain_text" locator("#capacidadesLista").locator(".event").filter(has_text="Aplicativo no celular e push") with timeout 5000ms
+E         - waiting for locator("#capacidadesLista").locator(".event").filter(has_text="Aplicativo no celular e push")
+E           14 × locator resolved to &lt;div class="event"&gt;…&lt;/div&gt;
+E              - unexpected value "Aplicativo no celular e push — configuração necessáriaPush e instalação no celular exigem HTTPS público (infra externa pendente); neste PC tudo funciona agora.Abrir"
+E       
+E       Aria snapshot:
+E       - text: Aplicativo no celular e push — configuração necessária Push e instalação no celular exigem HTTPS público (infra externa pendente); neste PC tudo funciona agora.
+E       - button "Abrir"
+
+tests\e2e\test_fm6_app_isolado.py:267: AssertionError</failure></testcase></testsuite></testsuites>

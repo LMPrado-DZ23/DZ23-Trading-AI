@@ -23,6 +23,7 @@ executar contra um alvo externo sem depender de outros módulos de teste.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 
@@ -243,6 +244,125 @@ def test_fm6_03b_escola_falha_visivel_e_tentativa_de_novo(page, mesa_url, senha,
     expect(escola).to_contain_text("Maestro: pausa global")
     expect(escola).not_to_contain_text("não respondeu")
     page.screenshot(path=str(evidence_dir / "fm6-03b-escola-retomada.png"))
+
+
+# ------------------------------------------------------------------- item 03c
+def test_fm6_03c_capacidades_distingue_suporte_configuracao_permissao_teste(
+        page, mesa_url, senha, evidence_dir):
+    # V9-PWA-01: o cartão de capacidades não pode tratar HTTPS como capacidade
+    # de push, nem presença de chave como capacidade operacional, nem prometer
+    # toast do Windows fora do Windows. Cada cartão distingue SUPORTE (existe
+    # neste endereço/navegador), CONFIGURAÇÃO (chaves/inscrição), PERMISSÃO
+    # (navegador) e TESTE (entrega confirmada pelo backend).
+    entrar_como_dono(page, mesa_url, senha)
+    caps = page.locator("#capacidadesLista")
+    expect(caps).to_be_visible(timeout=15000)
+    push = caps.locator(".event", has_text="Aplicativo no celular e push")
+    pc = caps.locator(".event", has_text="Alertas no PC")
+
+    # 1) Servidor recém-criado: localhost é contexto seguro, mas SEM chaves
+    # VAPID geradas e SEM inscrição. Dizer "liberados" só porque o endereço é
+    # seguro é a sobre-promessa — falta configurar, inscrever e autorizar.
+    expect(push).to_contain_text("configuração necessária")
+    expect(push).to_contain_text("VAPID")
+    expect(push).to_contain_text("permissão")
+    expect(push).not_to_contain_text("liberados")
+
+    # 2) Toast do PC segue o BACKEND (canal windows), nunca promessa fixa: o
+    # runner hermético desliga ALERTA_WINDOWS de propósito (nenhum toast real
+    # durante os testes) e o cartão tem de dizer isso — não "funcionam agora".
+    expect(pc).to_contain_text("configuração necessária")
+    expect(pc).to_contain_text("desligado")
+    expect(pc).not_to_contain_text("funcionam agora")
+    page.screenshot(path=str(evidence_dir / "fm6-03c-capacidades-iniciais.png"))
+
+    # Estado do backend simulado (determinístico em qualquer máquina): o
+    # cartão tem de reagir ao que o servidor responde, não a texto fixo.
+    def canais_stub(*canais):
+        corpo = json.dumps({"canais": list(canais),
+                            "aviso": "resposta simulada do teste V9-PWA-01"})
+
+        def _handler(route):
+            route.fulfill(status=200, content_type="application/json",
+                          body=corpo)
+        return _handler
+
+    painel = {"nome": "painel", "prioridade": 1, "configurado": True,
+              "disponivel": True, "ultimo_teste": "",
+              "detalhe": ("entrega garantida: o alerta fica na Caixa de "
+                          "entrada do painel")}
+    webpush = {"nome": "webpush", "prioridade": 6, "configurado": False,
+               "disponivel": True, "ultimo_teste": "",
+               "detalhe": ("estrutura pronta — gere as chaves VAPID e "
+                           "inscreva o celular em Configuração → Aplicativo")}
+
+    # 2b) Windows LIGADO, mas sem teste de entrega registrado ainda: o cartão
+    # mostra o suporte real (toast nativo) e cobra a prova — ligado ≠
+    # comprovado, então nada de "funcionam agora".
+    page.route("**/v1/notificacoes/canais", canais_stub(
+        painel, webpush,
+        {"nome": "windows", "prioridade": 2, "configurado": True,
+         "disponivel": True, "ultimo_teste": "",
+         "detalhe": "notificação nativa do Windows (toast)"}))
+    page.evaluate("capacidadesLoad()")
+    expect(pc).to_contain_text("disponível")
+    expect(pc).to_contain_text("toast")
+    expect(pc).to_contain_text("teste a entrega")
+    expect(pc).not_to_contain_text("funcionam agora")
+    page.screenshot(path=str(evidence_dir / "fm6-03c-capacidades-windows-sem-teste.png"))
+
+    # 3) Servidor NÃO-Windows: o cartão assume a limitação real e não some
+    # com a Caixa de entrada do painel.
+    page.route("**/v1/notificacoes/canais", canais_stub(
+        painel, webpush,
+        {"nome": "windows", "prioridade": 2, "configurado": True,
+         "disponivel": False, "ultimo_teste": "",
+         "detalhe": "toast nativo só existe no Windows"}))
+    page.evaluate("capacidadesLoad()")
+    expect(pc).to_contain_text("só no Windows")
+    expect(pc).not_to_contain_text("funcionam agora")
+    expect(pc).to_contain_text("Caixa de entrada")
+    page.screenshot(path=str(evidence_dir / "fm6-03c-capacidades-nao-windows.png"))
+
+    # 4) Servidor Windows com teste de entrega REGISTRADO: o cartão mostra a
+    # evidência do teste — distinção explícita entre disponível e testado.
+    page.unroute("**/v1/notificacoes/canais")
+    page.route("**/v1/notificacoes/canais", canais_stub(
+        painel, webpush,
+        {"nome": "windows", "prioridade": 2, "configurado": True,
+         "disponivel": True, "ultimo_teste": "2026-10-15T12:00:00+00:00",
+         "detalhe": "notificação nativa do Windows (toast)"}))
+    page.evaluate("capacidadesLoad()")
+    expect(pc).to_contain_text("disponível")
+    expect(pc).to_contain_text("Último teste")
+    expect(pc).to_contain_text("2026-10-15T12:00")
+
+    # 4b) Toast DESLIGADO (ALERTA_WINDOWS=false) não vira "disponível".
+    page.unroute("**/v1/notificacoes/canais")
+    page.route("**/v1/notificacoes/canais", canais_stub(
+        painel, webpush,
+        {"nome": "windows", "prioridade": 2, "configurado": False,
+         "disponivel": True, "ultimo_teste": "",
+         "detalhe": "desligado (ALERTA_WINDOWS=false)"}))
+    page.evaluate("capacidadesLoad()")
+    expect(pc).to_contain_text("configuração necessária")
+    expect(pc).to_contain_text("desligado")
+    page.unroute("**/v1/notificacoes/canais")
+
+    # 5) Chaves VAPID geradas pelo fluxo REAL da Configuração: o cartão muda
+    # de "gere as chaves" para "inscreva o aparelho" — e segue sem prometer
+    # "liberados" enquanto não houver inscrição e permissão.
+    modo_avancado(page)
+    ir_para(page, "config")
+    page.get_by_role("button", name="Gerar chaves VAPID").click()
+    expect(page.locator("#pwaEstado")).to_contain_text(
+        "chaves VAPID geradas", timeout=15000)
+    page.evaluate("capacidadesLoad()")
+    expect(push).to_contain_text("sem navegador inscrito ainda")
+    expect(push).to_contain_text("permissão")
+    expect(push).not_to_contain_text("liberados")
+    expect(push).not_to_contain_text("gere as chaves VAPID")
+    page.screenshot(path=str(evidence_dir / "fm6-03c-capacidades-vapid-gerado.png"))
 
 
 # ------------------------------------------------------------------- item 04
