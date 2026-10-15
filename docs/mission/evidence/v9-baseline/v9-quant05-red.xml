@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="8" skipped="0" tests="8" time="0.273" timestamp="2026-10-15T11:53:34.156616-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_v9_quant05_experimento_equivalente.TestExecucaoCausal" name="test_executor_ve_apenas_o_prefixo_causal" time="0.003"><failure message="assert False&#10; +  where False = all(&lt;generator object TestExecucaoCausal.test_executor_ve_apenas_o_prefixo_causal.&lt;locals&gt;.&lt;genexpr&gt; at 0x0000022FC2227760&gt;)">self = &lt;tests.test_v9_quant05_experimento_equivalente.TestExecucaoCausal object at 0x0000022FC2054200&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x0000022FC2050F50&gt;
+
+    def test_executor_ve_apenas_o_prefixo_causal(self, monkeypatch):
+        vistos: list[tuple[int, int]] = []
+        _registrar(monkeypatch, _espiao_que_ve_tudo({SINAL}, vistos))
+        evo = EvolucaoAutonoma()
+        exp = _exp(_h("espiao_v9", marca=1), _h("espiao_v9", marca=2))
+        evo.registrar_experimento(exp)
+        v = evo.executar_experimento(exp, {"BTC/USDT": _serie()})
+        assert vistos
+&gt;       assert all(comprimento == i + 1 for comprimento, i in vistos)
+E       assert False
+E        +  where False = all(&lt;generator object TestExecucaoCausal.test_executor_ve_apenas_o_prefixo_causal.&lt;locals&gt;.&lt;genexpr&gt; at 0x0000022FC2227760&gt;)
+
+tests\test_v9_quant05_experimento_equivalente.py:89: AssertionError</failure></testcase><testcase classname="tests.test_v9_quant05_experimento_equivalente.TestHorizonteComum" name="test_lados_sao_medidos_no_maior_horizonte" time="0.001"><failure message="AttributeError: 'VereditoDoExperimento' object has no attribute 'horizonte_efetivo'">self = &lt;tests.test_v9_quant05_experimento_equivalente.TestHorizonteComum object at 0x0000022FC20551C0&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x0000022FC2057320&gt;
+
+    def test_lados_sao_medidos_no_maior_horizonte(self, monkeypatch):
+        closes = _serie()
+        v = self._roda(monkeypatch, 2, 5)
+&gt;       assert v.horizonte_efetivo == 5
+               ^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'VereditoDoExperimento' object has no attribute 'horizonte_efetivo'
+
+tests\test_v9_quant05_experimento_equivalente.py:112: AttributeError</failure></testcase><testcase classname="tests.test_v9_quant05_experimento_equivalente.TestHorizonteComum" name="test_ordem_dos_horizontes_nao_muda_a_regua" time="0.001"><failure message="AttributeError: 'VereditoDoExperimento' object has no attribute 'horizonte_efetivo'">self = &lt;tests.test_v9_quant05_experimento_equivalente.TestHorizonteComum object at 0x0000022FC2054650&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x0000022FC2054D10&gt;
+
+    def test_ordem_dos_horizontes_nao_muda_a_regua(self, monkeypatch):
+        closes = _serie()
+        v = self._roda(monkeypatch, 5, 2)
+&gt;       assert v.horizonte_efetivo == 5
+               ^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'VereditoDoExperimento' object has no attribute 'horizonte_efetivo'
+
+tests\test_v9_quant05_experimento_equivalente.py:123: AttributeError</failure></testcase><testcase classname="tests.test_v9_quant05_experimento_equivalente.TestCustosComparaveis" name="test_custos_somam_o_custo_real_de_cada_instrumento" time="0.001"><failure message="assert 0.002 == 0.003 ± 3.0e-09&#10;  &#10;  comparison failed&#10;  Obtained: 0.002&#10;  Expected: 0.003 ± 3.0e-09">self = &lt;tests.test_v9_quant05_experimento_equivalente.TestCustosComparaveis object at 0x0000022FC2054D40&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x0000022FC2057740&gt;
+
+    def test_custos_somam_o_custo_real_de_cada_instrumento(self, monkeypatch):
+        v = self._dois_instrumentos(monkeypatch)
+        assert v.champion.operacoes == 2
+        assert v.challenger.operacoes == 2
+&gt;       assert v.challenger.custos == pytest.approx(0.001 + 0.002)
+E       assert 0.002 == 0.003 ± 3.0e-09
+E         
+E         comparison failed
+E         Obtained: 0.002
+E         Expected: 0.003 ± 3.0e-09
+
+tests\test_v9_quant05_experimento_equivalente.py:149: AssertionError</failure></testcase><testcase classname="tests.test_v9_quant05_experimento_equivalente.TestCustosComparaveis" name="test_benchmark_tambem_paga_o_custo_da_janela" time="0.001"><failure message="assert 0.0 == 0.012 ± 1.2e-08&#10;  &#10;  comparison failed&#10;  Obtained: 0.0&#10;  Expected: 0.012 ± 1.2e-08">self = &lt;tests.test_v9_quant05_experimento_equivalente.TestCustosComparaveis object at 0x0000022FC2055340&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x0000022FC20DC0E0&gt;
+
+    def test_benchmark_tambem_paga_o_custo_da_janela(self, monkeypatch):
+        v = self._dois_instrumentos(monkeypatch)
+        por_instrumento = v.janelas // 2
+        assert v.benchmark.operacoes == v.janelas
+&gt;       assert v.benchmark.custos == pytest.approx(
+            0.001 * por_instrumento + 0.002 * por_instrumento)
+E       assert 0.0 == 0.012 ± 1.2e-08
+E         
+E         comparison failed
+E         Obtained: 0.0
+E         Expected: 0.012 ± 1.2e-08
+
+tests\test_v9_quant05_experimento_equivalente.py:156: AssertionError</failure></testcase><testcase classname="tests.test_v9_quant05_experimento_equivalente.TestMetadadosCongelados" name="test_veredito_registra_dado_codigo_janelas_e_custos" time="0.001"><failure message="AttributeError: 'VereditoDoExperimento' object has no attribute 'hash_das_series'">self = &lt;tests.test_v9_quant05_experimento_equivalente.TestMetadadosCongelados object at 0x0000022FC2055580&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x0000022FC20DCA40&gt;
+
+    def test_veredito_registra_dado_codigo_janelas_e_custos(self, monkeypatch):
+        serie = _serie()
+        v = self._roda(monkeypatch, {"BTC/USDT": serie},
+                       janelas=1)
+&gt;       assert re.fullmatch(r"[0-9a-f]{64}", v.hash_das_series)
+                                             ^^^^^^^^^^^^^^^^^
+E       AttributeError: 'VereditoDoExperimento' object has no attribute 'hash_das_series'
+
+tests\test_v9_quant05_experimento_equivalente.py:177: AttributeError</failure></testcase><testcase classname="tests.test_v9_quant05_experimento_equivalente.TestMetadadosCongelados" name="test_grade_reflete_as_janelas_pedidas" time="0.001"><failure message="AttributeError: 'VereditoDoExperimento' object has no attribute 'grade_de_janelas'">self = &lt;tests.test_v9_quant05_experimento_equivalente.TestMetadadosCongelados object at 0x0000022FC2055970&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x0000022FC20DD550&gt;
+
+    def test_grade_reflete_as_janelas_pedidas(self, monkeypatch):
+        v = self._roda(monkeypatch, {"BTC/USDT": _serie()}, janelas=2)
+        assert v.janelas == 2
+&gt;       assert v.grade_de_janelas == (("BTC/USDT", 180, 239),
+               ^^^^^^^^^^^^^^^^^^
+                                      ("BTC/USDT", 239, 298))
+E       AttributeError: 'VereditoDoExperimento' object has no attribute 'grade_de_janelas'
+
+tests\test_v9_quant05_experimento_equivalente.py:187: AttributeError</failure></testcase><testcase classname="tests.test_v9_quant05_experimento_equivalente.TestMetadadosCongelados" name="test_hash_das_series_ignora_ordem_e_muda_com_o_dado" time="0.001"><failure message="AttributeError: 'VereditoDoExperimento' object has no attribute 'custos_aplicados'">self = &lt;tests.test_v9_quant05_experimento_equivalente.TestMetadadosCongelados object at 0x0000022FC2055C70&gt;
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x0000022FC20DDF70&gt;
+
+    def test_hash_das_series_ignora_ordem_e_muda_com_o_dado(
+            self, monkeypatch):
+        serie = _serie()
+        ab = {"AAA/USDT": serie, "BBB/USDT": list(serie)}
+        ba = {"BBB/USDT": list(serie), "AAA/USDT": list(serie)}
+        v_ab = self._roda(monkeypatch, ab)
+&gt;       assert v_ab.custos_aplicados == ("AAA/USDT:0.00100000;"
+               ^^^^^^^^^^^^^^^^^^^^^
+                                         "BBB/USDT:0.00100000")
+E       AttributeError: 'VereditoDoExperimento' object has no attribute 'custos_aplicados'
+
+tests\test_v9_quant05_experimento_equivalente.py:196: AttributeError</failure></testcase></testsuite></testsuites>

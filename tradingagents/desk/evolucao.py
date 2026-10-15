@@ -15,7 +15,10 @@ O que este módulo faz:
   espiar e afinar é impossível; execução única, reexecução só explícita.
 - **Walk-forward fora da amostra**: os trades são medidos em janelas
   sequenciais no fim da série, com o executável vendo apenas o passado
-  (`serie[:i+1]`); o futuro só mede o resultado.
+  (`serie[:i+1]`); o futuro só mede o resultado. Champion e challenger são
+  medidos na MESMA régua (horizonte comum, o maior dos dois) e o veredito
+  grava o que decide a reprodutibilidade: hash das séries, revisão do
+  código, grade de janelas usada e custos aplicados por instrumento.
 - **Bonferroni por família** (herdado do BT-2) e **benchmark** (comprado e
   segurado na própria janela) — quem testa muito precisa de prova mais forte.
 - **Métricas de rentabilidade, não de vaidade**: expectativa líquida,
@@ -44,7 +47,7 @@ from hashlib import sha256
 from pathlib import Path
 
 from .costs import custo_de_operar
-from .laboratorio import ALPHA, EXECUTORES, VALOR_REFERENCIA, Hipotese
+from .laboratorio import ALPHA, EXECUTORES, VALOR_REFERENCIA, Hipotese, _hash_das_series
 from .learning import AMOSTRA_MINIMA, Desfecho
 
 # Causas determinísticas de perda — em ordem de prioridade de diagnóstico.
@@ -198,6 +201,13 @@ class VereditoDoExperimento:
     aprovado: bool
     executada_em: str
     motivo: str
+    # Reprodutibilidade (V9-QUANT-05): o que mediu, com que dado, em que
+    # janelas e a que custo — reexecução idêntica é conferível pelo auditor.
+    horizonte_efetivo: int = 0
+    hash_das_series: str = ""
+    code_revision: str = ""
+    grade_de_janelas: tuple = ()
+    custos_aplicados: str = ""
 
     @property
     def aviso(self) -> str:
@@ -240,10 +250,10 @@ def _janelas_de_avaliacao(n: int, hipoteses: list[Hipotese],
     return saida
 
 
-def _metricas(trades: list[float], custo_unit: float,
+def _metricas(trades: list[float], custo_total: float,
               por_janela: list[list[float]]) -> MetricasDoLado:
     """Métricas de um lado: expectativa líquida, drawdown multiplicativo,
-    estabilidade (fração de janelas positivas) e custos pagos."""
+    estabilidade (fração de janelas positivas) e custos REAIS pagos."""
     ops = len(trades)
     esp = sum(trades) / ops if ops else 0.0
     # drawdown sobre a curva composta, na ordem cronológica dos trades
@@ -258,7 +268,12 @@ def _metricas(trades: list[float], custo_unit: float,
                           expectativa_liquida=round(esp, 6),
                           drawdown=round(dd, 6),
                           estabilidade=round(estabilidade, 4),
-                          custos=round(custo_unit * ops, 6))
+                          custos=round(custo_total, 6))
+
+
+def _revisao_do_codigo() -> str:
+    """Hash do próprio módulo: identifica as regras que MEDIRAM o veredito."""
+    return sha256(Path(__file__).read_bytes()).hexdigest()
 
 
 def _o_que_mudou(registro: dict) -> dict:
@@ -456,44 +471,46 @@ class EvolucaoAutonoma:
         h_l = int(experimento.challenger.horizonte_barras)
         if h < 1 or h_l < 1:
             raise ValueError("horizonte_barras deve ser >= 1")
+        h_efetivo = max(h, h_l)
 
-        pares: list[tuple[list[float], list[float], float]] = []
+        pares: list[tuple[list[float], list[float], float, float]] = []
+        grade: list[tuple[str, int, int]] = []
+        custos_por_instrumento: dict[str, float] = {}
         for instrumento, brutos in series.items():
             closes = [float(c) for c in (brutos or [])]
             if len(closes) <= max(
                     experimento.champion.janela_treino_barras,
-                    experimento.challenger.janela_treino_barras) + max(h, h_l):
+                    experimento.challenger.janela_treino_barras) + h_efetivo:
                 continue
             custo = float(custo_de_operar(
                 instrumento, experimento.challenger.exchange,
                 VALOR_REFERENCIA).ida_e_volta)
+            custos_por_instrumento[instrumento] = custo
             for a, b in _janelas_de_avaliacao(
                     len(closes),
                     [experimento.champion, experimento.challenger],
                     int(janelas)):
-                nets_c = [((closes[i + h] - closes[i]) / closes[i]) - custo
+                nets_c = [((closes[i + h_efetivo] - closes[i]) / closes[i]) - custo
                           for i in range(a, b)
-                          if executor_c(closes, i,
+                          if executor_c(closes[:i + 1], i,
                                         experimento.champion.parametros_dict) > 0]
-                nets_l = [((closes[i + h_l] - closes[i]) / closes[i]) - custo
+                nets_l = [((closes[i + h_efetivo] - closes[i]) / closes[i]) - custo
                           for i in range(a, b)
-                          if executor_l(closes, i,
+                          if executor_l(closes[:i + 1], i,
                                         experimento.challenger.parametros_dict) > 0]
                 bench = ((closes[b - 1] - closes[a]) / closes[a]
                          if b - 1 > a else 0.0) - custo
-                pares.append((nets_c, nets_l, bench))
+                pares.append((nets_c, nets_l, bench, custo))
+                grade.append((instrumento, a, b))
 
         trades_c = [t for p in pares for t in p[0]]
         trades_l = [t for p in pares for t in p[1]]
-        custo_ref = 0.0
-        if series:
-            primeiro = next(iter(series))
-            custo_ref = float(custo_de_operar(
-                primeiro, experimento.challenger.exchange,
-                VALOR_REFERENCIA).ida_e_volta)
-        m_champ = _metricas(trades_c, custo_ref, [p[0] for p in pares])
-        m_chall = _metricas(trades_l, custo_ref, [p[1] for p in pares])
-        m_bench = _metricas([p[2] for p in pares], 0.0,
+        custos_c = sum(p[3] * len(p[0]) for p in pares)
+        custos_l = sum(p[3] * len(p[1]) for p in pares)
+        custos_bench = sum(p[3] for p in pares)
+        m_champ = _metricas(trades_c, custos_c, [p[0] for p in pares])
+        m_chall = _metricas(trades_l, custos_l, [p[1] for p in pares])
+        m_bench = _metricas([p[2] for p in pares], custos_bench,
                             [[p[2]] for p in pares])
 
         familia = registro.get("familia") or experimento.trader
@@ -504,7 +521,7 @@ class EvolucaoAutonoma:
             p_valor = 1.0
         else:
             difs = []
-            for nets_c, nets_l, _ in pares:
+            for nets_c, nets_l, _, _ in pares:
                 ec = sum(nets_c) / len(nets_c) if nets_c else 0.0
                 el = sum(nets_l) / len(nets_l) if nets_l else 0.0
                 difs.append(el - ec)
@@ -549,7 +566,14 @@ class EvolucaoAutonoma:
             familia_n=familia_n, alpha_ajustado=alpha_ajustado,
             p_valor=round(p_valor, 8), janelas=len(pares),
             champion=m_champ, challenger=m_chall, benchmark=m_bench,
-            aprovado=aprovado, executada_em=agora.isoformat(), motivo=motivo)
+            aprovado=aprovado, executada_em=agora.isoformat(), motivo=motivo,
+            horizonte_efetivo=h_efetivo,
+            hash_das_series=_hash_das_series(series),
+            code_revision=_revisao_do_codigo(),
+            grade_de_janelas=tuple(grade),
+            custos_aplicados=";".join(
+                f"{k}:{v:.8f}"
+                for k, v in sorted(custos_por_instrumento.items())))
         gravado = asdict(resultado)
         gravado["aviso"] = resultado.aviso
         gravado["forcada"] = bool(assinatura in self._resultados and forcar)
