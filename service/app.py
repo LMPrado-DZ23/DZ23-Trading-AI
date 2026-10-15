@@ -4442,6 +4442,7 @@ async def testar_canal_de_notificacao(req: Request, _=Depends(auth)):
                                  + str(resultado.get("erro") or "sem detalhe"))
     return {"ok": True, "canal": nome,
             "detalhe": resultado.get("detalhe", ""),
+            "parcial": bool(resultado.get("parcial")),
             "latencia_ms": resultado.get("latencia_ms", 0),
             "em": utcnow().isoformat(),
             "aviso": ("teste de entrega confirmado — o canal está de pé "

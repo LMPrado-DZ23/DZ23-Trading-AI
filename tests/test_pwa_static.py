@@ -85,6 +85,12 @@ class TestPainelPwa:
         html = self._html()
         assert "ultimo_teste_ok" in html
 
+    def test_toast_do_teste_de_canal_declara_a_lacuna_quando_parcial(self):
+        # V9-PWA-04: entrega parcial (1 de N aparelhos) não pode virar toast
+        # de "entrega confirmada" sem declarar a lacuna que o backend expõe.
+        html = self._html()
+        assert "r.data.parcial" in html
+
 
 class TestRotasPwa:
     def _app(self, tmp_path, monkeypatch):

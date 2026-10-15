@@ -181,6 +181,34 @@ class TestEntregaHonesta:
                            remetente=seletivo).enviar(AlertaFalso())
         assert r["ok"] and r["entregues"] == 1 and r["erros"] == 1
 
+    def test_entrega_parcial_e_explicita_e_conta_o_aparelho_que_falhou(self):
+        # V9-PWA-04: entrega em 1 de 2 NÃO pode parecer entrega total — o
+        # resultado carrega "parcial" e o detalhe mostra a lacuna; o aparelho
+        # que falhou acumula a falha real.
+        a_bom, a_ruim = _assinatura_valida(), _assinatura_valida(
+            endpoint="https://fcm.googleapis.com/fcm/send/ruim")
+
+        def seletivo(a, p, ttl, u):
+            if "ruim" in a.endpoint:
+                raise TimeoutError("sem rede")
+        r = EntregadorPush([a_bom, a_ruim], vapid_privada="pem",
+                           remetente=seletivo).enviar(AlertaFalso())
+        assert r["ok"] and r["entregues"] == 1 and r["erros"] == 1
+        assert r.get("parcial") is True
+        assert "1/2" in str(r.get("detalhe", ""))
+        assert a_ruim.falhas == 1 and "TimeoutError" in a_ruim.ultimo_erro
+        assert a_bom.ultimo_ok and a_bom.falhas == 0
+
+    def test_entrega_total_nao_e_marcada_como_parcial(self):
+        a1, a2 = _assinatura_valida(), _assinatura_valida(
+            endpoint="https://fcm.googleapis.com/fcm/send/outro")
+
+        r = EntregadorPush([a1, a2], vapid_privada="pem",
+                           remetente=lambda a, p, ttl, u: None).enviar(
+                               AlertaFalso())
+        assert r["ok"] and r["entregues"] == 2
+        assert r.get("parcial") is False
+
     def test_expirada_e_podada_com_callback(self):
         class Resposta:
             status_code = 410
@@ -201,6 +229,8 @@ class TestEntregaHonesta:
         assert r["ok"] and r["entregues"] == 1
         assert [a.identificador() for a in podadas] == [a_morta.identificador()]
         assert a_morta.identificador() in r["expiradas"]
+        # V9-PWA-04: 1 entregue + 1 expirada é uma lacuna — parcial, não total.
+        assert r.get("parcial") is True
 
     def test_todas_expiradas_manda_reinscrever(self):
         import pywebpush
@@ -564,3 +594,50 @@ class TestRotasPush:
         vivo = d["dispositivos"][0]
         assert vivo["ultimo_ok"], "o aparelho vivo mantém o sucesso real"
         assert vivo["falhas"] == 0 and vivo["ultimo_erro"] == ""
+
+    @pytest.mark.skipif(not _TEM_PY_VAPID, reason="py_vapid ausente")
+    def test_teste_parcial_do_webpush_declara_a_lacuna_e_mostra_a_falha(
+            self, tmp_path, monkeypatch):
+        # V9-PWA-04: o teste do canal webpush com 1 de 2 aparelhos servidos
+        # não pode responder como sucesso total: a rota declara "parcial",
+        # o diagnóstico mostra o aparelho que falhou e a caixa de entrada
+        # registra a lacuna na auditoria da entrega.
+        m, c, h = self._app(tmp_path, monkeypatch)
+        self._preparar_push(c, h)                      # aparelho bom ("tok")
+        r2 = c.post("/v1/push/assinar", headers=h, json=self._corpo("ruim"))
+        assert r2.status_code == 200
+        assert c.get("/v1/push/estado", headers=h).json()["total"] == 2
+
+        def remetente(a, p, ttl, u):
+            if a.endpoint.endswith("tokruim"):
+                raise TimeoutError("sem resposta do serviço de push")
+            return None
+
+        original = m._push_do_tenant
+
+        def push_fake(tid):
+            assinaturas, entregador = original(tid)
+            entregador._remetente = remetente
+            return assinaturas, entregador
+
+        monkeypatch.setattr(m, "_push_do_tenant", push_fake)
+        r = c.post("/v1/notificacoes/testar", headers=h,
+                   json={"canal": "webpush"})
+        assert r.status_code == 200
+        body = r.json()
+        assert body.get("parcial") is True, \
+            "1 de 2 aparelhos servidos precisa ser declarado parcial"
+        assert "1/2" in str(body.get("detalhe", ""))
+
+        d = c.get("/v1/push/estado", headers=h).json()
+        assert any(x["falhas"] >= 1 and "TimeoutError" in x["ultimo_erro"]
+                   for x in d["dispositivos"]), \
+            "o aparelho que falhou precisa aparecer no diagnóstico"
+        assert any(x["ultimo_ok"] for x in d["dispositivos"])
+
+        self._despachar_com_remetente(m, c, h, monkeypatch, remetente)
+        caixa = c.get("/v1/notificacoes/inbox", headers=h).json()
+        assert any(t.get("canal") == "webpush" and t.get("ok")
+                   and "1/2" in str(t.get("detalhe", ""))
+                   for t in caixa["auditoria"]), \
+            "a lacuna da entrega parcial precisa ficar registrada na auditoria"

@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="5" skipped="0" tests="54" time="5.828" timestamp="2026-10-15T13:18:56.282533-03:00" hostname="DESKTOP-AVELL"><testcase classname="tests.test_pwa_push.TestValidacaoDeAssinatura" name="test_assinatura_valida_passa" time="0.003" /><testcase classname="tests.test_pwa_push.TestValidacaoDeAssinatura" name="test_invalida_e_recusada_com_motivo[troca0-https]" time="0.001" /><testcase classname="tests.test_pwa_push.TestValidacaoDeAssinatura" name="test_invalida_e_recusada_com_motivo[troca1-longo]" time="0.001" /><testcase classname="tests.test_pwa_push.TestValidacaoDeAssinatura" name="test_invalida_e_recusada_com_motivo[troca2-inv\xe1lidos]" time="0.001" /><testcase classname="tests.test_pwa_push.TestValidacaoDeAssinatura" name="test_invalida_e_recusada_com_motivo[troca3-p256dh]" time="0.001" /><testcase classname="tests.test_pwa_push.TestValidacaoDeAssinatura" name="test_invalida_e_recusada_com_motivo[troca4-auth]" time="0.001" /><testcase classname="tests.test_pwa_push.TestValidacaoDeAssinatura" name="test_invalida_e_recusada_com_motivo[troca5-https]" time="0.001" /><testcase classname="tests.test_pwa_push.TestValidacaoDeAssinatura" name="test_identificador_nao_expoe_endpoint" time="0.001" /><testcase classname="tests.test_pwa_push.TestValidacaoDeAssinatura" name="test_resumo_nunca_contem_segredos" time="0.001" /><testcase classname="tests.test_pwa_push.TestValidacaoDeAssinatura" name="test_from_dict_aceita_formato_do_navegador" time="0.001" /><testcase classname="tests.test_pwa_push.TestPersistenciaNoConfig" name="test_ida_e_volta_com_limite" time="0.001" /><testcase classname="tests.test_pwa_push.TestPersistenciaNoConfig" name="test_lixo_no_config_vira_lista_vazia" time="0.001" /><testcase classname="tests.test_pwa_push.TestPersistenciaNoConfig" name="test_invalida_nao_e_carregada" time="0.001" /><testcase classname="tests.test_pwa_push.TestPersistenciaNoConfig" name="test_limite_de_dispositivos_e_aplicado_na_leitura" time="0.001" /><testcase classname="tests.test_pwa_push.TestPayloadETtl" name="test_payload_minimo_sem_dado_sensivel_na_url" time="0.001" /><testcase classname="tests.test_pwa_push.TestPayloadETtl" name="test_payload_trunca_textos_longos" time="0.001" /><testcase classname="tests.test_pwa_push.TestPayloadETtl" name="test_ttl_e_urgencia_por_severidade" time="0.001" /><testcase classname="tests.test_pwa_push.TestEntregaHonesta" name="test_sem_chave_privada_recusa_com_instrucao" time="0.001" /><testcase classname="tests.test_pwa_push.TestEntregaHonesta" name="test_sem_assinaturas_recusa" time="0.001" /><testcase classname="tests.test_pwa_push.TestEntregaHonesta" name="test_entrega_marca_ultimo_ok_e_conta" time="0.001" /><testcase classname="tests.test_pwa_push.TestEntregaHonesta" name="test_erro_generico_conta_falha_e_nao_finge" time="0.001" /><testcase classname="tests.test_pwa_push.TestEntregaHonesta" name="test_apenas_uma_entregue_ainda_e_sucesso_com_detalhe" time="0.001" /><testcase classname="tests.test_pwa_push.TestEntregaHonesta" name="test_entrega_parcial_e_explicita_e_conta_o_aparelho_que_falhou" time="0.001"><failure message="AssertionError: assert None is True&#10; +  where None = &lt;built-in method get of dict object at 0x000001C8F9435A80&gt;('parcial')&#10; +    where &lt;built-in method get of dict object at 0x000001C8F9435A80&gt; = {'entregues': 1, 'expiradas': [], 'erros': 1, 'ok': True, ...}.get">self = &lt;tests.test_pwa_push.TestEntregaHonesta object at 0x000001C8F8EE9850&gt;
+
+    def test_entrega_parcial_e_explicita_e_conta_o_aparelho_que_falhou(self):
+        # V9-PWA-04: entrega em 1 de 2 NÃO pode parecer entrega total — o
+        # resultado carrega "parcial" e o detalhe mostra a lacuna; o aparelho
+        # que falhou acumula a falha real.
+        a_bom, a_ruim = _assinatura_valida(), _assinatura_valida(
+            endpoint="https://fcm.googleapis.com/fcm/send/ruim")
+    
+        def seletivo(a, p, ttl, u):
+            if "ruim" in a.endpoint:
+                raise TimeoutError("sem rede")
+        r = EntregadorPush([a_bom, a_ruim], vapid_privada="pem",
+                           remetente=seletivo).enviar(AlertaFalso())
+        assert r["ok"] and r["entregues"] == 1 and r["erros"] == 1
+&gt;       assert r.get("parcial") is True
+E       AssertionError: assert None is True
+E        +  where None = &lt;built-in method get of dict object at 0x000001C8F9435A80&gt;('parcial')
+E        +    where &lt;built-in method get of dict object at 0x000001C8F9435A80&gt; = {'entregues': 1, 'expiradas': [], 'erros': 1, 'ok': True, ...}.get
+
+tests\test_pwa_push.py:197: AssertionError</failure></testcase><testcase classname="tests.test_pwa_push.TestEntregaHonesta" name="test_entrega_total_nao_e_marcada_como_parcial" time="0.001"><failure message="AssertionError: assert None is False&#10; +  where None = &lt;built-in method get of dict object at 0x000001C8F94DD1C0&gt;('parcial')&#10; +    where &lt;built-in method get of dict object at 0x000001C8F94DD1C0&gt; = {'entregues': 2, 'expiradas': [], 'erros': 0, 'ok': True, ...}.get">self = &lt;tests.test_pwa_push.TestEntregaHonesta object at 0x000001C8F8EE9670&gt;
+
+    def test_entrega_total_nao_e_marcada_como_parcial(self):
+        a1, a2 = _assinatura_valida(), _assinatura_valida(
+            endpoint="https://fcm.googleapis.com/fcm/send/outro")
+    
+        r = EntregadorPush([a1, a2], vapid_privada="pem",
+                           remetente=lambda a, p, ttl, u: None).enviar(
+                               AlertaFalso())
+        assert r["ok"] and r["entregues"] == 2
+&gt;       assert r.get("parcial") is False
+E       AssertionError: assert None is False
+E        +  where None = &lt;built-in method get of dict object at 0x000001C8F94DD1C0&gt;('parcial')
+E        +    where &lt;built-in method get of dict object at 0x000001C8F94DD1C0&gt; = {'entregues': 2, 'expiradas': [], 'erros': 0, 'ok': True, ...}.get
+
+tests\test_pwa_push.py:210: AssertionError</failure></testcase><testcase classname="tests.test_pwa_push.TestEntregaHonesta" name="test_expirada_e_podada_com_callback" time="1.326"><failure message="AssertionError: assert None is True&#10; +  where None = &lt;built-in method get of dict object at 0x000001C8F92F22C0&gt;('parcial')&#10; +    where &lt;built-in method get of dict object at 0x000001C8F92F22C0&gt; = {'entregues': 1, 'expiradas': ['44d3956983'], 'erros': 0, 'ok': True, ...}.get">self = &lt;tests.test_pwa_push.TestEntregaHonesta object at 0x000001C8F8EE8770&gt;
+
+    def test_expirada_e_podada_com_callback(self):
+        class Resposta:
+            status_code = 410
+            reason = "Gone"
+            text = "expired"
+    
+        import pywebpush
+        a_viva, a_morta = _assinatura_valida(), _assinatura_valida(
+            endpoint="https://fcm.googleapis.com/fcm/send/morto")
+    
+        def seletivo(assinatura, payload, ttl, urgencia):
+            if "morto" in assinatura.endpoint:
+                raise pywebpush.WebPushException("expirou", response=Resposta())
+        podadas = []
+        e = EntregadorPush([a_viva, a_morta], vapid_privada="pem",
+                           remetente=seletivo, podar=podadas.extend)
+        r = e.enviar(AlertaFalso())
+        assert r["ok"] and r["entregues"] == 1
+        assert [a.identificador() for a in podadas] == [a_morta.identificador()]
+        assert a_morta.identificador() in r["expiradas"]
+        # V9-PWA-04: 1 entregue + 1 expirada é uma lacuna — parcial, não total.
+&gt;       assert r.get("parcial") is True
+E       AssertionError: assert None is True
+E        +  where None = &lt;built-in method get of dict object at 0x000001C8F92F22C0&gt;('parcial')
+E        +    where &lt;built-in method get of dict object at 0x000001C8F92F22C0&gt; = {'entregues': 1, 'expiradas': ['44d3956983'], 'erros': 0, 'ok': True, ...}.get
+
+tests\test_pwa_push.py:233: AssertionError</failure></testcase><testcase classname="tests.test_pwa_push.TestEntregaHonesta" name="test_todas_expiradas_manda_reinscrever" time="0.001" /><testcase classname="tests.test_pwa_push.TestEntregaHonesta" name="test_poda_que_falha_nao_derruba_a_entrega" time="0.001" /><testcase classname="tests.test_pwa_push.TestEstadoPublico" name="test_estado_nunca_contem_chave_privada_nem_endpoint" time="0.001" /><testcase classname="tests.test_pwa_push.TestChavesVapid" name="test_geracao_produz_par_utilizavel" time="0.012" /><testcase classname="tests.test_pwa_push.TestCriptoRealSemRede" name="test_criptografia_e_assinatura_vapid_reais" time="0.003" /><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_estado_sem_auth_recusa" time="0.724" /><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_estado_inicial_honesto_sem_segredo" time="0.159" /><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_cabecalhos_de_seguranca" time="0.292" /><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_csp_nao_quebra_o_iframe_do_floor" time="0.233" /><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_vapid_gerar_persiste_e_recusa_sobrescrever" time="0.170" /><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_assinar_valida_deduplica_e_nao_ecoa_endpoint" time="0.206" /><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_assinar_respeita_limite" time="0.327" /><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_cancelar_remove_aparelho" time="0.200" /><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_estado_guarda_diagnostico_real_apos_envio" time="0.476" /><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_estado_guarda_falha_e_contagem_reais_apos_envio" time="0.226" /><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_persistencia_nao_ressuscita_inscricao_expirada_no_despacho" time="0.318" /><testcase classname="tests.test_pwa_push.TestRotasPush" name="test_teste_parcial_do_webpush_declara_a_lacuna_e_mostra_a_falha" time="0.250"><failure message="AssertionError: 1 de 2 aparelhos servidos precisa ser declarado parcial&#10;assert None is True&#10; +  where None = &lt;built-in method get of dict object at 0x000001C8FB10AB80&gt;('parcial')&#10; +    where &lt;built-in method get of dict object at 0x000001C8FB10AB80&gt; = {'ok': True, 'canal': 'webpush', 'detalhe': 'push entregue a 1/2 dispositivo(s)', 'latencia_ms': 0, ...}.get">self = &lt;tests.test_pwa_push.TestRotasPush object at 0x000001C8F8F89340&gt;
+tmp_path = WindowsPath('C:/Users/DZ23/AppData/Local/Temp/dz23-v9-v9-pwa04-red-9pc1t9b2/tmp/pytest-of-unknown/pytest-0/test_teste_parcial_do_webpush_0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x000001C8F9BC3140&gt;
+
+    @pytest.mark.skipif(not _TEM_PY_VAPID, reason="py_vapid ausente")
+    def test_teste_parcial_do_webpush_declara_a_lacuna_e_mostra_a_falha(
+            self, tmp_path, monkeypatch):
+        # V9-PWA-04: o teste do canal webpush com 1 de 2 aparelhos servidos
+        # não pode responder como sucesso total: a rota declara "parcial",
+        # o diagnóstico mostra o aparelho que falhou e a caixa de entrada
+        # registra a lacuna na auditoria da entrega.
+        m, c, h = self._app(tmp_path, monkeypatch)
+        self._preparar_push(c, h)                      # aparelho bom ("tok")
+        r2 = c.post("/v1/push/assinar", headers=h, json=self._corpo("ruim"))
+        assert r2.status_code == 200
+        assert c.get("/v1/push/estado", headers=h).json()["total"] == 2
+    
+        def remetente(a, p, ttl, u):
+            if a.endpoint.endswith("tokruim"):
+                raise TimeoutError("sem resposta do serviço de push")
+            return None
+    
+        original = m._push_do_tenant
+    
+        def push_fake(tid):
+            assinaturas, entregador = original(tid)
+            entregador._remetente = remetente
+            return assinaturas, entregador
+    
+        monkeypatch.setattr(m, "_push_do_tenant", push_fake)
+        r = c.post("/v1/notificacoes/testar", headers=h,
+                   json={"canal": "webpush"})
+        assert r.status_code == 200
+        body = r.json()
+&gt;       assert body.get("parcial") is True, \
+            "1 de 2 aparelhos servidos precisa ser declarado parcial"
+E       AssertionError: 1 de 2 aparelhos servidos precisa ser declarado parcial
+E       assert None is True
+E        +  where None = &lt;built-in method get of dict object at 0x000001C8FB10AB80&gt;('parcial')
+E        +    where &lt;built-in method get of dict object at 0x000001C8FB10AB80&gt; = {'ok': True, 'canal': 'webpush', 'detalhe': 'push entregue a 1/2 dispositivo(s)', 'latencia_ms': 0, ...}.get
+
+tests\test_pwa_push.py:628: AssertionError</failure></testcase><testcase classname="tests.test_pwa_static.TestServiceWorker" name="test_cache_so_de_estaticos_publicos_e_versionado" time="0.035" /><testcase classname="tests.test_pwa_static.TestServiceWorker" name="test_push_mostra_notificacao_com_tag_e_abre_area_autenticada" time="0.001" /><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_instalar_comeca_escondido_ate_o_navegador_oferecer" time="0.002" /><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_registra_sw_sem_cache_velho_e_inscreve_push_real" time="0.001" /><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_card_do_aplicativo_com_dica_iphone_e_estados" time="0.001" /><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_endereco_inseguro_degrada_honesto" time="0.001" /><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_fragmento_do_push_tem_consumidor_real_no_painel" time="0.001" /><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_ultimo_teste_do_canal_e_honesto_no_painel" time="0.001" /><testcase classname="tests.test_pwa_static.TestPainelPwa" name="test_toast_do_teste_de_canal_declara_a_lacuna_quando_parcial" time="0.002"><failure message="assert 'r.data.parcial' in '&lt;!doctype html&gt;\n&lt;html lang=&quot;pt-BR&quot;&gt;\n&lt;head&gt;\n&lt;meta charset=&quot;utf-8&quot;&gt;&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width.../[&amp;&lt;&gt;&quot;]/g,c=&gt;({\'&amp;\':\'&amp;amp;\',\'&lt;\':\'&amp;lt;\',\'&gt;\':\'&amp;gt;\',\'&quot;\':\'&amp;quot;\'}[c]))}boot();\n&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;\n'">self = &lt;tests.test_pwa_static.TestPainelPwa object at 0x000001C8F8F89C10&gt;
+
+    def test_toast_do_teste_de_canal_declara_a_lacuna_quando_parcial(self):
+        # V9-PWA-04: entrega parcial (1 de N aparelhos) não pode virar toast
+        # de "entrega confirmada" sem declarar a lacuna que o backend expõe.
+        html = self._html()
+&gt;       assert "r.data.parcial" in html
+E       assert 'r.data.parcial' in '&lt;!doctype html&gt;\n&lt;html lang="pt-BR"&gt;\n&lt;head&gt;\n&lt;meta charset="utf-8"&gt;&lt;meta name="viewport" content="width=device-width.../[&amp;&lt;&gt;"]/g,c=&gt;({\'&amp;\':\'&amp;amp;\',\'&lt;\':\'&amp;lt;\',\'&gt;\':\'&amp;gt;\',\'"\':\'&amp;quot;\'}[c]))}boot();\n&lt;/script&gt;&lt;/body&gt;&lt;/html&gt;\n'
+
+tests\test_pwa_static.py:92: AssertionError</failure></testcase><testcase classname="tests.test_pwa_static.TestRotasPwa" name="test_sw_js_servido_com_escopo_raiz_e_sem_cache_velho" time="0.140" /><testcase classname="tests.test_pwa_static.TestRotasPwa" name="test_manifest_continua_servido" time="0.155" /><testcase classname="tests.test_pwa_static.TestRotasPwa" name="test_sw_exige_contexto_autenticado_apenas_para_painel_nao_para_o_arquivo" time="0.135" /></testsuite></testsuites>
