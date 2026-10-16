@@ -4304,6 +4304,8 @@ def _registrar_prova_testnet(request: Request, d: dict,
 
 
 _CHAVE_PREPARACAO_REAL = "preparacao_real_leitura"
+_VALIDADE_PREPARACAO_REAL = timedelta(hours=24)
+_TOLERANCIA_RELOGIO_PREPARACAO_REAL = timedelta(minutes=5)
 
 
 def _env_leitura_real(cfg: dict) -> dict:
@@ -4311,6 +4313,28 @@ def _env_leitura_real(cfg: dict) -> dict:
         "TRADINGAGENTS_EXCHANGE", "REAL_READ_ONLY_API_KEY",
         "REAL_READ_ONLY_API_SECRET", "REAL_READ_ONLY_API_PASSWORD",
         "REAL_READ_ONLY_API_UID")}
+
+
+def _prova_leitura_real_recente(prova: dict, agora: datetime | None = None) -> bool:
+    """Acesso privado precisa ser comprovado de novo a cada 24 horas.
+
+    Timestamp ausente, sem fuso, inválido ou muito no futuro é recusado. Isso
+    impede que uma prova antiga ou editada sobreviva indefinidamente só porque
+    a impressão da credencial continua igual.
+    """
+    try:
+        verificada = datetime.fromisoformat(
+            str(prova.get("verificada_em") or "").replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return False
+    if verificada.tzinfo is None:
+        return False
+    atual = agora or datetime.now(timezone.utc)
+    verificada = verificada.astimezone(timezone.utc)
+    atual = atual.astimezone(timezone.utc)
+    idade = atual - verificada
+    return (-_TOLERANCIA_RELOGIO_PREPARACAO_REAL <= idade
+            <= _VALIDADE_PREPARACAO_REAL)
 
 
 def _prova_leitura_real(request: Request, cfg: dict) -> tuple[dict | None, bool]:
@@ -4326,6 +4350,7 @@ def _prova_leitura_real(request: Request, cfg: dict) -> tuple[dict | None, bool]
         and hmac.compare_digest(str(prova["credential_fingerprint"]), atual)
         and prova.get("exchange") == (
             cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+        and _prova_leitura_real_recente(prova)
     )
     return prova, valida
 
@@ -4333,18 +4358,34 @@ def _prova_leitura_real(request: Request, cfg: dict) -> tuple[dict | None, bool]
 def _prova_publica(prova: dict | None, valida: bool) -> dict:
     if not prova:
         return {"registrada": False, "valida": False}
+    recente = _prova_leitura_real_recente(prova)
+    expira_em = ""
+    try:
+        verificada = datetime.fromisoformat(
+            str(prova.get("verificada_em") or "").replace("Z", "+00:00"))
+        if verificada.tzinfo is not None:
+            expira_em = (verificada.astimezone(timezone.utc)
+                         + _VALIDADE_PREPARACAO_REAL).isoformat()
+    except (TypeError, ValueError):
+        pass
+    if valida:
+        aviso = "prova válida para a credencial atualmente salva"
+    elif not recente:
+        aviso = "prova expirada ou com horário inválido; refaça a comprovação"
+    else:
+        aviso = "prova obsoleta: corretora ou credencial foi alterada"
     return {
         "registrada": True,
         "valida": valida,
         "exchange": prova.get("exchange", ""),
         "conta": prova.get("conta", ""),
         "verificada_em": prova.get("verificada_em", ""),
+        "expira_em": expira_em,
         "authenticated_read": bool(prova.get("authenticated_read")),
         "read_methods": list(prova.get("read_methods") or ()),
         "sem_trade_declarado": bool(prova.get("sem_trade_declarado")),
         "sem_saque_declarado": bool(prova.get("sem_saque_declarado")),
-        "aviso": ("prova válida para a credencial atualmente salva" if valida
-                  else "prova obsoleta: corretora ou credencial foi alterada"),
+        "aviso": aviso,
     }
 
 

@@ -158,6 +158,7 @@ class TestPreparacaoReal:
         t = _funcao(html, "async function preparoRealLoad(")
         assert "'/v1/live/status'" in t
         assert "checklist" in t and "pendencias" in t
+        assert "expira_em" in t and "aviso" in t
         assert "BLOQUEADO" in t, "o estado real (bloqueado) precisa estar visível"
         assert "escapeHtml" in t
 

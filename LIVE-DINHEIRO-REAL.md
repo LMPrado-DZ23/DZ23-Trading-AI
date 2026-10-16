@@ -106,6 +106,11 @@ privado é devolvido ao painel. A prova durável contém apenas corretora, rótu
 da conta, horário, nomes dos métodos de leitura e um hash da credencial. Trocar
 qualquer parte da credencial invalida a prova automaticamente.
 
+A prova vale por 24 horas. Depois desse prazo, ou se o relógio registrado for
+inválido, o checklist volta a bloquear a conta e exige uma nova consulta
+autenticada. O painel mostra quando a prova expira; renovar a prova continua
+usando somente métodos de leitura e não envia ordens.
+
 Uma consulta bem-sucedida comprova acesso de leitura; não comprova, sozinha,
 que a corretora retirou permissões de trade ou movimentação. Essa restrição é
 declarada pelo proprietário no DZ23 e deve ser conferida também no painel da

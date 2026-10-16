@@ -258,7 +258,7 @@ async function preparoRealLoad(){
 const alvo=$('preparoReal');if(!alvo)return;
 const r=await api('/v1/live/status');
 if(!r.ok){alvo.innerHTML='<span class="warn">Preparação indisponível agora.</span>';return}
-const d=r.data||{},p=d.preparacao_leitura||{};const itens=(d.checklist||[]).map(i=>'<div>'+(i.pronto?'✔':'✖')+' '+escapeHtml(String(i.item||''))+' — '+escapeHtml(String(i.acao||''))+'</div>').join('');const prova=p.registrada?'<div class="muted">Prova de leitura: '+(p.valida?'válida':'obsoleta')+' · '+escapeHtml(String(p.exchange||''))+' · conta '+escapeHtml(String(p.conta||''))+' · '+escapeHtml(String(p.verificada_em||''))+'</div>':'';
+const d=r.data||{},p=d.preparacao_leitura||{};const itens=(d.checklist||[]).map(i=>'<div>'+(i.pronto?'✔':'✖')+' '+escapeHtml(String(i.item||''))+' — '+escapeHtml(String(i.acao||''))+'</div>').join('');const prova=p.registrada?'<div class="muted">Prova de leitura: '+(p.valida?'válida':'bloqueada')+' · '+escapeHtml(String(p.exchange||''))+' · conta '+escapeHtml(String(p.conta||''))+' · verificada '+escapeHtml(String(p.verificada_em||''))+(p.expira_em?' · expira '+escapeHtml(String(p.expira_em)):'')+'<br>'+escapeHtml(String(p.aviso||''))+'</div>':'';
 alvo.innerHTML='<div><b>Dinheiro real: '+(d.pode_operar_real?'LIBERADO':'BLOQUEADO')+'</b> — pendências: '+(Number(d.pendencias)||0)+'. Conferir aqui NÃO ativa nada.</div>'+prova+itens+'<div class="warn">'+escapeHtml(String(d.aviso||''))+'</div>'}
 async function inicioConectar(){
 const vars={};const ex=$('iniExchange');if(ex&&ex.value)vars.TRADINGAGENTS_EXCHANGE=ex.value;

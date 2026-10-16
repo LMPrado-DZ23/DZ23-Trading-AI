@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import importlib
+import json
 import sys
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -172,6 +174,56 @@ def test_rotacao_da_chave_invalida_a_prova(tmp_path, monkeypatch):
     assert status["preparacao_leitura"]["valida"] is False
     assert _item(status, "permissões mínimas")["pronto"] is False
     assert _item(status, "identidade")["pronto"] is False
+
+
+def test_prova_de_leitura_expira_e_bloqueia_o_piloto(tmp_path, monkeypatch):
+    m, c = _app(tmp_path, monkeypatch)
+    c.post("/v1/config", headers=H, json={"vars": READ_CFG})
+    monkeypatch.setattr(m, "probe_read_only_account", lambda env: {
+        "exchange": "binance", "authenticated_read": True,
+        "read_methods": ["fetch_balance"],
+        "credential_fingerprint": read_only_credential_fingerprint(env),
+    })
+    assert c.post("/v1/live/preparacao-leitura", headers=H, json={
+        "conta": "real-principal", "confirmo_sem_trade": True,
+        "confirmo_sem_movimentacao": True}).status_code == 200
+
+    caminho = next((tmp_path / "desks").rglob("preparacao_real_leitura.json"))
+    prova = json.loads(caminho.read_text(encoding="utf-8"))
+    prova["verificada_em"] = (
+        datetime.now(timezone.utc) - timedelta(hours=25)).isoformat()
+    caminho.write_text(json.dumps(prova), encoding="utf-8")
+
+    status = c.get("/v1/live/status", headers=H).json()
+    assert status["preparacao_leitura"]["valida"] is False
+    assert "expirada" in status["preparacao_leitura"]["aviso"]
+    assert status["preparacao_leitura"]["expira_em"]
+    assert _item(status, "permissões mínimas")["pronto"] is False
+    assert _item(status, "identidade")["pronto"] is False
+
+
+@pytest.mark.parametrize("horario", [
+    "", "sem-data", "2026-10-16T00:00:00", "2999-01-01T00:00:00+00:00"])
+def test_prova_com_horario_ausente_invalido_ou_sem_fuso_falha_fechado(
+        tmp_path, monkeypatch, horario):
+    m, c = _app(tmp_path, monkeypatch)
+    c.post("/v1/config", headers=H, json={"vars": READ_CFG})
+    monkeypatch.setattr(m, "probe_read_only_account", lambda env: {
+        "exchange": "binance", "authenticated_read": True,
+        "read_methods": ["fetch_balance"],
+        "credential_fingerprint": read_only_credential_fingerprint(env),
+    })
+    assert c.post("/v1/live/preparacao-leitura", headers=H, json={
+        "conta": "real-principal", "confirmo_sem_trade": True,
+        "confirmo_sem_movimentacao": True}).status_code == 200
+    caminho = next((tmp_path / "desks").rglob("preparacao_real_leitura.json"))
+    prova = json.loads(caminho.read_text(encoding="utf-8"))
+    prova["verificada_em"] = horario
+    caminho.write_text(json.dumps(prova), encoding="utf-8")
+
+    status = c.get("/v1/live/status", headers=H).json()
+    assert status["preparacao_leitura"]["valida"] is False
+    assert _item(status, "permissões mínimas")["pronto"] is False
 
 
 def test_certificacao_amarra_estrategia_conta_risco_e_reconciliacao(
