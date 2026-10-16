@@ -249,6 +249,24 @@ class SupervisorDePiloto:
             "aviso": ("sala REAL apenas preparada; sem limites, sem "
                       "autorização e sem capacidade de enviar ordens"),
         }
+        # Compatibilidade com estados criados antes de existir a fila
+        # automática: se o MESMO contexto já possui pedido não encerrado, o
+        # encaminhamento reflete esse pedido em vez de regredir para
+        # "aguardando configuração" e bloquear um piloto já autorizado.
+        autorizacao = self._autorizacoes.get(agent_id)
+        mesmo_contexto = bool(
+            autorizacao
+            and self._chave_encaminhamento(
+                agent_id, dict(autorizacao.get("contexto") or {})) == chave)
+        if mesmo_contexto:
+            estado = EstadoDoPiloto(autorizacao["estado"])
+            if estado not in ENCERRADOS:
+                registro["authorization_id"] = autorizacao["authorization_id"]
+                registro["configurado_em"] = autorizacao["solicitado_em"]
+                registro["estado"] = (
+                    "configurado_aguardando_autorizacao"
+                    if estado is EstadoDoPiloto.AGUARDANDO_AUTORIZACAO
+                    else estado.value)
         self._encaminhamentos[chave] = registro
         self.salvar()
         return dict(registro)

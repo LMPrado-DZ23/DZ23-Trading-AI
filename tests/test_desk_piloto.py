@@ -195,6 +195,19 @@ class TestCadeiaObrigatoria:
         assert fila["estado"] == "configurado_aguardando_autorizacao"
         assert fila["authorization_id"] == sup2.de(AGENTE).authorization_id
 
+    def test_encaminhamento_tardio_nao_regride_piloto_ja_autorizado(self):
+        sup, _, _ = _supervisor_formado()
+        _solicitar(sup, contexto=self.CONTEXTO)
+        autorizado = sup.autorizar(AGENTE, gates=_gates_ok(), agora=AGORA)
+
+        fila = sup.encaminhar_formado(
+            AGENTE, estrategia="trend_following", contexto=self.CONTEXTO,
+            agora=AGORA + timedelta(minutes=1))
+
+        assert fila["authorization_id"] == autorizado.authorization_id
+        assert fila["estado"] == "piloto_autorizado"
+        assert AGENTE not in sup.bloqueios(agora=AGORA + timedelta(minutes=2))
+
     def test_sem_formatura_solicitar_recusa(self):
         esc = EscolaDeTraders(armazem=ArmazemFake())
         sup = SupervisorDePiloto(armazem=ArmazemFake(), escola=esc)

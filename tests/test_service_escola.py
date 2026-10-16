@@ -391,6 +391,30 @@ class TestMesaEscolaE2E:
         assert c.post("/v1/escola/avaliar", headers=H, json={
             "chave": self.CHAVE}).status_code == 422
 
+    def test_ciclo_detecta_formatura_e_encaminha_sem_rota_manual(
+            self, tmp_path, monkeypatch):
+        """A fila nasce no ciclo; abrir a tela ou chamar /avaliar não é requisito."""
+        c, m = _client(tmp_path, monkeypatch)
+        assert c.get("/v1/desk/status", headers=H).status_code == 200
+        self._semear_formada(m, estrategia="momentum", ativo="BTC/USDT")
+        antes = c.get("/v1/escola/pilotos", headers=H).json()
+        assert antes["encaminhamentos"] == []
+
+        ciclo = c.post("/v1/desk/cycle", headers=H)
+
+        assert ciclo.status_code == 200, ciclo.text
+        avaliacao = next(x for x in ciclo.json()["escola"]
+                         if x["estrategia"] == "momentum")
+        assert avaliacao["estado"] == "formada"
+        assert avaliacao["sala_real"]["estado"] == \
+            "aguardando_configuracao_do_proprietario"
+        depois = c.get("/v1/escola/pilotos", headers=H).json()
+        assert [x["agent_id"] for x in depois["encaminhamentos"]] == [
+            "trader-momentum"]
+        assert depois["autorizacoes"] == []
+        status = c.get("/v1/desk/status", headers=H).json()
+        assert status["escola"]["avaliacoes_automaticas"]
+
     def test_formado_e_encaminhado_mesmo_apos_reinicio_da_mesa(
             self, tmp_path, monkeypatch):
         """A fila REAL vem do estado durável, não do cache `_DESKS`."""

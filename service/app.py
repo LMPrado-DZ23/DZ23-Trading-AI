@@ -2546,6 +2546,82 @@ def _revisor_de_ia(tenant_id: str, cfg: dict):
     return revisar
 
 
+def _avaliar_escola_da_mesa(desk: dict, tenant_id: str, *,
+                            agora: datetime | None = None) -> list[dict]:
+    """Avalia evidência fechada da sala e encaminha formados.
+
+    É chamada pelo callback persistido de cada ciclo. Assim, a Escola não
+    depende de uma consulta manual do painel para avançar. Formar continua
+    significando apenas entrar na fila bloqueada da Sala REAL: nenhum limite,
+    autorização, broker ou ordem é criado aqui.
+    """
+    from tradingagents.desk.escola import EstadoDaEscola
+    from tradingagents.desk.piloto import SupervisorDePiloto
+    from tradingagents.desk.salas import (
+        ContextoDeCertificacao,
+        EscolaCentral,
+        EscolaDoPiloto,
+    )
+
+    sala = desk.get("sala")
+    armazem = desk.get("armazem")
+    orchestrator = desk.get("orchestrator")
+    if sala is None or armazem is None or orchestrator is None:
+        return []
+    desfechos = list(getattr(sala, "desfechos", ()) or ())
+    alunos = sorted({
+        (str(d.estrategia), str(d.versao or "1"), str(d.instrumento),
+         str(d.horizonte or "1h"))
+        for d in desfechos
+        if d.estrategia and d.instrumento
+    })
+    if not alunos:
+        return []
+
+    central = EscolaCentral(armazem=armazem, tenant_id=tenant_id)
+    resultados = []
+    for estrategia, versao, ativo, horizonte in alunos:
+        av = central.avaliar(
+            sala=sala, estrategia=estrategia, versao=versao,
+            ativo=ativo, horizonte=horizonte, agora=agora)
+        encaminhamento = None
+        if av.estado is EstadoDaEscola.FORMADA:
+            candidatos = [
+                t for t in orchestrator.traders
+                if t.strategy == estrategia
+                and str(t.spec.version) == versao
+            ]
+            if len(candidatos) == 1:
+                contexto = ContextoDeCertificacao(
+                    corretora=sala.contexto.corretora,
+                    conta=sala.contexto.conta,
+                    mercado=sala.contexto.mercado,
+                    modo=sala.contexto.modo,
+                    ativo=ativo, horizonte=horizonte,
+                    payout=sala.contexto.payout)
+                supervisor = SupervisorDePiloto(
+                    armazem, tenant_id=tenant_id,
+                    escola=EscolaDoPiloto(central, contexto))
+                encaminhamento = supervisor.encaminhar_formado(
+                    candidatos[0].spec.agent_id,
+                    estrategia=estrategia, versao=versao,
+                    contexto=contexto.como_dict(), agora=agora)
+            else:
+                encaminhamento = {
+                    "estado": "nao_encaminhado",
+                    "motivo": ("estratégia sem agente único na mesa; nada "
+                               "foi liberado automaticamente"),
+                }
+        resultados.append({
+            "estrategia": estrategia, "versao": versao,
+            "ativo": ativo, "horizonte": horizonte,
+            "estado": av.estado.value, "motivo": av.motivo,
+            "amostras": av.amostras,
+            "sala_real": encaminhamento,
+        })
+    return resultados
+
+
 def _desk_boot(tenant_id: str) -> dict:
     from decimal import Decimal
 
@@ -2817,6 +2893,7 @@ def _desk_boot(tenant_id: str) -> dict:
             "feed_kind": feed_kind, "broker_mode": broker_mode,
             "modo": modo, "posse": posse, "sala": sala_da_mesa,
             "sala_motivo": sala_motivo, "avisos_vigia": _avisos_vigia,
+            "escola_avaliacoes": [],
             "scheduler": None, "estagios_antes": estagios_antes,
             "persistir_estagios": _persistir_estagios,
             "ia_modelo": cfg.get("TRADINGAGENTS_LLM_PROVIDER") or "",
@@ -2839,6 +2916,19 @@ def _desk_boot(tenant_id: str) -> dict:
 
     def _record(out):
         _persistir_oms()
+        # Escola automática: operações FECHADAS do ciclo alimentam a régua
+        # contextual e um formando entra imediatamente na Sala REAL bloqueada.
+        # Falha da Escola é observável, mas nunca derruba nem libera a mesa.
+        try:
+            avaliacoes = _avaliar_escola_da_mesa(desk, tenant_id)
+            desk["escola_avaliacoes"] = avaliacoes
+            out["escola"] = avaliacoes
+        except Exception as exc:
+            aviso = ("avaliação automática da Escola falhou: "
+                     f"{type(exc).__name__}: {exc}")[:240]
+            _avisos_vigia.append(aviso)
+            del _avisos_vigia[:-10]
+            out["escola_erro"] = aviso
         # A cada ciclo, avalia e ENTREGA alertas pela fila durável — é o que
         # acorda o dono sem ele precisar abrir o painel. A entrega tem
         # dedupe, backoff e rate limit; falha não derruba o ciclo.
@@ -3101,6 +3191,7 @@ def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
         "decisao": _decisao_da_mesa(d),
         "escola": {"sala": (d["sala"].resumo() if d.get("sala") else None),
                    "motivo": d.get("sala_motivo", ""),
+                   "avaliacoes_automaticas": d.get("escola_avaliacoes", []),
                    "avisos_vigia": d.get("avisos_vigia", [])[-5:]},
         "durabilidade": d["armazem"].estado() if d.get("armazem") else {},
         "fonte": {"dados": d["feed_kind"], "corretora": d["broker_mode"],
@@ -3121,6 +3212,7 @@ def desk_cycle(request: Request, _=Depends(auth), __=Depends(require_plan)):
         return {"ok": True, "modo": "observador",
                 "resumo": out.get("resumo", ""),
                 "propostas": out.get("propostas", []),
+                "escola": [],
                 "ordens": [],       # explícito: nada foi enviado
                 "encerradas": [],   # explícito: nenhuma saída executada
                 "descartados": out.get("descartados", []),
@@ -3131,6 +3223,7 @@ def desk_cycle(request: Request, _=Depends(auth), __=Depends(require_plan)):
     return {"ok": True, "resumo": out.get("resumo", ""),
             "ordens": out.get("ordens", []),
             "encerradas": out.get("encerradas", []),
+            "escola": out.get("escola", []),
             "descartados": out.get("descartados", []),
             "vetos": out.get("vetos", []), "abstencoes": out.get("abstencoes", []),
             "erros": out.get("erros", [])}

@@ -132,6 +132,15 @@ bloqueada**. O contexto que certificou a estratégia permanece preservado
 (corretora, conta PAPER, mercado, ativo e horizonte), separado da conta REAL
 de destino. Essa separação evita fingir que a prova ocorreu com dinheiro real.
 
+A avaliação da Escola acontece automaticamente depois de cada ciclo persistido
+da mesa. Portanto, a passagem para essa fila não depende de abrir o painel nem
+de chamar manualmente a rota de avaliação. Se a avaliação falhar, a falha fica
+visível no estado da mesa, o ciclo financeiro não ganha permissão adicional e
+nenhum agente é liberado. Se já existir uma autorização válida para o mesmo
+agente e contexto, o encaminhamento automático preserva esse estado em vez de
+fazê-lo regredir; autorizações encerradas ou de outro contexto não são
+reaproveitadas.
+
 Ao configurar os limites pelo painel, o destino só pode mudar da conta PAPER
 para uma conta REAL quando:
 
