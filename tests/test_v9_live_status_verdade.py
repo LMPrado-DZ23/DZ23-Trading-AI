@@ -135,13 +135,16 @@ class TestTestnetDeVerdade:
         _com_ordem(m, external_id=external_id)
         assert _item(_status(c), "testnet")["pronto"] is False
 
-    def test_ordem_preenchida_em_corretora_externa_conta(
+    def test_ordem_externa_sem_reconciliacao_duravel_nao_conta(
             self, tmp_path, monkeypatch):
-        """Controle: id opaco de exchange (testnet — a única corretora
-        externa construível com LIVE selado) é evidência verdadeira."""
+        """Um id opaco isolado não prova corretora nem reconciliação.
+
+        A contraprova positiva agora passa pela rota real de reconciliação e
+        fica persistida em ``test_testnet_readiness_proof.py``.
+        """
         m, c = _app(tmp_path, monkeypatch)
         _com_ordem(m, external_id="4380219706")   # id real de exchange
-        assert _item(_status(c), "testnet")["pronto"] is True
+        assert _item(_status(c), "testnet")["pronto"] is False
 
     def test_fill_parcial_nao_conta(self, tmp_path, monkeypatch):
         m, c = _app(tmp_path, monkeypatch)

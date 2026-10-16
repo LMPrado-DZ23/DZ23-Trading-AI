@@ -6,6 +6,7 @@ cada job — sem redeploy, sem tocar em env no Coolify. Segredos nunca voltam
 inteiros ao navegador (exibição mascarada)."""
 import asyncio
 import contextlib
+import hashlib
 import hmac
 import ipaddress
 import json
@@ -35,6 +36,7 @@ from tradingagents.brokers.ccxt_bridge import (
     BrokerSecurityError,
     probe_read_only_account,
     read_only_credential_fingerprint,
+    testnet_credential_fingerprint,
 )
 from tradingagents.desk.models import AgentStage
 from tradingagents.desk.modo import EstadoDaMesa, ModoBloqueado
@@ -4157,7 +4159,7 @@ def _teto_positivo(cfg: dict, chave: str) -> bool:
     return valor.is_finite() and valor > 0
 
 
-def _fill_de_corretora_externa(d) -> bool:
+def _fill_de_corretora_externa(d):
     """Ordem PREENCHIDA com id de exchange de verdade.
 
     O simulador local grava id `paper-*` (PaperBroker); o id do
@@ -4167,14 +4169,110 @@ def _fill_de_corretora_externa(d) -> bool:
     de "já operou em testnet". Registro sem id, id do simulador ou estado
     desconhecido NÃO conta."""
     if not d:
-        return False
+        return None
     for r in d["coordinator"].orders.values():
         if r.state.value != "filled":
             continue
         externo = str(getattr(r, "external_id", "") or "")
         if externo and not externo.startswith("paper-"):
-            return True
-    return False
+            return r
+    return None
+
+
+_CHAVE_HOMOLOGACAO_TESTNET = "homologacao_testnet"
+_SCHEMA_HOMOLOGACAO_TESTNET = "dz23.homologacao-testnet/1"
+
+
+def _env_testnet(cfg: dict) -> dict:
+    return {k: cfg.get(k, "") for k in (
+        "TRADINGAGENTS_EXCHANGE", "EXCHANGE_API_KEY",
+        "EXCHANGE_API_SECRET", "EXCHANGE_API_PASSWORD", "EXCHANGE_API_UID")}
+
+
+def _prova_testnet(request: Request, cfg: dict) -> tuple[dict, bool]:
+    """Lê a homologação durável da corretora atualmente selecionada."""
+    exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    esc = _escola_of(request)
+    provas = esc["armazem"].carregar(
+        esc["tenant_id"], _CHAVE_HOMOLOGACAO_TESTNET)
+    if not isinstance(provas, dict):
+        provas = {}
+    prova = provas.get(exchange)
+    valida = bool(
+        isinstance(prova, dict)
+        and prova.get("schema") == _SCHEMA_HOMOLOGACAO_TESTNET
+        and str(prova.get("exchange") or "").strip().lower() == exchange
+        and prova.get("filled_external_order") is True
+        and prova.get("reconciled") is True
+        and str(prova.get("verified_at") or "").strip())
+    if not isinstance(prova, dict):
+        return ({"valida": False,
+                 "motivo": f"sem prova TESTNET reconciliada para {exchange}"},
+                False)
+    return ({
+        "valida": valida,
+        "exchange": prova.get("exchange"),
+        "verified_at": prova.get("verified_at"),
+        "mode": "testnet",
+        "filled_external_order": bool(prova.get("filled_external_order")),
+        "reconciled": bool(prova.get("reconciled")),
+        "motivo": ("ordem TESTNET preenchida e reconciliada na mesma corretora"
+                   if valida else "prova TESTNET inválida ou incompatível"),
+    }, valida)
+
+
+def _registrar_prova_testnet(request: Request, d: dict,
+                             resultado: dict) -> dict | None:
+    """Persiste prova somente após fill externo e reconciliação segura.
+
+    A prova é vinculada à corretora; ids de ordem e credenciais entram apenas
+    como SHA-256 e nunca voltam pela API. Trocar a configuração para LIVE pode
+    destruir a mesa em memória sem apagar a homologação já concluída.
+    """
+    if resultado.get("seguro") is not True:
+        return None
+    cfg = load_cfg(request_tenant(request))
+    exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    if (str(d.get("broker_mode") or "").lower() != "testnet"
+            or str(cfg.get("TRADINGAGENTS_BROKER_MODE") or "").lower()
+            != "testnet"):
+        return None
+    coord = d.get("coordinator")
+    broker = getattr(coord, "broker", None)
+    bridge = getattr(broker, "bridge", None)
+    if (getattr(bridge, "mode", None) != "testnet"
+            or getattr(bridge, "exchange_name", None) != exchange):
+        return None
+    fill = _fill_de_corretora_externa(d)
+    if fill is None:
+        return None
+    external_id = str(getattr(fill, "external_id", "") or "")
+    agora = datetime.now(timezone.utc).isoformat()
+    prova = {
+        "schema": _SCHEMA_HOMOLOGACAO_TESTNET,
+        "exchange": exchange,
+        "mode": "testnet",
+        "filled_external_order": True,
+        "reconciled": True,
+        "verified_at": agora,
+        "credential_fingerprint": testnet_credential_fingerprint(
+            _env_testnet(cfg)),
+        "external_order_fingerprint": hashlib.sha256(
+            f"{exchange}\0{external_id}".encode()).hexdigest(),
+    }
+    esc = _escola_of(request)
+    provas = esc["armazem"].carregar(
+        esc["tenant_id"], _CHAVE_HOMOLOGACAO_TESTNET)
+    if not isinstance(provas, dict):
+        provas = {}
+    provas[exchange] = prova
+    esc["armazem"].salvar(
+        esc["tenant_id"], _CHAVE_HOMOLOGACAO_TESTNET, provas)
+    return {
+        "valida": True, "exchange": exchange, "mode": "testnet",
+        "filled_external_order": True, "reconciled": True,
+        "verified_at": agora,
+    }
 
 
 _CHAVE_PREPARACAO_REAL = "preparacao_real_leitura"
@@ -4366,8 +4464,8 @@ def live_status(request: Request, _=Depends(auth)):
     """Diz, sem rodeio, se este inquilino pode operar dinheiro real e o que
     falta para poder."""
     cfg = load_cfg(request_tenant(request))
-    d = _DESKS.get(request_tenant(request))
     prova_leitura, prova_valida = _prova_leitura_real(request, cfg)
+    prova_testnet, prova_testnet_valida = _prova_testnet(request, cfg)
     acesso_leitura_ok = bool(
         prova_valida and prova_leitura.get("authenticated_read"))
     permissoes_minimas_ok = bool(
@@ -4416,10 +4514,11 @@ def live_status(request: Request, _=Depends(auth)):
          "pronto": (cfg.get("TRADINGAGENTS_BROKER_MODE") or "") == "live",
          "acao": "Troque o modo da corretora para LIVE"},
         {"item": "Já operou em testnet",
-         "pronto": _fill_de_corretora_externa(d),
+         "pronto": prova_testnet_valida,
          "acao": ("Rode a mesa com a corretora TESTNET (CCXT) e veja uma ordem "
-                  "preenchida de verdade — ordem PAPER (simulada neste PC) "
-                  "não conta")},
+                  "preenchida de verdade; depois reconcilie. A prova fica "
+                  "vinculada à corretora — PAPER e teste em outra corretora "
+                  "não contam")},
         {"item": "Reconciliação financeira atual sem pendências",
          "pronto": reconciliacao["seguro"],
          "acao": ("Reconcilie ordens, posições, caixa e livro-razão; relatório "
@@ -4441,6 +4540,7 @@ def live_status(request: Request, _=Depends(auth)):
     return {"pode_operar_real": not faltam, "checklist": checklist,
             "pendencias": len(faltam),
             "preparacao_leitura": _prova_publica(prova_leitura, prova_valida),
+            "homologacao_testnet": prova_testnet,
             "reconciliacao": reconciliacao,
             "certificacoes_estrategia_conta": certificacoes,
             "pilotos_autorizados_no_contexto": [
@@ -5398,6 +5498,9 @@ def desk_reconciliar(request: Request, _=Depends(auth)):
         consultar_ordens_abertas=(consultar_ordens_abertas if tem_abertas
                                   else None),
         consultar_caixa=consultar_caixa if tem_caixa else None)
+    prova_testnet = _registrar_prova_testnet(request, d, resultado)
     return {**resultado,
+            **({"homologacao_testnet": prova_testnet}
+               if prova_testnet is not None else {}),
             "acao": ("portão liberado: pode operar" if resultado["seguro"] else
                      "confira as divergências na corretora antes de operar")}

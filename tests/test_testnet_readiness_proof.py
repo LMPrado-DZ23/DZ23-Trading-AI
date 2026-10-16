@@ -1,0 +1,147 @@
+"""Prova TESTNET durável e vinculada à corretora para o checklist REAL."""
+from __future__ import annotations
+
+import importlib
+from types import SimpleNamespace as NS
+
+from tradingagents.desk.execution import OrderState
+
+H = {"Authorization": "Bearer s3nh4"}
+
+
+def _app(tmp_path, monkeypatch):
+    monkeypatch.setenv("ACCESS_PASSWORD", "s3nh4")
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    import service.app as m
+    importlib.reload(m)
+    m._FAILS.clear()
+    m._DESKS.clear()
+    from fastapi.testclient import TestClient
+    return m, TestClient(m.app)
+
+
+def _item(status, trecho):
+    return next(i for i in status["checklist"]
+                if trecho.lower() in i["item"].lower())
+
+
+class _BrokerTestnet:
+    def __init__(self, exchange="binance"):
+        self.bridge = NS(mode="testnet", exchange_name=exchange)
+
+    def fetch_order_by_client_id(self, _client_order_id):
+        return None
+
+    def fetch_positions(self):
+        return {}
+
+    def fetch_order_fills(self, _client_order_id, _exchange_order_id=""):
+        return []
+
+    def fetch_open_orders(self):
+        return []
+
+    def fetch_cash(self):
+        return {"USDT": "1000"}
+
+
+class _Coordenador:
+    def __init__(self, *, exchange="binance", seguro=True,
+                 external_id="4380219706", estado=OrderState.FILLED):
+        self.broker = _BrokerTestnet(exchange)
+        self.orders = {"ord-1": NS(
+            state=estado, external_id=external_id,
+            terminal_em="2026-10-15T00:00:00+00:00")}
+        self._seguro = seguro
+
+    def reconciliar(self, *_args, **_kwargs):
+        return {"seguro": self._seguro,
+                "pendencias": [] if self._seguro else ["divergência"]}
+
+
+def _configurar_testnet(c, exchange="binance"):
+    r = c.post("/v1/config", headers=H, json={"vars": {
+        "TRADINGAGENTS_DESK_BROKER": "ccxt",
+        "TRADINGAGENTS_EXCHANGE": exchange,
+        "TRADINGAGENTS_BROKER_MODE": "testnet",
+        "EXCHANGE_API_KEY": "test-key",
+        "EXCHANGE_API_SECRET": "test-secret",
+    }})
+    assert r.status_code == 200, r.text
+
+
+def test_fill_reconciliado_vira_prova_duravel_apos_trocar_para_live(
+        tmp_path, monkeypatch):
+    m, c = _app(tmp_path, monkeypatch)
+    _configurar_testnet(c)
+    m._DESKS["legacy"] = {
+        "coordinator": _Coordenador(), "broker_mode": "testnet"}
+
+    r = c.post("/v1/desk/reconciliar", headers=H)
+    assert r.status_code == 200, r.text
+    assert r.json()["homologacao_testnet"]["exchange"] == "binance"
+    assert "4380219706" not in r.text
+    assert "test-secret" not in r.text
+    arquivo = next((tmp_path / "desks").rglob("homologacao_testnet.json"))
+    persistido = arquivo.read_text(encoding="utf-8")
+    assert "4380219706" not in persistido
+    assert "test-key" not in persistido and "test-secret" not in persistido
+
+    # Salvar LIVE reconstrói a mesa; a prova não pode desaparecer junto com
+    # o objeto em memória que continha o fill TESTNET.
+    r = c.post("/v1/config", headers=H, json={"vars": {
+        "TRADINGAGENTS_BROKER_MODE": "live"}})
+    assert r.status_code == 200, r.text
+    assert "legacy" not in m._DESKS
+    status = c.get("/v1/live/status", headers=H).json()
+    assert _item(status, "testnet")["pronto"] is True
+    assert status["homologacao_testnet"]["valida"] is True
+    assert status["homologacao_testnet"]["exchange"] == "binance"
+
+
+def test_prova_de_uma_corretora_nao_homologa_outra(tmp_path, monkeypatch):
+    m, c = _app(tmp_path, monkeypatch)
+    _configurar_testnet(c, "binance")
+    m._DESKS["legacy"] = {
+        "coordinator": _Coordenador(exchange="binance"),
+        "broker_mode": "testnet"}
+    assert c.post("/v1/desk/reconciliar", headers=H).status_code == 200
+
+    c.post("/v1/config", headers=H, json={"vars": {
+        "TRADINGAGENTS_EXCHANGE": "okx",
+        "TRADINGAGENTS_BROKER_MODE": "live"}})
+    status = c.get("/v1/live/status", headers=H).json()
+    assert _item(status, "testnet")["pronto"] is False
+    assert status["homologacao_testnet"]["valida"] is False
+    assert status["homologacao_testnet"]["motivo"] == (
+        "sem prova TESTNET reconciliada para okx")
+
+
+def test_reconciliacao_insegura_nao_grava_prova(tmp_path, monkeypatch):
+    m, c = _app(tmp_path, monkeypatch)
+    _configurar_testnet(c)
+    m._DESKS["legacy"] = {
+        "coordinator": _Coordenador(seguro=False),
+        "broker_mode": "testnet"}
+    r = c.post("/v1/desk/reconciliar", headers=H)
+    assert r.status_code == 200
+    assert "homologacao_testnet" not in r.json()
+    assert _item(c.get("/v1/live/status", headers=H).json(),
+                 "testnet")["pronto"] is False
+
+
+def test_fill_paper_ou_parcial_nao_grava_prova(tmp_path, monkeypatch):
+    m, c = _app(tmp_path, monkeypatch)
+    _configurar_testnet(c)
+    for external_id, estado in (
+            ("paper-1", OrderState.FILLED),
+            ("4380219706", OrderState.PARTIALLY_FILLED)):
+        m._DESKS["legacy"] = {
+            "coordinator": _Coordenador(
+                external_id=external_id, estado=estado),
+            "broker_mode": "testnet"}
+        r = c.post("/v1/desk/reconciliar", headers=H)
+        assert r.status_code == 200
+        assert "homologacao_testnet" not in r.json()
+

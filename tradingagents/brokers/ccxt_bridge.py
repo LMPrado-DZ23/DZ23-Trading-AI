@@ -62,6 +62,22 @@ def read_only_credential_fingerprint(env: dict) -> str:
     return hashlib.sha256("\0".join(partes).encode()).hexdigest()
 
 
+def testnet_credential_fingerprint(env: dict) -> str:
+    """Identifica a credencial usada na homologação TESTNET sem guardá-la.
+
+    A impressão é evidência de qual conjunto de credenciais produziu a prova;
+    ela não é reutilizada para autenticação e não habilita qualquer envio.
+    """
+    partes = [
+        (env.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower(),
+        env.get("EXCHANGE_API_KEY") or "",
+        env.get("EXCHANGE_API_SECRET") or "",
+        env.get("EXCHANGE_API_PASSWORD") or "",
+        env.get("EXCHANGE_API_UID") or "",
+    ]
+    return hashlib.sha256("\0".join(partes).encode()).hexdigest()
+
+
 def probe_read_only_account(env: dict) -> dict:
     """Prova autenticação REAL usando exclusivamente métodos de leitura.
 

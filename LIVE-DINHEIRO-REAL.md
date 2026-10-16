@@ -121,6 +121,11 @@ com a ação exata de cada item que falta.
 
 ## Ordem recomendada (não pule)
 1. Rode em **testnet** até ver uma ordem preenchida e reconciliada.
+   Ao concluir a reconciliação segura, o DZ23 grava uma prova durável vinculada
+   à corretora. Assim, trocar a configuração de TESTNET para LIVE não apaga a
+   homologação. Um fill PAPER, parcial, não reconciliado ou feito em outra
+   corretora não satisfaz o checklist. Credenciais e o identificador externo da
+   ordem entram na prova apenas como hash e não são devolvidos pelo painel.
 2. Confira a contabilidade fechando (patrimônio e atribuição por trader).
 3. Comece com teto **baixo** — por exemplo, 1% do que você imagina.
 4. Acompanhe o primeiro dia inteiro antes de aumentar qualquer limite.
