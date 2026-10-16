@@ -10,11 +10,11 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
 | Gate | Prova exigida | Estado no HEAD da branch |
 |---|---|---|
-| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.552 passaram localmente; CI do novo SHA pendente |
-| lint | `ruff check .` | verde localmente; CI do novo SHA pendente |
-| instalação limpa | job CI dedicado | verde no PR #14 até `205edaa` |
-| dependências/segredos/licenças/SBOM | jobs CI dedicados | verdes no PR #14 até `205edaa` |
-| PostgreSQL e ARM64 | jobs CI dedicados | verdes no PR #14 até `205edaa` |
+| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.591 passaram localmente; a matriz precisa estar verde no HEAD publicado do PR #14 |
+| lint | `ruff check .` | verde localmente; o job do PR precisa corresponder ao HEAD |
+| instalação limpa | job CI dedicado | exige job verde no HEAD publicado do PR #14 |
+| dependências/segredos/licenças/SBOM | jobs CI dedicados | exigem jobs verdes no HEAD publicado do PR #14 |
+| PostgreSQL e ARM64 | jobs CI dedicados | exigem jobs verdes no HEAD publicado do PR #14 |
 | LIVE fechado | testes + `/v1/operational-readiness` | `MESA_LIVE_LIBERADA=False` |
 | rollback | backup local + restore isolado + prova recente | implementado; ensaio no host ainda externo |
 

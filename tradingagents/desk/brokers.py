@@ -88,6 +88,10 @@ class CCXTDeskBroker:
         self.bridge = CCXTBridge(env=env, journal_path=journal_path)
         self.final_state = final_state
         self.mode = self.bridge.mode
+        self.testnet_exchange = (
+            self.bridge.exchange_name if self.mode == "testnet" else "")
+        self.testnet_credential_fingerprint = (
+            self.bridge.credential_fingerprint if self.mode == "testnet" else "")
         self.submitted: dict[str, dict] = {}
 
     # ------------------------------------------------ consultas canônicas
@@ -399,6 +403,7 @@ def build_desk_broker(cfg: dict, *, final_state: dict, journal_path: str | None 
            ("TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
             "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET",
             "EXCHANGE_API_PASSWORD", "EXCHANGE_API_UID",
+            "EXCHANGE_CREDENTIAL_BOUND_AT",
             "LIVE_TRADING_CONFIRM",
             "LIVE_MAX_ORDER_VALUE", "LIVE_MAX_DAILY_LOSS")}
     broker = CCXTDeskBroker(env, final_state=final_state, journal_path=journal_path)

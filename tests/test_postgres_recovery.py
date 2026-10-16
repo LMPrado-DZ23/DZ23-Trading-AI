@@ -162,3 +162,8 @@ def test_pg_tool_keeps_password_out_of_process_arguments(monkeypatch):
     assert captured["env"]["PGPASSWORD"] == secret
     assert captured["env"]["PGHOST"] == "db.example"
     assert "UNRELATED_API_KEY" not in captured["env"]
+
+
+def test_manifesto_ordena_json_com_collation_deterministica():
+    source = recovery.Path(recovery.__file__).read_text(encoding="utf-8")
+    assert 'ORDER BY row_to_json(t)::text COLLATE \\"C\\"' in source

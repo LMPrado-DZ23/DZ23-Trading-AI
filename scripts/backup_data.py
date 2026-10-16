@@ -4,9 +4,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
-from tradingagents.desk.backup import create_backup, restore_backup
+from tradingagents.desk.backup import (
+    BackupError,
+    create_backup,
+    inspect_backup,
+    restore_backup,
+)
 
 
 def backup(data_dir: Path, destination: Path) -> Path:
@@ -30,18 +36,21 @@ def main(argv: list[str] | None = None) -> int:
                         help="permite substituir estado existente no restore")
     args = parser.parse_args(argv)
 
-    if args.action == "inspect":
-        from tradingagents.desk.backup import inspect_backup
-        print(json.dumps(inspect_backup(args.data_dir), ensure_ascii=False,
-                         indent=2, sort_keys=True))
-        return 0
-    if args.archive is None:
-        parser.error("archive é obrigatório para backup/restore")
-    if args.action == "backup":
-        result = create_backup(args.data_dir, args.archive)
-    else:
-        result = restore_backup(args.archive, args.data_dir,
-                                overwrite=args.overwrite)
+    try:
+        if args.action == "inspect":
+            print(json.dumps(inspect_backup(args.data_dir), ensure_ascii=False,
+                             indent=2, sort_keys=True))
+            return 0
+        if args.archive is None:
+            parser.error("archive é obrigatório para backup/restore")
+        if args.action == "backup":
+            result = create_backup(args.data_dir, args.archive)
+        else:
+            result = restore_backup(args.archive, args.data_dir,
+                                    overwrite=args.overwrite)
+    except BackupError as exc:
+        print(f"backup recusado: {exc}", file=sys.stderr)
+        return 2
     print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
     return 0
 

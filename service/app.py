@@ -209,6 +209,7 @@ ALLOWED_KEYS = [
     "TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
     "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET", "EXCHANGE_API_PASSWORD",
     "EXCHANGE_API_UID", "EXCHANGE_CREDENTIAL_EXCHANGE",
+    "EXCHANGE_CREDENTIAL_BOUND_AT",
     "REAL_READ_ONLY_API_KEY", "REAL_READ_ONLY_API_SECRET",
     "REAL_READ_ONLY_API_PASSWORD", "REAL_READ_ONLY_API_UID",
     "REAL_READ_ONLY_EXCHANGE",
@@ -1216,10 +1217,16 @@ async def set_cfg(req: Request, _=Depends(auth)):
     body = await _json_body(req)
     tenant_id = request_tenant(req)
     cfg = load_cfg(tenant_id)
+    fingerprint_execucao_anterior = testnet_credential_fingerprint({
+        k: cfg.get(k, "") for k in (
+            "TRADINGAGENTS_EXCHANGE", "EXCHANGE_API_KEY",
+            "EXCHANGE_API_SECRET", "EXCHANGE_API_PASSWORD",
+            "EXCHANGE_API_UID")})
     saved, changed = [], []
     vars_recebidas = body.get("vars") or {}
     vinculos_gerenciados = {
-        "EXCHANGE_CREDENTIAL_EXCHANGE", "REAL_READ_ONLY_EXCHANGE"}
+        "EXCHANGE_CREDENTIAL_EXCHANGE", "EXCHANGE_CREDENTIAL_BOUND_AT",
+        "REAL_READ_ONLY_EXCHANGE"}
     for k, v in vars_recebidas.items():
         if (k in ALLOWED_KEYS and k not in vinculos_gerenciados
                 and isinstance(v, str) and v.strip()):
@@ -1273,6 +1280,28 @@ async def set_cfg(req: Request, _=Depends(auth)):
         if str(cfg.get(k) or "").strip():
             changed.append(k)
         cfg.pop(k, None)
+    exchange_execucao = str(
+        cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    credencial_execucao_completa = bool(
+        str(cfg.get("EXCHANGE_API_KEY") or "").strip()
+        and str(cfg.get("EXCHANGE_API_SECRET") or "").strip()
+        and str(cfg.get("EXCHANGE_CREDENTIAL_EXCHANGE") or "").strip().lower()
+        == exchange_execucao)
+    fingerprint_execucao_atual = testnet_credential_fingerprint({
+        k: cfg.get(k, "") for k in (
+            "TRADINGAGENTS_EXCHANGE", "EXCHANGE_API_KEY",
+            "EXCHANGE_API_SECRET", "EXCHANGE_API_PASSWORD",
+            "EXCHANGE_API_UID")})
+    if credencial_execucao_completa:
+        if (fingerprint_execucao_atual != fingerprint_execucao_anterior
+                or not _horario_testnet_valido(
+                    cfg.get("EXCHANGE_CREDENTIAL_BOUND_AT"))):
+            cfg["EXCHANGE_CREDENTIAL_BOUND_AT"] = (
+                datetime.now(timezone.utc).isoformat())
+            saved.append("EXCHANGE_CREDENTIAL_BOUND_AT")
+            changed.append("EXCHANGE_CREDENTIAL_BOUND_AT")
+    elif cfg.pop("EXCHANGE_CREDENTIAL_BOUND_AT", None) is not None:
+        changed.append("EXCHANGE_CREDENTIAL_BOUND_AT")
     if not saved and not pedidos:
         raise HTTPException(400, "nada para salvar")
     save_cfg(cfg, tenant_id)
@@ -4441,7 +4470,9 @@ def _credenciais_execucao_prontas(cfg: dict) -> tuple[bool, list[str]]:
     return not faltando, faltando
 
 
-def _fill_de_corretora_externa(d):
+def _fill_de_corretora_externa(d, *, exchange: str,
+                               credential_fingerprint: str,
+                               credential_bound_at: str):
     """Ordem PREENCHIDA com id de exchange de verdade.
 
     O simulador local grava id `paper-*` (PaperBroker); o id do
@@ -4452,12 +4483,40 @@ def _fill_de_corretora_externa(d):
     desconhecido NÃO conta."""
     if not d:
         return None
+    try:
+        vinculado_em = datetime.fromisoformat(
+            str(credential_bound_at or "").replace("Z", "+00:00"))
+        if vinculado_em.tzinfo is None:
+            return None
+        vinculado_em = vinculado_em.astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        return None
     for r in d["coordinator"].orders.values():
         if r.state.value != "filled":
             continue
         externo = str(getattr(r, "external_id", "") or "")
-        if externo and not externo.startswith("paper-"):
-            return r
+        if not externo or externo.startswith("paper-"):
+            continue
+        origem_exchange = str(
+            getattr(r, "testnet_exchange", "") or "").strip().lower()
+        origem_fingerprint = str(
+            getattr(r, "testnet_credential_fingerprint", "") or "")
+        if (origem_exchange != exchange
+                or not _fingerprint_sha256_valido(origem_fingerprint)
+                or not hmac.compare_digest(
+                    origem_fingerprint, credential_fingerprint)):
+            continue
+        terminal = str(getattr(r, "terminal_em", "") or "")
+        if not _horario_testnet_valido(terminal):
+            continue
+        try:
+            terminal_em = datetime.fromisoformat(
+                terminal.replace("Z", "+00:00")).astimezone(timezone.utc)
+        except (TypeError, ValueError):
+            continue
+        if terminal_em <= vinculado_em:
+            continue
+        return r
     return None
 
 
@@ -4569,7 +4628,12 @@ def _registrar_prova_testnet(request: Request, d: dict,
     if (getattr(bridge, "mode", None) != "testnet"
             or getattr(bridge, "exchange_name", None) != exchange):
         return None
-    fill = _fill_de_corretora_externa(d)
+    fingerprint_atual = testnet_credential_fingerprint(_env_testnet(cfg))
+    fill = _fill_de_corretora_externa(
+        d, exchange=exchange,
+        credential_fingerprint=fingerprint_atual,
+        credential_bound_at=str(
+            cfg.get("EXCHANGE_CREDENTIAL_BOUND_AT") or ""))
     if fill is None:
         return None
     external_id = str(getattr(fill, "external_id", "") or "")
@@ -4581,8 +4645,7 @@ def _registrar_prova_testnet(request: Request, d: dict,
         "filled_external_order": True,
         "reconciled": True,
         "verified_at": agora,
-        "credential_fingerprint": testnet_credential_fingerprint(
-            _env_testnet(cfg)),
+        "credential_fingerprint": fingerprint_atual,
         "external_order_fingerprint": hashlib.sha256(
             f"{exchange}\0{external_id}".encode()).hexdigest(),
     }

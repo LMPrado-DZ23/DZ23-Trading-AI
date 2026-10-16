@@ -49,11 +49,13 @@ def _resultado_prova(env, *, methods=None):
 
 class _ExchangeSomenteLeitura:
     chamadas: list[str] = []
+    ultima_config: dict = {}
     requiredCredentials = {"apiKey": True, "secret": True}
     has = {"fetchOpenOrders": True, "fetchAccounts": True}
 
     def __init__(self, config):
         self.config = config
+        type(self).ultima_config = config
 
     def fetch_balance(self):
         self.chamadas.append("fetch_balance")
@@ -220,6 +222,10 @@ def test_probe_chama_exclusivamente_metodos_de_leitura(monkeypatch):
     assert "read-secret" not in str(resultado)
     assert BROKER_ACCOUNT_ID not in str(resultado)
     assert resultado["broker_identity_verified"] is True
+    assert _ExchangeSomenteLeitura.ultima_config.get("options") == {
+        "warnOnFetchOpenOrdersWithoutSymbol": False,
+        "fetchOpenOrders": {"warnWithoutSymbol": False},
+    }
 
 
 def test_probe_recusa_identidade_de_outra_conta(monkeypatch):

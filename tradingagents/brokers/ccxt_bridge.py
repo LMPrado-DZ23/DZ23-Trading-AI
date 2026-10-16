@@ -122,6 +122,10 @@ def probe_read_only_account(env: dict) -> dict:
     exchange = getattr(ccxt, ccxt_id)({
         "apiKey": api_key, "secret": api_secret,
         "password": password, "uid": uid, "enableRateLimit": True,
+        "options": {
+            "warnOnFetchOpenOrdersWithoutSymbol": False,
+            "fetchOpenOrders": {"warnWithoutSymbol": False},
+        },
     })
     requisitos = getattr(exchange, "requiredCredentials", {}) or {}
     valores = {"apiKey": api_key, "secret": api_secret,
@@ -207,6 +211,7 @@ class CCXTBridge:
         self.api_secret = env.get("EXCHANGE_API_SECRET") or ""
         self.api_password = env.get("EXCHANGE_API_PASSWORD") or ""
         self.api_uid = env.get("EXCHANGE_API_UID") or ""
+        self.credential_fingerprint = testnet_credential_fingerprint(env)
         self.journal_path = Path(journal_path or env.get(
             "TRADINGAGENTS_BROKER_JOURNAL", "/data/broker-journal.jsonl"))
 

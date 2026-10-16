@@ -157,6 +157,17 @@ class TestHistoricoPaginado:
         assert len(snap.closes) == 99
         assert snap.quality.startswith("degraded: dado histórico atrasado")
 
+    def test_close_malformado_e_descartado_sem_abortar_historico(self):
+        ex = FakePagedExchange(n=120)
+        ex.rows[10][4] = "nao-e-numero"
+        feed = PublicMarketFeed("binance", client=ex)
+
+        snap = feed.historical_snapshot(
+            "BTC/USDT", "1h", limit=120, now=NOW, page_size=120)
+
+        assert len(snap.closes) == 118
+        assert snap.quality == "degraded: apenas 118/120 velas fechadas"
+
 
 class TestEscolhaDeCorretora:
     def test_default_is_paper_never_external(self):

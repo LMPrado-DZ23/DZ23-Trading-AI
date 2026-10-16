@@ -106,9 +106,14 @@ class PublicMarketFeed:
                         continue
                     try:
                         ts = int(row[0])
-                    except (TypeError, ValueError):
+                        close = Decimal(str(row[4]))
+                        if not close.is_finite():
+                            continue
+                    except (TypeError, ValueError, ArithmeticError):
                         continue
-                    por_timestamp[ts] = list(row[:6])
+                    normalizada = list(row[:6])
+                    normalizada[4] = close
+                    por_timestamp[ts] = normalizada
                     maior = max(maior, ts)
                 proximo = maior + step_ms
                 if proximo <= since:       # API ignorou since / página repetida
@@ -127,7 +132,7 @@ class PublicMarketFeed:
             close_at = datetime.fromtimestamp(
                 ts / 1000, timezone.utc) + timedelta(milliseconds=step_ms)
             if close_at <= now:
-                fechadas.append((close_at, Decimal(str(row[4]))))
+                fechadas.append((close_at, row[4]))
         fechadas = fechadas[-limit:]
         if not fechadas:
             return MarketSnapshot(

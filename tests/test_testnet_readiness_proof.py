@@ -8,9 +8,19 @@ from types import SimpleNamespace as NS
 
 import pytest
 
+from tradingagents.brokers.ccxt_bridge import (
+    testnet_credential_fingerprint as _testnet_credential_fingerprint,
+)
 from tradingagents.desk.execution import OrderState
 
 H = {"Authorization": "Bearer s3nh4"}
+TESTNET_ENV = {
+    "TRADINGAGENTS_EXCHANGE": "binance",
+    "EXCHANGE_API_KEY": "test-key",
+    "EXCHANGE_API_SECRET": "test-secret",
+    "EXCHANGE_API_PASSWORD": "",
+    "EXCHANGE_API_UID": "",
+}
 
 
 def _app(tmp_path, monkeypatch):
@@ -52,11 +62,19 @@ class _BrokerTestnet:
 
 class _Coordenador:
     def __init__(self, *, exchange="binance", seguro=True,
-                 external_id="4380219706", estado=OrderState.FILLED):
+                 external_id="4380219706", estado=OrderState.FILLED,
+                 origem_exchange=None, origem_fingerprint=None,
+                 terminal_em=None):
         self.broker = _BrokerTestnet(exchange)
         self.orders = {"ord-1": NS(
             state=estado, external_id=external_id,
-            terminal_em="2026-10-15T00:00:00+00:00")}
+            testnet_exchange=(exchange if origem_exchange is None
+                              else origem_exchange),
+            testnet_credential_fingerprint=(
+                _testnet_credential_fingerprint({
+                    **TESTNET_ENV, "TRADINGAGENTS_EXCHANGE": exchange})
+                if origem_fingerprint is None else origem_fingerprint),
+            terminal_em=(terminal_em or datetime.now(timezone.utc).isoformat()))}
         self._seguro = seguro
 
     def reconciliar(self, *_args, **_kwargs):
@@ -199,4 +217,46 @@ def test_fill_paper_ou_parcial_nao_grava_prova(tmp_path, monkeypatch):
         r = c.post("/v1/desk/reconciliar", headers=H)
         assert r.status_code == 200
         assert "homologacao_testnet" not in r.json()
+
+
+@pytest.mark.parametrize("origem_exchange,origem_fingerprint,terminal_em", [
+    ("okx", _testnet_credential_fingerprint(TESTNET_ENV), None),
+    ("binance", "f" * 64, None),
+    ("binance", _testnet_credential_fingerprint(TESTNET_ENV),
+     "2000-01-01T00:00:00+00:00"),
+])
+def test_fill_antigo_ou_de_outro_vinculo_nao_homologa_credencial_atual(
+        tmp_path, monkeypatch, origem_exchange, origem_fingerprint,
+        terminal_em):
+    m, c = _app(tmp_path, monkeypatch)
+    _configurar_testnet(c)
+    m._DESKS["legacy"] = {
+        "coordinator": _Coordenador(
+            origem_exchange=origem_exchange,
+            origem_fingerprint=origem_fingerprint,
+            terminal_em=terminal_em),
+        "broker_mode": "testnet"}
+
+    r = c.post("/v1/desk/reconciliar", headers=H)
+
+    assert r.status_code == 200
+    assert "homologacao_testnet" not in r.json()
+    assert _item(c.get("/v1/live/status", headers=H).json(),
+                 "testnet")["pronto"] is False
+
+
+def test_fill_restaurado_sem_origem_nao_homologa_vinculo_atual(
+        tmp_path, monkeypatch):
+    m, c = _app(tmp_path, monkeypatch)
+    _configurar_testnet(c)
+    coordenador = _Coordenador()
+    del coordenador.orders["ord-1"].testnet_exchange
+    del coordenador.orders["ord-1"].testnet_credential_fingerprint
+    m._DESKS["legacy"] = {
+        "coordinator": coordenador, "broker_mode": "testnet"}
+
+    r = c.post("/v1/desk/reconciliar", headers=H)
+
+    assert r.status_code == 200
+    assert "homologacao_testnet" not in r.json()
 

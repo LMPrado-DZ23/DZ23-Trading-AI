@@ -159,6 +159,8 @@ def validar(trader, closes, instrumento: str, *, exchange: str = "binance",
             snap = MarketSnapshot(instrumento, "1h", utcnow(), janela)
             proposta = trader.propose(snap)
             resultado.velas_avaliadas += 1
+            # A última vela fecha a janela em ``fim - 1``; abrir nela não
+            # deixaria uma vela posterior para avaliar ou encerrar a posição.
             if proposta.action is Action.BUY and i + 1 < fim:
                 posicao = (i, preco)
             else:

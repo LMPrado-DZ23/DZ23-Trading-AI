@@ -214,3 +214,29 @@ class TestRestore:
             assert (novo / name).read_bytes() == (data / name).read_bytes()
         with sqlite3.connect(novo / "jobs.db") as conn:
             assert conn.execute("SELECT state FROM jobs").fetchall() == [("paper",)]
+
+    def test_partial_restore_reports_written_items_and_original_error(
+            self, tmp_path, monkeypatch):
+        data = populate(tmp_path / "data")
+        archive = tmp_path / "bk.tar.gz"
+        create_backup(data, archive)
+        destino = tmp_path / "alvo"
+        real_replace = os.replace
+        calls = 0
+
+        def fail_second(source, target):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("disco cheio")
+            return real_replace(source, target)
+
+        monkeypatch.setattr(os, "replace", fail_second)
+        with pytest.raises(BackupError) as excinfo:
+            restore_backup(archive, destino)
+
+        mensagem = str(excinfo.value)
+        assert "disco cheio" in mensagem
+        assert "itens já gravados: 1" in mensagem
+        assert "preserve o destino" in mensagem
+        assert "diretório vazio" in mensagem

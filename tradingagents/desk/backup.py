@@ -281,7 +281,13 @@ def restore_backup(archive: str | Path, data_dir: str | Path, *,
     except BackupError:
         raise
     except (OSError, tarfile.TarError) as exc:
-        raise BackupError(f"falha ao restaurar pacote: {type(exc).__name__}") from exc
+        parcial = locals().get("restored") or []
+        raise BackupError(
+            f"falha ao restaurar pacote: {type(exc).__name__}: {exc}; "
+            f"itens já gravados: {len(parcial)}"
+            + (f" ({', '.join(parcial)})" if parcial else "")
+            + "; preserve o destino e restaure novamente em diretório vazio"
+        ) from exc
 
     return {
         "restaurados": restored,

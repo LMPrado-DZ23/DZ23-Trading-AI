@@ -187,7 +187,7 @@ def _database_manifest(dsn: str) -> dict:
             cursor.execute(
                 sql.SQL(
                     "SELECT row_to_json(t)::text FROM {}.{} AS t "
-                    "ORDER BY row_to_json(t)::text"
+                    "ORDER BY row_to_json(t)::text COLLATE \"C\""
                 ).format(sql.Identifier("public"), sql.Identifier(table))
             )
             for row in cursor:
