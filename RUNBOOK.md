@@ -22,7 +22,8 @@ navegador, exceto onde estiver escrito "no servidor".
    - Corretora `paper` = simulada; `ccxt` usa o modo configurado na seção de
      corretora (TESTNET por padrão).
 2. **🤖 Ligar mesa autônoma** — a partir daí ela roda sozinha; pode fechar o
-   navegador. O estado fica em `/data/desk-state.json`.
+   navegador. O estado local fica sob `/data/desks/` (ou no PostgreSQL quando
+   `DATABASE_URL` estiver ativo).
 3. **🛑 Parar mesa** = parada controlada: o laço encerra, as posições
    continuam sob o guardião.
 
@@ -36,8 +37,9 @@ o motivo por trader ("sem operar: ..."). Causas comuns:
 
 ## Backup e restauração
 - **Gerar**: aba 🧑‍💼 → 💾 Gerar backup. O pacote vai para
-  `/data/backups/dz23-backup-AAAAMMDD-HHMMSS.tar.gz` (config com segredos,
-  fila de jobs, estado da mesa, journal). Baixe pelo volume, não por HTTP.
+  `/data/backups/dz23-backup-AAAAMMDD-HHMMSS.tar.gz` e inclui o estado local
+  completo permitido (config/segredos, identidade, bancos, Escola, Sala REAL,
+  pilotos, provas, journals e checkpoints). Baixe pelo volume, não por HTTP.
 - **Restaurar** (no servidor, máquina nova):
   ```
   python -c "from tradingagents.desk.backup import restore_backup; \
@@ -45,6 +47,10 @@ o motivo por trader ("sem operar: ..."). Causas comuns:
   ```
   Cada arquivo é conferido por SHA-256; pacote adulterado é recusado e
   **nada** é gravado. Destino já ocupado exige `overwrite=True`.
+
+  Restaure primeiro em diretório vazio e homologue a cópia. Se o sistema usa
+  `DATABASE_URL`, faça também backup/restore lógico do PostgreSQL: ele não
+  entra no pacote do volume local.
 
 ## Incidentes
 | Sintoma | O que fazer |

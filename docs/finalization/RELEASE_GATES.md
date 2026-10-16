@@ -1,55 +1,56 @@
-# RELEASE_GATES — DZ23 Trading
+# RELEASE_GATES — DZ23 Trading AI
 
-> Frase oficial até a auditoria externa: **"Release candidate para
-> PAPER/SHADOW/TESTNET, aguardando auditoria independente."** Nunca "pronto
-> para LIVE".
+Frase oficial: **release candidate para PAPER/SHADOW/TESTNET e preparação
+REAL; LIVE continua bloqueado.**
 
-## Gate de deploy (todos verdes antes de redeploy)
+Este documento não afirma estado de produção. Toda evidência de deployment
+deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
-| # | Gate | Como provar | Estado nesta sessão |
-|---|---|---|---|
-| 1 | suíte completa verde | CI do GitHub (pytest+compileall) | ⏳ via CI (local não roda: 3.14) |
-| 2 | ruff verde | `ruff check .` | ✅ local |
-| 3 | typecheck verde ou blocker | A2 — typecheck não existe | 🔴 A2 documentado |
-| 4 | migrations analisadas | revisão | n/a nesta rodada (sem migration) |
-| 5 | backup se mexeu no banco | — | n/a (sem mudança de schema) |
-| 6 | build reproduzível | Dockerfile py3.12 + `.[desk]` | ✅ |
-| 7 | SHA registrado | STATUS.md/Histórico | ✅ |
-| 8 | rollback definido | Coolify → Rollback para SHA anterior | ✅ disponível |
-| 9 | sem credencial em código/log | `.env.example` só nomes; scan | ✅ |
-| 10 | LIVE explicitamente bloqueado | `/v1/status/operacao` LIVE=false | ✅ |
+## Gate de código desta branch
 
-## Prova pós-deploy (após estabilização da troca de containers)
+| Gate | Prova exigida | Estado no HEAD da branch |
+|---|---|---|
+| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.546 passaram localmente; CI do novo SHA pendente |
+| lint | `ruff check .` | verde localmente; CI do novo SHA pendente |
+| instalação limpa | job CI dedicado | verde no PR #14 até `c59a400` |
+| dependências/segredos/licenças/SBOM | jobs CI dedicados | verdes no PR #14 até `c59a400` |
+| PostgreSQL e ARM64 | jobs CI dedicados | verdes no PR #14 até `c59a400` |
+| LIVE fechado | testes + `/v1/operational-readiness` | `MESA_LIVE_LIBERADA=False` |
+| rollback | backup local íntegro + runbook | implementado; homologação no host ainda externa |
 
-- `/healthz` → 200 (Postgres/Supabase conectado)
-- `/v1/status/operacao` → 200, `modo_atual=PAPER`, `LIVE.habilitado=false`,
-  `operacao_real.estado=BLOQUEADA`
-- SHA implantado == SHA esperado (log do deploy mostra branch+commit)
-- sem 5xx novo; console do navegador limpo; login funcional; fluxos PAPER ok;
-  logs sem secrets
+## Gate do ambiente de destino
 
-## Gate de cadastro (SIGNUP_ENABLED=true) — NÃO liberar sem tudo isto
-cadastro transacional · verificação de e-mail · rate limiting ·
-anti-enumeração · isolamento Tenant A×B · RBAC · sessões · recuperação de
-senha · E2E completo · auditoria do SHA específico.
+Todos os itens abaixo precisam de evidência nova no SHA implantado:
 
-## Ações que exigem autorização do proprietário
-habilitar LIVE · ordem/dinheiro real · excluir/resetar dados · migration
-destrutiva · apagar app/volume/backup · trocar DNS · rotacionar credencial
-crítica sem plano · merge definitivo sem rollback · liberar cadastro público.
+1. TLS/reverse proxy, DNS e acesso administrativo controlado;
+2. volume persistente e reinício sem perda;
+3. backup local criado, inspecionado e restaurado em diretório isolado;
+4. backup lógico e restore do PostgreSQL, quando `DATABASE_URL` estiver ativo;
+5. `/healthz`, `/readyz`, `/metrics` autenticado e logs sem segredos;
+6. coleta de métricas e alertas com janela prolongada;
+7. kill switch e reconciliação comprovados;
+8. SHA implantado igual ao SHA aprovado;
+9. preflight `--target preparacao` concluído;
+10. nenhum 5xx novo e nenhuma ordem real enviada.
 
-## Estado atual do deploy
-- Produção (`dz23trading.com.br`): rodando `40dbbf3` (validado nesta sessão:
-  healthz 200, `/v1/status/operacao` 200 PAPER, LIVE=false).
-- Patch F1/F2 (B1–B10) **COMPLETO**; commits até `d6472bd` (inclui B5 `cad7a5c`
-  e B6 `8b265ce`) **publicados em `origin/correcao-auditoria`**. **Ainda não
-  implantados** em produção. LIVE bloqueado; SIGNUP_ENABLED=false.
-- ⚠️ Gate 1 (suíte completa via CI) **ainda NÃO rodou** nestes commits: o
-  workflow `ci.yml` dispara só em push para `main`/`unificacao`/`feat/**` ou em
-  **pull_request**. `correcao-auditoria` não está nos gatilhos de push. Para
-  rodar a suíte completa é preciso **abrir um PR** (evento pull_request) —
-  ação outward-facing, aguardando decisão do dono (base e abertura). Localmente
-  só roda o subconjunto do kernel (py3.14).
-- Gate multiprocess **fechado**: o ledger em memória não impõe
-  `UNIQUE(fee_component_id)` entre processos (B6). Deploy single-process apenas
-  até o ledger migrar para Postgres.
+## Gate externo por corretora/conta
+
+- credencial somente leitura criada e identidade da conta comprovada;
+- fill TESTNET reconciliado, quando a corretora oferece sandbox compatível;
+- PAPER prolongado por agente/estratégia/conta;
+- limites do piloto e tetos globais compatíveis;
+- IQ Option com token novo e os sete handshakes demo comprovados;
+- divergências e provas expiradas ausentes.
+
+## Ações que continuam exigindo o proprietário no momento da ação
+
+Merge definitivo, deploy de produção, DNS, migração destrutiva, rotação de
+credencial crítica, ativação LIVE e qualquer ordem/dinheiro real. Preparar o
+software não concede essa autorização.
+
+## Condição de liberação futura
+
+Mesmo com todos os gates anteriores verdes, o estado esperado é
+`aguardando_liberacao_de_codigo`. Abrir o selo é uma alteração de código
+separada, revisada e confirmada pelo proprietário no momento da ação. Esta
+branch não faz essa alteração.

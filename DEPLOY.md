@@ -58,6 +58,19 @@ python3 scripts/load_test.py --base-url http://127.0.0.1:8080 --requests 100 --w
 
 Não exponha o PostgreSQL (nem o próprio serviço) publicamente. Coloque o serviço atrás de TLS/reverse proxy, configure backup dos volumes e mantenha os secrets fora do Git.
 
+Antes de promover qualquer ambiente, prove o restore em um diretório isolado:
+
+```bash
+python3 scripts/backup_data.py backup /data /backup/dz23-pre-deploy.tar.gz
+python3 scripts/backup_data.py inspect /backup/dz23-pre-deploy.tar.gz
+python3 scripts/backup_data.py restore /data-restaurado /backup/dz23-pre-deploy.tar.gz
+```
+
+O pacote local contém segredos e todo o estado permitido do volume, inclusive
+Escola/Sala REAL/pilotos; proteja-o como credencial. Estado em PostgreSQL
+externo exige backup lógico e restore separados. Consulte
+[docs/mission/ROLLBACK.md](docs/mission/ROLLBACK.md).
+
 Para um proxy Caddy de referência, consulte [ops/Caddyfile.example](ops/Caddyfile.example). O domínio, DNS, portas 80/443, certificado e política de backup devem ser configurados pelo operador do ambiente.
 
 ## 5. Healthchecks e preflight REAL

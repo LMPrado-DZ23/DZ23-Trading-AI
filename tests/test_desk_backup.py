@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import sys
 import tarfile
 from pathlib import Path
@@ -22,7 +23,9 @@ def _pular_fora_de_posix():
 def populate(d):
     d.mkdir(parents=True, exist_ok=True)
     (d / "config.json").write_text(json.dumps({"GROQ_API_KEY": "gsk-segredo-123"}))
-    (d / "jobs.db").write_bytes(b"SQLite format 3\x00fake")
+    with sqlite3.connect(d / "jobs.db") as conn:
+        conn.execute("CREATE TABLE jobs (id INTEGER PRIMARY KEY, state TEXT)")
+        conn.execute("INSERT INTO jobs(state) VALUES ('paper')")
     (d / "desk-state.json").write_text(json.dumps({"cycles_run": 7,
                                                    "open_positions": ["BTC/USDT"]}))
     (d / "cache.tmp").write_text("descartável")
@@ -49,6 +52,41 @@ class TestBackup:
         (tmp_path / "vazio").mkdir()
         with pytest.raises(BackupError, match="nada a salvar"):
             create_backup(tmp_path / "vazio", tmp_path / "bk.tar.gz")
+
+    def test_includes_school_real_room_tenant_and_checkpoints(self, tmp_path):
+        data = populate(tmp_path / "data")
+        (data / "desks" / "legacy").mkdir(parents=True)
+        (data / "desks" / "legacy" / "escola.json").write_text("{}")
+        (data / "desks" / "legacy" / "pilotos.json").write_text("{}")
+        (data / "tenants" / "owner").mkdir(parents=True)
+        (data / "tenants" / "owner" / "kill-switch.json").write_text("{}")
+        (data / "checkpoints").mkdir()
+        with sqlite3.connect(data / "checkpoints" / "BTC_USDT.db") as conn:
+            conn.execute("CREATE TABLE checkpoints (id INTEGER PRIMARY KEY)")
+        (data / "desks" / "legacy" / "posse.json.trava").write_text("lock")
+
+        out = create_backup(data, tmp_path / "bk.tar.gz")
+
+        assert "desks/legacy/escola.json" in out["itens"]
+        assert "desks/legacy/pilotos.json" in out["itens"]
+        assert "tenants/owner/kill-switch.json" in out["itens"]
+        assert "checkpoints/BTC_USDT.db" in out["itens"]
+        assert not any(item.endswith(".trava") for item in out["itens"])
+
+    def test_symbolic_link_in_state_is_refused(self, tmp_path):
+        if not hasattr(os, "symlink"):
+            pytest.skip("plataforma sem symlink")
+        data = populate(tmp_path / "data")
+        (data / "desks").mkdir()
+        outside = tmp_path / "outside.json"
+        outside.write_text('{"secret": true}')
+        try:
+            (data / "desks" / "escape.json").symlink_to(outside)
+        except OSError:
+            pytest.skip("usuário sem permissão para criar symlink")
+
+        with pytest.raises(BackupError, match="link simbólico"):
+            create_backup(data, tmp_path / "bk.tar.gz")
 
 
 class TestArchivePermissions:
@@ -131,10 +169,48 @@ class TestRestore:
             restore_backup(forjado, destino)
         assert not (destino / "desk-state.json").exists()   # nada gravado
 
-    def test_round_trip_is_byte_identical(self, tmp_path):
+        with pytest.raises(BackupError, match="adulterado"):
+            inspect_backup(forjado)
+
+    def test_unmanifested_member_is_refused(self, tmp_path):
+        data = populate(tmp_path / "data")
+        original = tmp_path / "bk.tar.gz"
+        create_backup(data, original)
+        extracted = tmp_path / "ex-extra"
+        extracted.mkdir()
+        with tarfile.open(original, "r:gz") as tar:
+            tar.extractall(extracted)
+        (extracted / "data" / "extra.json").write_text("{}")
+        forged = tmp_path / "extra.tar.gz"
+        with tarfile.open(forged, "w:gz") as tar:
+            tar.add(extracted / "MANIFEST.json", arcname="MANIFEST.json")
+            for path in (extracted / "data").rglob("*"):
+                if path.is_file():
+                    tar.add(path, arcname="data/" + path.relative_to(
+                        extracted / "data").as_posix())
+
+        destination = tmp_path / "alvo-extra"
+        with pytest.raises(BackupError, match="não declarado"):
+            restore_backup(forged, destination)
+        assert not destination.exists()
+
+    def test_windows_style_traversal_is_refused(self, tmp_path):
+        forged = tmp_path / "windows-traversal.tar.gz"
+        with tarfile.open(forged, "w:gz") as tar:
+            info = tarfile.TarInfo("data/..\\escape.json")
+            info.size = 2
+            import io
+            tar.addfile(info, io.BytesIO(b"{}"))
+
+        with pytest.raises(BackupError, match="caminho suspeito"):
+            restore_backup(forged, tmp_path / "destino")
+
+    def test_round_trip_preserves_files_and_sqlite_content(self, tmp_path):
         data = populate(tmp_path / "data")
         create_backup(data, tmp_path / "bk.tar.gz")
         novo = tmp_path / "n2"
         restore_backup(tmp_path / "bk.tar.gz", novo)
-        for name in ("config.json", "jobs.db", "desk-state.json"):
+        for name in ("config.json", "desk-state.json"):
             assert (novo / name).read_bytes() == (data / name).read_bytes()
+        with sqlite3.connect(novo / "jobs.db") as conn:
+            assert conn.execute("SELECT state FROM jobs").fetchall() == [("paper",)]

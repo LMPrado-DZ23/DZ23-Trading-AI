@@ -80,20 +80,31 @@ curl -X POST http://127.0.0.1:8000/v1/execution/kill-switch \
 
 ## Backup e restore
 
-O backup inclui apenas os arquivos operacionais permitidos e **não inclui `config.json` nem chaves de API**:
+O backup local inclui configuração, credenciais armazenadas, identidade do
+proprietário, bancos locais, Escola, Sala REAL, pilotos, provas, journals,
+kill switch, estados PAPER/SHADOW e checkpoints. Por isso o pacote é criado
+com permissão restrita e deve ser tratado como segredo:
 
 ```bash
 python3 scripts/backup_data.py backup ./data ./backups/dz23-$(date -u +%Y%m%dT%H%M%SZ).tar.gz
+python3 scripts/backup_data.py inspect ./backups/dz23-ARQUIVO.tar.gz
 ```
 
-Para restaurar, pare o serviço, preserve a pasta atual, restaure e verifique o healthcheck:
+Para restaurar, pare o serviço, preserve a pasta atual e restaure primeiro em
+um diretório vazio:
 
 ```bash
-python3 scripts/backup_data.py restore ./backups/arquivo.tar.gz ./data
-python3 -m pytest -q
+python3 scripts/backup_data.py restore ./data-restaurado ./backups/arquivo.tar.gz
 ```
 
-O arquivo de backup deve ser armazenado de forma protegida. Ele pode conter histórico operacional e configurações; não o publique nem o envie para repositórios públicos.
+Suba uma instância isolada sobre `./data-restaurado` e confira healthchecks,
+login, Escola, pilotos, journals e reconciliação antes de trocar o volume. O
+manifesto e os hashes são verificados antes da primeira escrita; membros
+extras, links, caminhos inseguros e pacotes adulterados são recusados.
+
+Se `DATABASE_URL` estiver ativo, o estado persistido no PostgreSQL **não**
+está dentro do arquivo local: gere e teste separadamente o backup lógico pelo
+provedor do banco. Um backup só conta como gate depois de um restore provado.
 
 ## Promoção de estratégia
 

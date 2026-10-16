@@ -1,48 +1,50 @@
+"""CLI do backup local verificável do DZ23."""
+
 from __future__ import annotations
 
 import argparse
-import tarfile
-from datetime import datetime, timezone
+import json
 from pathlib import Path
 
-FILES = ("jobs.db", "agency-events.jsonl", "execution-events.jsonl", "paper-state.json", "shadow-state.json", "kill-switch.json")
+from tradingagents.desk.backup import create_backup, restore_backup
 
 
 def backup(data_dir: Path, destination: Path) -> Path:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_suffix(destination.suffix + ".tmp")
-    with tarfile.open(temporary, "w:gz") as archive:
-        for name in FILES:
-            path = data_dir / name
-            if path.exists():
-                archive.add(path, arcname=name, recursive=False)
-    temporary.replace(destination)
+    create_backup(data_dir, destination)
     return destination
 
 
-def restore(archive_path: Path, data_dir: Path) -> None:
-    data_dir.mkdir(parents=True, exist_ok=True)
-    with tarfile.open(archive_path, "r:gz") as archive:
-        names = {member.name for member in archive.getmembers()}
-        unsafe = names - set(FILES)
-        if unsafe or any(".." in Path(name).parts or Path(name).is_absolute() for name in names):
-            raise ValueError("backup contém caminhos não permitidos")
-        archive.extractall(data_dir, filter="data")
+def restore(archive_path: Path, data_dir: Path, *, overwrite: bool = False) -> None:
+    restore_backup(archive_path, data_dir, overwrite=overwrite)
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("backup", "restore"))
-    parser.add_argument("data_dir", type=Path)
-    parser.add_argument("archive", type=Path)
-    args = parser.parse_args()
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Cria ou restaura o estado operacional local do DZ23")
+    parser.add_argument("action", choices=("backup", "restore", "inspect"))
+    parser.add_argument("data_dir", type=Path,
+                        help="DATA_DIR no backup/restore; arquivo no inspect")
+    parser.add_argument("archive", type=Path, nargs="?",
+                        help="arquivo .tar.gz no backup/restore")
+    parser.add_argument("--overwrite", action="store_true",
+                        help="permite substituir estado existente no restore")
+    args = parser.parse_args(argv)
+
+    if args.action == "inspect":
+        from tradingagents.desk.backup import inspect_backup
+        print(json.dumps(inspect_backup(args.data_dir), ensure_ascii=False,
+                         indent=2, sort_keys=True))
+        return 0
+    if args.archive is None:
+        parser.error("archive é obrigatório para backup/restore")
     if args.action == "backup":
-        stamp = datetime.now(timezone.utc).isoformat()
-        print(f"backup criado em {backup(args.data_dir, args.archive)} ({stamp})")
+        result = create_backup(args.data_dir, args.archive)
     else:
-        restore(args.archive, args.data_dir)
-        print(f"backup restaurado em {args.data_dir}")
+        result = restore_backup(args.archive, args.data_dir,
+                                overwrite=args.overwrite)
+    print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
