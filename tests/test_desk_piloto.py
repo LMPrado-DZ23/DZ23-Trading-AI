@@ -208,6 +208,62 @@ class TestCadeiaObrigatoria:
         assert fila["estado"] == "piloto_autorizado"
         assert AGENTE not in sup.bloqueios(agora=AGORA + timedelta(minutes=2))
 
+    def test_fila_existente_acompanha_autorizacao_e_revogacao_persistidas(self):
+        """A Sala REAL precisa refletir a cadeia comum, não só a tardia."""
+        sup, esc, _ = _supervisor_formado()
+        fila = sup.encaminhar_formado(
+            AGENTE, estrategia="trend_following", contexto=self.CONTEXTO,
+            agora=AGORA)
+        _solicitar(sup, contexto=self.CONTEXTO, agora=AGORA)
+
+        autorizado = sup.autorizar(
+            AGENTE, gates=_gates_ok(), agora=AGORA + timedelta(minutes=1))
+
+        fila_autorizada = sup.encaminhamentos()[0]
+        assert fila_autorizada["encaminhamento_id"] == fila["encaminhamento_id"]
+        assert fila_autorizada["authorization_id"] == autorizado.authorization_id
+        assert fila_autorizada["estado"] == "piloto_autorizado"
+        assert fila_autorizada["atualizada_em"] == (
+            AGORA + timedelta(minutes=1)).isoformat()
+        recarregado = SupervisorDePiloto(
+            armazem=sup.armazem, escola=esc).encaminhamentos()[0]
+        assert recarregado["estado"] == "piloto_autorizado"
+
+        sup.revogar(
+            AGENTE, motivo="decisão do proprietário",
+            agora=AGORA + timedelta(minutes=2))
+
+        fila_revogada = sup.encaminhamentos()[0]
+        assert fila_revogada["estado"] == "revogado"
+        assert fila_revogada["atualizada_em"] == (
+            AGORA + timedelta(minutes=2)).isoformat()
+
+    def test_fila_existente_acompanha_expiracao_e_suspensao(self):
+        sup, _, _ = _supervisor_formado()
+        sup.encaminhar_formado(
+            AGENTE, estrategia="trend_following", contexto=self.CONTEXTO,
+            agora=AGORA)
+        _solicitar(sup, contexto=self.CONTEXTO, agora=AGORA, prazo_dias=1)
+        sup.autorizar(AGENTE, gates=_gates_ok(), agora=AGORA)
+
+        sup.vigiar(agora=AGORA + timedelta(days=1))
+
+        assert sup.de(AGENTE).estado is EstadoDoPiloto.EXPIRADO
+        assert sup.encaminhamentos()[0]["estado"] == "expirado"
+
+        outro, escola, formado_em = _supervisor_formado()
+        outro.encaminhar_formado(
+            AGENTE, estrategia="trend_following", contexto=self.CONTEXTO,
+            agora=AGORA)
+        _solicitar(outro, contexto=self.CONTEXTO, agora=AGORA)
+        outro.autorizar(AGENTE, gates=_gates_ok(), agora=AGORA)
+        _revogar_escola(escola, "trend_following", formado_em)
+
+        outro.vigiar(agora=AGORA + timedelta(minutes=1))
+
+        assert outro.de(AGENTE).estado is EstadoDoPiloto.SUSPENSO
+        assert outro.encaminhamentos()[0]["estado"] == "suspenso"
+
     def test_sem_formatura_solicitar_recusa(self):
         esc = EscolaDeTraders(armazem=ArmazemFake())
         sup = SupervisorDePiloto(armazem=ArmazemFake(), escola=esc)
@@ -250,6 +306,20 @@ class TestCadeiaObrigatoria:
                        perda_total_maxima=Decimal("100"))
         with pytest.raises(ValueError, match="prazo"):
             _solicitar(sup, prazo_dias=0)
+        assert sup.de(AGENTE) is None
+
+    @pytest.mark.parametrize(
+        "campo,valor",
+        [("capital_maximo", Decimal("NaN")),
+         ("perda_diaria_maxima", Decimal("Infinity")),
+         ("perda_total_maxima", Decimal("-Infinity"))],
+    )
+    def test_limites_nao_finitos_recusados_no_supervisor(self, campo, valor):
+        sup, _, _ = _supervisor_formado()
+
+        with pytest.raises(ValueError, match="finitos"):
+            _solicitar(sup, **{campo: valor})
+
         assert sup.de(AGENTE) is None
 
     def test_autorizar_sem_pedido_recusa(self):

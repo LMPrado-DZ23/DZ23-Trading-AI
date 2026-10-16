@@ -4161,9 +4161,12 @@ async def escola_piloto_solicitar(req: Request, _=Depends(auth),
         if valor in (None, ""):
             raise HTTPException(422, f"{campo} é obrigatório para o pedido")
         try:
-            return D(str(valor))
+            numero = D(str(valor))
         except Exception as exc:
             raise HTTPException(422, f"{campo} precisa ser numérico") from exc
+        if not numero.is_finite():
+            raise HTTPException(422, f"{campo} precisa ser finito")
+        return numero
 
     try:
         prazo = int(body.get("prazo_dias") or 0)

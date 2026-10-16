@@ -8,6 +8,8 @@ import importlib
 import json
 from decimal import Decimal
 
+import pytest
+
 
 def _load_app(tmp_path, monkeypatch, **env):
     monkeypatch.setenv("ACCESS_PASSWORD", "s3nh4")
@@ -490,6 +492,33 @@ class TestMesaEscolaE2E:
         assert any("trader-momentum" in a
                    and "Maestro/piloto" in a for a in ciclo3["abstencoes"]), \
             ciclo3["abstencoes"]
+
+    @pytest.mark.parametrize(
+        "campo,valor",
+        [("capital_maximo", "NaN"),
+         ("perda_diaria_maxima", "Infinity"),
+         ("perda_total_maxima", "-Infinity")],
+    )
+    def test_pedido_recusa_limite_nao_finito_sem_erro_interno(
+            self, tmp_path, monkeypatch, campo, valor):
+        c, m = _client(tmp_path, monkeypatch)
+        assert c.get("/v1/desk/status", headers=H).status_code == 200
+        self._semear_formada(m, estrategia="momentum", ativo="BTC/USDT")
+        pedido = {
+            "agent_id": "trader-momentum", "estrategia": "momentum",
+            "versao": "1", "corretora": "binance",
+            "conta": "paper-legacy", "ativo": "BTC/USDT",
+            "horizonte": "1h", "capital_maximo": "100",
+            "perda_diaria_maxima": "10", "perda_total_maxima": "30",
+            "prazo_dias": 30,
+        }
+        pedido[campo] = valor
+
+        resposta = c.post(
+            "/v1/escola/pilotos/solicitar", headers=H, json=pedido)
+
+        assert resposta.status_code == 422
+        assert "finito" in resposta.json()["detail"]
 
     def test_formado_vincula_conta_real_so_com_prova_read_only(
             self, tmp_path, monkeypatch):

@@ -190,6 +190,13 @@ class SupervisorDePiloto:
             "motivo": motivo[:400]})
         if len(d["eventos"]) > self.MAX_EVENTOS:
             d["eventos"] = d["eventos"][-self.MAX_EVENTOS:]
+        authorization_id = str(d.get("authorization_id") or "")
+        for encaminhamento in self._encaminhamentos.values():
+            if (encaminhamento.get("agent_id") == agent_id
+                    and encaminhamento.get("authorization_id") ==
+                    authorization_id):
+                encaminhamento["estado"] = novo.value
+                encaminhamento["atualizada_em"] = agora.isoformat()
         self.salvar()
 
     # -- consulta -------------------------------------------------------
@@ -315,6 +322,9 @@ class SupervisorDePiloto:
         capital_maximo = Decimal(str(capital_maximo))
         perda_diaria_maxima = Decimal(str(perda_diaria_maxima))
         perda_total_maxima = Decimal(str(perda_total_maxima))
+        if not all(numero.is_finite() for numero in (
+                capital_maximo, perda_diaria_maxima, perda_total_maxima)):
+            raise ValueError("limites financeiros precisam ser finitos")
         if capital_maximo <= 0:
             raise ValueError("capital máximo precisa ser positivo")
         if perda_diaria_maxima <= 0 or perda_total_maxima <= 0:
