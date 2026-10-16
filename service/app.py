@@ -273,6 +273,64 @@ _DESK_EFFECTIVE_DEFAULTS = {
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 bearer = HTTPBearer(auto_error=False)
 
+_REQUEST_ID = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
+    r"[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+)
+
+
+def _request_id(request: Request) -> str:
+    """Aceita só UUID canônico; nunca ecoa texto livre ou token disfarçado."""
+    supplied = request.headers.get("X-Request-ID", "")
+    return supplied if _REQUEST_ID.fullmatch(supplied) else str(uuid.uuid4())
+
+
+def _route_label(request: Request) -> str:
+    """Template de rota de baixa cardinalidade, nunca o caminho fornecido."""
+    route = request.scope.get("route")
+    template = getattr(route, "path", None)
+    if isinstance(template, str) and template.isascii() and 1 <= len(template) <= 128:
+        return template
+    return "unmatched"
+
+
+@app.middleware("http")
+async def observabilidade_http(request: Request, call_next):
+    request_id = _request_id(request)
+    request.state.request_id = request_id
+    started = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        response.headers["X-Request-ID"] = request_id
+        return response
+    finally:
+        duration_ms = (time.perf_counter() - started) * 1000
+        labels = {
+            "method": request.method[:16] if request.method.isascii() else "OTHER",
+            "route": _route_label(request),
+            "status_class": f"{status_code // 100}xx",
+        }
+        METRICS.inc("http.requests", labels=labels)
+        METRICS.observe("http.request.duration_ms", duration_ms, labels=labels)
+        # JSON de uma linha facilita correlação sem registrar query, headers,
+        # corpo, IP, conta, ativo financeiro ou qualquer credencial.
+        LOGGER.info(
+            json.dumps(
+                {
+                    "event": "http_request_completed",
+                    "request_id": request_id,
+                    "method": labels["method"],
+                    "route": labels["route"],
+                    "status": status_code,
+                    "duration_ms": round(duration_ms, 3),
+                },
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+        )
+
 # ── GATE G2 — BLOQUEIO INCONDICIONAL DA SUPERFÍCIE SaaS ─────────────────────
 # Prefixos de rota que NÃO existem num aplicativo pessoal de dono único. O
 # casamento é por SEGMENTO (prefixo exato ou seguido de '/'), para jamais
@@ -1029,7 +1087,7 @@ def readyz():
 
 @app.get("/metrics")
 def metrics(_=Depends(auth)):
-    return METRICS.snapshot()
+    return METRICS.snapshot(detailed=True)
 
 @app.get("/")
 def index():
