@@ -1,0 +1,928 @@
+{
+  "schema": "dz23-validacao-oos-v1",
+  "gerado_em": "2026-10-16T01:38:51.511184+00:00",
+  "revisao_codigo": "ecb8f4b0a8837afd7a21d3dd01920b57b5475e69-dirty",
+  "exchange": "binance",
+  "timeframe": "1h",
+  "configuracao": {
+    "velas": 5000,
+    "treino": 2000,
+    "teste": 500,
+    "embargo": 48,
+    "capital": "1000"
+  },
+  "instrumentos": [
+    {
+      "instrumento": "BTC/USDT",
+      "fonte": "binance:1h:historico",
+      "qualidade": "ok",
+      "cutoff": "2026-10-16T01:00:00+00:00",
+      "velas_obtidas": 5000,
+      "sha256_fechamentos": "de1e3b04188548b79e2c5d07df2b8c7738473ae5534b9ff99e6f8a885d37c3ce",
+      "estrategias": [
+        {
+          "estrategia": "trend_following",
+          "janelas_oos": 5,
+          "intervalos_teste": [
+            [
+              2048,
+              2548
+            ],
+            [
+              2548,
+              3048
+            ],
+            [
+              3048,
+              3548
+            ],
+            [
+              3548,
+              4048
+            ],
+            [
+              4048,
+              4548
+            ]
+          ],
+          "velas_avaliadas": 1905,
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 18,
+            "acerto": 0.389,
+            "retorno_bruto": "15.51%",
+            "custo_pago": "5.40%",
+            "retorno_liquido": "10.11%",
+            "retorno_medio_por_operacao": "0.562%",
+            "pior_sequencia": "-11.48%",
+            "ressalvas": [
+              "amostra pequena: 18 operações"
+            ],
+            "resumo": "REPROVADA: +10.11% líquidos em 18 operações - amostra pequena: 18 operações",
+            "aviso": "teste sobre o passado; não prevê o futuro",
+            "janelas_oos": 5,
+            "janelas_positivas": 3
+          }
+        },
+        {
+          "estrategia": "mean_reversion",
+          "janelas_oos": 5,
+          "intervalos_teste": [
+            [
+              2048,
+              2548
+            ],
+            [
+              2548,
+              3048
+            ],
+            [
+              3048,
+              3548
+            ],
+            [
+              3548,
+              4048
+            ],
+            [
+              4048,
+              4548
+            ]
+          ],
+          "velas_avaliadas": 1572,
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 32,
+            "acerto": 0.531,
+            "retorno_bruto": "14.69%",
+            "custo_pago": "9.60%",
+            "retorno_liquido": "5.09%",
+            "retorno_medio_por_operacao": "0.159%",
+            "pior_sequencia": "-8.09%",
+            "ressalvas": [
+              "os custos consumiram mais da metade do resultado bruto",
+              "instável entre janelas: 2/5 positivas"
+            ],
+            "resumo": "REPROVADA: +5.09% líquidos em 32 operações - os custos consumiram mais da metade do resultado bruto; instável entre janelas: 2/5 positivas",
+            "aviso": "teste sobre o passado; não prevê o futuro",
+            "janelas_oos": 5,
+            "janelas_positivas": 2
+          }
+        },
+        {
+          "estrategia": "breakout",
+          "janelas_oos": 5,
+          "intervalos_teste": [
+            [
+              2048,
+              2548
+            ],
+            [
+              2548,
+              3048
+            ],
+            [
+              3048,
+              3548
+            ],
+            [
+              3548,
+              4048
+            ],
+            [
+              4048,
+              4548
+            ]
+          ],
+          "velas_avaliadas": 2273,
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 8,
+            "acerto": 0.5,
+            "retorno_bruto": "10.00%",
+            "custo_pago": "2.40%",
+            "retorno_liquido": "7.60%",
+            "retorno_medio_por_operacao": "0.950%",
+            "pior_sequencia": "-5.47%",
+            "ressalvas": [
+              "amostra pequena: 8 operações"
+            ],
+            "resumo": "REPROVADA: +7.60% líquidos em 8 operações - amostra pequena: 8 operações",
+            "aviso": "teste sobre o passado; não prevê o futuro",
+            "janelas_oos": 5,
+            "janelas_positivas": 3
+          }
+        },
+        {
+          "estrategia": "scalping",
+          "janelas_oos": 5,
+          "intervalos_teste": [
+            [
+              2048,
+              2548
+            ],
+            [
+              2548,
+              3048
+            ],
+            [
+              3048,
+              3548
+            ],
+            [
+              3548,
+              4048
+            ],
+            [
+              4048,
+              4548
+            ]
+          ],
+          "velas_avaliadas": 2421,
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 14,
+            "acerto": 0.643,
+            "retorno_bruto": "6.76%",
+            "custo_pago": "4.20%",
+            "retorno_liquido": "2.56%",
+            "retorno_medio_por_operacao": "0.183%",
+            "pior_sequencia": "-1.54%",
+            "ressalvas": [
+              "amostra pequena: 14 operações",
+              "os custos consumiram mais da metade do resultado bruto"
+            ],
+            "resumo": "REPROVADA: +2.56% líquidos em 14 operações - amostra pequena: 14 operações; os custos consumiram mais da metade do resultado bruto",
+            "aviso": "teste sobre o passado; não prevê o futuro",
+            "janelas_oos": 5,
+            "janelas_positivas": 3
+          }
+        },
+        {
+          "estrategia": "swing",
+          "janelas_oos": 5,
+          "intervalos_teste": [
+            [
+              2048,
+              2548
+            ],
+            [
+              2548,
+              3048
+            ],
+            [
+              3048,
+              3548
+            ],
+            [
+              3548,
+              4048
+            ],
+            [
+              4048,
+              4548
+            ]
+          ],
+          "velas_avaliadas": 1471,
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 24,
+            "acerto": 0.417,
+            "retorno_bruto": "1.34%",
+            "custo_pago": "7.20%",
+            "retorno_liquido": "-5.86%",
+            "retorno_medio_por_operacao": "-0.244%",
+            "pior_sequencia": "-12.47%",
+            "ressalvas": [
+              "os custos consumiram mais da metade do resultado bruto"
+            ],
+            "resumo": "REPROVADA: -5.86% líquidos em 24 operações - os custos consumiram mais da metade do resultado bruto",
+            "aviso": "teste sobre o passado; não prevê o futuro",
+            "janelas_oos": 5,
+            "janelas_positivas": 3
+          }
+        },
+        {
+          "estrategia": "momentum",
+          "janelas_oos": 5,
+          "intervalos_teste": [
+            [
+              2048,
+              2548
+            ],
+            [
+              2548,
+              3048
+            ],
+            [
+              3048,
+              3548
+            ],
+            [
+              3548,
+              4048
+            ],
+            [
+              4048,
+              4548
+            ]
+          ],
+          "velas_avaliadas": 2011,
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 17,
+            "acerto": 0.294,
+            "retorno_bruto": "6.26%",
+            "custo_pago": "5.10%",
+            "retorno_liquido": "1.16%",
+            "retorno_medio_por_operacao": "0.068%",
+            "pior_sequencia": "-7.09%",
+            "ressalvas": [
+              "amostra pequena: 17 operações",
+              "os custos consumiram mais da metade do resultado bruto",
+              "instável entre janelas: 1/5 positivas"
+            ],
+            "resumo": "REPROVADA: +1.16% líquidos em 17 operações - amostra pequena: 17 operações; os custos consumiram mais da metade do resultado bruto; instável entre janelas: 1/5 positivas",
+            "aviso": "teste sobre o passado; não prevê o futuro",
+            "janelas_oos": 5,
+            "janelas_positivas": 1
+          }
+        },
+        {
+          "estrategia": "volatility",
+          "janelas_oos": 5,
+          "intervalos_teste": [
+            [
+              2048,
+              2548
+            ],
+            [
+              2548,
+              3048
+            ],
+            [
+              3048,
+              3548
+            ],
+            [
+              3548,
+              4048
+            ],
+            [
+              4048,
+              4548
+            ]
+          ],
+          "velas_avaliadas": 2500,
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "resumo": "REPROVADA: +0.00% líquidos em 0 operações - instável entre janelas: 0/5 positivas",
+            "janelas_oos": 5,
+            "janelas_positivas": 0,
+            "ressalvas": [
+              "instável entre janelas: 0/5 positivas"
+            ]
+          }
+        },
+        {
+          "estrategia": "arbitrage",
+          "janelas_oos": 5,
+          "intervalos_teste": [
+            [
+              2048,
+              2548
+            ],
+            [
+              2548,
+              3048
+            ],
+            [
+              3048,
+              3548
+            ],
+            [
+              3548,
+              4048
+            ],
+            [
+              4048,
+              4548
+            ]
+          ],
+          "velas_avaliadas": 2144,
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 45,
+            "acerto": 0.289,
+            "retorno_bruto": "-8.43%",
+            "custo_pago": "13.50%",
+            "retorno_liquido": "-21.93%",
+            "retorno_medio_por_operacao": "-0.487%",
+            "pior_sequencia": "-23.58%",
+            "ressalvas": [
+              "os custos consumiram mais da metade do resultado bruto",
+              "instável entre janelas: 0/5 positivas"
+            ],
+            "resumo": "REPROVADA: -21.93% líquidos em 45 operações - os custos consumiram mais da metade do resultado bruto; instável entre janelas: 0/5 positivas",
+            "aviso": "teste sobre o passado; não prevê o futuro",
+            "janelas_oos": 5,
+            "janelas_positivas": 0
+          }
+        },
+        {
+          "estrategia": "statistical",
+          "janelas_oos": 5,
+          "intervalos_teste": [
+            [
+              2048,
+              2548
+            ],
+            [
+              2548,
+              3048
+            ],
+            [
+              3048,
+              3548
+            ],
+            [
+              3548,
+              4048
+            ],
+            [
+              4048,
+              4548
+            ]
+          ],
+          "velas_avaliadas": 1728,
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 33,
+            "acerto": 0.455,
+            "retorno_bruto": "7.76%",
+            "custo_pago": "9.90%",
+            "retorno_liquido": "-2.14%",
+            "retorno_medio_por_operacao": "-0.065%",
+            "pior_sequencia": "-6.60%",
+            "ressalvas": [
+              "os custos consumiram mais da metade do resultado bruto",
+              "instável entre janelas: 2/5 positivas"
+            ],
+            "resumo": "REPROVADA: -2.14% líquidos em 33 operações - os custos consumiram mais da metade do resultado bruto; instável entre janelas: 2/5 positivas",
+            "aviso": "teste sobre o passado; não prevê o futuro",
+            "janelas_oos": 5,
+            "janelas_positivas": 2
+          }
+        },
+        {
+          "estrategia": "adaptive_regime",
+          "janelas_oos": 5,
+          "intervalos_teste": [
+            [
+              2048,
+              2548
+            ],
+            [
+              2548,
+              3048
+            ],
+            [
+              3048,
+              3548
+            ],
+            [
+              3548,
+              4048
+            ],
+            [
+              4048,
+              4548
+            ]
+          ],
+          "velas_avaliadas": 1651,
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 29,
+            "acerto": 0.345,
+            "retorno_bruto": "12.09%",
+            "custo_pago": "8.70%",
+            "retorno_liquido": "3.39%",
+            "retorno_medio_por_operacao": "0.117%",
+            "pior_sequencia": "-17.35%",
+            "ressalvas": [
+              "os custos consumiram mais da metade do resultado bruto",
+              "instável entre janelas: 2/5 positivas"
+            ],
+            "resumo": "REPROVADA: +3.39% líquidos em 29 operações - os custos consumiram mais da metade do resultado bruto; instável entre janelas: 2/5 positivas",
+            "aviso": "teste sobre o passado; não prevê o futuro",
+            "janelas_oos": 5,
+            "janelas_positivas": 2
+          }
+        }
+      ]
+    },
+    {
+      "instrumento": "ETH/USDT",
+      "fonte": "binance:1h:historico",
+      "qualidade": "ok",
+      "cutoff": "2026-10-16T01:00:00+00:00",
+      "velas_obtidas": 5000,
+      "sha256_fechamentos": "48d8f40c34826d5c38a41a0662ef044b079ed7abbd39949ed7e5038681391b8e",
+      "estrategias": [
+        {
+          "estrategia": "trend_following",
+          "janelas_oos": 5,
+          "intervalos_teste": [
+            [
+              2048,
+              2548
+            ],
+            [
+              2548,
+              3048
+            ],
+            [
+              3048,
+              3548
+            ],
+            [
+              3548,
+              4048
+            ],
+            [
+              4048,
+              4548
+            ]
+          ],
+          "velas_avaliadas": 1749,
+          "veredito": {
+            "conclusivo": true,
+            "aprovada": true,
+            "operacoes": 27,
+            "acerto": 0.37,
+            "retorno_bruto": "16.41%",
+            "custo_pago": "8.10%",
+            "retorno_liquido": "8.31%",
+            "retorno_medio_por_operacao": "0.308%",
+            "pior_sequencia": "-16.19%",
+            "ressalvas": [],
+            "resumo": "APROVADA: +8.31% líquidos em 27 operações",
+            "aviso": "teste sobre o passado; não prevê o futuro",
+            "janelas_oos": 5,
+            "janelas_positivas": 4
+          }
+        },
+        {
+          "estrategia": "mean_reversion",
+          "janelas_oos": 5,
+          "intervalos_teste": [
+            [
+              2048,
+              2548
+            ],
+            [
+              2548,
+              3048
+            ],
+            [
+              3048,
+              3548
+            ],
+            [
+              3548,
+              4048
+            ],
+            [
+              4048,
+              4548
+            ]
+          ],
+          "velas_avaliadas": 1619,
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 42,
+            "acerto": 0.524,
+            "retorno_bruto": "22.86%",
+            "custo_pago": "12.60%",
+            "retorno_liquido": "10.26%",
+            "retorno_medio_por_operacao": "0.244%",
+            "pior_sequencia": "-9.35%",
+            "ressalvas": [
+              "os custos consumiram mais da metade do resultado bruto",
+              "instável entre janelas: 2/5 positivas"
+            ],
+            "resumo": "REPROVADA: +10.26% líquidos em 42 operações - os custos consumiram mais da metade do resultado bruto; instável entre janelas: 2/5 positivas",
+            "aviso": "teste sobre o passado; não prevê o futuro",
+            "janelas_oos": 5,
+            "janelas_positivas": 2
+          }
+        },
+        {
+          "estrategia": "breakout",
+          "janelas_oos": 5,
+          "intervalos_teste": [
+            [
+              2048,
+              2548
+            ],
+            [
+              2548,
+              3048
+            ],
+            [
+              3048,
+              3548
+            ],
+            [
+              3548,
+              4048
+            ],
+            [
+              4048,
+              4548
+            ]
+          ],
+          "velas_avaliadas": 2255,
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 12,
+            "acerto": 0.583,
+            "retorno_bruto": "15.49%",
+            "custo_pago": "3.60%",
+            "retorno_liquido": "11.89%",
+            "retorno_medio_por_operacao": "0.991%",
+            "pior_sequencia": "-5.79%",
+            "ressalvas": [
+              "amostra pequena: 12 operações"
+            ],
+            "resumo": "REPROVADA: +11.89% líquidos em 12 operações - amostra pequena: 12 operações",
+            "aviso": "teste sobre o passado; não prevê o futuro",
+            "janelas_oos": 5,
+            "janelas_positivas": 3
+          }
+        },
+        {
+          "estrategia": "scalping",
+          "janelas_oos": 5,
+          "intervalos_teste": [
+            [
+              2048,
+              2548
+            ],
+            [
+              2548,
+              3048
+            ],
+            [
+              3048,
+              3548
+            ],
+            [
+              3548,
+              4048
+            ],
+            [
+              4048,
+              4548
+            ]
+          ],
+          "velas_avaliadas": 2437,
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 15,
+            "acerto": 0.4,
+            "retorno_bruto": "-2.84%",
+            "custo_pago": "4.50%",
+            "retorno_liquido": "-7.34%",
+            "retorno_medio_por_operacao": "-0.490%",
+            "pior_sequencia": "-7.90%",
+            "ressalvas": [
+              "amostra pequena: 15 operações",
+              "os custos consumiram mais da metade do resultado bruto",
+              "instável entre janelas: 1/5 positivas"
+            ],
+            "resumo": "REPROVADA: -7.34% líquidos em 15 operações - amostra pequena: 15 operações; os custos consumiram mais da metade do resultado bruto; instável entre janelas: 1/5 positivas",
+            "aviso": "teste sobre o passado; não prevê o futuro",
+            "janelas_oos": 5,
+            "janelas_positivas": 1
+          }
+        },
+        {
+          "estrategia": "swing",
+          "janelas_oos": 5,
+          "intervalos_teste": [
+            [
+              2048,
+              2548
+            ],
+            [
+              2548,
+              3048
+            ],
+            [
+              3048,
+              3548
+            ],
+            [
+              3548,
+              4048
+            ],
+            [
+              4048,
+              4548
+            ]
+          ],
+          "velas_avaliadas": 1375,
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 30,
+            "acerto": 0.6,
+            "retorno_bruto": "18.00%",
+            "custo_pago": "9.00%",
+            "retorno_liquido": "9.00%",
+            "retorno_medio_por_operacao": "0.300%",
+            "pior_sequencia": "-12.97%",
+            "ressalvas": [
+              "os custos consumiram mais da metade do resultado bruto"
+            ],
+            "resumo": "REPROVADA: +9.00% líquidos em 30 operações - os custos consumiram mais da metade do resultado bruto",
+            "aviso": "teste sobre o passado; não prevê o futuro",
+            "janelas_oos": 5,
+            "janelas_positivas": 3
+          }
+        },
+        {
+          "estrategia": "momentum",
+          "janelas_oos": 5,
+          "intervalos_teste": [
+            [
+              2048,
+              2548
+            ],
+            [
+              2548,
+              3048
+            ],
+            [
+              3048,
+              3548
+            ],
+            [
+              3548,
+              4048
+            ],
+            [
+              4048,
+              4548
+            ]
+          ],
+          "velas_avaliadas": 2044,
+          "veredito": {
+            "conclusivo": true,
+            "aprovada": true,
+            "operacoes": 23,
+            "acerto": 0.478,
+            "retorno_bruto": "18.92%",
+            "custo_pago": "6.90%",
+            "retorno_liquido": "12.02%",
+            "retorno_medio_por_operacao": "0.523%",
+            "pior_sequencia": "-9.67%",
+            "ressalvas": [],
+            "resumo": "APROVADA: +12.02% líquidos em 23 operações",
+            "aviso": "teste sobre o passado; não prevê o futuro",
+            "janelas_oos": 5,
+            "janelas_positivas": 4
+          }
+        },
+        {
+          "estrategia": "volatility",
+          "janelas_oos": 5,
+          "intervalos_teste": [
+            [
+              2048,
+              2548
+            ],
+            [
+              2548,
+              3048
+            ],
+            [
+              3048,
+              3548
+            ],
+            [
+              3548,
+              4048
+            ],
+            [
+              4048,
+              4548
+            ]
+          ],
+          "velas_avaliadas": 2500,
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "resumo": "REPROVADA: +0.00% líquidos em 0 operações - instável entre janelas: 0/5 positivas",
+            "janelas_oos": 5,
+            "janelas_positivas": 0,
+            "ressalvas": [
+              "instável entre janelas: 0/5 positivas"
+            ]
+          }
+        },
+        {
+          "estrategia": "arbitrage",
+          "janelas_oos": 5,
+          "intervalos_teste": [
+            [
+              2048,
+              2548
+            ],
+            [
+              2548,
+              3048
+            ],
+            [
+              3048,
+              3548
+            ],
+            [
+              3548,
+              4048
+            ],
+            [
+              4048,
+              4548
+            ]
+          ],
+          "velas_avaliadas": 2218,
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 53,
+            "acerto": 0.415,
+            "retorno_bruto": "6.82%",
+            "custo_pago": "15.90%",
+            "retorno_liquido": "-9.08%",
+            "retorno_medio_por_operacao": "-0.171%",
+            "pior_sequencia": "-15.34%",
+            "ressalvas": [
+              "os custos consumiram mais da metade do resultado bruto"
+            ],
+            "resumo": "REPROVADA: -9.08% líquidos em 53 operações - os custos consumiram mais da metade do resultado bruto",
+            "aviso": "teste sobre o passado; não prevê o futuro",
+            "janelas_oos": 5,
+            "janelas_positivas": 3
+          }
+        },
+        {
+          "estrategia": "statistical",
+          "janelas_oos": 5,
+          "intervalos_teste": [
+            [
+              2048,
+              2548
+            ],
+            [
+              2548,
+              3048
+            ],
+            [
+              3048,
+              3548
+            ],
+            [
+              3548,
+              4048
+            ],
+            [
+              4048,
+              4548
+            ]
+          ],
+          "velas_avaliadas": 1694,
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 45,
+            "acerto": 0.511,
+            "retorno_bruto": "15.57%",
+            "custo_pago": "13.50%",
+            "retorno_liquido": "2.07%",
+            "retorno_medio_por_operacao": "0.046%",
+            "pior_sequencia": "-12.03%",
+            "ressalvas": [
+              "os custos consumiram mais da metade do resultado bruto",
+              "instável entre janelas: 2/5 positivas"
+            ],
+            "resumo": "REPROVADA: +2.07% líquidos em 45 operações - os custos consumiram mais da metade do resultado bruto; instável entre janelas: 2/5 positivas",
+            "aviso": "teste sobre o passado; não prevê o futuro",
+            "janelas_oos": 5,
+            "janelas_positivas": 2
+          }
+        },
+        {
+          "estrategia": "adaptive_regime",
+          "janelas_oos": 5,
+          "intervalos_teste": [
+            [
+              2048,
+              2548
+            ],
+            [
+              2548,
+              3048
+            ],
+            [
+              3048,
+              3548
+            ],
+            [
+              3548,
+              4048
+            ],
+            [
+              4048,
+              4548
+            ]
+          ],
+          "velas_avaliadas": 1553,
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 40,
+            "acerto": 0.375,
+            "retorno_bruto": "11.32%",
+            "custo_pago": "12.00%",
+            "retorno_liquido": "-0.68%",
+            "retorno_medio_por_operacao": "-0.017%",
+            "pior_sequencia": "-20.08%",
+            "ressalvas": [
+              "os custos consumiram mais da metade do resultado bruto"
+            ],
+            "resumo": "REPROVADA: -0.68% líquidos em 40 operações - os custos consumiram mais da metade do resultado bruto",
+            "aviso": "teste sobre o passado; não prevê o futuro",
+            "janelas_oos": 5,
+            "janelas_positivas": 3
+          }
+        }
+      ]
+    }
+  ],
+  "aviso": "dados públicos históricos; não autoriza LIVE nem prevê lucro futuro"
+}

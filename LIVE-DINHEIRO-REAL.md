@@ -17,6 +17,39 @@ com nova validação da certificação no instante da autorização. Mesmo um pi
 autorizado continua sujeito ao selo global `MESA_LIVE_LIBERADA=False` e às
 demais fechaduras descritas abaixo.
 
+### Evidência histórica fora da amostra
+
+O validador público agora busca histórico paginado, recusa séries incompletas,
+descarta a vela em formação e avalia blocos fora da amostra não sobrepostos,
+separados do treino por embargo. Toda posição que ainda estiver aberta no fim
+de um bloco é marcada a mercado e paga os custos de ida e volta; ela não pode
+simplesmente desaparecer do resultado. Uma estratégia só recebe aprovação
+histórica quando tem pelo menos 20 operações, resultado líquido positivo, sem
+ressalva de custos e com pelo menos 60% das janelas positivas.
+
+A rodada de referência em dados públicos da Binance, com 5.000 velas de 1h,
+treino de 2.000, embargo de 48 e cinco testes de 500 velas, encontrou apenas
+dois candidatos aprovados: `trend_following` em ETH/USDT (+8,31% líquidos em
+27 operações) e `momentum` em ETH/USDT (+12,02% em 23 operações). Todas as
+estratégias em BTC/USDT e as outras oito em ETH/USDT foram reprovadas. A
+evidência completa, com hash da série e revisão do código, está em
+`docs/mission/evidence/real-readiness/binance-btc-eth-1h-oos.json`.
+
+Essa aprovação é somente histórica. Ela **não forma o agente**, não substitui
+PAPER prolongado, fill TESTNET reconciliado nem a prova somente leitura da
+conta REAL, e não abre nenhuma trava LIVE. A Escola continua sendo a autoridade
+de formação; quando formar o agente, o encaminhamento automático o coloca na
+Sala REAL bloqueada para decisão explícita do proprietário.
+
+Para repetir a rodada:
+
+```powershell
+uv run python scripts/validar_estrategias.py --exchange binance `
+  --instrumentos BTC/USDT,ETH/USDT --timeframe 1h --velas 5000 `
+  --treino 2000 --teste 500 --embargo 48 --capital 1000 `
+  --saida-json docs/mission/evidence/real-readiness/binance-btc-eth-1h-oos.json
+```
+
 ### Corretoras disponíveis
 
 | Corretora | Dados públicos | TESTNET pelo CCXT instalado | Credencial adicional |

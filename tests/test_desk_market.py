@@ -38,6 +38,25 @@ class FakeExchange:
         return rows
 
 
+class FakePagedExchange:
+    """Histórico maior que o limite de uma única resposta da corretora."""
+
+    def __init__(self, n=2600):
+        self.calls = 0
+        self.rows = []
+        for i in range(n):
+            open_at = NOW - timedelta(hours=n - 1 - i)
+            self.rows.append([
+                int(open_at.timestamp() * 1000), 100, 101, 99,
+                100 + i / 100, 10])
+
+    def fetch_ohlcv(self, symbol, timeframe="1h", since=None, limit=1000):
+        self.calls += 1
+        candidatas = self.rows if since is None else [
+            row for row in self.rows if row[0] >= since]
+        return candidatas[:limit]
+
+
 class TestCutoffEVelaEmFormacao:
     def test_open_candle_is_discarded_and_cutoff_is_close_time(self):
         feed = PublicMarketFeed("binance", client=FakeExchange(n=40))
@@ -99,6 +118,27 @@ class TestCacheCompartilhado:
         feed.snapshot("BTC/USDT", "1h", now=NOW)
         feed.snapshot("ETH/USDT", "1h", now=NOW)
         assert ex.calls == 2
+
+
+class TestHistoricoPaginado:
+    def test_busca_varias_paginas_sem_duplicar_e_descarta_vela_aberta(self):
+        ex = FakePagedExchange(n=2600)
+        feed = PublicMarketFeed("binance", client=ex)
+        snap = feed.historical_snapshot(
+            "BTC/USDT", "1h", limit=2200, now=NOW, page_size=500)
+        assert ex.calls >= 5
+        assert len(snap.closes) == 2200
+        assert snap.cutoff == NOW
+        assert snap.quality == "ok"
+        assert len(set(snap.closes)) == 2200
+
+    def test_historico_incompleto_e_degradado_sem_inventar_velas(self):
+        ex = FakePagedExchange(n=120)
+        feed = PublicMarketFeed("binance", client=ex)
+        snap = feed.historical_snapshot(
+            "BTC/USDT", "1h", limit=500, now=NOW, page_size=100)
+        assert len(snap.closes) == 119
+        assert snap.quality == "degraded: apenas 119/500 velas fechadas"
 
 
 class TestEscolhaDeCorretora:

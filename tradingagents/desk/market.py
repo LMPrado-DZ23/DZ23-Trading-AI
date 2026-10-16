@@ -72,6 +72,77 @@ class PublicMarketFeed:
             self._cache[key] = (now, rows)
         return rows
 
+    def historical_snapshot(self, instrument: str, timeframe: str = "1h", *,
+                            limit: int = 5000, page_size: int = 1000,
+                            now: datetime | None = None) -> MarketSnapshot:
+        """Carrega histórico público paginado para validação quantitativa.
+
+        ``snapshot`` atende a mesa online com uma leitura curta e cacheada.
+        Esta variante é deliberadamente offline/read-only: pagina por ``since``,
+        deduplica timestamps e exige velas fechadas. Corretora que ignora
+        ``since`` não causa loop nem ganha velas inventadas.
+        """
+        if limit <= 0 or page_size <= 0:
+            raise ValueError("limit e page_size precisam ser positivos")
+        if timeframe not in TIMEFRAME_SECONDS:
+            raise ValueError(f"timeframe não suportado: {timeframe}")
+        now = now or datetime.now(timezone.utc)
+        step_ms = TIMEFRAME_SECONDS[timeframe] * 1000
+        now_ms = int(now.timestamp() * 1000)
+        # Duas barras de folga: uma pode estar aberta e limites de API podem
+        # cortar exatamente na fronteira solicitada.
+        since = now_ms - (limit + 2) * step_ms
+        por_timestamp: dict[int, list] = {}
+        max_paginas = ((limit + 2 + page_size - 1) // page_size) + 3
+        try:
+            for _ in range(max_paginas):
+                pagina = self.client.fetch_ohlcv(
+                    instrument, timeframe, since, min(page_size, limit + 2))
+                if not pagina:
+                    break
+                maior = since - step_ms
+                for row in pagina:
+                    if not isinstance(row, (list, tuple)) or len(row) < 6:
+                        continue
+                    try:
+                        ts = int(row[0])
+                    except (TypeError, ValueError):
+                        continue
+                    por_timestamp[ts] = list(row[:6])
+                    maior = max(maior, ts)
+                proximo = maior + step_ms
+                if proximo <= since:       # API ignorou since / página repetida
+                    break
+                since = proximo
+                if since > now_ms:
+                    break
+        except Exception as exc:
+            return MarketSnapshot(
+                instrument, timeframe, now, (),
+                source=f"{self.exchange_id}:historico-indisponivel",
+                quality=f"degraded: {type(exc).__name__}: falha de rede"[:80])
+
+        fechadas = []
+        for ts, row in sorted(por_timestamp.items()):
+            close_at = datetime.fromtimestamp(
+                ts / 1000, timezone.utc) + timedelta(milliseconds=step_ms)
+            if close_at <= now:
+                fechadas.append((close_at, Decimal(str(row[4]))))
+        fechadas = fechadas[-limit:]
+        if not fechadas:
+            return MarketSnapshot(
+                instrument, timeframe, now, (),
+                source=f"{self.exchange_id}:{timeframe}:historico",
+                quality="degraded: nenhuma vela fechada")
+        cutoff = fechadas[-1][0]
+        quality = ("ok" if len(fechadas) == limit else
+                   f"degraded: apenas {len(fechadas)}/{limit} velas fechadas")
+        return MarketSnapshot(
+            instrument, timeframe, cutoff,
+            tuple(close for _, close in fechadas),
+            source=f"{self.exchange_id}:{timeframe}:historico",
+            quality=quality)
+
     def snapshot(self, instrument: str, timeframe: str = "1h", limit: int = 240,
                  *, now: datetime | None = None) -> MarketSnapshot:
         now = now or datetime.now(timezone.utc)
