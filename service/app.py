@@ -2791,7 +2791,108 @@ def _avaliar_escola_da_mesa(desk: dict, tenant_id: str, *,
     return resultados
 
 
-def _desk_boot(tenant_id: str) -> dict:
+_SCHEMA_ATIVACAO_LIVE = "dz23.ativacao-live/1"
+_CHAVE_ATIVACAO_LIVE = "ativacao_live"
+
+
+def _validar_ativacao_live_salva(armazem, tenant_id: str, cfg: dict) -> dict:
+    """Revalida o mandato persistido; reinício nunca amplia autorização."""
+    from tradingagents.desk.piloto import (
+        EstadoDoPiloto,
+        SupervisorDePiloto,
+    )
+    from tradingagents.desk.salas import EscolaCentral
+
+    registro = armazem.carregar(tenant_id, _CHAVE_ATIVACAO_LIVE)
+    if not isinstance(registro, dict):
+        return {}
+    registro = dict(registro)
+    registro["valida"] = False
+    if (registro.get("schema") != _SCHEMA_ATIVACAO_LIVE
+            or registro.get("tenant_id") != tenant_id):
+        return registro
+    exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    if str(registro.get("exchange") or "").strip().lower() != exchange:
+        return registro
+    if not hmac.compare_digest(
+            str(registro.get("execution_credential_fingerprint") or ""),
+            testnet_credential_fingerprint(_env_testnet(cfg))):
+        return registro
+    prova, prova_valida = _prova_leitura_real_armazem(
+        armazem, tenant_id, cfg)
+    supervisor = SupervisorDePiloto(armazem, tenant_id=tenant_id)
+    try:
+        supervisor.vigiar(
+            central=EscolaCentral(armazem=armazem, tenant_id=tenant_id))
+    except Exception:
+        return registro
+    piloto = supervisor.de(str(registro.get("agent_id") or ""))
+    if not piloto or piloto.estado is not EstadoDoPiloto.PILOTO_AUTORIZADO:
+        return registro
+    if (piloto.authorization_id != registro.get("authorization_id")
+            or piloto.conta != registro.get("conta")
+            or not _prova_real_serve_piloto(prova, prova_valida, piloto)):
+        return registro
+    teto_ordem = _decimal_positivo(cfg.get("LIVE_MAX_ORDER_VALUE"))
+    teto_diario = _decimal_positivo(cfg.get("LIVE_MAX_DAILY_LOSS"))
+    if (teto_ordem is None or teto_diario is None
+            or teto_ordem > piloto.capital_maximo
+            or teto_diario > piloto.perda_diaria_maxima):
+        return registro
+    registro["valida"] = True
+    return registro
+
+
+def _construir_mandato_da_mesa(
+        tenant_id: str, cfg: dict, universe: tuple[str, ...], capital: Decimal,
+        *, ativacao_live: dict | None = None):
+    """Constrói o mandato no mesmo modo econômico da corretora.
+
+    Configuração nunca concede LIVE. O modo real exige simultaneamente o
+    selo auditado de código e um registro produzido pelo ato explícito do
+    proprietário, já vinculado a inquilino, corretora, conta e piloto.
+    """
+    from tradingagents.desk.models import DeskMandate, Mode
+
+    broker_kind = str(
+        cfg.get("TRADINGAGENTS_DESK_BROKER") or "paper").strip().lower()
+    broker_mode = str(
+        cfg.get("TRADINGAGENTS_BROKER_MODE") or "testnet").strip().lower()
+    if broker_kind != "ccxt":
+        mode, account, live_authorized = Mode.PAPER, f"paper-{tenant_id}", False
+    elif broker_mode == "testnet":
+        mode, account, live_authorized = (
+            Mode.TESTNET, f"testnet-{tenant_id}", False)
+    elif broker_mode == "live":
+        if not MESA_LIVE_LIBERADA:
+            raise BrokerSecurityError(
+                "LIVE bloqueado pelo selo de código MESA_LIVE_LIBERADA=False")
+        ativacao = ativacao_live if isinstance(ativacao_live, dict) else {}
+        if not (ativacao.get("valida") is True
+                and ativacao.get("schema") == _SCHEMA_ATIVACAO_LIVE
+                and ativacao.get("tenant_id") == tenant_id
+                and str(ativacao.get("exchange") or "").strip().lower()
+                == str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+                and str(ativacao.get("conta") or "").strip()
+                and str(ativacao.get("agent_id") or "").strip()
+                and str(ativacao.get("authorization_id") or "").strip()):
+            raise BrokerSecurityError(
+                "LIVE exige ativação explícita, vigente e vinculada à conta "
+                "e ao piloto autorizado")
+        mode = Mode.LIVE
+        account = str(ativacao["conta"]).strip()
+        live_authorized = True
+    else:
+        raise BrokerSecurityError(
+            "TRADINGAGENTS_BROKER_MODE deve ser testnet ou live")
+    return DeskMandate(
+        mandate_id=f"desk-{tenant_id}", owner=tenant_id, account=account,
+        mode=mode, instruments=universe, capital=capital,
+        live_authorized=live_authorized)
+
+
+def _desk_boot(tenant_id: str, *, cfg_override: dict | None = None,
+               live_activation: dict | None = None) -> dict:
     from decimal import Decimal
 
     from tradingagents.desk.brokers import build_desk_broker
@@ -2799,7 +2900,6 @@ def _desk_boot(tenant_id: str) -> dict:
     from tradingagents.desk.ledger import Ledger
     from tradingagents.desk.models import (
         AgentStage,
-        DeskMandate,
         MarketSnapshot,
         Mode,
         utcnow as _now,
@@ -2809,13 +2909,10 @@ def _desk_boot(tenant_id: str) -> dict:
     from tradingagents.desk.scheduler import DeskScheduler
     from tradingagents.desk.traders import default_desk
 
-    cfg = load_cfg(tenant_id)
+    cfg = dict(cfg_override) if cfg_override is not None else load_cfg(tenant_id)
     raw = cfg.get("TRADINGAGENTS_DESK_INSTRUMENTS") or "BTC/USDT,ETH/USDT"
     universe = tuple(i.strip().upper() for i in raw.split(",") if i.strip())
     capital = Decimal(str(cfg.get("TRADINGAGENTS_DESK_CAPITAL") or "1000"))
-    mandate = DeskMandate(mandate_id=f"desk-{tenant_id}", owner=tenant_id,
-                          account=f"paper-{tenant_id}", mode=Mode.PAPER,
-                          instruments=universe, capital=capital)
     from tradingagents.desk.learning import MemoriaDeDesempenho
     from tradingagents.desk.modo import ModoDaMesa, PosseDeExecucao
     from tradingagents.desk.storage import ArmazemDeEstado
@@ -2823,6 +2920,15 @@ def _desk_boot(tenant_id: str) -> dict:
     # o histórico dos agentes sobrevive à troca de máquina.
     armazem = ArmazemDeEstado(os.environ.get("DATABASE_URL"),
                               diretorio=DATA / "desks")
+    if (str(cfg.get("TRADINGAGENTS_DESK_BROKER") or "paper").strip().lower()
+            == "ccxt"
+            and str(cfg.get("TRADINGAGENTS_BROKER_MODE") or "").strip().lower()
+            == "live"
+            and live_activation is None):
+        live_activation = _validar_ativacao_live_salva(
+            armazem, tenant_id, cfg)
+    mandate = _construir_mandato_da_mesa(
+        tenant_id, cfg, universe, capital, ativacao_live=live_activation)
     memoria = MemoriaDeDesempenho(DATA / "desks" / tenant_id / "aprendizado.json",
                                   armazem=armazem, tenant_id=tenant_id)
     # Evolução autônoma (E5): diário auditável por trader + experimentos
@@ -2867,12 +2973,18 @@ def _desk_boot(tenant_id: str) -> dict:
 
     risk = RiskEngine(mandate)
     ledger = Ledger(opening_cash=mandate.capital)
-    data_dir = DATA / "desks" / tenant_id
-    # A autorização de LIVE é de CÓDIGO, não de configuração. O mandato
-    # desta mesa é PAPER (acima) e `live_authorized` só se torna verdadeiro
-    # por construção explícita em código auditado — salvar
-    # TRADINGAGENTS_BROKER_MODE=live no painel NÃO basta para a mesa.
-    # (Achado FIN-1 da auditoria independente.)
+    if mandate.mode is Mode.LIVE:
+        escopo_financeiro = hashlib.sha256(
+            f"{exchange_cfg}\0{mandate.account}".encode()).hexdigest()[:16]
+        chave_oms = f"oms_live_{escopo_financeiro}"
+        chave_livro = f"livro_live_{escopo_financeiro}"
+        chave_mesa = f"mesa_live_{escopo_financeiro}"
+        data_dir = DATA / "desks" / tenant_id / f"live-{escopo_financeiro}"
+    else:
+        chave_oms, chave_livro, chave_mesa = "oms", "livro", "mesa"
+        data_dir = DATA / "desks" / tenant_id
+    # A autorização de LIVE é de CÓDIGO + ato explícito vinculado à conta.
+    # Salvar TRADINGAGENTS_BROKER_MODE=live jamais basta (FIN-1/ADR-006).
     broker, broker_mode = build_desk_broker(
         cfg, final_state={}, journal_path=str(data_dir / "broker.jsonl"),
         paper_price=Decimal("100"), live_authorized=mandate.live_authorized)
@@ -3038,13 +3150,18 @@ def _desk_boot(tenant_id: str) -> dict:
 
     # Estado financeiro anterior: restaurar e EXIGIR reconciliação antes de
     # qualquer exposição nova (UNKNOWN => BLOCK).
-    recuperacao = coord.restaurar_estado(armazem.carregar(tenant_id, "oms"))
+    recuperacao = coord.restaurar_estado(
+        armazem.carregar(tenant_id, chave_oms))
+    if mandate.mode is Mode.LIVE:
+        coord.exigir_reconciliacao(
+            "mesa LIVE iniciada ou reiniciada: reconcilie conta, ordens, "
+            "posições e caixa antes de qualquer entrada")
 
     # Diário de gestão (políticas, trailing, parciais): sem restaurar, a
     # posição sobreviveria ao reinício mas o GERENTE de saída morreria com o
     # processo. A verdade financeira continua sendo o diário (ledger vence).
     restauracao_livro = orch.restaurar_livro(
-        armazem.carregar(tenant_id, "livro"), ledger=coord.ledger)
+        armazem.carregar(tenant_id, chave_livro), ledger=coord.ledger)
 
     # Centro Inteligente de Alertas ⑤: a fila durável é carregada agora; o
     # que ficou pendente no processo anterior volta a ser tentado (ciclo ou
@@ -3072,10 +3189,12 @@ def _desk_boot(tenant_id: str) -> dict:
             "scheduler": None, "estagios_antes": estagios_antes,
             "persistir_estagios": _persistir_estagios,
             "ia_modelo": cfg.get("TRADINGAGENTS_LLM_PROVIDER") or "",
-            "manual": copiloto, "snaps_fn": snaps_fn}
+            "manual": copiloto, "snaps_fn": snaps_fn,
+            "chave_oms": chave_oms, "chave_livro": chave_livro,
+            "chave_mesa": chave_mesa}
 
     def _gravar_oms():
-        armazem.salvar(tenant_id, "oms", coord.snapshot_estado())
+        armazem.salvar(tenant_id, chave_oms, coord.snapshot_estado())
 
     # WAL do OMS (FIN-08): gravação SÍNCRONA ligada ao coordenador. Aqui a
     # falha LEVANTA de propósito — o coordenador recusa a ordem que a
@@ -3158,6 +3277,7 @@ def _desk_boot(tenant_id: str) -> dict:
         orch, coord, snapshot_provider=snaps_fn, price_provider=prices_fn,
         state_path=data_dir / "state.json", on_cycle=_record,
         armazem=armazem, tenant_id=tenant_id,
+        state_key=chave_mesa, livro_key=chave_livro,
         interval_seconds=int(os.environ.get("DESK_INTERVAL_SECONDS", "300")),
         guarda_operacao=_guarda_operacao)
     return desk
@@ -3377,6 +3497,20 @@ def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
     }
 
 
+def _exigir_prontidao_live(request: Request, d: dict) -> None:
+    """Revalida o preflight imediatamente antes de ligar/enviar em LIVE."""
+    if str(d.get("broker_mode") or "").lower() != "live":
+        return
+    prontidao = _live_status_payload(request)
+    if prontidao.get("pode_operar_real") is not True:
+        raise HTTPException(409, {
+            "erro": "mesa LIVE preparada, mas envio permanece bloqueado",
+            "pendencias": [i.get("item") for i in (
+                prontidao.get("checklist") or ()) if not i.get("pronto")],
+            "acao": "resolva as pendências e reconcilie antes de ligar",
+        })
+
+
 @app.post("/v1/desk/cycle")
 def desk_cycle(request: Request, _=Depends(auth), __=Depends(require_plan)):
     d = _desk_of(request)
@@ -3393,6 +3527,7 @@ def desk_cycle(request: Request, _=Depends(auth), __=Depends(require_plan)):
                 "descartados": out.get("descartados", []),
                 "vetos": out.get("vetos", []), "abstencoes": out.get("abstencoes", []),
                 "erros": out.get("erros", [])}
+    _exigir_prontidao_live(request, d)
     _guarda_do_pedido(d)
     out = d["scheduler"].run_once()
     return {"ok": True, "resumo": out.get("resumo", ""),
@@ -3412,6 +3547,7 @@ def desk_scheduler(action: str, request: Request, _=Depends(auth), __=Depends(re
     d = _desk_of(request)
     sched = d["scheduler"]
     if action == "start":
+        _exigir_prontidao_live(request, d)
         _guarda_do_pedido(d)
         recuperacao = sched.recover()
         return {"ok": True, "iniciado": sched.start(), "recuperacao": recuperacao,
@@ -5062,9 +5198,19 @@ def _resumo_sala_real(request: Request) -> dict:
     """
     from tradingagents.desk.piloto import MODO_DO_PILOTO
 
+    tid = request_tenant(request)
+    desk = _DESKS.get(tid) or {}
+    mandato = getattr((desk.get("orchestrator")), "mandate", None)
+    live_ativo = bool(
+        str(desk.get("broker_mode") or "").lower() == "live"
+        and getattr(mandato, "live_authorized", False)
+        and MESA_LIVE_LIBERADA)
     base = {
         "disponivel": False,
-        "modo_do_piloto": MODO_DO_PILOTO,
+        "modo_do_piloto": ("live (conta real)" if live_ativo
+                            else MODO_DO_PILOTO),
+        # Construir o adaptador não equivale a liberar envio: o status pai
+        # só marca isso após reconciliação e checklist completo.
         "envio_real_habilitado": False,
         "encaminhamentos_total": 0,
         "autorizacoes_total": 0,
@@ -5095,8 +5241,12 @@ def _resumo_sala_real(request: Request) -> dict:
         "autorizacoes_total": len(autorizacoes),
         "estados_encaminhamento": _contar(encaminhamentos),
         "estados_autorizacao": _contar(autorizacoes),
-        "aviso": ("formatura apenas encaminha; limites e autorização explícita "
-                  "do proprietário continuam obrigatórios"),
+        "aviso": (
+            "mesa LIVE construída; cada agente continua sujeito à sua "
+            "autorização, limites, vigia e reconciliação"
+            if live_ativo else
+            "formatura apenas encaminha; limites e autorização explícita "
+            "do proprietário continuam obrigatórios"),
     }
 
 
@@ -5329,6 +5479,123 @@ def _live_status_payload(request: Request) -> dict:
 def live_status(request: Request, _=Depends(auth)):
     """Checklist detalhado da preparação para dinheiro real."""
     return _live_status_payload(request)
+
+
+@app.post("/v1/live/ativar/{agent_id}")
+async def live_ativar_mesa(agent_id: str, req: Request, _=Depends(auth),
+                           __=Depends(require_plan)):
+    """Ato final do dono, disponível somente após liberação auditada.
+
+    A rota não existe como atalho de configuração: exige todos os controles
+    prévios, seleciona um piloto já autorizado para a conta exata e cria a
+    mesa LIVE ainda com reconciliação obrigatória. Nenhuma ordem é enviada.
+    """
+    if not MESA_LIVE_LIBERADA:
+        raise HTTPException(
+            409, "LIVE indisponível: MESA_LIVE_LIBERADA=False; exige mudança "
+                 "de código auditada e decisão explícita do proprietário")
+    body = await _json_body(req)
+    if str(body.get("frase") or "").strip() != LIVE_CONFIRM_PHRASE:
+        raise HTTPException(422, f"repita exatamente: {LIVE_CONFIRM_PHRASE}")
+    conta_confirmada = str(body.get("conta") or "").strip()
+    if not conta_confirmada:
+        raise HTTPException(422, "confirme a conta REAL exata desta ativação")
+    tid = request_tenant(req)
+    cfg = load_cfg(tid)
+    if (str(cfg.get("TRADINGAGENTS_DESK_BROKER") or "").strip().lower()
+            != "ccxt"):
+        raise HTTPException(409, "a ativação LIVE exige o executor CCXT")
+    if str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower() == "iq_option":
+        raise HTTPException(
+            409, "IQ Option não possui executor LIVE homologado no DZ23")
+    if str(cfg.get("TRADINGAGENTS_BROKER_MODE") or "testnet").lower() != "testnet":
+        raise HTTPException(
+            409, "prepare e reconcilie a mesa em TESTNET antes da ativação")
+
+    prontidao = _live_status_payload(req)
+    estado = prontidao.get("estado_de_liberacao") or {}
+    if estado.get("pre_requisitos_sem_selo_concluidos") is not True:
+        raise HTTPException(409, {
+            "erro": "pré-requisitos operacionais ainda não concluídos",
+            "bloqueios": estado.get("bloqueios_por_categoria") or {},
+        })
+    certificacao = next((p for p in (
+        prontidao.get("certificacoes_estrategia_conta") or ())
+        if p.get("agent_id") == agent_id
+        and p.get("conta") == conta_confirmada
+        and p.get("risco_compativel") is True), None)
+    if certificacao is None:
+        raise HTTPException(
+            409, "o agente não possui piloto vigente e risco compatível "
+                 "para a conta REAL confirmada")
+    d_anterior = _DESKS.get(tid)
+    if d_anterior and d_anterior["scheduler"].running:
+        raise HTTPException(
+            409, "pare a mesa TESTNET antes de ativar a mesa LIVE")
+    esc = _escola_of(req)
+    sup = _supervisor_of(req)
+    piloto = sup.de(agent_id)
+    prova, prova_valida = _prova_leitura_real(req, cfg)
+    if piloto is None or not _prova_real_serve_piloto(
+            prova, prova_valida, piloto):
+        raise HTTPException(
+            409, "a prova somente leitura já não corresponde ao piloto e à conta")
+    ativacao = {
+        "schema": _SCHEMA_ATIVACAO_LIVE,
+        "tenant_id": tid,
+        "exchange": str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").lower(),
+        "conta": conta_confirmada,
+        "agent_id": agent_id,
+        "authorization_id": piloto.authorization_id,
+        "execution_credential_fingerprint": testnet_credential_fingerprint(
+            _env_testnet(cfg)),
+        "autorizada_em": datetime.now(timezone.utc).isoformat(),
+        "valida": True,
+    }
+    cfg_live = {**cfg, "TRADINGAGENTS_BROKER_MODE": "live"}
+    try:
+        nova = _desk_boot(tid, cfg_override=cfg_live,
+                          live_activation=ativacao)
+    except BrokerSecurityError as exc:
+        raise HTTPException(409, f"mesa LIVE recusada: {exc}"[:400]) from exc
+    # Só persiste a decisão depois que a composição segura foi construída.
+    esc["armazem"].salvar(tid, _CHAVE_ATIVACAO_LIVE,
+                           {k: v for k, v in ativacao.items() if k != "valida"})
+    save_cfg(cfg_live, tid)
+    _DESKS[tid] = nova
+    return {
+        "ok": True,
+        "modo": "live",
+        "agent_id": agent_id,
+        "conta": conta_confirmada,
+        "envio_real_habilitado": False,
+        "reconciliacao_obrigatoria": True,
+        "proxima_acao": (
+            "reconcilie ordens, posições e caixa; somente depois o PLAY "
+            "reavaliará todos os gates"),
+    }
+
+
+@app.post("/v1/live/desativar")
+def live_desativar_mesa(request: Request, _=Depends(auth),
+                        __=Depends(require_plan)):
+    """Volta para TESTNET e revoga o mandato global sem apagar evidências."""
+    tid = request_tenant(request)
+    d = _DESKS.get(tid)
+    if d and d.get("scheduler") and d["scheduler"].running:
+        d["scheduler"].stop()
+    esc = _escola_of(request)
+    esc["armazem"].salvar(tid, _CHAVE_ATIVACAO_LIVE, {
+        "schema": _SCHEMA_ATIVACAO_LIVE,
+        "tenant_id": tid,
+        "revogada_em": datetime.now(timezone.utc).isoformat(),
+        "motivo": "desativada explicitamente pelo proprietário",
+    })
+    cfg = load_cfg(tid)
+    cfg["TRADINGAGENTS_BROKER_MODE"] = "testnet"
+    save_cfg(cfg, tid)
+    _desk_reset(tid)
+    return {"ok": True, "modo": "testnet", "envio_real_habilitado": False}
 
 
 @app.get("/v1/operational-readiness")

@@ -15,6 +15,7 @@ por cima. LIVE continua bloqueado por política (ADR-002/ADR-006).
 from __future__ import annotations
 
 import importlib
+from types import SimpleNamespace
 
 import pytest
 
@@ -77,6 +78,77 @@ class TestSeloDaMesa:
         broker, mode = build_desk_broker({}, final_state={})
         assert mode == "paper" and type(broker).__name__ == "PaperBroker"
 
+    def test_mandato_live_exige_selo_e_ativacao_vinculada(self, tmp_path,
+                                                          monkeypatch):
+        m, _ = TestPontaAPontaNoServico()._app(tmp_path, monkeypatch)
+        from tradingagents.desk.models import Mode
+
+        with pytest.raises(BrokerSecurityError, match="selo de código"):
+            m._construir_mandato_da_mesa(
+                "legacy", CFG_LIVE_COMPLETO, ("BTC/USDT",),
+                m.Decimal("1000"), ativacao_live={
+                    "schema": "dz23.ativacao-live/1", "tenant_id": "legacy",
+                    "exchange": "binance", "conta": "principal",
+                    "agent_id": "trader-momentum",
+                    "authorization_id": "AUT-1", "valida": True,
+                })
+
+        monkeypatch.setattr(m, "MESA_LIVE_LIBERADA", True)
+        with pytest.raises(BrokerSecurityError, match="ativação explícita"):
+            m._construir_mandato_da_mesa(
+                "legacy", CFG_LIVE_COMPLETO, ("BTC/USDT",),
+                m.Decimal("1000"), ativacao_live=None)
+
+        mandato = m._construir_mandato_da_mesa(
+            "legacy", CFG_LIVE_COMPLETO, ("BTC/USDT",),
+            m.Decimal("1000"), ativacao_live={
+                "schema": "dz23.ativacao-live/1", "tenant_id": "legacy",
+                "exchange": "binance", "conta": "principal",
+                "agent_id": "trader-momentum",
+                "authorization_id": "AUT-1", "valida": True,
+            })
+        assert mandato.mode is Mode.LIVE
+        assert mandato.account == "principal"
+        assert mandato.live_authorized is True
+
+    def test_testnet_recebe_mandato_testnet(self, tmp_path, monkeypatch):
+        m, _ = TestPontaAPontaNoServico()._app(tmp_path, monkeypatch)
+        from tradingagents.desk.models import Mode
+
+        cfg = {**CFG_LIVE_COMPLETO,
+               "TRADINGAGENTS_BROKER_MODE": "testnet"}
+        mandato = m._construir_mandato_da_mesa(
+            "legacy", cfg, ("BTC/USDT",), m.Decimal("1000"))
+        assert mandato.mode is Mode.TESTNET
+        assert mandato.live_authorized is False
+        assert mandato.account == "testnet-legacy"
+
+    def test_boot_live_isola_estado_e_nasce_bloqueado_para_reconciliar(
+            self, tmp_path, monkeypatch):
+        m, _ = TestPontaAPontaNoServico()._app(tmp_path, monkeypatch)
+        from tradingagents.desk.models import Mode
+
+        monkeypatch.setattr(m, "MESA_LIVE_LIBERADA", True)
+        ativacao = {
+            "schema": "dz23.ativacao-live/1", "tenant_id": "legacy",
+            "exchange": "binance", "conta": "principal",
+            "agent_id": "trader-momentum",
+            "authorization_id": "AUT-1", "valida": True,
+        }
+        desk = m._desk_boot(
+            "legacy", cfg_override=CFG_LIVE_COMPLETO,
+            live_activation=ativacao)
+
+        mandato = desk["orchestrator"].mandate
+        assert mandato.mode is Mode.LIVE and mandato.live_authorized is True
+        assert desk["broker_mode"] == "live"
+        assert desk["coordinator"].reconciliacao_pendente is True
+        assert "reconcilie" in desk["coordinator"].motivo_bloqueio.lower()
+        assert desk["chave_oms"].startswith("oms_live_")
+        assert desk["chave_livro"].startswith("livro_live_")
+        assert desk["chave_mesa"].startswith("mesa_live_")
+        assert desk["scheduler"].running is False
+
 
 class TestPontaAPontaNoServico:
     """O caminho REAL do painel: salvar a configuração e usar a mesa."""
@@ -112,3 +184,70 @@ class TestPontaAPontaNoServico:
         selos = [i for i in d["checklist"] if "código" in i["item"].lower()]
         assert selos, "o checklist precisa declarar o selo de código da mesa"
         assert selos[0]["pronto"] is False and selos[0]["acao"]
+
+    def test_rota_de_ativacao_nao_contorna_selo_fechado(self, tmp_path,
+                                                        monkeypatch):
+        m, c = self._app(tmp_path, monkeypatch)
+        r = c.post(
+            "/v1/live/ativar/trader-momentum", headers=H,
+            json={"frase": "EU AUTORIZO OPERAR COM DINHEIRO REAL",
+                  "conta": "principal"})
+        assert r.status_code == 409
+        assert "MESA_LIVE_LIBERADA=False" in str(r.json()["detail"])
+        assert m.MESA_LIVE_LIBERADA is False
+        assert m._DESKS == {}
+
+    def test_rota_futura_vincula_agente_conta_e_nao_envia_ordem(
+            self, tmp_path, monkeypatch):
+        m, c = self._app(tmp_path, monkeypatch)
+        cfg = {**CFG_LIVE_COMPLETO,
+               "TRADINGAGENTS_BROKER_MODE": "testnet"}
+        piloto = SimpleNamespace(
+            authorization_id="AUT-1", conta="principal")
+        salvos = {}
+
+        class Armazem:
+            def salvar(self, tenant, chave, valor):
+                salvos[(tenant, chave)] = valor
+
+        mesa = {"broker_mode": "live",
+                "scheduler": SimpleNamespace(running=False)}
+        monkeypatch.setattr(m, "MESA_LIVE_LIBERADA", True)
+        monkeypatch.setattr(m, "load_cfg", lambda _tid: dict(cfg))
+        monkeypatch.setattr(m, "_live_status_payload", lambda _req: {
+            "estado_de_liberacao": {
+                "pre_requisitos_sem_selo_concluidos": True},
+            "certificacoes_estrategia_conta": [{
+                "agent_id": "trader-momentum", "conta": "principal",
+                "risco_compativel": True}],
+        })
+        monkeypatch.setattr(m, "_escola_of", lambda _req: {
+            "armazem": Armazem(), "tenant_id": "legacy"})
+        monkeypatch.setattr(
+            m, "_supervisor_of",
+            lambda _req: SimpleNamespace(de=lambda _agent: piloto))
+        monkeypatch.setattr(
+            m, "_prova_leitura_real", lambda _req, _cfg: ({}, True))
+        monkeypatch.setattr(
+            m, "_prova_real_serve_piloto", lambda *_args: True)
+        monkeypatch.setattr(
+            m, "_desk_boot", lambda *_args, **_kwargs: mesa)
+        monkeypatch.setattr(
+            m, "save_cfg", lambda value, tenant: salvos.__setitem__(
+                (tenant, "config"), value))
+
+        r = c.post(
+            "/v1/live/ativar/trader-momentum", headers=H,
+            json={"frase": "EU AUTORIZO OPERAR COM DINHEIRO REAL",
+                  "conta": "principal"})
+
+        assert r.status_code == 200, r.text
+        assert r.json()["envio_real_habilitado"] is False
+        assert r.json()["reconciliacao_obrigatoria"] is True
+        assert salvos[("legacy", "config")][
+            "TRADINGAGENTS_BROKER_MODE"] == "live"
+        registro = salvos[("legacy", m._CHAVE_ATIVACAO_LIVE)]
+        assert registro["agent_id"] == "trader-momentum"
+        assert registro["conta"] == "principal"
+        assert "frase" not in registro
+        assert m._DESKS["legacy"] is mesa
