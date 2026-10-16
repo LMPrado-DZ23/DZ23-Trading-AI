@@ -28,7 +28,10 @@ As nove corretoras CCXT do catálogo abrem salas PAPER spot isoladas na Escola.
 A IQ Option permanece laboratório PAPER, mas uma estratégia formada pode
 entrar na fila bloqueada da Sala REAL graças à integração MCP oficial; isso
 não cria executor, não habilita LIVE e não dispensa a prova de conta somente
-leitura.
+leitura. Seu boot de produção abre uma sala `opcoes_binarias` somente quando o
+payout observado foi declarado explicitamente no painel e validado no
+intervalo `(0, 1]`; ausência e valores inválidos falham fechado, sem sala e
+com motivo visível.
 Nenhuma dessas provas abre o selo LIVE.
 
 ## Gate do ambiente de destino

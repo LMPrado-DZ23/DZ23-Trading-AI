@@ -196,6 +196,7 @@ def test_fm6_02b_iq_option_exibe_so_credencial_mcp_e_live_bloqueado(
     page.select_option("#TRADINGAGENTS_EXCHANGE", "iq_option")
 
     expect(page.locator("#IQ_OPTION_MCP_BEARER_TOKEN")).to_be_visible()
+    expect(page.locator("#TRADINGAGENTS_DESK_PAYOUT")).to_be_visible()
     expect(page.locator("#EXCHANGE_API_KEY")).not_to_be_visible()
     expect(page.get_by_role("button", name="Validar configuração")).not_to_be_visible()
     expect(page.locator("#REAL_READ_ONLY_API_KEY")).not_to_be_visible()
@@ -214,6 +215,7 @@ def test_fm6_02b_iq_option_exibe_so_credencial_mcp_e_live_bloqueado(
     expect(page.locator("#EXCHANGE_API_KEY")).to_be_visible()
     expect(page.get_by_role("button", name="Validar configuração")).to_be_visible()
     expect(page.locator("#IQ_OPTION_MCP_BEARER_TOKEN")).not_to_be_visible()
+    expect(page.locator("#TRADINGAGENTS_DESK_PAYOUT")).not_to_be_visible()
     page.screenshot(path=str(evidence_dir / "fm6-02b-iq-option.png"))
 
 

@@ -220,6 +220,7 @@ ALLOWED_KEYS = [
     "IQ_OPTION_MCP_BEARER_TOKEN",
     "TRADINGAGENTS_DESK_FEED", "TRADINGAGENTS_DESK_BROKER",
     "TRADINGAGENTS_DESK_INSTRUMENTS", "TRADINGAGENTS_DESK_CAPITAL",
+    "TRADINGAGENTS_DESK_PAYOUT",
     "TRADINGAGENTS_DESK_CONTROLE", "TRADINGAGENTS_DESK_TETO_EXPOSICAO",
     "LIVE_MAX_ORDER_VALUE", "LIVE_MAX_DAILY_LOSS",
     "LIVE_TRADING_CONFIRM",
@@ -1230,6 +1231,20 @@ async def set_cfg(req: Request, _=Depends(auth)):
             "EXCHANGE_API_UID")})
     saved, changed = [], []
     vars_recebidas = body.get("vars") or {}
+    payout_recebido = vars_recebidas.get("TRADINGAGENTS_DESK_PAYOUT")
+    if payout_recebido is not None:
+        if not isinstance(payout_recebido, str) or not payout_recebido.strip():
+            raise HTTPException(
+                422, "payout da escola IQ Option precisa ser informado")
+        try:
+            payout_decimal = Decimal(payout_recebido.strip())
+        except InvalidOperation as exc:
+            raise HTTPException(
+                422, "payout da escola IQ Option precisa ser numérico") from exc
+        if (not payout_decimal.is_finite()
+                or payout_decimal <= 0 or payout_decimal > 1):
+            raise HTTPException(
+                422, "payout da escola IQ Option precisa estar entre 0 e 1")
     vinculos_gerenciados = {
         "EXCHANGE_CREDENTIAL_EXCHANGE", "EXCHANGE_CREDENTIAL_BOUND_AT",
         "REAL_READ_ONLY_EXCHANGE"}
@@ -2938,10 +2953,16 @@ def _desk_boot(tenant_id: str) -> dict:
     sala_motivo = ""
     if broker_mode in ("paper", "testnet"):
         try:
+            mercado_sala = (
+                "opcoes_binarias" if exchange_cfg == "iq_option" else "spot")
+            payout_sala = (
+                cfg.get("TRADINGAGENTS_DESK_PAYOUT")
+                if exchange_cfg == "iq_option" else None)
             sala_da_mesa = RegistroDeSalas(
                 armazem=armazem, tenant_id=tenant_id).abrir_sala(
                 ContextoDaSala(corretora=exchange_cfg, conta=mandate.account,
-                               mercado="spot", modo=broker_mode))
+                               mercado=mercado_sala, modo=broker_mode,
+                               payout=payout_sala))
         except Exception as exc:
             sala_motivo = f"sala não registrada ({type(exc).__name__}: {exc})"[:200]
     else:

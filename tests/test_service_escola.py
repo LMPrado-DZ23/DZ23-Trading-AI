@@ -237,6 +237,60 @@ class TestControleOptIn:
         assert len(ids) == 11 and "trader-controle" in ids
 
 
+class TestBootDaMesaIQOption:
+    def test_abre_sala_binaria_paper_com_payout_explicito(
+            self, tmp_path, monkeypatch):
+        c, m = _client(
+            tmp_path, monkeypatch,
+            TRADINGAGENTS_EXCHANGE="iq_option",
+            TRADINGAGENTS_DESK_PAYOUT="0.85",
+            TRADINGAGENTS_DESK_INSTRUMENTS="EUR/USD",
+        )
+
+        resposta = c.get("/v1/desk/status", headers=H)
+
+        assert resposta.status_code == 200, resposta.text
+        escola = resposta.json()["escola"]
+        assert escola["motivo"] == ""
+        assert escola["sala"]["chave"] == (
+            "iq_option|paper-legacy|opcoes_binarias|paper")
+        assert escola["sala"]["contexto"]["payout"] == "0.85"
+        assert m._DESKS["legacy"]["broker_mode"] == "paper"
+        assert m._DESKS["legacy"]["orchestrator"].mandate.live_authorized is False
+        assert m.MESA_LIVE_LIBERADA is False
+
+    def test_sem_payout_falha_fechado_e_expoe_motivo(
+            self, tmp_path, monkeypatch):
+        c, m = _client(
+            tmp_path, monkeypatch,
+            TRADINGAGENTS_EXCHANGE="iq_option",
+            TRADINGAGENTS_DESK_INSTRUMENTS="EUR/USD",
+        )
+
+        resposta = c.get("/v1/desk/status", headers=H)
+
+        assert resposta.status_code == 200, resposta.text
+        escola = resposta.json()["escola"]
+        assert escola["sala"] is None
+        assert "payout" in escola["motivo"]
+        assert m._DESKS["legacy"]["broker_mode"] == "paper"
+        assert m.MESA_LIVE_LIBERADA is False
+
+    @pytest.mark.parametrize("valor", ["0", "-0.1", "1.01", "NaN", "Infinity"])
+    def test_config_recusa_payout_invalido_sem_persistir(
+            self, tmp_path, monkeypatch, valor):
+        c, _ = _client(tmp_path, monkeypatch)
+
+        resposta = c.post("/v1/config", headers=H, json={"vars": {
+            "TRADINGAGENTS_DESK_PAYOUT": valor,
+        }})
+
+        assert resposta.status_code == 422
+        assert "payout" in resposta.json()["detail"].lower()
+        publico = c.get("/v1/config", headers=H).json()["config"]
+        assert publico["TRADINGAGENTS_DESK_PAYOUT"]["set"] is False
+
+
 def _fechar_posicao(m, instrumento):
     """Saída pelo caminho de produção: OMS fecha na corretora e o livro da
     mesa encerra — é o mesmo par de chamadas que a operação usa."""

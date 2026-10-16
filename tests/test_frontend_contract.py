@@ -106,6 +106,15 @@ def test_config_page_exposes_the_desk_feed_toggle():
     assert "Fonte de dados" in html
 
 
+def test_iq_option_exposes_explicit_payout_only_for_its_school_room():
+    html = (ROOT / "service/static/index.html").read_text(encoding="utf-8")
+    assert 'id="TRADINGAGENTS_DESK_PAYOUT"' in html
+    assert "'TRADINGAGENTS_DESK_PAYOUT'" in html
+    assert 'min="0.01"' in html and 'max="1"' in html
+    assert "grupoDeskPayout" in html
+    assert "classList.toggle('hide',!iq)" in html
+
+
 def test_painel_tem_saida_do_aplicativo():
     # C009: sem console, o usuário só fecharia o app pelo Gerenciador de
     # Tarefas. O painel do dono precisa de um botão que encerra o servidor,

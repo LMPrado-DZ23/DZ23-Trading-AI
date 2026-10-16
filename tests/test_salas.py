@@ -174,6 +174,13 @@ class TestAdaptadoresEHomologacao:
         with pytest.raises(SalaError, match="payout"):
             reg.abrir_sala(_ctx(payout="0.80"))
 
+    @pytest.mark.parametrize("payout", ["NaN", "Infinity", "1.01"])
+    def test_binaria_recusa_payout_nao_finito_ou_acima_de_um(self, payout):
+        reg = RegistroDeSalas(armazem=ArmazemFake())
+        with pytest.raises(SalaError, match="payout"):
+            reg.abrir_sala(_ctx(corretora="iq_option", conta="lab-1",
+                                mercado="opcoes_binarias", payout=payout))
+
     def test_laboratorio_so_opera_em_paper(self):
         reg = RegistroDeSalas(armazem=ArmazemFake())
         with pytest.raises(SalaError, match="laboratório"):

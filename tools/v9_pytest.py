@@ -66,7 +66,13 @@ def main() -> int:
     evidence = (ROOT / rel) if rel else (ROOT / 'docs/mission/evidence/v9-baseline')
     evidence.mkdir(parents=True, exist_ok=True)
     xml = evidence / f'{label}.xml'
-    cmd = [sys.executable, '-B', '-c', CHILD, *tests, '-q', f'--junitxml={xml}']
+    # O arquivo de teste pode viver fora do repositório (os testes de
+    # isolamento usam tmp_path). Sem raiz explícita, pytest pode escolher o
+    # ancestral comum do arquivo temporário como rootdir e coletar outras
+    # pastas transitórias do Windows, inclusive artefatos Playwright que
+    # desaparecem em paralelo. A raiz auditada é sempre este repositório.
+    cmd = [sys.executable, '-B', '-c', CHILD, *tests, '-q',
+           f'--rootdir={ROOT}', f'--junitxml={xml}']
     record = {
         'head': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
         'command': cmd, 'working_directory': str(ROOT), 'temporary_directory': str(work),

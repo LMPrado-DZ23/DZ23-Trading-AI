@@ -105,7 +105,12 @@ A integração oficial também permite que uma estratégia IQ Option formada em
 sua sala PAPER entre na fila bloqueada da Sala REAL. A IQ Option continua
 marcada como laboratório, não cria sala LIVE, não possui executor de ordens
 nesta camada e ainda exige a prova autenticada somente leitura da conta antes
-de qualquer pedido de piloto para conta REAL.
+de qualquer pedido de piloto para conta REAL. Ao selecionar IQ Option no
+painel, o proprietário precisa declarar o payout observado, entre 0 e 1. O
+boot então cria a sala isolada `opcoes_binarias|paper`; payout ausente, não
+finito, zero, negativo ou acima de 1 falha fechado e fica visível no status da
+Escola. O sistema não presume payout e nunca transforma esse campo em permissão
+de execução.
 
 O painel oficial da IQ Option foi verificado em 2026-10-16: `Read access` é
 sempre habilitado e os acessos de negociação de Options e Margin Products são

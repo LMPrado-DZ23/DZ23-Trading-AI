@@ -560,8 +560,10 @@ class RegistroDeSalas:
         if contexto.mercado != "opcoes_binarias" and contexto.payout is not None:
             raise SalaError(f"payout só faz sentido em opções binárias "
                             f"(mercado atual: {contexto.mercado})")
-        if contexto.payout is not None and contexto.payout <= 0:
-            raise SalaError("payout precisa ser positivo")
+        if (contexto.payout is not None
+                and (not contexto.payout.is_finite()
+                     or contexto.payout <= 0 or contexto.payout > 1)):
+            raise SalaError("payout precisa ser finito e estar entre 0 e 1")
         if contexto.classe:
             try:
                 cl = classe_de(contexto.classe)
