@@ -22,6 +22,7 @@ import json
 import os
 import shutil
 import sqlite3
+import stat
 import tarfile
 import tempfile
 from contextlib import suppress
@@ -238,6 +239,33 @@ def inspect_backup(archive: str | Path) -> dict:
         raise BackupError(f"pacote ilegível: {type(exc).__name__}") from exc
 
 
+def _is_link_like(path: Path) -> bool:
+    """Reconhece symlink e reparse point/junction do Windows."""
+    if path.is_symlink():
+        return True
+    is_junction = getattr(path, "is_junction", None)
+    if callable(is_junction) and is_junction():
+        return True
+    try:
+        attributes = getattr(os.lstat(path), "st_file_attributes", 0)
+    except OSError:
+        return False
+    return bool(attributes & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0))
+
+
+def _reject_destination_links(data_dir: Path, rel: str) -> None:
+    """Recusa a raiz e todos os pais existentes que possam redirecionar I/O."""
+    current = data_dir
+    candidates = [current]
+    for part in PurePosixPath(rel).parts[:-1]:
+        current /= part
+        candidates.append(current)
+    for candidate in candidates:
+        if _is_link_like(candidate):
+            raise BackupError(
+                f"link simbólico não permitido no destino: {candidate}")
+
+
 def restore_backup(archive: str | Path, data_dir: str | Path, *,
                    overwrite: bool = False) -> dict:
     archive, data_dir = Path(archive), Path(data_dir)
@@ -257,6 +285,8 @@ def restore_backup(archive: str | Path, data_dir: str | Path, *,
                 if _sha256(target) != expected:
                     raise BackupError(f"hash divergente em {rel} — pacote adulterado")
 
+            for rel in meta["itens"]:
+                _reject_destination_links(data_dir, rel)
             existing = [
                 rel for rel in meta["itens"]
                 if data_dir.joinpath(*PurePosixPath(rel).parts).exists()

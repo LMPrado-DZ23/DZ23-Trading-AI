@@ -121,6 +121,65 @@ class TestArchivePermissions:
 
 
 class TestRestore:
+    def test_destination_root_symlink_is_rejected_before_first_write(
+            self, tmp_path, monkeypatch):
+        data = populate(tmp_path / "data")
+        archive = tmp_path / "bk.tar.gz"
+        create_backup(data, archive)
+        destination = tmp_path / "restore"
+        destination.mkdir()
+
+        real_is_symlink = Path.is_symlink
+        real_replace = os.replace
+        writes = 0
+
+        def fake_is_symlink(path):
+            return Path(path) == destination or real_is_symlink(path)
+
+        def count_replace(source, target):
+            nonlocal writes
+            writes += 1
+            return real_replace(source, target)
+
+        monkeypatch.setattr(Path, "is_symlink", fake_is_symlink)
+        monkeypatch.setattr(os, "replace", count_replace)
+
+        with pytest.raises(BackupError, match="link simbólico.*destino"):
+            restore_backup(archive, destination)
+
+        assert writes == 0
+
+    def test_destination_parent_symlink_is_rejected_before_first_write(
+            self, tmp_path, monkeypatch):
+        data = populate(tmp_path / "data")
+        (data / "desks" / "legacy").mkdir(parents=True)
+        (data / "desks" / "legacy" / "escola.json").write_text("{}")
+        archive = tmp_path / "bk.tar.gz"
+        create_backup(data, archive)
+        destination = tmp_path / "restore"
+        (destination / "desks").mkdir(parents=True)
+
+        symlink_parent = destination / "desks"
+        real_is_symlink = Path.is_symlink
+        real_replace = os.replace
+        writes = 0
+
+        def fake_is_symlink(path):
+            return Path(path) == symlink_parent or real_is_symlink(path)
+
+        def count_replace(source, target):
+            nonlocal writes
+            writes += 1
+            return real_replace(source, target)
+
+        monkeypatch.setattr(Path, "is_symlink", fake_is_symlink)
+        monkeypatch.setattr(os, "replace", count_replace)
+
+        with pytest.raises(BackupError, match="link simbólico.*destino"):
+            restore_backup(archive, destination)
+
+        assert writes == 0
+
     def test_restore_into_empty_destination(self, tmp_path):
         data = populate(tmp_path / "data")
         create_backup(data, tmp_path / "bk.tar.gz")
