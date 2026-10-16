@@ -195,6 +195,74 @@ class TestCadeiaObrigatoria:
         assert fila["estado"] == "configurado_aguardando_autorizacao"
         assert fila["authorization_id"] == sup2.de(AGENTE).authorization_id
 
+    @pytest.mark.parametrize(
+        "estrategia,versao",
+        [("trend_following", "2"), ("momentum", "1")],
+    )
+    def test_fila_isola_formatura_por_estrategia_e_versao(
+            self, estrategia, versao):
+        class EscolaSempreFormada:
+            @staticmethod
+            def elegivel_para_live(_estrategia, _versao):
+                return True, "formatura válida no contexto"
+
+        sup = SupervisorDePiloto(
+            armazem=ArmazemFake(), escola=EscolaSempreFormada())
+        primeira = sup.encaminhar_formado(
+            AGENTE, estrategia="trend_following", versao="1",
+            contexto=self.CONTEXTO, agora=AGORA)
+
+        nova = sup.encaminhar_formado(
+            AGENTE, estrategia=estrategia, versao=versao,
+            contexto=self.CONTEXTO, agora=AGORA + timedelta(minutes=1))
+
+        assert nova["encaminhamento_id"] != primeira["encaminhamento_id"]
+        assert {(item["estrategia"], item["versao"])
+                for item in sup.encaminhamentos()} == {
+                    ("trend_following", "1"), (estrategia, versao)}
+
+    def test_chave_legada_e_reindexada_sem_duplicar_encaminhamento(self):
+        arm = ArmazemFake()
+        esc, _ = _escola_formada()
+        sup = SupervisorDePiloto(armazem=arm, escola=esc)
+        primeira = sup.encaminhar_formado(
+            AGENTE, estrategia="trend_following", versao="1",
+            contexto=self.CONTEXTO, agora=AGORA)
+        payload = arm.dados[("legacy", SupervisorDePiloto.CHAVE_ARMAZEM)]
+        registro = next(iter(payload["encaminhamentos"].values()))
+        payload["encaminhamentos"] = {"chave-legada": registro}
+
+        recarregado = SupervisorDePiloto(armazem=arm, escola=esc)
+        repetido = recarregado.encaminhar_formado(
+            AGENTE, estrategia="trend_following", versao="1",
+            contexto=self.CONTEXTO, agora=AGORA + timedelta(minutes=1))
+
+        assert repetido["encaminhamento_id"] == primeira["encaminhamento_id"]
+        assert len(recarregado.encaminhamentos()) == 1
+        chaves_salvas = arm.dados[(
+            "legacy", SupervisorDePiloto.CHAVE_ARMAZEM)]["encaminhamentos"]
+        assert "chave-legada" not in chaves_salvas
+
+    def test_autorizacao_de_versao_antiga_nao_e_herdada_por_nova_formatura(
+            self):
+        class EscolaSempreFormada:
+            @staticmethod
+            def elegivel_para_live(_estrategia, _versao):
+                return True, "formatura válida no contexto"
+
+        sup = SupervisorDePiloto(
+            armazem=ArmazemFake(), escola=EscolaSempreFormada())
+        antiga = _solicitar(sup, contexto=self.CONTEXTO, versao="1")
+        sup.autorizar(AGENTE, gates=_gates_ok(), agora=AGORA)
+
+        nova = sup.encaminhar_formado(
+            AGENTE, estrategia="trend_following", versao="2",
+            contexto=self.CONTEXTO, agora=AGORA + timedelta(minutes=1))
+
+        assert nova["authorization_id"] is None
+        assert nova["estado"] == "aguardando_configuracao_do_proprietario"
+        assert antiga.authorization_id != nova["authorization_id"]
+
     def test_encaminhamento_tardio_nao_regride_piloto_ja_autorizado(self):
         sup, _, _ = _supervisor_formado()
         _solicitar(sup, contexto=self.CONTEXTO)

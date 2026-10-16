@@ -24,6 +24,7 @@ O que este módulo garante, por construção:
 """
 from __future__ import annotations
 
+import json
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -226,11 +227,47 @@ class SupervisorDePiloto:
         }
 
     @staticmethod
-    def _chave_encaminhamento(agent_id: str, contexto: dict) -> str:
-        partes = [agent_id] + [str(contexto.get(k) or "") for k in (
+    def _chave_encaminhamento(agent_id: str, estrategia: str, versao: str,
+                              contexto: dict) -> str:
+        """Identidade sem colisões da formação no contexto certificado."""
+        partes = [str(agent_id or ""), str(estrategia or ""),
+                  str(versao or "1")] + [str(contexto.get(k) or "") for k in (
             "corretora", "conta", "mercado", "modo", "ativo",
             "horizonte", "payout")]
-        return "|".join(partes)
+        return json.dumps(partes, ensure_ascii=False, separators=(",", ":"))
+
+    def _encaminhamento_da(self, agent_id: str, estrategia: str, versao: str,
+                           contexto: dict) -> tuple[str, dict | None]:
+        """Encontra a fila exata e migra em memória chaves legadas.
+
+        Versões anteriores indexavam apenas agente + contexto. O documento
+        persistido já contém estratégia e versão, então ele pode ser
+        reindexado sem inferir nem descartar certificação.
+        """
+        chave = self._chave_encaminhamento(
+            agent_id, estrategia, versao, contexto)
+        existente = self._encaminhamentos.get(chave)
+        if existente is not None:
+            return chave, existente
+        for chave_legada, registro in list(self._encaminhamentos.items()):
+            if not isinstance(registro, dict):
+                continue
+            contexto_registrado = registro.get("contexto")
+            contexto_registrado = (
+                contexto_registrado
+                if isinstance(contexto_registrado, dict) else {})
+            identidade = self._chave_encaminhamento(
+                str(registro.get("agent_id") or ""),
+                str(registro.get("estrategia") or ""),
+                str(registro.get("versao") or "1"),
+                contexto_registrado)
+            if identidade != chave:
+                continue
+            if chave_legada != chave:
+                self._encaminhamentos[chave] = self._encaminhamentos.pop(
+                    chave_legada)
+            return chave, self._encaminhamentos[chave]
+        return chave, None
 
     def encaminhar_formado(self, agent_id: str, *, estrategia: str,
                            versao: str = "1", contexto: dict,
@@ -252,8 +289,9 @@ class SupervisorDePiloto:
         if not ok:
             raise ValueError(f"trader não elegível ao processo: {motivo}")
         contexto = dict(contexto or {})
-        chave = self._chave_encaminhamento(agent_id, contexto)
-        existente = self._encaminhamentos.get(chave)
+        versao = str(versao or "1")
+        chave, existente = self._encaminhamento_da(
+            agent_id, estrategia, versao, contexto)
         if existente:
             existente["elegibilidade_verificada_em"] = agora.isoformat()
             existente["motivo_elegibilidade"] = motivo[:400]
@@ -262,7 +300,7 @@ class SupervisorDePiloto:
         registro = {
             "encaminhamento_id": f"REAL-{agora:%Y%m%d}-{uuid.uuid4().hex[:8]}",
             "tenant_id": self.tenant_id, "agent_id": agent_id,
-            "estrategia": estrategia, "versao": str(versao or "1"),
+            "estrategia": estrategia, "versao": versao,
             "contexto": contexto,
             "corretora": str(contexto.get("corretora") or ""),
             "conta": str(contexto.get("conta") or ""),
@@ -285,7 +323,9 @@ class SupervisorDePiloto:
         mesmo_contexto = bool(
             autorizacao
             and self._chave_encaminhamento(
-                agent_id, dict(autorizacao.get("contexto") or {})) == chave)
+                agent_id, str(autorizacao.get("estrategia") or ""),
+                str(autorizacao.get("versao") or "1"),
+                dict(autorizacao.get("contexto") or {})) == chave)
         if mesmo_contexto:
             estado = EstadoDoPiloto(autorizacao["estado"])
             if estado not in ENCERRADOS:
@@ -374,8 +414,8 @@ class SupervisorDePiloto:
                 "motivo": "pedido do proprietário registrado"}],
         }
         self._autorizacoes[agent_id] = registro
-        chave = self._chave_encaminhamento(agent_id, dict(contexto or {}))
-        encaminhamento = self._encaminhamentos.get(chave)
+        chave, encaminhamento = self._encaminhamento_da(
+            agent_id, estrategia, str(versao or "1"), dict(contexto or {}))
         if encaminhamento:
             encaminhamento["estado"] = "configurado_aguardando_autorizacao"
             encaminhamento["authorization_id"] = registro["authorization_id"]
