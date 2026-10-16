@@ -441,7 +441,9 @@ class TestLimitesEVigia:
          ("perda_total", Decimal("Infinity")),
          ("perda_total", Decimal("-Infinity")),
          ("capital_em_uso", "telemetria-corrompida"),
-         ("capital_em_uso", Decimal("-1"))],
+         ("capital_em_uso", Decimal("-1")),
+         ("perda_hoje", Decimal("-0.01")),
+         ("perda_total", Decimal("-0.01"))],
     )
     def test_metrica_de_risco_invalida_bloqueia_sem_quebrar_o_vigia(
             self, campo, valor):

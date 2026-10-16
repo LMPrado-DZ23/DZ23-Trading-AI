@@ -576,11 +576,13 @@ class SupervisorDePiloto:
                     bloqueados[agent_id] = (
                         f"métrica de risco não finita ou inválida: {invalida}")
                     continue
-                em_uso = metricas[0][1]
-                if em_uso < 0:
+                negativa = next(
+                    (nome for nome, valor in metricas if valor < 0), None)
+                if negativa:
                     bloqueados[agent_id] = (
-                        "métrica de risco inválida: capital em uso negativo")
+                        f"métrica de risco inválida: {negativa} negativa")
                     continue
+                em_uso = metricas[0][1]
                 if em_uso > cap_max:
                     bloqueados[agent_id] = (
                         f"capital em uso {em_uso} acima do máximo "
