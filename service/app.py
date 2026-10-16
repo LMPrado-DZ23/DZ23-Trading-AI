@@ -2137,9 +2137,9 @@ def status_operacao():
     porque a rota é pública. O estado real de um inquilino depende de kill
     switch, reconciliação, incidentes de risco, consistência de capital,
     capacidade da corretora, mandato, autorização e frescor do SAFE; isso
-    vive em /v1/operational-readiness, autenticado e por inquilino, ainda
-    não implementado. Responder aqui o que é de lá vazaria estado de cliente
-    para quem nem fez login.
+    vive em /v1/operational-readiness, autenticado e por inquilino.
+    Responder aqui o que é de lá vazaria estado de cliente para quem nem fez
+    login.
     """
     ambiente = {
         "PAPER": {"habilitado": True,
@@ -2163,7 +2163,7 @@ def status_operacao():
     return {
         "escopo": "PLATAFORMA",
         "nao_e": ("prova de prontidão operacional (operational readiness); "
-                  "o estado por inquilino virá autenticado em "
+                  "consulte o estado por inquilino, autenticado, em "
                   "/v1/operational-readiness"),
         # PAPER é POLÍTICA ATUAL, não detecção: enquanto só ele estiver
         # autorizado, o valor é fixo de propósito. Quando o modo passar a
@@ -4934,8 +4934,7 @@ async def live_preparacao_leitura(req: Request, _=Depends(auth),
             "aviso": prova["aviso"]}
 
 
-@app.get("/v1/live/status")
-def live_status(request: Request, _=Depends(auth)):
+def _live_status_payload(request: Request) -> dict:
     """Diz, sem rodeio, se este inquilino pode operar dinheiro real e o que
     falta para poder."""
     cfg = load_cfg(request_tenant(request))
@@ -5048,6 +5047,37 @@ def live_status(request: Request, _=Depends(auth)):
                 for p in pilotos_no_contexto],
             "aviso": ("Dinheiro real: perdas são suas e irreversíveis. O "
                       "sistema não promete lucro.")}
+
+
+@app.get("/v1/live/status")
+def live_status(request: Request, _=Depends(auth)):
+    """Checklist detalhado da preparação para dinheiro real."""
+    return _live_status_payload(request)
+
+
+@app.get("/v1/operational-readiness")
+def operational_readiness(request: Request, _=Depends(auth)):
+    """Preflight autenticado por tenant, somente leitura e fail-closed.
+
+    Esta rota consolida o contrato que o status público não pode revelar. Ela
+    não altera configuração, não concede mandato e não possui caminho de ordem.
+    """
+    dinheiro_real = _live_status_payload(request)
+    envio_real = bool(
+        dinheiro_real.get("pode_operar_real") and MESA_LIVE_LIBERADA)
+    return {
+        "schema": "dz23.operational-readiness/1",
+        "escopo": "INQUILINO_AUTENTICADO",
+        "status": "ready" if envio_real else "blocked",
+        "modo_atual": "LIVE" if envio_real else "PAPER",
+        "invariantes": {
+            "consulta_envia_ordens": False,
+            "selo_de_codigo_live": MESA_LIVE_LIBERADA,
+            "envio_real_habilitado": envio_real,
+            "exige_confirmacao_no_momento_da_acao": True,
+        },
+        "dinheiro_real": dinheiro_real,
+    }
 
 
 @app.post("/v1/live/parada-emergencia")

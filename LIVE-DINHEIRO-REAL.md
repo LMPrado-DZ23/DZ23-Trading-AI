@@ -236,6 +236,24 @@ encaminhamentos e pilotos. Esse retrato nunca contém credenciais e declara
 explicitamente `envio_real_habilitado=false` nesta branch. Se a leitura da
 Sala REAL falhar, o resumo fica indisponível e a prontidão continua fechada.
 
+Para um preflight reproduzível da instalação em execução, use a rota agregada
+autenticada e o verificador somente leitura:
+
+```powershell
+$env:ACCESS_PASSWORD = Read-Host -AsSecureString | ConvertFrom-SecureString -AsPlainText
+python scripts/real_readiness_check.py `
+  --base-url http://127.0.0.1:8000 `
+  --target preparacao `
+  --output .\data\evidence\real-readiness.json
+Remove-Item Env:ACCESS_PASSWORD
+```
+
+O script nunca aceita o token como argumento e não o inclui no relatório. O
+alvo `preparacao` exige todos os pré-requisitos sem abrir o selo; o alvo
+`live` exige, adicionalmente, que o selo, o envio e o checklist estejam todos
+liberados. Ambos retornam código diferente de zero quando o contrato está
+incompleto, indisponível ou contraditório.
+
 ## Ordem recomendada (não pule)
 1. Rode em **testnet** até ver uma ordem preenchida e reconciliada.
    Ao concluir a reconciliação segura, o DZ23 grava uma prova durável vinculada

@@ -33,6 +33,25 @@ uvicorn service.app:app --host 127.0.0.1 --port 8000
 
 O endpoint `/healthz` verifica se o processo está vivo. O endpoint `/readyz` verifica se o modo operacional não está bloqueado pelo KillSwitch e se o Paper Adapter está disponível. A API protegida exige Bearer Token igual ao valor de `ACCESS_PASSWORD`.
 
+O endpoint autenticado `/v1/operational-readiness` é a fonte canônica por
+instalação para a preparação de dinheiro real. Ele consolida o checklist sem
+modificar estado e sempre declara se o envio real está habilitado. O preflight
+local pode ser repetido e salvo sem colocar o token na linha de comando:
+
+```bash
+export ACCESS_PASSWORD='carregue-o pelo mecanismo seguro do host'
+python3 scripts/real_readiness_check.py \
+  --base-url http://127.0.0.1:8000 \
+  --target preparacao \
+  --output ./data/evidence/real-readiness.json
+unset ACCESS_PASSWORD
+```
+
+Saída `preparado_sem_live` significa somente que os pré-requisitos anteriores
+ao selo foram comprovados. Não autoriza LIVE. `--target live` permanece
+bloqueado até uma futura liberação de código auditada e confirmação do dono no
+momento da ação.
+
 ## Fluxo recomendado
 
 O primeiro uso deve ser feito em Shadow Trading. Registre uma intenção pelo endpoint protegido `/v1/execution/shadow` e confirme em `/v1/execution/shadow` que `orders_sent` continua igual a zero. Depois use `/v1/execution/paper`, que exige decisão tipada, evidência, snapshot de mercado e validação determinística do Risk Engine.

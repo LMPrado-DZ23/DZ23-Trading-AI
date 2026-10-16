@@ -60,9 +60,29 @@ Não exponha o PostgreSQL (nem o próprio serviço) publicamente. Coloque o serv
 
 Para um proxy Caddy de referência, consulte [ops/Caddyfile.example](ops/Caddyfile.example). O domínio, DNS, portas 80/443, certificado e política de backup devem ser configurados pelo operador do ambiente.
 
-## 5. Healthchecks
+## 5. Healthchecks e preflight REAL
 
 O endpoint público `/healthz` confirma que o processo está vivo. O endpoint `/readyz` informa se o serviço está pronto ou bloqueado pelo KillSwitch. `/metrics` exige autenticação.
+
+`/v1/operational-readiness` exige a autenticação do proprietário e consolida,
+por instalação, a prova somente leitura da conta, Escola/Sala REAL, piloto,
+risco, TESTNET, reconciliação, parada de emergência e selo de código. A rota é
+somente leitura: consultá-la não altera configuração nem envia ordem.
+
+Com o serviço iniciado e o token disponível apenas no ambiente, execute:
+
+```bash
+python3 scripts/real_readiness_check.py \
+  --base-url http://127.0.0.1:8080 \
+  --target preparacao \
+  --output ./data/evidence/real-readiness.json
+```
+
+O alvo `preparacao` só passa quando todos os pré-requisitos externos e
+operacionais estão comprovados, mas o selo e o envio LIVE continuam
+desabilitados. `--target live` é reservado para a futura cerimônia explícita
+de liberação e falha enquanto qualquer fechadura permanecer fechada. O token
+nunca é aceito como argumento: por padrão, o script lê `ACCESS_PASSWORD`.
 
 ## 6. Primeiro uso
 
