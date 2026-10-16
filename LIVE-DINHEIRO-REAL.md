@@ -37,6 +37,37 @@ como TESTNET operacional. Chaves, segredos, passphrases e UID são armazenados
 pelos mesmos controles de segredo do painel e nunca devem ser copiados para
 documentação, commits ou tickets.
 
+### Prova da conta REAL sem habilitar execução
+
+A credencial da conta REAL é separada da credencial TESTNET e usa os campos
+`REAL_READ_ONLY_API_KEY`, `REAL_READ_ONLY_API_SECRET`,
+`REAL_READ_ONLY_API_PASSWORD` e `REAL_READ_ONLY_API_UID`. Ela não é lida pelo
+adaptador que envia ordens.
+
+No painel, em **Configuração → Conta REAL — somente leitura**:
+
+1. crie na corretora uma chave sem permissão de trade e sem movimentação de
+   fundos;
+2. cole a credencial no painel local e salve;
+3. clique em **Comprovar conta REAL somente leitura**;
+4. identifique a conta e confirme as duas restrições de permissão.
+
+O servidor executa somente consultas autenticadas de saldo, ordens abertas e,
+quando o adaptador oferece, contas. Nenhum saldo, ordem ou identificador
+privado é devolvido ao painel. A prova durável contém apenas corretora, rótulo
+da conta, horário, nomes dos métodos de leitura e um hash da credencial. Trocar
+qualquer parte da credencial invalida a prova automaticamente.
+
+Uma consulta bem-sucedida comprova acesso de leitura; não comprova, sozinha,
+que a corretora retirou permissões de trade ou movimentação. Essa restrição é
+declarada pelo proprietário no DZ23 e deve ser conferida também no painel da
+corretora.
+
+Mesmo com a prova válida, o checklist exige um piloto formado, configurado e
+explicitamente autorizado para a mesma corretora e conta. Se o modo LIVE vier
+a ser liberado em código no futuro, todo agente sem essa autorização será
+bloqueado pelo vigia fail-closed.
+
 ## Antes de tudo
 Perdas com dinheiro real são **suas e irreversíveis**. Nenhum resultado de
 teste, backtest ou paper prevê lucro futuro. Ligue com dinheiro que você

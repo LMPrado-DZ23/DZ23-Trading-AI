@@ -264,6 +264,27 @@ class TestCadeiaObrigatoria:
             sup.autorizar(AGENTE, gates=_gates_ok(), agora=AGORA)
         assert sup.de(AGENTE).estado is EstadoDoPiloto.AGUARDANDO_AUTORIZACAO
 
+    def test_live_bloqueia_todo_agente_sem_autorizacao_explicita(self):
+        sup, _, _ = _supervisor_formado()
+        assert "outro-agente" not in sup.bloqueios(
+            agentes_esperados=["outro-agente"])
+        bloqueios = sup.bloqueios(
+            exigir_autorizacao=True,
+            agentes_esperados=[AGENTE, "outro-agente"])
+        assert set(bloqueios) == {AGENTE, "outro-agente"}
+        assert all("LIVE exige piloto" in motivo
+                   for motivo in bloqueios.values())
+
+    def test_live_libera_somente_o_piloto_autorizado(self):
+        sup, _, _ = _supervisor_formado()
+        _solicitar(sup)
+        sup.autorizar(AGENTE, gates=_gates_ok(), agora=AGORA)
+        bloqueios = sup.bloqueios(
+            exigir_autorizacao=True,
+            agentes_esperados=[AGENTE, "outro-agente"], agora=AGORA)
+        assert AGENTE not in bloqueios
+        assert "outro-agente" in bloqueios
+
     def test_cadeia_completa_autoriza(self):
         sup, _, _ = _supervisor_formado()
         _solicitar(sup)

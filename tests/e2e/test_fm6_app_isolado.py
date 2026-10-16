@@ -146,8 +146,8 @@ def test_fm6_01_modo_avancado_todas_as_paginas(page, mesa_url, senha, evidence_d
 
 # ------------------------------------------------------------------- item 02
 def test_fm6_02_corretoras_catalogo_capacidades_reconciliacao(page, mesa_url, senha, evidence_dir):
-    # §11 "Corretoras" + §3: catálogo local sem credenciais/rede, capacidades
-    # anunciadas como NÃO verificadas, execução pelo painel desligada e
+    # §11 "Corretoras" + §3: catálogo local sem credenciais/rede, linha DZ23
+    # separada dos adaptadores genéricos, execução LIVE desligada e
     # reconciliação pelo portão real — nada aqui ativa dinheiro real.
     entrar_como_dono(page, mesa_url, senha)
     modo_avancado(page)
@@ -157,11 +157,11 @@ def test_fm6_02_corretoras_catalogo_capacidades_reconciliacao(page, mesa_url, se
 
     page.get_by_role("button", name=re.compile("Catálogo e capacidades")).click()
     cat = page.locator("#brokerCatalogo")
-    expect(cat).to_contain_text("Salas fixas", timeout=15000)
+    expect(cat).to_contain_text("Corretoras DZ23", timeout=15000)
     expect(cat).to_contain_text("Binance")
-    expect(cat).to_contain_text("planejada, não validada")
-    expect(cat).to_contain_text("Adaptador CCXT instalado nesta máquina")
-    expect(cat).to_contain_text("Execução de ordens pelo painel: desligada")
+    expect(cat).to_contain_text("disponível para dados e TESTNET")
+    expect(cat).to_contain_text("Todos os adaptadores CCXT instalados nesta máquina")
+    expect(cat).to_contain_text("LIVE pelo painel: bloqueada")
 
     cat.locator("button", has_text="Capacidades").first.click()
     det = page.locator("#brokerDetalhe")

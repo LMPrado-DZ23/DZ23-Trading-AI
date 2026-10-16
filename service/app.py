@@ -31,7 +31,11 @@ from service.api.owner_credentials import CredenciaisDoDono, erro_de_senha
 from tradingagents.agency import AgencyTask, build_llm_handler
 from tradingagents.agency.store import AgencyTaskStore
 from tradingagents.agency_runtime import AgencyRuntime
-from tradingagents.brokers.ccxt_bridge import BrokerSecurityError
+from tradingagents.brokers.ccxt_bridge import (
+    BrokerSecurityError,
+    probe_read_only_account,
+    read_only_credential_fingerprint,
+)
 from tradingagents.desk.models import AgentStage
 from tradingagents.desk.modo import EstadoDaMesa, ModoBloqueado
 from tradingagents.desk.storage import escrever_json_atomico
@@ -203,6 +207,8 @@ ALLOWED_KEYS = [
     "TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
     "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET", "EXCHANGE_API_PASSWORD",
     "EXCHANGE_API_UID",
+    "REAL_READ_ONLY_API_KEY", "REAL_READ_ONLY_API_SECRET",
+    "REAL_READ_ONLY_API_PASSWORD", "REAL_READ_ONLY_API_UID",
     "TRADINGAGENTS_DESK_FEED", "TRADINGAGENTS_DESK_BROKER",
     "TRADINGAGENTS_DESK_INSTRUMENTS", "TRADINGAGENTS_DESK_CAPITAL",
     "TRADINGAGENTS_DESK_CONTROLE", "TRADINGAGENTS_DESK_TETO_EXPOSICAO",
@@ -227,6 +233,8 @@ SEGREDOS_DECLARADOS = {
     "OPENAI_COMPATIBLE_API_KEY", "FRED_API_KEY", "ALPHA_VANTAGE_API_KEY",
     "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET", "EXCHANGE_API_PASSWORD",
     "EXCHANGE_API_UID",
+    "REAL_READ_ONLY_API_KEY", "REAL_READ_ONLY_API_SECRET",
+    "REAL_READ_ONLY_API_PASSWORD", "REAL_READ_ONLY_API_UID",
     "ALERTA_TELEGRAM_TOKEN", "ALERTA_TELEGRAM_CHAT", "ALERTA_WEBHOOK_URL",
     "ALERTA_TELEGRAM_WEBHOOK_SECRET", "ALERTA_DISCORD_WEBHOOK",
     "ALERTA_WHATSAPP_TOKEN", "EMAIL_SMTP_PASS",
@@ -2707,7 +2715,9 @@ def _desk_boot(tenant_id: str) -> dict:
         try:
             sup = SupervisorDePiloto(armazem, tenant_id=tenant_id)
             viva = EscolaCentral(armazem=armazem, tenant_id=tenant_id)
-            bloqueados = sup.bloqueios(central=viva)
+            bloqueados = sup.bloqueios(
+                central=viva, exigir_autorizacao=(broker_mode == "live"),
+                agentes_esperados=(t.spec.agent_id for t in traders))
             # Evolução (E5): trader suspenso por deterioração bloqueia novas
             # entradas — o motivo do piloto vence quando os dois apontam.
             evo_viva = EvolucaoAutonoma(armazem=armazem, tenant_id=tenant_id)
@@ -4144,12 +4154,119 @@ def _fill_de_corretora_externa(d) -> bool:
     return False
 
 
+_CHAVE_PREPARACAO_REAL = "preparacao_real_leitura"
+
+
+def _env_leitura_real(cfg: dict) -> dict:
+    return {k: cfg.get(k, "") for k in (
+        "TRADINGAGENTS_EXCHANGE", "REAL_READ_ONLY_API_KEY",
+        "REAL_READ_ONLY_API_SECRET", "REAL_READ_ONLY_API_PASSWORD",
+        "REAL_READ_ONLY_API_UID")}
+
+
+def _prova_leitura_real(request: Request, cfg: dict) -> tuple[dict | None, bool]:
+    """Carrega a prova e informa se ela ainda pertence à credencial atual."""
+    esc = _escola_of(request)
+    prova = esc["armazem"].carregar(esc["tenant_id"],
+                                     _CHAVE_PREPARACAO_REAL)
+    if not isinstance(prova, dict):
+        return None, False
+    atual = read_only_credential_fingerprint(_env_leitura_real(cfg))
+    valida = bool(
+        prova.get("credential_fingerprint")
+        and hmac.compare_digest(str(prova["credential_fingerprint"]), atual)
+        and prova.get("exchange") == (
+            cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    )
+    return prova, valida
+
+
+def _prova_publica(prova: dict | None, valida: bool) -> dict:
+    if not prova:
+        return {"registrada": False, "valida": False}
+    return {
+        "registrada": True,
+        "valida": valida,
+        "exchange": prova.get("exchange", ""),
+        "conta": prova.get("conta", ""),
+        "verificada_em": prova.get("verificada_em", ""),
+        "authenticated_read": bool(prova.get("authenticated_read")),
+        "read_methods": list(prova.get("read_methods") or ()),
+        "sem_trade_declarado": bool(prova.get("sem_trade_declarado")),
+        "sem_saque_declarado": bool(prova.get("sem_saque_declarado")),
+        "aviso": ("prova válida para a credencial atualmente salva" if valida
+                  else "prova obsoleta: corretora ou credencial foi alterada"),
+    }
+
+
+@app.post("/v1/live/preparacao-leitura")
+async def live_preparacao_leitura(req: Request, _=Depends(auth),
+                                  __=Depends(require_plan)):
+    """Comprova acesso autenticado REAL sem executar ação de escrita.
+
+    A declaração de que a chave não possui trade/saque é do proprietário;
+    a prova técnica confirma somente que a chave separada consegue ler. O
+    cliente CCXT usado aqui nunca alcança o caminho de envio de ordens.
+    """
+    body = await _json_body(req)
+    conta = str(body.get("conta") or "").strip()
+    if not conta:
+        raise HTTPException(422, "identifique a conta REAL que será preparada")
+    if body.get("confirmo_sem_trade") is not True:
+        raise HTTPException(
+            422, "confirme que a chave REAL separada não possui permissão de trade")
+    if body.get("confirmo_sem_movimentacao") is not True:
+        raise HTTPException(
+            422, "confirme que a chave REAL separada não possui permissão de saque")
+    cfg = load_cfg(request_tenant(req))
+    env = _env_leitura_real(cfg)
+    try:
+        resultado = probe_read_only_account(env)
+    except BrokerSecurityError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    agora = datetime.now(timezone.utc).isoformat()
+    prova = {
+        "schema": "dz23.preparacao-real-leitura/1",
+        "exchange": resultado["exchange"],
+        "conta": conta,
+        "authenticated_read": bool(resultado["authenticated_read"]),
+        "read_methods": list(resultado.get("read_methods") or ()),
+        "sem_trade_declarado": True,
+        "sem_saque_declarado": True,
+        "credential_fingerprint": resultado["credential_fingerprint"],
+        "verificada_em": agora,
+        "aviso": ("acesso de leitura comprovado; ausência de trade/saque foi "
+                  "declarada pelo proprietário e deve ser conferida também "
+                  "no painel da corretora"),
+    }
+    esc = _escola_of(req)
+    esc["armazem"].salvar(esc["tenant_id"], _CHAVE_PREPARACAO_REAL, prova)
+    return {"ok": True, "preparacao": _prova_publica(prova, True),
+            "aviso": prova["aviso"]}
+
+
 @app.get("/v1/live/status")
 def live_status(request: Request, _=Depends(auth)):
     """Diz, sem rodeio, se este inquilino pode operar dinheiro real e o que
     falta para poder."""
     cfg = load_cfg(request_tenant(request))
     d = _DESKS.get(request_tenant(request))
+    prova_leitura, prova_valida = _prova_leitura_real(request, cfg)
+    acesso_leitura_ok = bool(
+        prova_valida and prova_leitura.get("authenticated_read"))
+    permissoes_minimas_ok = bool(
+        acesso_leitura_ok and prova_leitura.get("sem_trade_declarado")
+        and prova_leitura.get("sem_saque_declarado"))
+    identidade_ok = bool(
+        acesso_leitura_ok and str(prova_leitura.get("conta") or "").strip())
+    conta_real = str((prova_leitura or {}).get("conta") or "").strip()
+    exchange_real = (cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    pilotos_no_contexto = [
+        p for p in _supervisor_of(request).relatorio()
+        if p.get("estado") == "piloto_autorizado"
+        and str(p.get("corretora") or "").strip().lower() == exchange_real
+        and str(p.get("conta") or "").strip() == conta_real
+    ]
     frase_ok = (cfg.get("LIVE_TRADING_CONFIRM") or "").strip() == LIVE_CONFIRM_PHRASE
     checklist = [
         {"item": "Frase de autorização digitada", "pronto": frase_ok,
@@ -4157,14 +4274,19 @@ def live_status(request: Request, _=Depends(auth)):
         {"item": "Chaves da corretora configuradas",
          "pronto": bool(cfg.get("EXCHANGE_API_KEY") and cfg.get("EXCHANGE_API_SECRET")),
          "acao": "Cole a chave e o segredo da sua corretora"},
-        {"item": "Permissões da chave da corretora comprovadas (somente leitura)",
-         "pronto": False,
-         "acao": ("Comprove que a chave só lê (sem saque e sem trade) com uma "
-                  "consulta real autorizada — preparação ainda não registrada")},
+        {"item": "Acesso REAL de leitura e permissões mínimas registrados",
+         "pronto": permissoes_minimas_ok,
+         "acao": ("Use uma chave REAL separada, sem trade e sem saque; o "
+                  "servidor fará apenas consultas autenticadas. Confira as "
+                  "permissões também no painel da corretora")},
         {"item": "Identidade da conta REAL confirmada",
-         "pronto": False,
-         "acao": ("Confirme, com consulta autorizada, que a conta cadastrada é "
-                  "a conta real pretendida — preparação ainda não registrada")},
+         "pronto": identidade_ok,
+         "acao": ("Identifique a conta durante a prova de leitura; a consulta "
+                  "autenticada liga essa declaração à credencial salva")},
+        {"item": "Piloto autorizado para esta corretora e conta",
+         "pronto": bool(pilotos_no_contexto),
+         "acao": ("Forme o agente na Escola Central deste contexto, configure "
+                  "capital e perdas e faça a autorização explícita do piloto")},
         {"item": "Teto por ordem definido",
          "pronto": _teto_positivo(cfg, "LIVE_MAX_ORDER_VALUE"),
          "acao": "Defina LIVE_MAX_ORDER_VALUE (número finito maior que zero)"},
@@ -4191,6 +4313,12 @@ def live_status(request: Request, _=Depends(auth)):
     faltam = [i for i in checklist if not i["pronto"]]
     return {"pode_operar_real": not faltam, "checklist": checklist,
             "pendencias": len(faltam),
+            "preparacao_leitura": _prova_publica(prova_leitura, prova_valida),
+            "pilotos_autorizados_no_contexto": [
+                {"agent_id": p.get("agent_id"),
+                 "estrategia": p.get("estrategia"),
+                 "versao": p.get("versao"), "conta": p.get("conta")}
+                for p in pilotos_no_contexto],
             "aviso": ("Dinheiro real: perdas são suas e irreversíveis. O "
                       "sistema não promete lucro.")}
 

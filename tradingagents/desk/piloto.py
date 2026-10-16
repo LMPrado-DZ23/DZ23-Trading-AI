@@ -473,7 +473,8 @@ class SupervisorDePiloto:
     def bloqueios(self, *, capital_em_uso=None, perda_hoje=None,
                   perda_total=None,
                   agora: datetime | None = None,
-                  central=None) -> dict[str, str]:
+                  central=None, exigir_autorizacao: bool = False,
+                  agentes_esperados=()) -> dict[str, str]:
         """Quem NÃO pode abrir posição agora — e por quê, para o Maestro.
 
         O vigia roda antes: estado vencido/revogado/suspenso já chega aqui
@@ -533,6 +534,19 @@ class SupervisorDePiloto:
                     str(d.get("agent_id") or ""),
                     "formado na escola; sala REAL aguardando configuração "
                     "e autorização explícita do proprietário")
+        if exigir_autorizacao:
+            for agent_id in agentes_esperados:
+                agent_id = str(agent_id or "").strip()
+                if not agent_id or agent_id in bloqueados:
+                    continue
+                registro = self._autorizacoes.get(agent_id)
+                autorizado = bool(
+                    registro and EstadoDoPiloto(registro["estado"])
+                    is EstadoDoPiloto.PILOTO_AUTORIZADO)
+                if not autorizado:
+                    bloqueados[agent_id] = (
+                        "modo LIVE exige piloto formado, configurado e "
+                        "explicitamente autorizado pelo proprietário")
         return bloqueados
 
     # -- relatório ------------------------------------------------------

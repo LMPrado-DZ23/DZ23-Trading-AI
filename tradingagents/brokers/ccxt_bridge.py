@@ -46,6 +46,98 @@ EXCHANGE_ALIASES = {
 LIVE_CONFIRM_PHRASE = "EU AUTORIZO OPERAR COM DINHEIRO REAL"
 
 
+def read_only_credential_fingerprint(env: dict) -> str:
+    """Identifica a credencial REAL sem persistir ou expor seu valor.
+
+    A prova de leitura fica automaticamente obsoleta quando qualquer parte
+    da credencial ou a corretora muda. O digest nunca é usado para autenticar.
+    """
+    partes = [
+        (env.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower(),
+        env.get("REAL_READ_ONLY_API_KEY") or "",
+        env.get("REAL_READ_ONLY_API_SECRET") or "",
+        env.get("REAL_READ_ONLY_API_PASSWORD") or "",
+        env.get("REAL_READ_ONLY_API_UID") or "",
+    ]
+    return hashlib.sha256("\0".join(partes).encode()).hexdigest()
+
+
+def probe_read_only_account(env: dict) -> dict:
+    """Prova autenticação REAL usando exclusivamente métodos de leitura.
+
+    Esta função deliberadamente não constrói ``CCXTBridge`` e não devolve o
+    cliente CCXT: assim a credencial de observação nunca alcança
+    ``submit_order``. Nenhum saldo, ordem, id de conta ou segredo é retornado.
+    A ausência de permissão de trade/saque não é inferível por uma leitura
+    genérica CCXT; ela permanece uma declaração explícita do proprietário.
+    """
+    exchange_name = (env.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    if exchange_name not in EXCHANGE_ALIASES:
+        raise BrokerSecurityError(
+            f"exchange {exchange_name!r} fora da linha DZ23 "
+            f"({', '.join(sorted(EXCHANGE_ALIASES))}).")
+    api_key = env.get("REAL_READ_ONLY_API_KEY") or ""
+    api_secret = env.get("REAL_READ_ONLY_API_SECRET") or ""
+    password = env.get("REAL_READ_ONLY_API_PASSWORD") or ""
+    uid = env.get("REAL_READ_ONLY_API_UID") or ""
+    if not api_key or not api_secret:
+        raise BrokerSecurityError(
+            "a prova REAL somente leitura exige chave e segredo próprios")
+
+    import ccxt
+    ccxt_id = EXCHANGE_ALIASES[exchange_name]
+    if not hasattr(ccxt, ccxt_id):
+        raise BrokerSecurityError(
+            f"ccxt instalado não possui {ccxt_id!r}; atualizar dependência.")
+    exchange = getattr(ccxt, ccxt_id)({
+        "apiKey": api_key, "secret": api_secret,
+        "password": password, "uid": uid, "enableRateLimit": True,
+    })
+    requisitos = getattr(exchange, "requiredCredentials", {}) or {}
+    valores = {"apiKey": api_key, "secret": api_secret,
+               "password": password, "uid": uid}
+    faltando = [nome for nome, valor in valores.items()
+                if requisitos.get(nome) is True and not valor]
+    if faltando:
+        raise BrokerSecurityError(
+            f"{exchange_name} exige credenciais adicionais: "
+            + ", ".join(faltando) + ".")
+
+    chamadas = []
+    try:
+        if not hasattr(exchange, "fetch_balance"):
+            raise BrokerSecurityError(
+                f"{exchange_name} não oferece consulta autenticada de saldo")
+        exchange.fetch_balance()
+        chamadas.append("fetch_balance")
+        capacidades = getattr(exchange, "has", {}) or {}
+        if capacidades.get("fetchOpenOrders") and hasattr(
+                exchange, "fetch_open_orders"):
+            exchange.fetch_open_orders()
+            chamadas.append("fetch_open_orders")
+        if capacidades.get("fetchAccounts") and hasattr(
+                exchange, "fetch_accounts"):
+            exchange.fetch_accounts()
+            chamadas.append("fetch_accounts")
+    except BrokerSecurityError:
+        raise
+    except Exception as exc:
+        raise BrokerSecurityError(
+            "consulta autenticada somente leitura recusada "
+            f"({type(exc).__name__})") from exc
+    finally:
+        fechar = getattr(exchange, "close", None)
+        if callable(fechar):
+            fechar()
+    return {
+        "exchange": exchange_name,
+        "ccxt_id": ccxt_id,
+        "authenticated_read": True,
+        "read_methods": chamadas,
+        "credential_fingerprint": read_only_credential_fingerprint(env),
+    }
+
+
 def _decimal_env(env, chave: str, padrao: str) -> Decimal:
     try:
         return Decimal(str(env.get(chave) or padrao))

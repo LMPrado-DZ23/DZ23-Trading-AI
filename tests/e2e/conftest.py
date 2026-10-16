@@ -107,7 +107,9 @@ def live_server(tmp_path_factory):
     """App real com a senha vinda do ambiente (caminho legado ainda aceito),
     como numa estação que já tinha instalação."""
     proc, base_url = _spawn_server(
-        tmp_path_factory, {"ACCESS_PASSWORD": E2E_OWNER_PASSWORD}, "dz23-e2e-data"
+        tmp_path_factory,
+        {"ACCESS_PASSWORD": E2E_OWNER_PASSWORD, "ALERTA_WINDOWS": "false"},
+        "dz23-e2e-data",
     )
     yield base_url
     _stop(proc)

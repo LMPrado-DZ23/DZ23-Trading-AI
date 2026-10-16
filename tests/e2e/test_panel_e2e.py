@@ -465,10 +465,10 @@ def test_fm3_corretora_catalogo_capacidades_e_preparo_real(page, live_server, ow
     expect(page.locator("#pageTitle")).to_have_text("Configuração")
     page.get_by_role("button", name=re.compile("Catálogo e capacidades")).click()
     cat = page.locator("#brokerCatalogo")
-    expect(cat).to_contain_text("Salas fixas", timeout=15000)
+    expect(cat).to_contain_text("Corretoras DZ23", timeout=15000)
     expect(cat).to_contain_text("Binance")
-    expect(cat).to_contain_text("planejada, não validada")
-    expect(cat).to_contain_text("desligada")
+    expect(cat).to_contain_text("disponível para dados e TESTNET")
+    expect(cat).to_contain_text("LIVE pelo painel: bloqueada")
     page.screenshot(path=str(evidence_dir / "09d-fm3-catalogo.png"))
 
     # Capacidades do primeiro adaptador instalado: anúncio local, não teste
