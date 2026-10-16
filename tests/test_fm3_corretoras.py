@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HTML = ROOT / "service" / "static" / "index.html"
 
 CAP_ROTA = "/v1/personal/exchanges/{exchange_id}/capabilities"
+HEALTH_ROTA = "/v1/personal/exchanges/{exchange_id}/public-health"
 
 
 def _html() -> str:
@@ -75,6 +76,13 @@ class TestRotaCapacidades:
             personal_exchange_capabilities("nao_existe")
         assert e.value.status_code == 404
 
+    def test_sonda_publica_get_only_e_autenticada(self):
+        rotas = [r for r in app.routes
+                 if isinstance(r, APIRoute) and r.path == HEALTH_ROTA]
+        assert len(rotas) == 1
+        assert rotas[0].methods == {"GET"}
+        assert any(d.call is auth for d in rotas[0].dependant.dependencies)
+
 
 # ------------------------------------------------------------------ painel
 
@@ -114,6 +122,15 @@ class TestTelaCorretora:
             "capacidades vêm da rota real, montada com o id da corretora")
         assert "UNVERIFIED" in t, "capacidade anunciada ≠ corretora testada"
         assert "verified" in t and "live_enabled" in t
+
+    def test_leitura_publica_tem_acao_e_nao_usa_credenciais(self):
+        html = _html()
+        catalogo = _funcao(html, "async function catalogoCarregar(")
+        sonda = _funcao(html, "async function saudePublicaCorretora(")
+        assert "saudePublicaCorretora" in catalogo
+        assert "'/public-health'" in sonda
+        assert "nenhuma credencial usada" in sonda
+        assert "ordem enviada" in sonda
 
     def test_reconciliacao_usa_a_rota_real(self):
         html = _html()

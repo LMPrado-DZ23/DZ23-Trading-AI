@@ -391,6 +391,28 @@ class TestMesaEscolaE2E:
         assert c.post("/v1/escola/avaliar", headers=H, json={
             "chave": self.CHAVE}).status_code == 422
 
+    def test_formado_e_encaminhado_mesmo_apos_reinicio_da_mesa(
+            self, tmp_path, monkeypatch):
+        """A fila REAL vem do estado durável, não do cache `_DESKS`."""
+        c, m = _client(tmp_path, monkeypatch)
+        assert c.get("/v1/desk/status", headers=H).status_code == 200
+        self._semear_formada(m, estrategia="momentum", ativo="BTC/USDT")
+        m._DESKS.clear()  # simula reinício antes da avaliação/encaminhamento
+
+        resposta = c.post("/v1/escola/avaliar", headers=H, json={
+            "chave": self.CHAVE, "estrategia": "momentum",
+            "ativo": "BTC/USDT"})
+
+        assert resposta.status_code == 200, resposta.text
+        fila = resposta.json()["sala_real"]
+        assert fila["agent_id"] == "trader-momentum"
+        assert fila["estado"] == "aguardando_configuracao_do_proprietario"
+        assert m._DESKS == {}  # encaminhar não inicializa broker/scheduler
+        persistido = c.get("/v1/escola/pilotos", headers=H).json()
+        assert [item["encaminhamento_id"] for item in
+                persistido["encaminhamentos"]] == [
+                    fila["encaminhamento_id"]]
+
     def test_piloto_aguardando_corta_entrada_no_ciclo(self, tmp_path,
                                                       monkeypatch):
         c, m = _client(tmp_path, monkeypatch)

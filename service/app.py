@@ -1422,6 +1422,16 @@ def personal_exchange_capabilities(exchange_id: str, _=Depends(auth)):
             close()
 
 
+@app.get("/v1/personal/exchanges/{exchange_id}/public-health")
+def personal_exchange_public_health(exchange_id: str, _=Depends(auth)):
+    """Prova conectividade pública com ticker+velas, sem usar credenciais."""
+    from service.personal_exchange_health import probe_public_exchange
+    try:
+        return probe_public_exchange(exchange_id)
+    except KeyError as exc:
+        raise HTTPException(404, "corretora fora da linha DZ23") from exc
+
+
 @app.get("/v1/broker/status")
 def broker_status(request: Request, _=Depends(auth)):
     """Valida a configuração de corretora SEM enviar ordem nenhuma."""
@@ -3669,6 +3679,24 @@ async def escola_avaliar(req: Request, _=Depends(auth),
         candidatos = [] if d is None else [
             t for t in d["orchestrator"].traders
             if t.strategy == estrategia and str(t.spec.version) == av.versao]
+        # A fila da Sala REAL não pode depender do cache do processo. Após
+        # reinício, a Escola e suas provas continuam no armazém, enquanto
+        # `_DESKS` nasce vazio. Reconstruímos somente o catálogo determinístico
+        # de agentes padrão (sem iniciar scheduler, broker ou ordem) para que a
+        # formatura ainda encontre o agente correto e seja encaminhada.
+        if not candidatos:
+            from tradingagents.desk.traders import default_desk
+            cfg = load_cfg(request_tenant(req))
+            incluir_controle = str(
+                cfg.get("TRADINGAGENTS_DESK_CONTROLE") or ""
+            ).strip().lower() in ("1", "true", "yes", "sim")
+            candidatos = [
+                t for t in default_desk(
+                    (ativo,), exchange=sala.contexto.corretora,
+                    incluir_controle=incluir_controle)
+                if t.strategy == estrategia
+                and str(t.spec.version) == av.versao
+            ]
         if len(candidatos) == 1:
             contexto = ContextoDeCertificacao(
                 corretora=sala.contexto.corretora,

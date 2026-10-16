@@ -425,7 +425,7 @@ if(!r.ok)return toast(r.data.detail||'Falha ao ler o catálogo local','bad');
 const d=r.data||{};
 // Estado real do catálogo traduzido para o dono; valor bruto aparece como veio.
 const INT={AVAILABLE_TESTNET:'disponível para dados e TESTNET',AVAILABLE_READ_ONLY:'disponível para dados públicos; sem sandbox nativo',EXPERIMENTAL_NOT_ELIGIBLE:'laboratório experimental; não elegível'};
-const salas=(d.fixed_rooms||[]).map(x=>'<div>'+escapeHtml(String(x.name||''))+' — '+escapeHtml(String(x.market||''))+' · simulação: '+escapeHtml(String(x.simulation||''))+' · operação real: '+(x.live_enabled?'SIM':'não')+' · integração: '+escapeHtml(String(INT[x.integration_status]||x.integration_status||''))+'</div>').join('');
+const salas=(d.fixed_rooms||[]).map(x=>'<div>'+escapeHtml(String(x.name||''))+' — '+escapeHtml(String(x.market||''))+' · simulação: '+escapeHtml(String(x.simulation||''))+' · operação real: '+(x.live_enabled?'SIM':'não')+' · integração: '+escapeHtml(String(INT[x.integration_status]||x.integration_status||''))+(x.read_only_enabled?' <button class="btn secondary" onclick="saudePublicaCorretora(\''+escapeHtml(String(x.id||''))+'\')">Testar leitura pública</button>':'')+'</div>').join('');
 const ccxt=(d.ccxt_available||[]).map(x=>'<div>'+escapeHtml(String(x.id||''))+' — '+(x.configured?'configurada':'sem chaves')+' · execução: '+(x.execution_enabled?'LIGADA':'desligada')+' · '+escapeHtml(String(x.status||''))+' <button class="btn secondary" onclick="capacidadesCorretora(\''+escapeHtml(String(x.id||''))+'\')">Capacidades</button></div>').join('');
 const erro=d.discovery_error?('<div class="warn">descoberta CCXT indisponível: '+escapeHtml(String(d.discovery_error))+'</div>'):'';
 alvo.innerHTML='<p class="muted">Lido do seu computador, sem credenciais e sem rede. LIVE pelo painel: '+(d.execution_enabled?'LIGADA':'bloqueada')+'.</p>'+erro+'<div><b>Corretoras DZ23</b></div>'+(salas||'<div class="muted">—</div>')+'<div style="margin-top:6px"><b>Todos os adaptadores CCXT instalados nesta máquina</b></div>'+(ccxt||'<div class="muted">nenhum</div>')}
@@ -435,6 +435,10 @@ const r=await api('/v1/personal/exchanges/'+encodeURIComponent(id)+'/capabilitie
 if(!r.ok)return toast(r.data.detail||'Capacidades indisponíveis','bad');
 const d=r.data||{};const linha=(nome,ok)=>'<div>'+escapeHtml(nome)+': '+(ok?'sim':'não')+'</div>';
 if(alvo)alvo.innerHTML='<div><b>'+escapeHtml(String(d.id||''))+'</b> — anúncio local do adaptador, sem credenciais e sem rede; <b>'+escapeHtml(String(d.status||'UNVERIFIED'))+'</b> (capacidade anunciada ≠ corretora testada).</div>'+linha('Cotação (ticker)',d.ticker)+linha('Livro de ofertas',d.order_book)+linha('Velas (OHLCV)',d.ohlcv)+linha('Saldo (privado)',d.balance)+linha('Envio de ordens',d.order_api)+'<div class="muted">verificado: '+(d.verified?'sim':'não')+' · operação real: '+(d.live_enabled?'SIM':'não')+'</div>'}
+async function saudePublicaCorretora(id){
+const alvo=$('brokerDetalhe');if(alvo)alvo.innerHTML='<div class="muted">Testando ticker e velas públicas, sem credenciais...</div>';
+const r=await api('/v1/personal/exchanges/'+encodeURIComponent(id)+'/public-health');const d=r.data||{};
+if(alvo)alvo.innerHTML=r.ok&&d.ok?'<div class="ok"><b>'+escapeHtml(String(d.name||id))+': leitura pública funcionando</b> · '+escapeHtml(String(d.symbol||''))+' · '+escapeHtml(String(d.candles||0))+' velas · '+escapeHtml(String(d.latency_ms||0))+' ms</div><div class="muted">Somente '+escapeHtml((d.methods||[]).join(', '))+'; nenhuma credencial usada e nenhuma ordem enviada.</div>':'<div class="warn"><b>'+escapeHtml(String(id))+': leitura pública indisponível</b> · '+escapeHtml(String(d.error_type||d.status||'erro'))+' · '+escapeHtml(String(d.detail||''))+'</div>'}
 async function brokerReconciliar(){
 const alvo=$('brokerDetalhe');
 const r=await api('/v1/desk/reconciliar',{method:'POST'});

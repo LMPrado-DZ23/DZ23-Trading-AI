@@ -70,6 +70,21 @@ como TESTNET operacional. Chaves, segredos, passphrases e UID são armazenados
 pelos mesmos controles de segredo do painel e nunca devem ser copiados para
 documentação, commits ou tickets.
 
+O botão **Testar leitura pública** consulta ticker e três velas de um mercado
+conhecido usando o adaptador CCXT da corretora, sem carregar chave e sem possuir
+caminho de ordem. A rodada de referência de 2026-10-16 confirmou leitura
+pública nas nove corretoras (9/9). O resultado auditável fica em
+`docs/mission/evidence/real-readiness/corretoras-publicas.json`. Essa prova
+confirma dados públicos e conectividade; não substitui autenticação somente
+leitura da conta, fill TESTNET nem homologação LIVE.
+
+Para repetir a prova das nove corretoras:
+
+```powershell
+uv run python scripts/verificar_corretoras_publicas.py `
+  --saida-json docs/mission/evidence/real-readiness/corretoras-publicas.json
+```
+
 ### Prova da conta REAL sem habilitar execução
 
 A credencial da conta REAL é separada da credencial TESTNET e usa os campos
