@@ -250,7 +250,7 @@ const itens=[
 ['Alertas externos (Telegram/Discord/WhatsApp/e-mail)',extCab[0],extCab[1],extCab[2],'config'],
 ['Aplicativo no celular e push',pushCab[0],pushCab[1],pushCab[2],'config'],
 ['Dinheiro real (LIVE)','bad','bloqueado por segurança','Servidor: '+(opReal.estado||'—')+(opReal.motivo?(' — '+opReal.motivo):'')+'. Só destrava com homologação e autorização explícita do proprietário.','mesa'],
-['IQ Option e corretoras fora do catálogo','muted','ainda não implementado','Conector experimental, não validado e sem CCXT — fora da operação até ser construído e passar por revisão independente.',null],
+['IQ Option','muted','MCP oficial em validação passiva','Sete endpoints oficiais disponíveis para handshake e catálogo de ferramentas. Sem token novo validado, sandbox comprovado ou caminho de ordem.',null],
 ];
 alvo.innerHTML=itens.map(x=>cap(x[0],x[1],x[2],x[3],x[4])).join('');
 }
@@ -258,8 +258,8 @@ async function preparoRealLoad(){
 const alvo=$('preparoReal');if(!alvo)return;
 const r=await api('/v1/live/status');
 if(!r.ok){alvo.innerHTML='<span class="warn">Preparação indisponível agora.</span>';return}
-const d=r.data||{},p=d.preparacao_leitura||{};const itens=(d.checklist||[]).map(i=>'<div>'+(i.pronto?'✔':'✖')+' '+escapeHtml(String(i.item||''))+' — '+escapeHtml(String(i.acao||''))+'</div>').join('');const prova=p.registrada?'<div class="muted">Prova de leitura: '+(p.valida?'válida':'bloqueada')+' · '+escapeHtml(String(p.exchange||''))+' · conta '+escapeHtml(String(p.conta||''))+' · verificada '+escapeHtml(String(p.verificada_em||''))+(p.expira_em?' · expira '+escapeHtml(String(p.expira_em)):'')+'<br>'+escapeHtml(String(p.aviso||''))+'</div>':'';
-alvo.innerHTML='<div><b>Dinheiro real: '+(d.pode_operar_real?'LIBERADO':'BLOQUEADO')+'</b> — pendências: '+(Number(d.pendencias)||0)+'. Conferir aqui NÃO ativa nada.</div>'+prova+itens+'<div class="warn">'+escapeHtml(String(d.aviso||''))+'</div>'}
+const d=r.data||{},p=d.preparacao_leitura||{},e=d.estado_de_liberacao||{},s=d.sala_real||{};const rotulos={acao_do_proprietario:'ação do proprietário',prova_externa:'prova externa',controle_operacional:'controle operacional',liberacao_de_codigo:'liberação de código'};const itens=(d.checklist||[]).map(i=>'<div>'+(i.pronto?'✔':'✖')+' '+escapeHtml(String(i.item||''))+' <span class="pill">'+escapeHtml(rotulos[i.categoria]||i.categoria||'controle')+'</span> — '+escapeHtml(String(i.acao||''))+'</div>').join('');const prova=p.registrada?'<div class="muted">Prova de leitura: '+(p.valida?'válida':'bloqueada')+' · '+escapeHtml(String(p.exchange||''))+' · conta '+escapeHtml(String(p.conta||''))+' · verificada '+escapeHtml(String(p.verificada_em||''))+(p.expira_em?' · expira '+escapeHtml(String(p.expira_em)):'')+'<br>'+escapeHtml(String(p.aviso||''))+'</div>':'';const sala='<div class="muted">Sala REAL: '+Number(s.encaminhamentos_total||0)+' encaminhamento(s), '+Number(s.autorizacoes_total||0)+' piloto(s) configurado(s) · modo '+escapeHtml(String(s.modo_do_piloto||'paper (simulado)'))+' · envio real '+(s.envio_real_habilitado?'habilitado':'desabilitado')+'.</div>';
+alvo.innerHTML='<div><b>Dinheiro real: '+(d.pode_operar_real?'LIBERADO':'BLOQUEADO')+'</b> — estado: '+escapeHtml(String(e.estado||'indisponível'))+' · pendências: '+(Number(d.pendencias)||0)+'. Conferir aqui NÃO ativa nada.</div>'+sala+prova+itens+'<div class="warn">'+escapeHtml(String(d.aviso||''))+'</div>'}
 async function inicioConectar(){
 const vars={};const ex=$('iniExchange');if(ex&&ex.value)vars.TRADINGAGENTS_EXCHANGE=ex.value;
 const k=$('iniExchangeKey');if(k&&k.value.trim())vars.EXCHANGE_API_KEY=k.value.trim();
@@ -703,9 +703,9 @@ $('deskMsg').innerHTML=d.instrumentos.map(i=>i.pronto?'<span class="ok">'+escape
 async function avaliar(){const r=await api('/v1/desk/avaliacao');if(!r.ok)return toast(r.data.detail||'falhou','bad');const d=r.data;
 $('deskMsg').innerHTML=(d.por_agente.length?d.por_agente.map(l=>escapeHtml(l.agente)+': '+l.ordens+' ordens · resultado '+escapeHtml(l.resultado_realizado)+' · custos '+escapeHtml(l.custos)).join('<br>'):'nenhuma operação ainda')+(d.ressalvas.length?'<div class="warn">'+escapeHtml(d.ressalvas.join(' · '))+'</div>':'<div class="ok">avaliação conclusiva</div>')+'<div class="muted">'+escapeHtml(d.aviso)+'</div>'}
 async function doBackup(){const r=await api('/v1/backup',{method:'POST'});toast(r.ok?('Backup salvo: '+String(r.data.arquivo).split('/').pop()):(r.data.detail||'falhou'),r.ok?'ok':'bad')}
-async function liveStatus(){const r=await api('/v1/live/status');if(!r.ok)return toast('falhou','bad');const d=r.data;
-$('deskMsg').innerHTML=`<div class="${d.pode_operar_real?'ok':'warn'}"><b>${d.pode_operar_real?'Pronto para operar com dinheiro real':'Faltam '+d.pendencias+' item(ns) para dinheiro real'}</b></div>`+
-d.checklist.map(i=>`<div class="metric-line"><span>${i.pronto?'✔':'○'} ${escapeHtml(i.item)}</span>${i.pronto?'':'<small class="muted">'+escapeHtml(i.acao)+'</small>'}</div>`).join('')+
+async function liveStatus(){const r=await api('/v1/live/status');if(!r.ok)return toast('falhou','bad');const d=r.data,e=d.estado_de_liberacao||{},s=d.sala_real||{},rotulos={acao_do_proprietario:'ação do proprietário',prova_externa:'prova externa',controle_operacional:'controle operacional',liberacao_de_codigo:'liberação de código'};
+$('deskMsg').innerHTML=`<div class="${d.pode_operar_real?'ok':'warn'}"><b>${d.pode_operar_real?'Pronto para operar com dinheiro real':'Faltam '+d.pendencias+' item(ns) para dinheiro real'}</b><small>Estado auditável: ${escapeHtml(e.estado||'indisponível')} · pré-requisitos sem selo: ${e.pre_requisitos_sem_selo_concluidos?'concluídos':'pendentes'}</small><small>Sala REAL: ${Number(s.encaminhamentos_total||0)} encaminhamento(s), ${Number(s.autorizacoes_total||0)} piloto(s) configurado(s) · ${escapeHtml(s.modo_do_piloto||'paper (simulado)')} · envio real ${s.envio_real_habilitado?'habilitado':'desabilitado'}.</small></div>`+
+d.checklist.map(i=>`<div class="metric-line"><span>${i.pronto?'✔':'○'} ${escapeHtml(i.item)} <small class="pill">${escapeHtml(rotulos[i.categoria]||i.categoria||'controle')}</small></span>${i.pronto?'':'<small class="muted">'+escapeHtml(i.acao)+'</small>'}</div>`).join('')+
 `<div class="muted">${escapeHtml(d.aviso)}</div>`}
 async function paradaEmergencia(){if(!confirm('PARAR TUDO agora? Entradas param e envios de ordem são bloqueados.'))return;
 const r=await api('/v1/live/parada-emergencia',{method:'POST'});

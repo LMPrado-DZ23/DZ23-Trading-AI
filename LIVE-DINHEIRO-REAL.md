@@ -1,8 +1,9 @@
 # Operar com DINHEIRO REAL — leia antes de ligar
 
-O caminho para dinheiro real existe e está pronto. Ele **não liga sozinho**:
-são cinco fechaduras independentes — quatro na sua mão e um selo de código
-que o painel não concede (você vê o estado real de todas elas na mesma tela).
+O caminho auditável para preparar dinheiro real existe. Ele **ainda não está
+liberado para operar** e não liga sozinho: além das ações do proprietário, há
+provas externas, controles operacionais e um selo de código que o painel não
+concede. O estado real de cada classe aparece na mesma tela.
 
 ## Estado seguro desta branch
 
@@ -219,6 +220,21 @@ deve operar a própria conta, com as próprias chaves.
 
 O painel mostra esse checklist em **Mesa de Agentes → "Dinheiro real: posso?"**
 com a ação exata de cada item que falta.
+
+O endpoint autenticado `GET /v1/live/status` também publica um contrato
+canônico `estado_de_liberacao` (`dz23.liberacao-real/1`). Ele separa as
+pendências em `acao_do_proprietario`, `prova_externa`,
+`controle_operacional` e `liberacao_de_codigo`. Seus estados são:
+
+- `preparacao_pendente`: existe ao menos um pré-requisito além do selo;
+- `aguardando_liberacao_de_codigo`: todos os demais itens foram comprovados,
+  mas o selo auditado continua fechado;
+- `liberado`: só pode aparecer quando nenhum item estiver pendente.
+
+O mesmo payload traz `sala_real`, com contagens por estado dos
+encaminhamentos e pilotos. Esse retrato nunca contém credenciais e declara
+explicitamente `envio_real_habilitado=false` nesta branch. Se a leitura da
+Sala REAL falhar, o resumo fica indisponível e a prontidão continua fechada.
 
 ## Ordem recomendada (não pule)
 1. Rode em **testnet** até ver uma ordem preenchida e reconciliada.

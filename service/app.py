@@ -4786,6 +4786,91 @@ def _parada_desarmada_para_prontidao(tenant_id: str) -> bool:
         return False
 
 
+_CATEGORIAS_LIBERACAO_REAL = (
+    "acao_do_proprietario",
+    "prova_externa",
+    "controle_operacional",
+    "liberacao_de_codigo",
+)
+
+
+def _estado_de_liberacao_real(checklist: list[dict]) -> dict:
+    """Agrupa bloqueios sem confundir preparação com autorização LIVE."""
+    bloqueios = {categoria: [] for categoria in _CATEGORIAS_LIBERACAO_REAL}
+    for item in checklist:
+        if item.get("pronto"):
+            continue
+        categoria = str(item.get("categoria") or "controle_operacional")
+        if categoria not in bloqueios:
+            categoria = "controle_operacional"
+        bloqueios[categoria].append(str(item.get("item") or "item sem nome"))
+    sem_selo = any(
+        bloqueios[categoria]
+        for categoria in _CATEGORIAS_LIBERACAO_REAL
+        if categoria != "liberacao_de_codigo")
+    if sem_selo:
+        estado = "preparacao_pendente"
+    elif bloqueios["liberacao_de_codigo"]:
+        estado = "aguardando_liberacao_de_codigo"
+    else:
+        estado = "liberado"
+    return {
+        "schema": "dz23.liberacao-real/1",
+        "estado": estado,
+        "pre_requisitos_sem_selo_concluidos": not sem_selo,
+        "exige_confirmacao_no_momento_da_acao": True,
+        "quantidade_por_categoria": {
+            categoria: len(itens) for categoria, itens in bloqueios.items()},
+        "bloqueios_por_categoria": bloqueios,
+    }
+
+
+def _resumo_sala_real(request: Request) -> dict:
+    """Retrato sem segredos da fila Escola -> Sala REAL.
+
+    A consulta nunca concede mandato. Mesmo uma autorização de piloto opera
+    no modo simulado enquanto o selo LIVE permanece fechado.
+    """
+    from tradingagents.desk.piloto import MODO_DO_PILOTO
+
+    base = {
+        "disponivel": False,
+        "modo_do_piloto": MODO_DO_PILOTO,
+        "envio_real_habilitado": False,
+        "encaminhamentos_total": 0,
+        "autorizacoes_total": 0,
+        "estados_encaminhamento": {},
+        "estados_autorizacao": {},
+    }
+    try:
+        esc = _escola_of(request)
+        supervisor = _supervisor_of(request)
+        supervisor.vigiar(central=esc["central"])
+        encaminhamentos = supervisor.encaminhamentos()
+        autorizacoes = supervisor.relatorio()
+    except Exception:
+        return {**base, "aviso": (
+            "estado da sala REAL indisponível; prontidão permanece bloqueada")}
+
+    def _contar(registros: list[dict]) -> dict[str, int]:
+        contagem: dict[str, int] = {}
+        for registro in registros:
+            estado = str(registro.get("estado") or "desconhecido")
+            contagem[estado] = contagem.get(estado, 0) + 1
+        return contagem
+
+    return {
+        **base,
+        "disponivel": True,
+        "encaminhamentos_total": len(encaminhamentos),
+        "autorizacoes_total": len(autorizacoes),
+        "estados_encaminhamento": _contar(encaminhamentos),
+        "estados_autorizacao": _contar(autorizacoes),
+        "aviso": ("formatura apenas encaminha; limites e autorização explícita "
+                  "do proprietário continuam obrigatórios"),
+    }
+
+
 @app.post("/v1/live/preparacao-leitura")
 async def live_preparacao_leitura(req: Request, _=Depends(auth),
                                   __=Depends(require_plan)):
@@ -4876,51 +4961,63 @@ def live_status(request: Request, _=Depends(auth)):
     frase_ok = (cfg.get("LIVE_TRADING_CONFIRM") or "").strip() == LIVE_CONFIRM_PHRASE
     checklist = [
         {"item": "Frase de autorização digitada", "pronto": frase_ok,
+         "categoria": "acao_do_proprietario",
          "acao": f"Digite exatamente: {LIVE_CONFIRM_PHRASE}"},
         {"item": "Chaves da corretora configuradas",
          "pronto": credenciais_execucao_ok,
+         "categoria": "acao_do_proprietario",
          "acao": ("Credenciais completas para a corretora selecionada"
                   if credenciais_execucao_ok else
                   "Informe: " + ", ".join(credenciais_execucao_faltando))},
         {"item": "Acesso REAL de leitura recente e permissões mínimas registradas",
          "pronto": permissoes_minimas_ok,
+         "categoria": "prova_externa",
          "acao": ("Use uma chave REAL separada, sem trade e sem saque; o "
                   "servidor fará apenas consultas autenticadas e exigirá "
                   "renovação da prova a cada 24 horas. Confira as "
                   "permissões também no painel da corretora")},
         {"item": "Identidade da conta REAL confirmada",
          "pronto": identidade_ok,
+         "categoria": "prova_externa",
          "acao": ("Informe o ID real exibido pela corretora; ele será "
                   "comparado em memória e somente um hash será persistido")},
         {"item": "Estratégia e conta com piloto autorizado vigente",
          "pronto": bool(pilotos_no_contexto),
+         "categoria": "acao_do_proprietario",
          "acao": ("Forme o agente na Escola Central deste contexto, configure "
                   "capital e perdas e faça a autorização explícita do piloto")},
         {"item": "Limites globais compatíveis com o piloto autorizado",
          "pronto": risco_certificado,
+         "categoria": "controle_operacional",
          "acao": ("Defina os tetos globais dentro do capital e da perda diária "
                   "autorizados para ao menos um piloto desta conta")},
         {"item": "Teto por ordem definido",
          "pronto": _teto_positivo(cfg, "LIVE_MAX_ORDER_VALUE"),
+         "categoria": "acao_do_proprietario",
          "acao": "Defina LIVE_MAX_ORDER_VALUE (número finito maior que zero)"},
         {"item": "Perda máxima diária definida",
          "pronto": _teto_positivo(cfg, "LIVE_MAX_DAILY_LOSS"),
+         "categoria": "acao_do_proprietario",
          "acao": "Defina LIVE_MAX_DAILY_LOSS (número finito maior que zero)"},
         {"item": "Modo da corretora em LIVE",
          "pronto": (cfg.get("TRADINGAGENTS_BROKER_MODE") or "") == "live",
+         "categoria": "acao_do_proprietario",
          "acao": "Troque o modo da corretora para LIVE"},
         {"item": "Já operou em testnet",
          "pronto": prova_testnet_valida,
+         "categoria": "prova_externa",
          "acao": ("Rode a mesa com a corretora TESTNET (CCXT) e veja uma ordem "
                   "preenchida de verdade; depois reconcilie. A prova fica "
                   "vinculada à corretora — PAPER e teste em outra corretora "
                   "não contam")},
         {"item": "Reconciliação financeira atual sem pendências",
          "pronto": reconciliacao["seguro"],
+         "categoria": "prova_externa",
          "acao": ("Reconcilie ordens, posições, caixa e livro-razão; relatório "
                   "ausente, antigo ou divergente nunca vira aprovação")},
         {"item": "Parada de emergência desarmada e disponível",
          "pronto": parada_desarmada,
+         "categoria": "controle_operacional",
          "acao": ("Resolva a causa da parada, reconcilie o estado e libere-a "
                   "explicitamente antes de qualquer operação")},
         # O selo de CÓDIGO da mesa (ADR-006). Sem ele, mesmo com todos os
@@ -4928,13 +5025,18 @@ def live_status(request: Request, _=Depends(auth)):
         # recuse: o painel nunca é a última fechadura de dinheiro real.
         {"item": "Liberação de código para operar dinheiro real na mesa",
          "pronto": MESA_LIVE_LIBERADA,
+         "categoria": "liberacao_de_codigo",
          "acao": ("Indisponível neste lançamento: exige liberação de código "
                   "auditada do dono (ADR-006); a mesa recusa corretora LIVE "
                   "sem ela — mantenha o modo em testnet")},
     ]
     faltam = [i for i in checklist if not i["pronto"]]
+    estado_de_liberacao = _estado_de_liberacao_real(checklist)
+    sala_real = _resumo_sala_real(request)
     return {"pode_operar_real": not faltam, "checklist": checklist,
             "pendencias": len(faltam),
+            "estado_de_liberacao": estado_de_liberacao,
+            "sala_real": sala_real,
             "preparacao_leitura": _prova_publica(prova_leitura, prova_valida),
             "homologacao_testnet": prova_testnet,
             "reconciliacao": reconciliacao,

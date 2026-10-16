@@ -413,13 +413,13 @@ def test_modo_simples_assistente_conectar_modo_play(page, live_server, owner_pas
     expect(page.locator("#iniMesaEstado")).to_contain_text("PARADA", timeout=15000)
 
     # §1 da missão de auditoria funcional: o Simples mostra as capacidades
-    # com estado honesto (4 estados) e acesso de UM CLIQUE a todas as telas —
+    # com estados honestos e acesso de UM CLIQUE a todas as telas —
     # telas ocultas no Simples abrem ligando o Avançado, nada escondido.
     caps = page.locator("#capacidadesLista")
     expect(caps).to_contain_text("disponível", timeout=15000)
     expect(caps).to_contain_text("configuração necessária")
     expect(caps).to_contain_text("bloqueado por segurança")
-    expect(caps).to_contain_text("ainda não implementado")
+    expect(caps).to_contain_text("MCP oficial em validação passiva")
     page.locator("#capacidadesLista").scroll_into_view_if_needed()
     page.screenshot(path=str(evidence_dir / "09b-inicio-capacidades.png"))
     page.locator('[data-abrir="mesa"]').first.click()
