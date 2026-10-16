@@ -59,6 +59,72 @@ def test_modo_live_so_muda_na_fechadura_final_nao_durante_preparacao(
     assert m.MESA_LIVE_LIBERADA is False
 
 
+def test_preparacao_completa_e_alcancavel_sem_trocar_testnet_para_live(
+        tmp_path, monkeypatch):
+    m, client = _app(tmp_path, monkeypatch)
+    cfg = {
+        "TRADINGAGENTS_EXCHANGE": "binance",
+        "TRADINGAGENTS_BROKER_MODE": "testnet",
+        "LIVE_TRADING_CONFIRM": m.LIVE_CONFIRM_PHRASE,
+        "LIVE_MAX_ORDER_VALUE": "25",
+        "LIVE_MAX_DAILY_LOSS": "10",
+    }
+    prova = {
+        "authenticated_read": True,
+        "broker_identity_verified": True,
+        "sem_trade_declarado": True,
+        "sem_saque_declarado": True,
+    }
+    certificacao = {
+        "agent_id": "agente-formado",
+        "authorization_id": "auth-1",
+        "estrategia": "momentum",
+        "versao": "v1",
+        "corretora": "binance",
+        "conta": "real-principal",
+        "contexto_certificacao": {},
+        "valido_ate": "2099-01-01T00:00:00+00:00",
+        "risco_compativel": True,
+        "pendencias_risco": [],
+    }
+    monkeypatch.setattr(m, "load_cfg", lambda _tenant: cfg)
+    monkeypatch.setattr(
+        m, "_credenciais_execucao_prontas", lambda _cfg: (True, []))
+    monkeypatch.setattr(
+        m, "_prova_leitura_real", lambda _request, _cfg: (prova, True))
+    monkeypatch.setattr(
+        m, "_prova_testnet", lambda _request, _cfg: (
+            {"valida": True, "exchange": "binance"}, True))
+    monkeypatch.setattr(
+        m, "_certificacoes_real",
+        lambda _request, _cfg, _prova, _valida: [certificacao])
+    monkeypatch.setattr(
+        m, "_reconciliacao_para_prontidao",
+        lambda _tenant: {"seguro": True, "pendencias": []})
+    monkeypatch.setattr(m, "_parada_desarmada_para_prontidao", lambda _: True)
+    monkeypatch.setattr(
+        m, "_recuperacao_local_para_prontidao", lambda: {"valida": True})
+    monkeypatch.setattr(
+        m, "_recuperacao_postgres_para_prontidao",
+        lambda: {"necessaria": False, "valida": True})
+    monkeypatch.setattr(
+        m, "_observabilidade_para_prontidao", lambda: {"valida": True})
+
+    body = client.get("/v1/live/status", headers=H).json()
+
+    assert body["pode_operar_real"] is False
+    assert body["estado_de_liberacao"]["estado"] == (
+        "aguardando_liberacao_de_codigo")
+    assert body["estado_de_liberacao"][
+        "pre_requisitos_sem_selo_concluidos"] is True
+    assert [item["item"] for item in body["checklist"] if not item["pronto"]] == [
+        "Ativação do modo LIVE somente na etapa final",
+        "Liberação de código para operar dinheiro real na mesa",
+    ]
+    assert cfg["TRADINGAGENTS_BROKER_MODE"] == "testnet"
+    assert m.MESA_LIVE_LIBERADA is False
+
+
 def test_resumo_puro_distingue_preparado_de_liberado(tmp_path, monkeypatch):
     m, _ = _app(tmp_path, monkeypatch)
     checklist = [
