@@ -135,6 +135,10 @@ def test_prova_persistida_libera_itens_mas_nunca_o_live(tmp_path, monkeypatch):
 
     class _Supervisor:
         @staticmethod
+        def vigiar(**_kwargs):
+            return []
+
+        @staticmethod
         def relatorio():
             return [{"agent_id": "trader-momentum",
                      "estrategia": "momentum", "versao": "1",
@@ -168,3 +172,125 @@ def test_rotacao_da_chave_invalida_a_prova(tmp_path, monkeypatch):
     assert status["preparacao_leitura"]["valida"] is False
     assert _item(status, "permissões mínimas")["pronto"] is False
     assert _item(status, "identidade")["pronto"] is False
+
+
+def test_certificacao_amarra_estrategia_conta_risco_e_reconciliacao(
+        tmp_path, monkeypatch):
+    m, c = _app(tmp_path, monkeypatch)
+    c.post("/v1/config", headers=H, json={"vars": {
+        **READ_CFG, "LIVE_MAX_ORDER_VALUE": "40",
+        "LIVE_MAX_DAILY_LOSS": "8"}})
+    monkeypatch.setattr(m, "probe_read_only_account", lambda env: {
+        "exchange": "binance", "authenticated_read": True,
+        "read_methods": ["fetch_balance"],
+        "credential_fingerprint": read_only_credential_fingerprint(env),
+    })
+    assert c.post("/v1/live/preparacao-leitura", headers=H, json={
+        "conta": "real-principal", "confirmo_sem_trade": True,
+        "confirmo_sem_movimentacao": True}).status_code == 200
+
+    class _Supervisor:
+        @staticmethod
+        def vigiar(**_kwargs):
+            return []
+
+        @staticmethod
+        def relatorio():
+            return [{
+                "agent_id": "trader-momentum", "authorization_id": "AUT-1",
+                "estrategia": "momentum", "versao": "1",
+                "corretora": "binance", "conta": "real-principal",
+                "capital_maximo": "100", "perda_diaria_maxima": "10",
+                "perda_total_maxima": "30", "valido_ate": "2027-01-01",
+                "estado": "piloto_autorizado",
+            }]
+
+    monkeypatch.setattr(m, "_supervisor_of", lambda _request: _Supervisor())
+    monkeypatch.setattr(m, "_relatorio_de_reconciliacao", lambda _tid: {
+        "seguro": True, "pendencias": []})
+    status = c.get("/v1/live/status", headers=H).json()
+    assert _item(status, "piloto autorizado vigente")["pronto"] is True
+    assert _item(status, "Limites globais compatíveis")["pronto"] is True
+    assert _item(status, "Reconciliação financeira")["pronto"] is True
+    cert = status["certificacoes_estrategia_conta"]
+    assert cert == [{
+        "agent_id": "trader-momentum", "authorization_id": "AUT-1",
+        "estrategia": "momentum", "versao": "1",
+        "corretora": "binance", "conta": "real-principal",
+        "contexto_certificacao": {},
+        "valido_ate": "2027-01-01", "risco_compativel": True,
+        "pendencias_risco": [],
+    }]
+    assert status["pode_operar_real"] is False
+
+
+def test_status_revalida_escola_e_recusa_autorizacao_obsoleta(
+        tmp_path, monkeypatch):
+    m, c = _app(tmp_path, monkeypatch)
+    c.post("/v1/config", headers=H, json={"vars": READ_CFG})
+    monkeypatch.setattr(m, "probe_read_only_account", lambda env: {
+        "exchange": "binance", "authenticated_read": True,
+        "read_methods": ["fetch_balance"],
+        "credential_fingerprint": read_only_credential_fingerprint(env),
+    })
+    assert c.post("/v1/live/preparacao-leitura", headers=H, json={
+        "conta": "real-principal", "confirmo_sem_trade": True,
+        "confirmo_sem_movimentacao": True}).status_code == 200
+
+    class _Supervisor:
+        estado = "piloto_autorizado"
+
+        @classmethod
+        def vigiar(cls, **_kwargs):
+            cls.estado = "suspenso"
+            return ["trader-momentum: piloto SUSPENSO"]
+
+        @classmethod
+        def relatorio(cls):
+            return [{"agent_id": "trader-momentum",
+                     "estrategia": "momentum", "versao": "1",
+                     "corretora": "binance", "conta": "real-principal",
+                     "estado": cls.estado}]
+
+    monkeypatch.setattr(m, "_supervisor_of", lambda _request: _Supervisor())
+    status = c.get("/v1/live/status", headers=H).json()
+    assert _item(status, "piloto autorizado vigente")["pronto"] is False
+    assert status["certificacoes_estrategia_conta"] == []
+
+
+def test_limite_global_acima_do_piloto_e_reconciliacao_pendente_bloqueiam(
+        tmp_path, monkeypatch):
+    m, c = _app(tmp_path, monkeypatch)
+    prova = {"exchange": "binance", "conta": "real-principal",
+             "authenticated_read": True, "sem_trade_declarado": True,
+             "sem_saque_declarado": True}
+    monkeypatch.setattr(m, "_prova_leitura_real", lambda _request, _cfg: (
+        prova, True))
+    c.post("/v1/config", headers=H, json={"vars": {
+        "TRADINGAGENTS_EXCHANGE": "binance",
+        "LIVE_MAX_ORDER_VALUE": "101", "LIVE_MAX_DAILY_LOSS": "11"}})
+
+    class _Supervisor:
+        @staticmethod
+        def vigiar(**_kwargs):
+            return []
+
+        @staticmethod
+        def relatorio():
+            return [{
+                "agent_id": "trader-momentum", "authorization_id": "AUT-1",
+                "estrategia": "momentum", "versao": "1",
+                "corretora": "binance", "conta": "real-principal",
+                "capital_maximo": "100", "perda_diaria_maxima": "10",
+                "perda_total_maxima": "30", "estado": "piloto_autorizado",
+            }]
+
+    monkeypatch.setattr(m, "_supervisor_of", lambda _request: _Supervisor())
+    monkeypatch.setattr(m, "_relatorio_de_reconciliacao", lambda _tid: {
+        "seguro": False, "pendencias": ["ordem incerta"]})
+    status = c.get("/v1/live/status", headers=H).json()
+    assert _item(status, "Limites globais compatíveis")["pronto"] is False
+    assert _item(status, "Reconciliação financeira")["pronto"] is False
+    assert status["reconciliacao"]["pendencias"] == ["ordem incerta"]
+    assert status["certificacoes_estrategia_conta"][0][
+        "risco_compativel"] is False

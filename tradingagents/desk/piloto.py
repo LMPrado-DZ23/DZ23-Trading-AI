@@ -573,6 +573,8 @@ class SupervisorDePiloto:
                 "motivo_revogacao": a.motivo_revogacao,
                 "motivo_suspensao": a.motivo_suspensao,
                 "modo": a.modo,
+                "contexto_certificacao": dict(
+                    self._autorizacoes[agent_id].get("contexto") or {}),
                 "eventos": self._autorizacoes[agent_id].get("eventos", [])[-10:],
                 "aviso": ("piloto é simulado e não ativa operação real; "
                           "autorizar exige decisão explícita do proprietário"),

@@ -68,6 +68,28 @@ explicitamente autorizado para a mesma corretora e conta. Se o modo LIVE vier
 a ser liberado em código no futuro, todo agente sem essa autorização será
 bloqueado pelo vigia fail-closed.
 
+### Da Escola para a conta REAL
+
+Quando um agente se forma, ele entra automaticamente na fila **Sala REAL
+bloqueada**. O contexto que certificou a estratégia permanece preservado
+(corretora, conta PAPER, mercado, ativo e horizonte), separado da conta REAL
+de destino. Essa separação evita fingir que a prova ocorreu com dinheiro real.
+
+Ao configurar os limites pelo painel, o destino só pode mudar da conta PAPER
+para uma conta REAL quando:
+
+1. a prova autenticada somente leitura dessa conta estiver válida;
+2. a corretora for a mesma do contexto que formou o agente;
+3. capital máximo, perda diária, perda total e prazo forem definidos;
+4. o proprietário autorizar explicitamente o piloto.
+
+O checklist REAL revalida a Escola antes de considerar a autorização vigente.
+Também exige que os tetos globais caibam nos limites do piloto, que a
+reconciliação financeira esteja atual e sem divergências e que a parada de
+emergência esteja desarmada. Se a formatura for retirada, a credencial mudar,
+os limites deixarem de ser compatíveis ou a reconciliação ficar pendente, a
+prontidão volta a ficar bloqueada automaticamente.
+
 ## Antes de tudo
 Perdas com dinheiro real são **suas e irreversíveis**. Nenhum resultado de
 teste, backtest ou paper prevê lucro futuro. Ligue com dinheiro que você

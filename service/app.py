@@ -3886,16 +3886,39 @@ async def escola_piloto_solicitar(req: Request, _=Depends(auth),
         raise HTTPException(422, "prazo_dias precisa ser um número inteiro") from exc
     esc = _escola_of(req)
     try:
-        contexto = ContextoDeCertificacao(
-            corretora=str(body.get("corretora") or ""),
-            conta=str(body.get("conta") or ""),
-            mercado=str(body.get("mercado") or "spot"),
-            modo=str(body.get("modo") or MODO_PAPER),
-            ativo=str(body.get("ativo") or ""),
-            horizonte=str(body.get("horizonte") or "1h"),
-            payout=body.get("payout") or None)
+        contexto_doc = body.get("contexto_certificacao")
+        if isinstance(contexto_doc, dict) and contexto_doc:
+            contexto = ContextoDeCertificacao.de_dict(contexto_doc)
+        else:
+            contexto = ContextoDeCertificacao(
+                corretora=str(body.get("corretora") or ""),
+                conta=str(body.get("conta") or ""),
+                mercado=str(body.get("mercado") or "spot"),
+                modo=str(body.get("modo") or MODO_PAPER),
+                ativo=str(body.get("ativo") or ""),
+                horizonte=str(body.get("horizonte") or "1h"),
+                payout=body.get("payout") or None)
     except SalaError as exc:
         raise HTTPException(422, str(exc)) from exc
+    corretora_alvo = str(body.get("corretora") or "").strip().lower()
+    conta_alvo = str(body.get("conta") or "").strip()
+    if not corretora_alvo or not conta_alvo:
+        raise HTTPException(422, "corretora e conta de destino são obrigatórias")
+    if corretora_alvo != contexto.corretora:
+        raise HTTPException(
+            409, "a conta REAL deve usar a mesma corretora do contexto que "
+                 "certificou a estratégia")
+    if conta_alvo != contexto.conta:
+        cfg = load_cfg(request_tenant(req))
+        prova, valida = _prova_leitura_real(req, cfg)
+        if not (valida and prova
+                and prova.get("authenticated_read")
+                and str(prova.get("exchange") or "").strip().lower()
+                == corretora_alvo
+                and str(prova.get("conta") or "").strip() == conta_alvo):
+            raise HTTPException(
+                409, "a conta REAL de destino precisa de prova autenticada "
+                     "somente leitura válida antes de receber o piloto")
     sup = SupervisorDePiloto(
         esc["armazem"], tenant_id=esc["tenant_id"],
         escola=EscolaDoPiloto(esc["central"], contexto))
@@ -3904,8 +3927,8 @@ async def escola_piloto_solicitar(req: Request, _=Depends(auth),
             str(body.get("agent_id") or ""),
             estrategia=str(body.get("estrategia") or ""),
             versao=str(body.get("versao") or "1"),
-            corretora=str(body.get("corretora") or ""),
-            conta=str(body.get("conta") or ""),
+            corretora=corretora_alvo,
+            conta=conta_alvo,
             capital_maximo=_decimal("capital_maximo"),
             perda_diaria_maxima=_decimal("perda_diaria_maxima"),
             perda_total_maxima=_decimal("perda_total_maxima"),
@@ -4199,6 +4222,99 @@ def _prova_publica(prova: dict | None, valida: bool) -> dict:
     }
 
 
+def _decimal_positivo(valor) -> Decimal | None:
+    """Converte um limite financeiro sem aceitar infinito/NaN/zero."""
+    try:
+        numero = Decimal(str(valor or ""))
+    except (InvalidOperation, ValueError):
+        return None
+    return numero if numero.is_finite() and numero > 0 else None
+
+
+def _certificacoes_real(request: Request, cfg: dict,
+                        prova: dict | None, prova_valida: bool) -> list[dict]:
+    """Revalida estratégia, conta e risco para a preparação REAL.
+
+    A consulta é fail-closed: uma autorização antiga só aparece pronta se a
+    Escola ainda a sustenta e se os limites globais cabem dentro dos limites
+    explicitamente concedidos ao piloto. Isto continua sendo preparação; não
+    muda mandato, modo da mesa nem capacidade de enviar ordens.
+    """
+    if not (prova_valida and prova and prova.get("authenticated_read")
+            and prova.get("sem_trade_declarado")
+            and prova.get("sem_saque_declarado")):
+        return []
+    try:
+        esc = _escola_of(request)
+        sup = _supervisor_of(request)
+        sup.vigiar(central=esc["central"])
+        relatorio = sup.relatorio()
+    except Exception:
+        return []
+    exchange = (cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    conta = str(prova.get("conta") or "").strip()
+    teto_ordem = _decimal_positivo(cfg.get("LIVE_MAX_ORDER_VALUE"))
+    teto_diario = _decimal_positivo(cfg.get("LIVE_MAX_DAILY_LOSS"))
+    saida = []
+    for piloto in relatorio:
+        if piloto.get("estado") != "piloto_autorizado":
+            continue
+        if str(piloto.get("corretora") or "").strip().lower() != exchange:
+            continue
+        if str(piloto.get("conta") or "").strip() != conta:
+            continue
+        capital = _decimal_positivo(piloto.get("capital_maximo"))
+        perda_dia = _decimal_positivo(piloto.get("perda_diaria_maxima"))
+        perda_total = _decimal_positivo(piloto.get("perda_total_maxima"))
+        motivos = []
+        if not all((capital, perda_dia, perda_total)):
+            motivos.append("limites do piloto ausentes ou inválidos")
+        elif perda_dia > perda_total:
+            motivos.append("perda diária do piloto excede a perda total")
+        if teto_ordem is None or (capital is not None and teto_ordem > capital):
+            motivos.append("teto global por ordem não cabe no capital do piloto")
+        if teto_diario is None or (
+                perda_dia is not None and teto_diario > perda_dia):
+            motivos.append("perda diária global excede o limite do piloto")
+        saida.append({
+            "agent_id": piloto.get("agent_id"),
+            "authorization_id": piloto.get("authorization_id"),
+            "estrategia": piloto.get("estrategia"),
+            "versao": piloto.get("versao"),
+            "corretora": piloto.get("corretora"),
+            "conta": piloto.get("conta"),
+            "contexto_certificacao": dict(
+                piloto.get("contexto_certificacao") or {}),
+            "valido_ate": piloto.get("valido_ate"),
+            "risco_compativel": not motivos,
+            "pendencias_risco": motivos,
+        })
+    return saida
+
+
+def _reconciliacao_para_prontidao(tenant_id: str) -> dict:
+    """Obtém a reconciliação sem transformar estado desconhecido em pronto."""
+    try:
+        relatorio = _relatorio_de_reconciliacao(tenant_id)
+    except Exception as exc:
+        return {"seguro": False,
+                "pendencias": ["reconciliação indisponível ("
+                                f"{type(exc).__name__})"]}
+    if not isinstance(relatorio, dict):
+        return {"seguro": False,
+                "pendencias": ["relatório de reconciliação inválido"]}
+    return {"seguro": bool(relatorio.get("seguro")),
+            "pendencias": list(relatorio.get("pendencias") or ())}
+
+
+def _parada_desarmada_para_prontidao(tenant_id: str) -> bool:
+    """Falha ao ler o kill switch significa bloqueio, nunca permissão."""
+    try:
+        return not _parada(tenant_id).bloqueia
+    except Exception:
+        return False
+
+
 @app.post("/v1/live/preparacao-leitura")
 async def live_preparacao_leitura(req: Request, _=Depends(auth),
                                   __=Depends(require_plan)):
@@ -4259,14 +4375,13 @@ def live_status(request: Request, _=Depends(auth)):
         and prova_leitura.get("sem_saque_declarado"))
     identidade_ok = bool(
         acesso_leitura_ok and str(prova_leitura.get("conta") or "").strip())
-    conta_real = str((prova_leitura or {}).get("conta") or "").strip()
-    exchange_real = (cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
-    pilotos_no_contexto = [
-        p for p in _supervisor_of(request).relatorio()
-        if p.get("estado") == "piloto_autorizado"
-        and str(p.get("corretora") or "").strip().lower() == exchange_real
-        and str(p.get("conta") or "").strip() == conta_real
-    ]
+    certificacoes = _certificacoes_real(
+        request, cfg, prova_leitura, prova_valida)
+    pilotos_no_contexto = certificacoes
+    risco_certificado = any(p["risco_compativel"] for p in certificacoes)
+    reconciliacao = _reconciliacao_para_prontidao(request_tenant(request))
+    parada_desarmada = _parada_desarmada_para_prontidao(
+        request_tenant(request))
     frase_ok = (cfg.get("LIVE_TRADING_CONFIRM") or "").strip() == LIVE_CONFIRM_PHRASE
     checklist = [
         {"item": "Frase de autorização digitada", "pronto": frase_ok,
@@ -4283,10 +4398,14 @@ def live_status(request: Request, _=Depends(auth)):
          "pronto": identidade_ok,
          "acao": ("Identifique a conta durante a prova de leitura; a consulta "
                   "autenticada liga essa declaração à credencial salva")},
-        {"item": "Piloto autorizado para esta corretora e conta",
+        {"item": "Estratégia e conta com piloto autorizado vigente",
          "pronto": bool(pilotos_no_contexto),
          "acao": ("Forme o agente na Escola Central deste contexto, configure "
                   "capital e perdas e faça a autorização explícita do piloto")},
+        {"item": "Limites globais compatíveis com o piloto autorizado",
+         "pronto": risco_certificado,
+         "acao": ("Defina os tetos globais dentro do capital e da perda diária "
+                  "autorizados para ao menos um piloto desta conta")},
         {"item": "Teto por ordem definido",
          "pronto": _teto_positivo(cfg, "LIVE_MAX_ORDER_VALUE"),
          "acao": "Defina LIVE_MAX_ORDER_VALUE (número finito maior que zero)"},
@@ -4301,6 +4420,14 @@ def live_status(request: Request, _=Depends(auth)):
          "acao": ("Rode a mesa com a corretora TESTNET (CCXT) e veja uma ordem "
                   "preenchida de verdade — ordem PAPER (simulada neste PC) "
                   "não conta")},
+        {"item": "Reconciliação financeira atual sem pendências",
+         "pronto": reconciliacao["seguro"],
+         "acao": ("Reconcilie ordens, posições, caixa e livro-razão; relatório "
+                  "ausente, antigo ou divergente nunca vira aprovação")},
+        {"item": "Parada de emergência desarmada e disponível",
+         "pronto": parada_desarmada,
+         "acao": ("Resolva a causa da parada, reconcilie o estado e libere-a "
+                  "explicitamente antes de qualquer operação")},
         # O selo de CÓDIGO da mesa (ADR-006). Sem ele, mesmo com todos os
         # itens acima verdes, a mesa recusa arrancar em LIVE — e é bom que
         # recuse: o painel nunca é a última fechadura de dinheiro real.
@@ -4314,6 +4441,8 @@ def live_status(request: Request, _=Depends(auth)):
     return {"pode_operar_real": not faltam, "checklist": checklist,
             "pendencias": len(faltam),
             "preparacao_leitura": _prova_publica(prova_leitura, prova_valida),
+            "reconciliacao": reconciliacao,
+            "certificacoes_estrategia_conta": certificacoes,
             "pilotos_autorizados_no_contexto": [
                 {"agent_id": p.get("agent_id"),
                  "estrategia": p.get("estrategia"),
