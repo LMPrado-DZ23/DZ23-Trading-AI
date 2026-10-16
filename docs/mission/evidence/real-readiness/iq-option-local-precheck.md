@@ -35,6 +35,12 @@ significa apenas que o registro não oferece um parecer. Conforme a política de
 precheck, o handshake autenticado aguarda decisão explícita do proprietário de
 prosseguir sem registro ou aguardar a publicação de um registro.
 
+O HEAD também contém `scripts/verify_iq_option_mcp.py`, uma CLI fail-closed que
+recebe a credencial exclusivamente pela variável
+`IQ_OPTION_MCP_BEARER_TOKEN`, executa a sonda já restrita a `initialize` e
+`tools/list` e salva apenas evidência sanitizada. A CLI não aceita token como
+argumento e também evita ecoar valores de argumentos inválidos.
+
 ## Invariantes preservadas
 
 - handshake futuro limitado a `initialize` e `tools/list`;

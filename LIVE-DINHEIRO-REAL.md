@@ -87,6 +87,22 @@ somente `initialize` e `tools/list`: todas as ferramentas listadas ficam
 bloqueadas e não existe chamada de ordem nesse caminho. Tokens MCP de arquivos
 anexados nunca são importados nem reutilizados como credenciais de execução.
 
+Depois de autorizar a conexão e carregar o token somente no ambiente local, a
+prova reproduzível pode ser gerada sem credencial na linha de comando:
+
+```powershell
+$env:IQ_OPTION_MCP_BEARER_TOKEN = Read-Host -MaskInput
+uv run python scripts/verify_iq_option_mcp.py `
+  --output .\data\evidence\iq-option-mcp.json
+Remove-Item Env:IQ_OPTION_MCP_BEARER_TOKEN
+```
+
+O comando retorna sucesso apenas quando os sete endpoints completam o
+handshake e `tools/list`, com zero ferramenta chamável. A evidência omite
+token, mensagens remotas e metadados das ferramentas; qualquer contradição,
+credencial ausente ou handshake parcial falha fechado. O comando não executa
+ferramentas MCP e não envia ordens.
+
 As credenciais de execução também ficam vinculadas à corretora escolhida.
 Trocar o seletor não reaproveita chave, segredo ou passphrase de outro
 provedor: o checklist, o teste de conexão e a construção da mesa permanecem
