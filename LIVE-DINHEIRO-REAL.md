@@ -81,11 +81,13 @@ nessas quatro integrações.
 A IQ Option usa uma integração MCP oficial separada do CCXT, com sete
 servidores por classe de instrumento. Os sete endpoints estão configurados no
 Codex usando apenas a referência `IQ_OPTION_MCP_BEARER_TOKEN`, sem token
-embutido. O catálogo publica `OFFICIAL_MCP_PENDING_VALIDATION` até que uma
-credencial nova prove os sete handshakes em demo. A sonda do DZ23 executa
-somente `initialize` e `tools/list`: todas as ferramentas listadas ficam
-bloqueadas e não existe chamada de ordem nesse caminho. Tokens MCP de arquivos
-anexados nunca são importados nem reutilizados como credenciais de execução.
+embutido. Em 2026-10-16, uma credencial fornecida localmente pelo proprietário
+provou os sete handshakes e o catálogo passou a publicar
+`OFFICIAL_MCP_METADATA_VALIDATED`. A sonda do DZ23 executa somente `initialize`
+e `tools/list`: todas as ferramentas listadas ficam bloqueadas e não existe
+chamada de ordem nesse caminho. Essa prova não lê conta, não homologa sandbox
+e não autoriza execução. Tokens MCP nunca são persistidos ou reutilizados como
+credenciais de execução pelo DZ23.
 
 Depois de autorizar a conexão e carregar o token somente no ambiente local, a
 prova reproduzível pode ser gerada sem credencial na linha de comando:
@@ -100,7 +102,9 @@ Remove-Item Env:IQ_OPTION_MCP_BEARER_TOKEN
 O comando retorna sucesso apenas quando os sete endpoints completam o
 handshake e `tools/list`, com zero ferramenta chamável. A evidência omite
 token, mensagens remotas e metadados das ferramentas; qualquer contradição,
-credencial ausente ou handshake parcial falha fechado. O comando não executa
+credencial ausente, handshake parcial ou drift do contrato esperado falha
+fechado. O contrato atual reconhece 60 ferramentas somente leitura e bloqueia
+32 mutáveis; nenhuma delas é chamável nesse caminho. O comando não executa
 ferramentas MCP e não envia ordens.
 
 As credenciais de execução também ficam vinculadas à corretora escolhida.
@@ -226,7 +230,9 @@ deve operar a própria conta, com as próprias chaves.
    tamanho da conta.
 3. **Perda máxima diária** (`LIVE_MAX_DAILY_LOSS`): ao atingir, os envios
    param até você revisar.
-4. **Modo da corretora** em `live` e chaves reais configuradas.
+4. **Modo da corretora** em `live` e chaves reais configuradas. Durante a
+   preparação ele permanece em PAPER/TESTNET; a mudança para `live` pertence
+   à mesma etapa final auditada que abre o selo, nunca a um preflight.
 5. **Selo de código da mesa**: a mesa de agentes recusa construir corretora
    em LIVE sem autorização explícita de código (`live_authorized`), que o
    painel **não** concede e a configuração salva **não** substitui
@@ -244,7 +250,7 @@ pendências em `acao_do_proprietario`, `prova_externa`,
 
 - `preparacao_pendente`: existe ao menos um pré-requisito além do selo;
 - `aguardando_liberacao_de_codigo`: todos os demais itens foram comprovados,
-  mas o selo auditado continua fechado;
+  mas o modo continua seguro em PAPER/TESTNET e o selo auditado fechado;
 - `liberado`: só pode aparecer quando nenhum item estiver pendente.
 
 O mesmo payload traz `sala_real`, com contagens por estado dos

@@ -20,6 +20,38 @@ IQ_OPTION_MCP_SERVERS = {
     for endpoint in IQ_OPTION_MCP_ENDPOINTS
 }
 
+_OPTION_READ_ONLY_TOOLS = frozenset({
+    "get_candles", "get_capabilities", "get_limits", "get_trade_history",
+    "list_assets", "list_balances", "list_positions",
+})
+_OPTION_MUTATING_TOOLS = frozenset({
+    "place_trade", "rollover_position", "sell_position",
+})
+_MARGINAL_READ_ONLY_TOOLS = frozenset({
+    "calculate_order_size", "get_candles", "get_capabilities",
+    "get_instruments", "get_limits", "get_orders", "get_trade_history",
+    "list_assets", "list_balances", "list_positions",
+})
+_MARGINAL_MUTATING_TOOLS = frozenset({
+    "cancel_pending_order", "change_position_stop_loss",
+    "change_position_take_profit", "close_position", "place_limit_order",
+    "place_market_order", "place_stop_order",
+})
+_DIGITAL_READ_ONLY_TOOLS = _OPTION_READ_ONLY_TOOLS | {
+    "get_instruments", "get_prices",
+}
+_DIGITAL_MUTATING_TOOLS = frozenset({"place_trade", "sell_position"})
+
+IQ_OPTION_MCP_TOOL_CONTRACTS = {
+    "binary-options": (_OPTION_READ_ONLY_TOOLS, _OPTION_MUTATING_TOOLS),
+    "blitz-options": (_OPTION_READ_ONLY_TOOLS, _OPTION_MUTATING_TOOLS),
+    "digital-options": (_DIGITAL_READ_ONLY_TOOLS, _DIGITAL_MUTATING_TOOLS),
+    "marginal-cfd": (_MARGINAL_READ_ONLY_TOOLS, _MARGINAL_MUTATING_TOOLS),
+    "marginal-crypto": (_MARGINAL_READ_ONLY_TOOLS, _MARGINAL_MUTATING_TOOLS),
+    "marginal-forex": (_MARGINAL_READ_ONLY_TOOLS, _MARGINAL_MUTATING_TOOLS),
+    "turbo-options": (_OPTION_READ_ONLY_TOOLS, _OPTION_MUTATING_TOOLS),
+}
+
 ToolLister = Callable[[str, str], Awaitable[Sequence[Any]]]
 
 
@@ -77,13 +109,32 @@ async def probe_iq_option_mcp_async(
         try:
             tools = tuple(await lister(endpoint, segredo))
             metadados = [_tool_metadata(tool) for tool in tools[:200]]
+            nomes = [item["name"] for item in metadados]
+            nomes_unicos = set(nomes)
+            leitura, mutacao = IQ_OPTION_MCP_TOOL_CONTRACTS[nome]
+            esperado = leitura | mutacao
+            desconhecidas = nomes_unicos - esperado
+            ausentes = esperado - nomes_unicos
+            contrato_valido = bool(
+                len(tools) == len(metadados)
+                and len(nomes) == len(nomes_unicos)
+                and "" not in nomes_unicos
+                and not desconhecidas
+                and not ausentes
+            )
             return {
                 "server": nome,
                 "endpoint": endpoint,
-                "status": "MCP_METADATA_CONNECTED",
-                "ok": True,
+                "status": ("MCP_METADATA_CONNECTED" if contrato_valido
+                           else "MCP_CONTRACT_DRIFT"),
+                "ok": contrato_valido,
                 "tool_count": len(tools),
                 "tools": metadados,
+                "contract_validated": contrato_valido,
+                "read_only_tool_count": len(nomes_unicos & leitura),
+                "mutating_tool_count": len(nomes_unicos & mutacao),
+                "unknown_tool_count": len(desconhecidas),
+                "missing_tool_count": len(ausentes),
                 "callable_tool_count": 0,
                 "all_tools_blocked": True,
             }
@@ -93,6 +144,7 @@ async def probe_iq_option_mcp_async(
                 "endpoint": endpoint,
                 "status": "MCP_UNAVAILABLE",
                 "ok": False,
+                "contract_validated": False,
                 "error_type": type(exc).__name__,
                 "detail": "falha no handshake autenticado ou em tools/list",
             }
@@ -102,7 +154,9 @@ async def probe_iq_option_mcp_async(
         for nome, endpoint in IQ_OPTION_MCP_SERVERS.items()
     )))
     conectados = sum(bool(item["ok"]) for item in probes)
-    if conectados == len(probes):
+    if any(item["status"] == "MCP_CONTRACT_DRIFT" for item in probes):
+        status = "MCP_CONTRACT_DRIFT"
+    elif conectados == len(probes):
         status = "MCP_METADATA_CONNECTED"
     elif conectados:
         status = "MCP_PARTIAL"
@@ -145,6 +199,7 @@ def probe_iq_option_mcp(*, token: str | None = None,
 
 __all__ = [
     "IQ_OPTION_MCP_SERVERS",
+    "IQ_OPTION_MCP_TOOL_CONTRACTS",
     "IQ_OPTION_TOKEN_ENV",
     "probe_iq_option_mcp",
     "probe_iq_option_mcp_async",

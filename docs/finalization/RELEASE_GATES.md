@@ -39,7 +39,8 @@ Todos os itens abaixo precisam de evidência nova no SHA implantado:
 - fill TESTNET reconciliado, quando a corretora oferece sandbox compatível;
 - PAPER prolongado por agente/estratégia/conta;
 - limites do piloto e tetos globais compatíveis;
-- IQ Option com token novo e os sete handshakes demo comprovados;
+- IQ Option com os sete handshakes passivos comprovados (7/7 em 2026-10-16),
+  sem ferramenta chamável, leitura de conta ou ordem;
 - divergências e provas expiradas ausentes.
 
 ## Ações que continuam exigindo o proprietário no momento da ação
@@ -53,4 +54,5 @@ software não concede essa autorização.
 Mesmo com todos os gates anteriores verdes, o estado esperado é
 `aguardando_liberacao_de_codigo`. Abrir o selo é uma alteração de código
 separada, revisada e confirmada pelo proprietário no momento da ação. Esta
-branch não faz essa alteração.
+branch não faz essa alteração. O modo da corretora também permanece em
+PAPER/TESTNET durante a preparação e só muda para LIVE junto dessa etapa final.

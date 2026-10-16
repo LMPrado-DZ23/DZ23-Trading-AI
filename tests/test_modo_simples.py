@@ -170,6 +170,19 @@ class TestCapacidadesVisiveisNoModoSimples:
             assert estado in pagina, (
                 f"estado {estado!r} não apresentado na tela")
 
+    def test_iq_option_mostra_metadata_validada_sem_prometer_conta_ou_ordem(
+            self):
+        capacidades = _trecho(
+            _html(), "async function capacidadesLoad(",
+            "async function preparoRealLoad(")
+        assert "MCP oficial validado em modo passivo" in capacidades
+        assert (
+            "Sem leitura de conta, sandbox comprovado ou caminho de ordem"
+            in capacidades
+        )
+        assert "MCP oficial em validação passiva" not in capacidades
+        assert "Sem token novo validado" not in capacidades
+
     def test_abrir_troca_para_avancado_quando_a_tela_esta_oculta(self):
         html = _html()
         trecho = _trecho(html, "function abrirPagina(", tam=400)

@@ -55,6 +55,14 @@ ferramentas chamáveis pelo DZ23 (`callable_tool_count=0`). A credencial ficou
 somente no ambiente do processo e foi removida ao final. Nenhuma ferramenta,
 consulta de conta ou ordem foi executada.
 
+O contrato foi depois fixado por servidor e revalidado contra os mesmos sete
+endpoints: 60 ferramentas somente leitura reconhecidas, 32 ferramentas
+mutáveis classificadas e bloqueadas, zero desconhecidas, zero ausentes e zero
+chamáveis. O verificador agora retorna `MCP_CONTRACT_DRIFT` e falha fechado se
+um nome for adicionado, removido, duplicado ou vier vazio. Essa classificação
+não concede permissão de chamada; ela apenas impede que mudança remota seja
+confundida com integração validada.
+
 O catálogo passa a informar `OFFICIAL_MCP_METADATA_VALIDATED`. Isso valida
 somente a disponibilidade do contrato MCP passivo; não equivale a credencial
 de leitura da conta, sandbox homologado ou autorização de execução.

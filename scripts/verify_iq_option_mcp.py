@@ -65,6 +65,35 @@ def _probe_summary(item: object) -> dict[str, object]:
             else None
         ),
         "all_tools_blocked": row.get("all_tools_blocked") is True,
+        "contract_validated": row.get("contract_validated") is True,
+        "read_only_tool_count": (
+            row.get("read_only_tool_count")
+            if isinstance(row.get("read_only_tool_count"), int)
+            and not isinstance(row.get("read_only_tool_count"), bool)
+            and row.get("read_only_tool_count") >= 0
+            else None
+        ),
+        "mutating_tool_count": (
+            row.get("mutating_tool_count")
+            if isinstance(row.get("mutating_tool_count"), int)
+            and not isinstance(row.get("mutating_tool_count"), bool)
+            and row.get("mutating_tool_count") >= 0
+            else None
+        ),
+        "unknown_tool_count": (
+            row.get("unknown_tool_count")
+            if isinstance(row.get("unknown_tool_count"), int)
+            and not isinstance(row.get("unknown_tool_count"), bool)
+            and row.get("unknown_tool_count") >= 0
+            else None
+        ),
+        "missing_tool_count": (
+            row.get("missing_tool_count")
+            if isinstance(row.get("missing_tool_count"), int)
+            and not isinstance(row.get("missing_tool_count"), bool)
+            and row.get("missing_tool_count") >= 0
+            else None
+        ),
     }
 
 
@@ -86,7 +115,14 @@ def _all_pass(raw: dict[str, object], probes: Sequence[dict[str, object]]) -> bo
         and all(
             row["status"] == "MCP_METADATA_CONNECTED"
             and row["ok"] is True
+            and row["contract_validated"] is True
             and isinstance(row["tool_count"], int)
+            and isinstance(row["read_only_tool_count"], int)
+            and isinstance(row["mutating_tool_count"], int)
+            and row["unknown_tool_count"] == 0
+            and row["missing_tool_count"] == 0
+            and (row["read_only_tool_count"] + row["mutating_tool_count"]
+                 == row["tool_count"])
             and row["callable_tool_count"] == 0
             and row["all_tools_blocked"] is True
             for row in probes

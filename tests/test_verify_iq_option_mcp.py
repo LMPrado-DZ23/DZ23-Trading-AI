@@ -27,6 +27,11 @@ def _resultado_ok() -> dict[str, object]:
                 "status": "MCP_METADATA_CONNECTED",
                 "ok": True,
                 "tool_count": 3,
+                "contract_validated": True,
+                "read_only_tool_count": 2,
+                "mutating_tool_count": 1,
+                "unknown_tool_count": 0,
+                "missing_tool_count": 0,
                 "callable_tool_count": 0,
                 "all_tools_blocked": True,
                 "tools": [{"name": "place_order", "description": "SEGREDO"}],
@@ -69,6 +74,9 @@ def test_sucesso_salva_somente_evidencia_sanitizada(tmp_path, capsys):
     assert evidencia["tool_execution_enabled"] is False
     assert evidencia["orders_enabled"] is False
     assert all(item["all_tools_blocked"] is True
+               for item in evidencia["probes"])
+    assert all(item["contract_validated"] is True
+               and item["unknown_tool_count"] == 0
                for item in evidencia["probes"])
     assert "tools" not in evidencia["probes"][0]
     assert "remote_payload" not in evidencia["probes"][0]

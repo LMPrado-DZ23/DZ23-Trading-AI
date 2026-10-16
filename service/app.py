@@ -5179,10 +5179,12 @@ def _live_status_payload(request: Request) -> dict:
          "pronto": _teto_positivo(cfg, "LIVE_MAX_DAILY_LOSS"),
          "categoria": "acao_do_proprietario",
          "acao": "Defina LIVE_MAX_DAILY_LOSS (número finito maior que zero)"},
-        {"item": "Modo da corretora em LIVE",
+        {"item": "Ativação do modo LIVE somente na etapa final",
          "pronto": (cfg.get("TRADINGAGENTS_BROKER_MODE") or "") == "live",
-         "categoria": "acao_do_proprietario",
-         "acao": "Troque o modo da corretora para LIVE"},
+         "categoria": "liberacao_de_codigo",
+         "acao": ("Durante a preparação, mantenha PAPER/TESTNET. Na ativação "
+                  "final auditada, o modo muda para LIVE junto com o selo de "
+                  "código e a confirmação do proprietário")},
         {"item": "Já operou em testnet",
          "pronto": prova_testnet_valida,
          "categoria": "prova_externa",

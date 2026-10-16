@@ -250,7 +250,7 @@ const itens=[
 ['Alertas externos (Telegram/Discord/WhatsApp/e-mail)',extCab[0],extCab[1],extCab[2],'config'],
 ['Aplicativo no celular e push',pushCab[0],pushCab[1],pushCab[2],'config'],
 ['Dinheiro real (LIVE)','bad','bloqueado por segurança','Servidor: '+(opReal.estado||'—')+(opReal.motivo?(' — '+opReal.motivo):'')+'. Só destrava com homologação e autorização explícita do proprietário.','mesa'],
-['IQ Option','muted','MCP oficial em validação passiva','Sete endpoints oficiais disponíveis para handshake e catálogo de ferramentas. Sem token novo validado, sandbox comprovado ou caminho de ordem.',null],
+['IQ Option','ok','MCP oficial validado em modo passivo','Sete endpoints oficiais validados para handshake e catálogo de ferramentas. Sem leitura de conta, sandbox comprovado ou caminho de ordem.',null],
 ];
 alvo.innerHTML=itens.map(x=>cap(x[0],x[1],x[2],x[3],x[4])).join('');
 }

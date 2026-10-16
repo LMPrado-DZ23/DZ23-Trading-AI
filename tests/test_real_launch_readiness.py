@@ -32,13 +32,31 @@ def test_status_separa_pendencias_por_responsabilidade(tmp_path, monkeypatch):
     assert sum(readiness["quantidade_por_categoria"].values()) == body[
         "pendencias"]
     assert readiness["bloqueios_por_categoria"]["liberacao_de_codigo"] == [
-        "Liberação de código para operar dinheiro real na mesa"]
+        "Ativação do modo LIVE somente na etapa final",
+        "Liberação de código para operar dinheiro real na mesa",
+    ]
     assert m.MESA_LIVE_LIBERADA is False
     assert body["pode_operar_real"] is False
     assert all(item["categoria"] in {
         "acao_do_proprietario", "prova_externa", "controle_operacional",
         "liberacao_de_codigo",
     } for item in body["checklist"])
+
+
+def test_modo_live_so_muda_na_fechadura_final_nao_durante_preparacao(
+        tmp_path, monkeypatch):
+    m, client = _app(tmp_path, monkeypatch)
+
+    body = client.get("/v1/live/status", headers=H).json()
+    modo = next(
+        item for item in body["checklist"]
+        if item["item"] == "Ativação do modo LIVE somente na etapa final"
+    )
+
+    assert modo["pronto"] is False
+    assert modo["categoria"] == "liberacao_de_codigo"
+    assert "mantenha PAPER/TESTNET" in modo["acao"]
+    assert m.MESA_LIVE_LIBERADA is False
 
 
 def test_resumo_puro_distingue_preparado_de_liberado(tmp_path, monkeypatch):
