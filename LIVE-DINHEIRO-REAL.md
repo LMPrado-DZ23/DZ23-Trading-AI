@@ -125,6 +125,11 @@ inválido, o checklist volta a bloquear a conta e exige uma nova consulta
 autenticada. O painel mostra quando a prova expira; renovar a prova continua
 usando somente métodos de leitura e não envia ordens.
 
+A homologação TESTNET também é vinculada ao conjunto exato de chave, segredo,
+passphrase e UID que produziu o fill reconciliado. Qualquer rotação invalida a
+prova anterior e exige novo fill seguido de reconciliação. Horários futuros ou
+sem fuso e identidades de ordem malformadas nunca satisfazem o checklist.
+
 Uma consulta bem-sucedida comprova acesso de leitura; não comprova, sozinha,
 que a corretora retirou permissões de trade ou movimentação. Essa restrição é
 declarada pelo proprietário no DZ23 e deve ser conferida também no painel da

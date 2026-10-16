@@ -2,7 +2,11 @@
 from __future__ import annotations
 
 import importlib
+import json
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace as NS
+
+import pytest
 
 from tradingagents.desk.execution import OrderState
 
@@ -116,6 +120,57 @@ def test_prova_de_uma_corretora_nao_homologa_outra(tmp_path, monkeypatch):
     assert status["homologacao_testnet"]["valida"] is False
     assert status["homologacao_testnet"]["motivo"] == (
         "sem prova TESTNET reconciliada para okx")
+
+
+@pytest.mark.parametrize("campo,novo", [
+    ("EXCHANGE_API_KEY", "rotated-test-key"),
+    ("EXCHANGE_API_SECRET", "rotated-test-secret"),
+    ("EXCHANGE_API_PASSWORD", "rotated-passphrase"),
+    ("EXCHANGE_API_UID", "rotated-uid"),
+])
+def test_rotacao_de_qualquer_credencial_invalida_prova_testnet(
+        tmp_path, monkeypatch, campo, novo):
+    m, c = _app(tmp_path, monkeypatch)
+    _configurar_testnet(c)
+    m._DESKS["legacy"] = {
+        "coordinator": _Coordenador(), "broker_mode": "testnet"}
+    assert c.post("/v1/desk/reconciliar", headers=H).status_code == 200
+    assert _item(c.get("/v1/live/status", headers=H).json(),
+                 "testnet")["pronto"] is True
+
+    assert c.post("/v1/config", headers=H,
+                  json={"vars": {campo: novo}}).status_code == 200
+    status = c.get("/v1/live/status", headers=H).json()
+    assert _item(status, "testnet")["pronto"] is False
+    assert status["homologacao_testnet"]["valida"] is False
+    assert "credenciais TESTNET foram alteradas" in (
+        status["homologacao_testnet"]["motivo"])
+    assert "credential_fingerprint" not in status["homologacao_testnet"]
+
+
+def test_prova_testnet_recusa_horario_e_identidade_de_ordem_invalidos(
+        tmp_path, monkeypatch):
+    m, c = _app(tmp_path, monkeypatch)
+    _configurar_testnet(c)
+    m._DESKS["legacy"] = {
+        "coordinator": _Coordenador(), "broker_mode": "testnet"}
+    assert c.post("/v1/desk/reconciliar", headers=H).status_code == 200
+    arquivo = next((tmp_path / "desks").rglob("homologacao_testnet.json"))
+
+    conteudo = json.loads(arquivo.read_text(encoding="utf-8"))
+    conteudo["binance"]["verified_at"] = (
+        datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    arquivo.write_text(json.dumps(conteudo), encoding="utf-8")
+    status = c.get("/v1/live/status", headers=H).json()
+    assert status["homologacao_testnet"]["valida"] is False
+    assert "horário inválido" in status["homologacao_testnet"]["motivo"]
+
+    conteudo["binance"]["verified_at"] = datetime.now(timezone.utc).isoformat()
+    conteudo["binance"]["external_order_fingerprint"] = "incompleto"
+    arquivo.write_text(json.dumps(conteudo), encoding="utf-8")
+    status = c.get("/v1/live/status", headers=H).json()
+    assert status["homologacao_testnet"]["valida"] is False
+    assert "identidade de ordem" in status["homologacao_testnet"]["motivo"]
 
 
 def test_reconciliacao_insegura_nao_grava_prova(tmp_path, monkeypatch):

@@ -4394,12 +4394,31 @@ def _fill_de_corretora_externa(d):
 
 _CHAVE_HOMOLOGACAO_TESTNET = "homologacao_testnet"
 _SCHEMA_HOMOLOGACAO_TESTNET = "dz23.homologacao-testnet/1"
+_TOLERANCIA_RELOGIO_TESTNET = timedelta(minutes=5)
 
 
 def _env_testnet(cfg: dict) -> dict:
     return {k: cfg.get(k, "") for k in (
         "TRADINGAGENTS_EXCHANGE", "EXCHANGE_API_KEY",
         "EXCHANGE_API_SECRET", "EXCHANGE_API_PASSWORD", "EXCHANGE_API_UID")}
+
+
+def _horario_testnet_valido(valor, agora: datetime | None = None) -> bool:
+    """Aceita prova histórica, mas nunca horário inválido ou no futuro."""
+    try:
+        instante = datetime.fromisoformat(
+            str(valor or "").replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return False
+    if instante.tzinfo is None:
+        return False
+    atual = (agora or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    return instante.astimezone(timezone.utc) <= (
+        atual + _TOLERANCIA_RELOGIO_TESTNET)
+
+
+def _fingerprint_sha256_valido(valor) -> bool:
+    return bool(re.fullmatch(r"[0-9a-f]{64}", str(valor or "")))
 
 
 def _prova_testnet(request: Request, cfg: dict) -> tuple[dict, bool]:
@@ -4411,17 +4430,43 @@ def _prova_testnet(request: Request, cfg: dict) -> tuple[dict, bool]:
     if not isinstance(provas, dict):
         provas = {}
     prova = provas.get(exchange)
+    fingerprint_atual = testnet_credential_fingerprint(_env_testnet(cfg))
+    credencial_compativel = bool(
+        isinstance(prova, dict)
+        and _fingerprint_sha256_valido(prova.get("credential_fingerprint"))
+        and hmac.compare_digest(
+            str(prova["credential_fingerprint"]), fingerprint_atual))
+    horario_valido = bool(
+        isinstance(prova, dict)
+        and _horario_testnet_valido(prova.get("verified_at")))
+    ordem_identificada = bool(
+        isinstance(prova, dict)
+        and _fingerprint_sha256_valido(
+            prova.get("external_order_fingerprint")))
     valida = bool(
         isinstance(prova, dict)
         and prova.get("schema") == _SCHEMA_HOMOLOGACAO_TESTNET
         and str(prova.get("exchange") or "").strip().lower() == exchange
         and prova.get("filled_external_order") is True
         and prova.get("reconciled") is True
-        and str(prova.get("verified_at") or "").strip())
+        and credencial_compativel
+        and horario_valido
+        and ordem_identificada)
     if not isinstance(prova, dict):
         return ({"valida": False,
                  "motivo": f"sem prova TESTNET reconciliada para {exchange}"},
                 False)
+    if valida:
+        motivo = "ordem TESTNET preenchida e reconciliada na mesma corretora"
+    elif not credencial_compativel:
+        motivo = ("credenciais TESTNET foram alteradas; repita um fill e a "
+                  "reconciliação nesta corretora")
+    elif not horario_valido:
+        motivo = "prova TESTNET com horário inválido; refaça a homologação"
+    elif not ordem_identificada:
+        motivo = "prova TESTNET sem identidade de ordem verificável"
+    else:
+        motivo = "prova TESTNET inválida ou incompatível"
     return ({
         "valida": valida,
         "exchange": prova.get("exchange"),
@@ -4429,8 +4474,7 @@ def _prova_testnet(request: Request, cfg: dict) -> tuple[dict, bool]:
         "mode": "testnet",
         "filled_external_order": bool(prova.get("filled_external_order")),
         "reconciled": bool(prova.get("reconciled")),
-        "motivo": ("ordem TESTNET preenchida e reconciliada na mesma corretora"
-                   if valida else "prova TESTNET inválida ou incompatível"),
+        "motivo": motivo,
     }, valida)
 
 
