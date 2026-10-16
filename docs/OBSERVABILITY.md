@@ -53,9 +53,11 @@ ser externo (`telegram`, `discord`, `whatsapp` ou `webpush`). Então execute:
 python scripts/verify_observability_window.py --data-dir /data
 ```
 
-O coletor exige no mínimo 1 hora e 100 amostras, lacuna máxima de 60 segundos,
-um único processo, ao menos 20 requisições, 5xx até 1%, p95 até 2 segundos,
-zero séries descartadas e entrega real do teste externo. A prova sanitizada vale
+O coletor aceita somente uma origem HTTPS sem credenciais, query ou subcaminho.
+Ele exige no mínimo 1 hora e 100 amostras, lacuna máxima de 60 segundos,
+um único processo, `health=ok`, readiness e Paper Adapter saudáveis, ao menos
+20 requisições, 5xx até 1%, p95 até 2 segundos, zero séries descartadas e
+entrega real do teste externo. A prova sanitizada vale
 24 horas, fica vinculada ao hash de `ops/alerts.yml` e é reavaliada integralmente
 por `/v1/operational-readiness`. Ela registra explicitamente que nenhuma ordem
 foi enviada e não substitui a confirmação do proprietário nem libera LIVE.

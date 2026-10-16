@@ -19,7 +19,9 @@ def _samples(*, count=121, interval=30, instance="instance-1", errors=0,
         result.append({
             "observed_at": (start + timedelta(seconds=index * interval)).isoformat(),
             "health_http_status": 200,
+            "health_status": "ok",
             "readiness_status": "ready",
+            "paper_status": "READY",
             "kill_switch": False,
             "process_instance_id": instance,
             "requests": requests,
@@ -90,8 +92,12 @@ def test_writer_discards_unrecognized_sample_fields(tmp_path):
     [
         (lambda rows: rows.__setitem__(60, {**rows[60], "health_http_status": 503}),
          "indisponibilidade"),
+        (lambda rows: rows.__setitem__(60, {**rows[60], "health_status": "degraded"}),
+         "degradado"),
         (lambda rows: rows.__setitem__(60, {**rows[60], "kill_switch": True}),
          "parada"),
+        (lambda rows: rows.__setitem__(60, {**rows[60], "paper_status": "ERROR"}),
+         "Paper Adapter"),
         (lambda rows: rows.__setitem__(60, {**rows[60], "process_instance_id": "restarted"}),
          "reiniciou"),
     ],
@@ -153,3 +159,19 @@ def test_validation_rejects_policy_drift_tampering_and_expiry(tmp_path):
     )
     assert expired["valida"] is False
     assert "expirou" in expired["motivo"]
+
+
+def test_sanitize_sample_keeps_health_and_paper_contract_without_labels():
+    sample = observability.sanitize_sample(
+        "2026-10-16T12:00:00+00:00",
+        200,
+        {"status": "ok", "avisos": []},
+        {"status": "ready", "kill_switch": False,
+         "paper": {"status": "READY", "account_id": "private-account"}},
+        {"process_instance_id": "instance-1", "counters": {},
+         "counter_series": [], "histogram_series": []},
+    )
+
+    assert sample["health_status"] == "ok"
+    assert sample["paper_status"] == "READY"
+    assert "private-account" not in json.dumps(sample)

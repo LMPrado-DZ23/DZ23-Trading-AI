@@ -10,7 +10,7 @@ from pathlib import Path
 
 from tradingagents.desk.storage import escrever_json_atomico
 
-SCHEMA = "dz23.observability-proof/1"
+SCHEMA = "dz23.observability-proof/2"
 PROOF_NAME = "observability-proof.json"
 MIN_DURATION = timedelta(hours=1)
 MAX_AGE = timedelta(hours=24)
@@ -48,8 +48,8 @@ def policy_sha256(path: str | Path | None = None) -> str:
     return hashlib.sha256(policy.read_bytes()).hexdigest()
 
 
-def sanitize_sample(observed_at: str, health_status: int, readiness: dict,
-                    metrics: dict) -> dict:
+def sanitize_sample(observed_at: str, health_http_status: int,
+                    health: dict, readiness: dict, metrics: dict) -> dict:
     """Retém apenas agregados operacionais; descarta rótulos e dados de negócio."""
     counters = {"requests": 0, "errors_5xx": 0}
     for series in metrics.get("counter_series") or ():
@@ -76,8 +76,10 @@ def sanitize_sample(observed_at: str, health_status: int, readiness: dict,
     )
     return {
         "observed_at": _parse_time(observed_at).isoformat(),
-        "health_http_status": int(health_status),
+        "health_http_status": int(health_http_status),
+        "health_status": str(health.get("status") or ""),
         "readiness_status": str(readiness.get("status") or ""),
+        "paper_status": str((readiness.get("paper") or {}).get("status") or ""),
         "kill_switch": readiness.get("kill_switch") is True,
         "process_instance_id": str(metrics.get("process_instance_id") or ""),
         "requests": counters["requests"],
@@ -102,7 +104,9 @@ def _canonical_sample(sample: dict) -> dict:
     return {
         "observed_at": _parse_time(sample.get("observed_at")).isoformat(),
         "health_http_status": int(sample.get("health_http_status") or 0),
+        "health_status": str(sample.get("health_status") or ""),
         "readiness_status": str(sample.get("readiness_status") or ""),
+        "paper_status": str(sample.get("paper_status") or ""),
         "kill_switch": sample.get("kill_switch") is True,
         "process_instance_id": str(sample.get("process_instance_id") or ""),
         "requests": int(sample.get("requests") or 0),
@@ -138,9 +142,13 @@ def evaluate_evidence(samples: list[dict], delivery: dict) -> dict:
         raise ObservabilityProofError("lacuna de coleta excedeu 60 segundos")
     if any(int(item.get("health_http_status") or 0) != 200 for item in ordered):
         raise ObservabilityProofError("health apresentou indisponibilidade")
+    if any(item.get("health_status") != "ok" for item in ordered):
+        raise ObservabilityProofError("health apresentou estado degradado")
     if any(item.get("readiness_status") != "ready" or item.get("kill_switch") is True
            for item in ordered):
         raise ObservabilityProofError("readiness ou parada de emergência bloqueou a janela")
+    if any(item.get("paper_status") != "READY" for item in ordered):
+        raise ObservabilityProofError("Paper Adapter não permaneceu saudável")
 
     instances = {str(item.get("process_instance_id") or "") for item in ordered}
     if "" in instances or len(instances) != 1:
