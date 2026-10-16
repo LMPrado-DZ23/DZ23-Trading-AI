@@ -10,11 +10,11 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
 | Gate | Prova exigida | Estado no HEAD da branch |
 |---|---|---|
-| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.617 passaram localmente; matriz verde no SHA `2fbb384` do PR #14 (run `38947463916`) |
-| lint | `ruff check .` | verde localmente e no SHA `2fbb384` do PR #14 |
-| instalação limpa | job CI dedicado | verde no SHA `2fbb384` do PR #14 |
-| dependências/segredos/licenças/SBOM | jobs CI dedicados | verdes no SHA `2fbb384` do PR #14 |
-| PostgreSQL e ARM64 | jobs CI dedicados | verdes no SHA `2fbb384` do PR #14; ARM64 valida dependências, não homologa host Oracle |
+| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.617 passaram localmente no último SHA de código (`2fbb384`); a matriz deve estar verde no HEAD publicado do PR #14 |
+| lint | `ruff check .` | verde localmente; o job deve estar verde no HEAD publicado do PR #14 |
+| instalação limpa | job CI dedicado | exige job verde no HEAD publicado do PR #14 |
+| dependências/segredos/licenças/SBOM | jobs CI dedicados | exigem jobs verdes no HEAD publicado do PR #14 |
+| PostgreSQL e ARM64 | jobs CI dedicados | exigem jobs verdes no HEAD publicado do PR #14; ARM64 valida dependências, não homologa host Oracle |
 | LIVE fechado | testes + `/v1/operational-readiness` | `MESA_LIVE_LIBERADA=False` |
 | rollback | backup local + restore isolado + prova recente | implementado; ensaio no host ainda externo |
 
