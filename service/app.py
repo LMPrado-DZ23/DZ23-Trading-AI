@@ -2727,9 +2727,16 @@ def _desk_boot(tenant_id: str) -> dict:
         try:
             sup = SupervisorDePiloto(armazem, tenant_id=tenant_id)
             viva = EscolaCentral(armazem=armazem, tenant_id=tenant_id)
+            agentes_esperados = tuple(t.spec.agent_id for t in traders)
             bloqueados = sup.bloqueios(
                 central=viva, exigir_autorizacao=(broker_mode == "live"),
-                agentes_esperados=(t.spec.agent_id for t in traders))
+                agentes_esperados=agentes_esperados)
+            if broker_mode == "live":
+                cfg_vivo = load_cfg(tenant_id)
+                prova, prova_valida = _prova_leitura_real_armazem(
+                    armazem, tenant_id, cfg_vivo)
+                bloqueados.update(_bloqueios_de_conta_real(
+                    sup, prova, prova_valida))
             # Evolução (E5): trader suspenso por deterioração bloqueia novas
             # entradas — o motivo do piloto vence quando os dois apontam.
             evo_viva = EvolucaoAutonoma(armazem=armazem, tenant_id=tenant_id)
@@ -3938,7 +3945,9 @@ async def escola_piloto_solicitar(req: Request, _=Depends(auth),
         raise HTTPException(
             409, "a conta REAL deve usar a mesma corretora do contexto que "
                  "certificou a estratégia")
-    if conta_alvo != contexto.conta:
+    conta_real = (body.get("conta_real") is True
+                  or conta_alvo != contexto.conta)
+    if conta_real:
         cfg = load_cfg(request_tenant(req))
         prova, valida = _prova_leitura_real(req, cfg)
         if not (valida and prova
@@ -3965,7 +3974,7 @@ async def escola_piloto_solicitar(req: Request, _=Depends(auth),
             prazo_dias=prazo,
             condicoes_de_suspensao=tuple(body.get("condicoes_de_suspensao")
                                          or ()),
-            contexto=contexto.como_dict())
+            contexto=contexto.como_dict(), conta_real=conta_real)
     except (ValueError, SalaError) as exc:
         raise HTTPException(409, str(exc)) from exc
     return {"ok": True, "autorizacao": aut.como_dict()}
@@ -3994,6 +4003,14 @@ def escola_piloto_autorizar(agent_id: str, request: Request,
     d = _desk_of(request)
     esc = _escola_of(request)
     sup = _supervisor_of(request)
+    pedido = sup.de(agent_id)
+    if pedido is not None and pedido.conta_real:
+        cfg = load_cfg(request_tenant(request))
+        prova, valida = _prova_leitura_real(request, cfg)
+        if not _prova_real_serve_piloto(prova, valida, pedido):
+            raise HTTPException(
+                409, "a autorização exige prova autenticada somente leitura "
+                     "válida e recente para a mesma corretora e conta REAL")
     try:
         aut = sup.autorizar(agent_id,
                             gates=_gates_do_ambiente(request_tenant(request),
@@ -4338,11 +4355,10 @@ def _prova_leitura_real_recente(prova: dict, agora: datetime | None = None) -> b
             <= _VALIDADE_PREPARACAO_REAL)
 
 
-def _prova_leitura_real(request: Request, cfg: dict) -> tuple[dict | None, bool]:
+def _prova_leitura_real_armazem(armazem, tenant_id: str,
+                                cfg: dict) -> tuple[dict | None, bool]:
     """Carrega a prova e informa se ela ainda pertence à credencial atual."""
-    esc = _escola_of(request)
-    prova = esc["armazem"].carregar(esc["tenant_id"],
-                                     _CHAVE_PREPARACAO_REAL)
+    prova = armazem.carregar(tenant_id, _CHAVE_PREPARACAO_REAL)
     if not isinstance(prova, dict):
         return None, False
     atual = read_only_credential_fingerprint(_env_leitura_real(cfg))
@@ -4355,6 +4371,44 @@ def _prova_leitura_real(request: Request, cfg: dict) -> tuple[dict | None, bool]
         and _prova_leitura_real_recente(prova)
     )
     return prova, valida
+
+
+def _prova_leitura_real(request: Request, cfg: dict) -> tuple[dict | None, bool]:
+    esc = _escola_of(request)
+    return _prova_leitura_real_armazem(
+        esc["armazem"], esc["tenant_id"], cfg)
+
+
+def _prova_real_serve_piloto(prova: dict | None, valida: bool, piloto) -> bool:
+    """Confirma conta, corretora e restrições no instante de usar a prova."""
+    return bool(
+        valida and prova
+        and prova.get("authenticated_read") is True
+        and prova.get("sem_trade_declarado") is True
+        and prova.get("sem_saque_declarado") is True
+        and str(prova.get("exchange") or "").strip().lower()
+        == str(getattr(piloto, "corretora", "") or "").strip().lower()
+        and str(prova.get("conta") or "").strip()
+        == str(getattr(piloto, "conta", "") or "").strip()
+    )
+
+
+def _bloqueios_de_conta_real(supervisor, prova: dict | None,
+                             valida: bool) -> dict[str, str]:
+    """Bloqueios adicionais do vigia LIVE, calculados por piloto."""
+    bloqueios = {}
+    for piloto in supervisor.autorizacoes():
+        estado = getattr(getattr(piloto, "estado", None), "value", "")
+        if estado != "piloto_autorizado":
+            continue
+        if not getattr(piloto, "conta_real", False):
+            bloqueios[piloto.agent_id] = (
+                "piloto sem vínculo explícito com conta REAL")
+        elif not _prova_real_serve_piloto(prova, valida, piloto):
+            bloqueios[piloto.agent_id] = (
+                "prova somente leitura da conta REAL ausente, "
+                "expirada ou incompatível")
+    return bloqueios
 
 
 def _prova_publica(prova: dict | None, valida: bool) -> dict:
@@ -4427,6 +4481,8 @@ def _certificacoes_real(request: Request, cfg: dict,
     saida = []
     for piloto in relatorio:
         if piloto.get("estado") != "piloto_autorizado":
+            continue
+        if piloto.get("conta_real") is not True:
             continue
         if str(piloto.get("corretora") or "").strip().lower() != exchange:
             continue

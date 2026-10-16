@@ -169,6 +169,12 @@ class TestPreparacaoReal:
             "ver preparação é leitura pura — nada é enviado ao servidor")
         assert "live/parada-emergencia" not in t
 
+    def test_configuracao_do_piloto_marca_destino_como_conta_real(self):
+        html = _html()
+        t = _funcao(html, "async function pilotoConfigurar(")
+        assert "conta_real:true" in t
+        assert "prova.valida" in t
+
 
 class TestTravasDoPainel:
     """O painel inteiro: sem caminho para dinheiro real, saque ou transferência."""

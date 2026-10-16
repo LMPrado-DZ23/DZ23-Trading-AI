@@ -145,6 +145,7 @@ def test_prova_persistida_libera_itens_mas_nunca_o_live(tmp_path, monkeypatch):
             return [{"agent_id": "trader-momentum",
                      "estrategia": "momentum", "versao": "1",
                      "corretora": "binance", "conta": "real-principal",
+                         "conta_real": True,
                      "estado": "piloto_autorizado"}]
 
     monkeypatch.setattr(m, "_supervisor_of", lambda _request: _Supervisor())
@@ -247,6 +248,31 @@ def test_prova_com_schema_desconhecido_falha_fechado(tmp_path, monkeypatch):
     assert _item(status, "permissões mínimas")["pronto"] is False
 
 
+def test_vigia_live_bloqueia_piloto_sem_vinculo_ou_com_prova_invalida(
+        tmp_path, monkeypatch):
+    m, _ = _app(tmp_path, monkeypatch)
+    estado = SimpleNamespace(value="piloto_autorizado")
+    real = SimpleNamespace(
+        agent_id="trader-real", estado=estado, conta_real=True,
+        corretora="binance", conta="real-principal")
+    legado = SimpleNamespace(
+        agent_id="trader-legado", estado=estado, conta_real=False,
+        corretora="binance", conta="paper-legacy")
+    supervisor = SimpleNamespace(autorizacoes=lambda: [real, legado])
+    prova = {
+        "exchange": "binance", "conta": "real-principal",
+        "authenticated_read": True, "sem_trade_declarado": True,
+        "sem_saque_declarado": True,
+    }
+
+    bloqueios = m._bloqueios_de_conta_real(supervisor, prova, True)
+    assert "trader-real" not in bloqueios
+    assert "vínculo explícito" in bloqueios["trader-legado"]
+
+    bloqueios = m._bloqueios_de_conta_real(supervisor, prova, False)
+    assert "prova somente leitura" in bloqueios["trader-real"]
+
+
 def test_certificacao_amarra_estrategia_conta_risco_e_reconciliacao(
         tmp_path, monkeypatch):
     m, c = _app(tmp_path, monkeypatch)
@@ -273,6 +299,7 @@ def test_certificacao_amarra_estrategia_conta_risco_e_reconciliacao(
                 "agent_id": "trader-momentum", "authorization_id": "AUT-1",
                 "estrategia": "momentum", "versao": "1",
                 "corretora": "binance", "conta": "real-principal",
+                "conta_real": True,
                 "capital_maximo": "100", "perda_diaria_maxima": "10",
                 "perda_total_maxima": "30", "valido_ate": "2027-01-01",
                 "estado": "piloto_autorizado",
@@ -354,6 +381,7 @@ def test_limite_global_acima_do_piloto_e_reconciliacao_pendente_bloqueiam(
                 "agent_id": "trader-momentum", "authorization_id": "AUT-1",
                 "estrategia": "momentum", "versao": "1",
                 "corretora": "binance", "conta": "real-principal",
+                "conta_real": True,
                 "capital_maximo": "100", "perda_diaria_maxima": "10",
                 "perda_total_maxima": "30", "estado": "piloto_autorizado",
             }]

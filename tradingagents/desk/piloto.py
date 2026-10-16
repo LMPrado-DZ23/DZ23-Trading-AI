@@ -66,6 +66,7 @@ class AutorizacaoDePiloto:
     versao: str
     corretora: str
     conta: str
+    conta_real: bool
     capital_maximo: Decimal
     perda_diaria_maxima: Decimal
     perda_total_maxima: Decimal
@@ -90,6 +91,7 @@ class AutorizacaoDePiloto:
             "agent_id": self.agent_id,
             "estrategia": self.estrategia, "versao": self.versao,
             "corretora": self.corretora, "conta": self.conta,
+            "conta_real": self.conta_real,
             "capital_maximo": str(self.capital_maximo),
             "perda_diaria_maxima": str(self.perda_diaria_maxima),
             "perda_total_maxima": str(self.perda_total_maxima),
@@ -157,6 +159,7 @@ class SupervisorDePiloto:
             versao=str(d.get("versao", "1")),
             corretora=d.get("corretora", ""),
             conta=d.get("conta", ""),
+            conta_real=d.get("conta_real") is True,
             capital_maximo=Decimal(str(d.get("capital_maximo", "0"))),
             perda_diaria_maxima=Decimal(str(d.get("perda_diaria_maxima", "0"))),
             perda_total_maxima=Decimal(str(d.get("perda_total_maxima", "0"))),
@@ -259,7 +262,7 @@ class SupervisorDePiloto:
                   corretora: str, conta: str, capital_maximo: Decimal,
                   perda_diaria_maxima: Decimal, perda_total_maxima: Decimal,
                   prazo_dias: int, condicoes_de_suspensao=(),
-                  contexto: dict | None = None,
+                  contexto: dict | None = None, conta_real: bool = False,
                   agora: datetime | None = None) -> AutorizacaoDePiloto:
         """Registra o PEDIDO do proprietário — ainda sem autorizar nada.
 
@@ -296,6 +299,7 @@ class SupervisorDePiloto:
             "tenant_id": self.tenant_id, "agent_id": agent_id,
             "estrategia": estrategia, "versao": str(versao or "1"),
             "corretora": corretora, "conta": conta,
+            "conta_real": bool(conta_real),
             "capital_maximo": str(capital_maximo),
             "perda_diaria_maxima": str(perda_diaria_maxima),
             "perda_total_maxima": str(perda_total_maxima),
@@ -560,6 +564,7 @@ class SupervisorDePiloto:
                 "authorization_id": a.authorization_id,
                 "estrategia": a.estrategia, "versao": a.versao,
                 "corretora": a.corretora, "conta": a.conta,
+                "conta_real": a.conta_real,
                 "capital_maximo": str(a.capital_maximo),
                 "perda_diaria_maxima": str(a.perda_diaria_maxima),
                 "perda_total_maxima": str(a.perda_total_maxima),

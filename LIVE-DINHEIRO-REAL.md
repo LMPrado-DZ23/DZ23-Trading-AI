@@ -13,7 +13,8 @@ capital, limites nem autorização para enviar ordens.
 
 O proprietário ainda precisa configurar o piloto por estratégia, versão e
 conta. Depois disso, a autorização do piloto é uma ação explícita e separada,
-com nova validação da certificação no instante da autorização. Mesmo um piloto
+com nova validação da certificação e da prova da conta REAL no instante da
+autorização. Mesmo um piloto
 autorizado continua sujeito ao selo global `MESA_LIVE_LIBERADA=False` e às
 demais fechaduras descritas abaixo.
 
@@ -140,8 +141,11 @@ O checklist REAL revalida a Escola antes de considerar a autorização vigente.
 Também exige que os tetos globais caibam nos limites do piloto, que a
 reconciliação financeira esteja atual e sem divergências e que a parada de
 emergência esteja desarmada. Se a formatura for retirada, a credencial mudar,
-os limites deixarem de ser compatíveis ou a reconciliação ficar pendente, a
-prontidão volta a ficar bloqueada automaticamente.
+a prova de leitura expirar, os limites deixarem de ser compatíveis ou a
+reconciliação ficar pendente, a prontidão volta a ficar bloqueada
+automaticamente. O vigia LIVE também recusa continuamente qualquer piloto sem
+vínculo explícito com conta REAL ou cuja prova não corresponda mais à mesma
+corretora e conta.
 
 ## Antes de tudo
 Perdas com dinheiro real são **suas e irreversíveis**. Nenhum resultado de

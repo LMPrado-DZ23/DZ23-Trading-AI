@@ -487,6 +487,11 @@ class TestMesaEscolaE2E:
                            json=pedido)
         assert sem_prova.status_code == 409
         assert "prova autenticada" in sem_prova.json()["detail"]
+        mesmo_rotulo = {**pedido, "conta": "paper-legacy", "conta_real": True}
+        sem_prova_mesmo_rotulo = c.post(
+            "/v1/escola/pilotos/solicitar", headers=H, json=mesmo_rotulo)
+        assert sem_prova_mesmo_rotulo.status_code == 409
+        assert "prova autenticada" in sem_prova_mesmo_rotulo.json()["detail"]
 
         cfg = {
             "TRADINGAGENTS_EXCHANGE": "binance",
@@ -511,10 +516,23 @@ class TestMesaEscolaE2E:
         assert resposta.status_code == 200, resposta.text
         aut = resposta.json()["autorizacao"]
         assert aut["conta"] == "real-principal"
+        assert aut["conta_real"] is True
         rel = c.get("/v1/escola/pilotos", headers=H).json()["autorizacoes"][0]
         assert rel["conta"] == "real-principal"
+        assert rel["conta_real"] is True
         assert rel["contexto_certificacao"]["conta"] == "paper-legacy"
         assert rel["contexto_certificacao"]["modo"] == "paper"
+
+        # A prova é revalidada no CLIQUE de autorização, não só no pedido.
+        # Rotacionar a chave entre as duas etapas mantém o piloto aguardando.
+        assert c.post("/v1/config", headers=H, json={"vars": {
+            "REAL_READ_ONLY_API_KEY": "rotated-key"}}).status_code == 200
+        bloqueada = c.post(
+            "/v1/escola/pilotos/trader-momentum/autorizar", headers=H)
+        assert bloqueada.status_code == 409
+        assert "prova autenticada" in bloqueada.json()["detail"]
+        rel = c.get("/v1/escola/pilotos", headers=H).json()["autorizacoes"][0]
+        assert rel["estado"] == "aguardando_autorizacao"
 
     def test_conta_real_nao_transfere_certificacao_entre_corretoras(
             self, tmp_path, monkeypatch):
