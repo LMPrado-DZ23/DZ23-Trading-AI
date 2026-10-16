@@ -10,7 +10,7 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
 | Gate | Prova exigida | Estado no HEAD da branch |
 |---|---|---|
-| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.618 passaram localmente no código atual; a matriz deve estar verde no HEAD publicado do PR #14 |
+| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.620 passaram localmente no código atual; a matriz deve estar verde no HEAD publicado do PR #14 |
 | lint | `ruff check .` | verde localmente; o job deve estar verde no HEAD publicado do PR #14 |
 | instalação limpa | job CI dedicado | exige job verde no HEAD publicado do PR #14 |
 | dependências/segredos/licenças/SBOM | jobs CI dedicados | exigem jobs verdes no HEAD publicado do PR #14 |
@@ -42,8 +42,10 @@ Todos os itens abaixo precisam de evidência nova no SHA implantado:
 - IQ Option com os sete handshakes passivos comprovados (7/7 em 2026-10-16),
   contrato exato pinado e prova `list_balances(NORMAL)` preparada; a primeira
   leitura autenticada da conta ainda é uma prova externa pendente,
-  sem ferramenta mutável ou ordem chamada; o token atual anuncia ferramentas
-  mutáveis e não satisfaz o gate de escopo read-only no provedor;
+  sem ferramenta mutável ou ordem chamada; o painel oficial confirma que é
+  possível criar token com `Read access` e todos os `Trading access`
+  desligados, mas o token DZ23 atual anuncia ferramentas mutáveis e não
+  satisfaz esse gate;
 - divergências e provas expiradas ausentes.
 
 ## Ações que continuam exigindo o proprietário no momento da ação

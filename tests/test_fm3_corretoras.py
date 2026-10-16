@@ -150,6 +150,9 @@ class TestTelaCorretora:
         assert "'/v1/personal/exchanges/iq_option/mcp-health'" in sonda
         assert "nenhuma ferramenta chamada" in sonda
         assert "nenhuma ordem enviada" in sonda
+        assert "read_only_scope" in sonda
+        assert "escopo somente leitura confirmado" in sonda
+        assert "token permite negociação" in sonda
 
     def test_reconciliacao_usa_a_rota_real(self):
         html = _html()

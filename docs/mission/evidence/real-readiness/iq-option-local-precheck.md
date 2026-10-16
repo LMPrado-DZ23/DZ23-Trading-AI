@@ -67,6 +67,22 @@ O catálogo passa a informar `OFFICIAL_MCP_METADATA_VALIDATED`. Isso valida
 somente a disponibilidade do contrato MCP passivo; não equivale a credencial
 de leitura da conta, sandbox homologado ou autorização de execução.
 
+## Escopo oficial do token
+
+O painel autenticado oficial `profile/ai-integration` foi inspecionado em
+2026-10-16 sem revelar, copiar, criar, reemitir ou excluir credenciais. A tela
+confirma `Read access` obrigatório e controles separados de `Trading access`
+para Options e Margin Products. O token DZ23 existente estava com esses
+acessos de negociação habilitados, em conformidade com as 32 ferramentas
+mutáveis observadas no catálogo passivo, e portanto não satisfaz o gate de
+permissão mínima.
+
+O código passa a reconhecer os dois catálogos oficiais, mas só permite a prova
+de conta quando todos os sete endpoints anunciam o catálogo estritamente
+somente leitura. Se `tools/list` expuser qualquer ferramenta mutável, a prova é
+recusada antes de `call_tool`. Nenhuma consulta de conta foi executada nesta
+validação.
+
 ## Invariantes preservadas
 
 - handshake futuro limitado a `initialize` e `tools/list`;

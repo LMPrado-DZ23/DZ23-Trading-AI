@@ -26,15 +26,17 @@ A plataforma pessoal não ficará restrita a seis corretoras. `service/personal_
   oficiais e seus contratos foram validados em 2026-10-16. A sonda passiva
   executa apenas `initialize` e `tools/list`. Um módulo isolado prepara a prova
   de conta com uma única chamada literal `list_balances({types: NORMAL})`,
-  revalida o contrato antes de chamar e descarta saldo, moeda e ID bruto. Esse
+  revalida o contrato e recusa qualquer ferramenta mutável antes de chamar,
+  então descarta saldo, moeda e ID bruto. Esse
   módulo não contém nomes nem caminhos de ferramentas mutáveis. A primeira
   consulta autenticada de conta ainda depende da confirmação do proprietário;
   portanto o estado é **preparado**, não homologado. O PolicyLayer continua
   sem registro publicado para os sete identificadores (`unknown`). Nenhuma
-  dessas provas habilita ordens. Como o token anuncia também ferramentas
-  mutáveis, o gate de permissões mínimas permanece fechado até existir escopo
-  read-only verificável no provedor; o bloqueio local não é apresentado como
-  permissão mínima remota.
+  dessas provas habilita ordens. O painel oficial oferece `Read access` sempre
+  ligado e controles separados de `Trading access`; o token DZ23 existente
+  anuncia ferramentas mutáveis. O gate permanece fechado até um token criado
+  com todos os acessos de negociação desligados produzir o catálogo remoto
+  estritamente read-only.
 - Operações LIVE continuam bloqueadas. Listar uma corretora **não** significa que sua integração foi testada ou liberada para ordens.
 
 ## Política para muitas exchanges

@@ -86,8 +86,9 @@ provou os sete handshakes. O catálogo publica
 `OFFICIAL_MCP_READ_ONLY_PREPARED`: a sonda passiva continua executando somente
 `initialize` e `tools/list`, e um módulo separado prepara uma única consulta
 autenticada literal, `list_balances` com filtro `NORMAL`. Antes dessa consulta,
-o catálogo remoto completo e as marcações `readOnly`/`destructive=false` são
-revalidados; qualquer drift fecha o caminho. O resultado compara apenas o
+o catálogo remoto e as marcações `readOnly`/`destructive=false` são
+revalidados; qualquer drift ou ferramenta mutável fecha o caminho **antes** de
+`call_tool`. O resultado compara apenas o
 `balance_id` informado pelo proprietário e não devolve nem persiste saldo,
 moeda ou ID bruto. Essa primeira consulta de conta ainda não foi executada
 nesta branch e exige confirmação no momento da ação. Não existe ferramenta de
@@ -95,12 +96,13 @@ ordem no módulo de leitura, não há sandbox homologado e nada disso autoriza
 execução. O token pode ficar cifrado pelo painel ou apenas no ambiente e nunca
 é reutilizado como credencial de execução pelo DZ23.
 
-O catálogo desse token anuncia também 32 ferramentas mutáveis. O DZ23 não as
-expõe nem as chama, porém bloqueia honestamente o gate **permissões mínimas**:
-restrição no aplicativo não prova escopo read-only no provedor. Para uma futura
-homologação REAL da IQ Option, será necessário um token cujo escopo somente
-leitura possa ser comprovado no lado da corretora, além de todos os demais
-gates. Uma declaração manual não sobrepõe essa evidência técnica.
+O painel oficial da IQ Option foi verificado em 2026-10-16: `Read access` é
+sempre habilitado e os acessos de negociação de Options e Margin Products são
+selecionáveis. O token DZ23 existente anuncia 32 ferramentas mutáveis e, por
+isso, continua recusado. A correção operacional é criar ou reemitir um token
+com **Read access ligado e todos os Trading access desligados**. O DZ23 exige
+que `tools/list` confirme exatamente esse catálogo somente leitura antes de
+consultar a conta; declaração manual não sobrepõe a evidência técnica.
 
 Depois de autorizar a conexão e carregar o token somente no ambiente local, a
 prova reproduzível pode ser gerada sem credencial na linha de comando:

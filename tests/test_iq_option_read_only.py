@@ -11,6 +11,8 @@ import pytest
 from service.iq_option_mcp import IQ_OPTION_MCP_TOOL_CONTRACTS
 from service.iq_option_read_only import (
     IqOptionReadOnlyError,
+    _assert_read_only_tool_contract,
+    _call_list_balances_with_read_only_scope,
     _tool_contract_is_exact,
     probe_iq_option_read_only_account_async,
 )
@@ -59,7 +61,7 @@ def test_prova_chama_apenas_list_balances_normal_e_nao_expoe_dados():
     assert resultado["exchange"] == "iq_option"
     assert resultado["authenticated_read"] is True
     assert resultado["broker_identity_verified"] is True
-    assert resultado["provider_mutating_tools_exposed"] is True
+    assert resultado["provider_mutating_tools_exposed"] is False
     assert resultado["read_methods"] == [
         "binary-options:list_balances[NORMAL]"]
     serializado = repr(resultado)
@@ -174,6 +176,13 @@ def test_contrato_remoto_exige_catalogo_exato_e_anotacao_read_only():
 
     assert _tool_contract_is_exact(tuple(tools)) is True
 
+    read_only_tools = tuple(x for x in tools if x.name in read)
+    assert _tool_contract_is_exact(read_only_tools) is True
+    _assert_read_only_tool_contract(read_only_tools)
+
+    with pytest.raises(IqOptionReadOnlyError, match="permissão de negociação"):
+        _assert_read_only_tool_contract(tuple(tools))
+
     list_balances = next(x for x in tools if x.name == "list_balances")
     list_balances.annotations.read_only_hint = False
     assert _tool_contract_is_exact(tuple(tools)) is False
@@ -181,3 +190,36 @@ def test_contrato_remoto_exige_catalogo_exato_e_anotacao_read_only():
     tools.append(SimpleNamespace(
         name="unexpected_tool", annotations=None, input_schema={}))
     assert _tool_contract_is_exact(tuple(tools)) is False
+    with pytest.raises(IqOptionReadOnlyError, match="contrato MCP mudou"):
+        _assert_read_only_tool_contract(tuple(tools))
+
+
+def test_escopo_mutavel_e_recusado_antes_de_call_tool():
+    read, write = IQ_OPTION_MCP_TOOL_CONTRACTS["binary-options"]
+    tools = []
+    for name in sorted(read | write):
+        tools.append(SimpleNamespace(
+            name=name,
+            annotations=SimpleNamespace(
+                read_only_hint=name in read,
+                destructive_hint=name in write),
+            input_schema=(
+                {"type": "object", "properties": {"types": {}},
+                 "additionalProperties": False}
+                if name == "list_balances" else {"type": "object"})))
+
+    class ClienteSobreprivilegiado:
+        chamadas = 0
+
+        async def list_tools(self, **_kwargs):
+            return SimpleNamespace(tools=tools)
+
+        async def call_tool(self, *_args, **_kwargs):
+            self.chamadas += 1
+            raise AssertionError("call_tool não poderia ser alcançado")
+
+    cliente = ClienteSobreprivilegiado()
+    with pytest.raises(IqOptionReadOnlyError, match="permissão de negociação"):
+        _run(_call_list_balances_with_read_only_scope(
+            cliente, {"types": "NORMAL"}))
+    assert cliente.chamadas == 0

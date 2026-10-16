@@ -204,6 +204,8 @@ def test_fm6_02b_iq_option_exibe_so_credencial_mcp_e_live_bloqueado(
         "IQ Option usa MCP separado")
     expect(page.locator("#page-config")).to_contain_text(
         "execução continua bloqueada")
+    expect(page.locator("#page-config")).to_contain_text(
+        "Read access ligado e todos os Trading access desligados")
 
     page.select_option("#TRADINGAGENTS_EXCHANGE", "binance")
 

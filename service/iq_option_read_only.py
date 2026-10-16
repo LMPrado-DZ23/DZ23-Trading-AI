@@ -32,12 +32,19 @@ class IqOptionReadOnlyError(RuntimeError):
 
 
 def _tool_contract_is_exact(tools: tuple[Any, ...]) -> bool:
-    """Confirma catálogo e marcações antes de permitir a única leitura."""
+    """Aceita somente os dois catálogos oficiais conhecidos.
+
+    Um token somente leitura anuncia apenas ``expected_read``. Tokens com
+    negociação habilitada anunciam também ``expected_write``; esse catálogo
+    ainda é reconhecido para produzir um erro específico, mas não é aceito
+    por :func:`_assert_read_only_tool_contract` para consultar a conta.
+    """
     expected_read, expected_write = IQ_OPTION_MCP_TOOL_CONTRACTS[
         IQ_OPTION_READ_ONLY_SERVER]
     names = [str(getattr(tool, "name", "")) for tool in tools]
-    if (len(names) != len(set(names)) or set(names) !=
-            expected_read | expected_write):
+    catalog = set(names)
+    if (len(names) != len(catalog) or catalog not in (
+            expected_read, expected_read | expected_write)):
         return False
     target = next((tool for tool in tools if tool.name == "list_balances"), None)
     if target is None:
@@ -53,6 +60,27 @@ def _tool_contract_is_exact(tools: tuple[Any, ...]) -> bool:
         and input_schema.get("additionalProperties") is False
         and set((input_schema.get("properties") or {}).keys()) == {"types"}
     )
+
+
+def _assert_read_only_tool_contract(tools: tuple[Any, ...]) -> None:
+    """Recusa escopo mutável antes de qualquer consulta de conta.
+
+    O bloqueio local de nomes de ferramentas não reduz as permissões do token
+    no provedor. Por isso, reconhecer o catálogo completo não basta: a prova
+    REAL só continua quando ``tools/list`` anuncia exatamente o subconjunto
+    oficial de leitura.
+    """
+    if not _tool_contract_is_exact(tools):
+        raise IqOptionReadOnlyError("contrato MCP mudou; leitura recusada")
+    expected_read, expected_write = IQ_OPTION_MCP_TOOL_CONTRACTS[
+        IQ_OPTION_READ_ONLY_SERVER]
+    names = {str(getattr(tool, "name", "")) for tool in tools}
+    if names & expected_write:
+        raise IqOptionReadOnlyError(
+            "token MCP possui permissão de negociação; crie um token com "
+            "Read access ligado e todos os Trading access desligados")
+    if names != expected_read:
+        raise IqOptionReadOnlyError("contrato MCP mudou; leitura recusada")
 
 
 def _payload_from_result(result: Any) -> dict[str, Any]:
@@ -77,6 +105,15 @@ def _payload_from_result(result: Any) -> dict[str, Any]:
     return payload
 
 
+async def _call_list_balances_with_read_only_scope(
+        client: Any, arguments: dict[str, str]) -> dict[str, Any]:
+    """Valida o escopo do token antes da única execução de ferramenta."""
+    listed = await client.list_tools(cache_mode="refresh")
+    _assert_read_only_tool_contract(tuple(listed.tools))
+    result = await client.call_tool("list_balances", arguments)
+    return _payload_from_result(result)
+
+
 async def _list_normal_balances_remote(
         endpoint: str, token: str,
         arguments: dict[str, str]) -> dict[str, Any]:
@@ -97,12 +134,8 @@ async def _list_normal_balances_remote(
         transport = streamable_http_client(
             endpoint, http_client=http_client, terminate_on_close=True)
         async with Client(transport, read_timeout_seconds=30.0) as client:
-            listed = await client.list_tools(cache_mode="refresh")
-            if not _tool_contract_is_exact(tuple(listed.tools)):
-                raise IqOptionReadOnlyError(
-                    "contrato MCP mudou; leitura recusada")
-            result = await client.call_tool("list_balances", arguments)
-            return _payload_from_result(result)
+            return await _call_list_balances_with_read_only_scope(
+                client, arguments)
 
 
 async def probe_iq_option_read_only_account_async(
@@ -169,9 +202,8 @@ async def probe_iq_option_read_only_account_async(
         "mcp_server": IQ_OPTION_READ_ONLY_SERVER,
         "authenticated_read": True,
         "read_methods": ["binary-options:list_balances[NORMAL]"],
-        # O catálogo do mesmo token anuncia ferramentas de ordem. O DZ23 não
-        # as expõe, mas isso não equivale a escopo read-only no provedor.
-        "provider_mutating_tools_exposed": True,
+        # A chamada só ocorre depois de tools/list provar o escopo read-only.
+        "provider_mutating_tools_exposed": False,
         "broker_identity_verified": True,
         "broker_identity_fingerprint": _broker_identity_fingerprint(
             env, expected_account_id),

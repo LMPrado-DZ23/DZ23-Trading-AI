@@ -11,7 +11,7 @@
 | **Bitget** | Spot | Capability Discovery | Supported | DISABLED (FAIL-CLOSED) | PASS |
 | **KuCoin** | Spot | Capability Discovery | Supported | DISABLED (FAIL-CLOSED) | PASS |
 | **Gate.io** | Spot | Capability Discovery | Supported | DISABLED (FAIL-CLOSED) | PASS |
-| **IQ Option** | Experimental | Isolated Replay/Paper | Offline Replay | DISABLED | ISOLATED / EXPERIMENTAL |
+| **IQ Option** | MCP oficial | Preparada; exige token read-only e prova autenticada | Offline Replay/Paper | DISABLED (FAIL-CLOSED) | OFFICIAL MCP / PREPARED |
 
 ---
 

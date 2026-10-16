@@ -112,8 +112,18 @@ async def probe_iq_option_mcp_async(
             nomes = [item["name"] for item in metadados]
             nomes_unicos = set(nomes)
             leitura, mutacao = IQ_OPTION_MCP_TOOL_CONTRACTS[nome]
-            esperado = leitura | mutacao
-            desconhecidas = nomes_unicos - esperado
+            catalogo_completo = leitura | mutacao
+            desconhecidas = nomes_unicos - catalogo_completo
+            if nomes_unicos == leitura:
+                escopo = "read_only"
+                esperado = leitura
+            elif nomes_unicos == catalogo_completo:
+                escopo = "trading_enabled"
+                esperado = catalogo_completo
+            else:
+                escopo = "invalid"
+                esperado = (catalogo_completo
+                            if nomes_unicos & mutacao else leitura)
             ausentes = esperado - nomes_unicos
             contrato_valido = bool(
                 len(tools) == len(metadados)
@@ -121,6 +131,7 @@ async def probe_iq_option_mcp_async(
                 and "" not in nomes_unicos
                 and not desconhecidas
                 and not ausentes
+                and escopo != "invalid"
             )
             return {
                 "server": nome,
@@ -131,6 +142,7 @@ async def probe_iq_option_mcp_async(
                 "tool_count": len(tools),
                 "tools": metadados,
                 "contract_validated": contrato_valido,
+                "credential_scope": escopo,
                 "read_only_tool_count": len(nomes_unicos & leitura),
                 "mutating_tool_count": len(nomes_unicos & mutacao),
                 "unknown_tool_count": len(desconhecidas),
@@ -162,6 +174,12 @@ async def probe_iq_option_mcp_async(
         status = "MCP_PARTIAL"
     else:
         status = "MCP_UNAVAILABLE"
+    mutaveis_expostas = any(
+        int(item.get("mutating_tool_count") or 0) > 0 for item in probes)
+    somente_leitura = bool(
+        conectados == len(probes)
+        and all(item.get("credential_scope") == "read_only"
+                for item in probes))
     return {
         "id": "iq_option",
         "status": status,
@@ -173,6 +191,8 @@ async def probe_iq_option_mcp_async(
         "metadata_only": True,
         "tool_execution_enabled": False,
         "orders_enabled": False,
+        "provider_mutating_tools_exposed": mutaveis_expostas,
+        "read_only_scope": somente_leitura,
         "probes": probes,
     }
 

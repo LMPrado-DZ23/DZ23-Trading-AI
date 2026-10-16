@@ -11,6 +11,7 @@ from fastapi.routing import APIRoute
 from service.app import app, auth
 from service.iq_option_mcp import (
     IQ_OPTION_MCP_SERVERS,
+    IQ_OPTION_MCP_TOOL_CONTRACTS,
     probe_iq_option_mcp,
 )
 
@@ -84,6 +85,8 @@ class TestSondaPassiva:
         resultado = probe_iq_option_mcp(token="credencial-em-memoria",
                                         lister=listar)
         assert resultado["ok"] is True
+        assert resultado["provider_mutating_tools_exposed"] is True
+        assert resultado["read_only_scope"] is False
         assert resultado["connected"] == 7
         assert {x[0] for x in chamadas} == set(IQ_OPTION_MCP_SERVERS.values())
         assert all(x[1] == "credencial-em-memoria" for x in chamadas)
@@ -96,6 +99,29 @@ class TestSondaPassiva:
             assert prova["unknown_tool_count"] == 0
             assert prova["callable_tool_count"] == 0
             assert prova["all_tools_blocked"] is True
+
+    def test_sete_handshakes_aceitam_catalogo_oficial_somente_leitura(self):
+        async def listar(endpoint, _token):
+            server = next(
+                name for name, candidate in IQ_OPTION_MCP_SERVERS.items()
+                if candidate == endpoint)
+            read, _write = IQ_OPTION_MCP_TOOL_CONTRACTS[server]
+            return [SimpleNamespace(name=name, description="metadata")
+                    for name in sorted(read)]
+
+        resultado = probe_iq_option_mcp(
+            token="credencial-read-only-em-memoria", lister=listar)
+
+        assert resultado["ok"] is True
+        assert resultado["status"] == "MCP_METADATA_CONNECTED"
+        assert resultado["provider_mutating_tools_exposed"] is False
+        assert resultado["read_only_scope"] is True
+        assert all(
+            prova["contract_validated"] is True
+            and prova["credential_scope"] == "read_only"
+            and prova["mutating_tool_count"] == 0
+            and prova["missing_tool_count"] == 0
+            for prova in resultado["probes"])
 
     def test_catalogo_remoto_desconhecido_falha_fechado(self):
         async def listar(endpoint, _token):
