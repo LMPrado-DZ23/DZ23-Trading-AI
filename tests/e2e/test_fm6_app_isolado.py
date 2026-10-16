@@ -186,6 +186,35 @@ def test_fm6_02_corretoras_catalogo_capacidades_reconciliacao(page, mesa_url, se
     page.screenshot(path=str(evidence_dir / "fm6-02-corretoras.png"))
 
 
+def test_fm6_02b_iq_option_exibe_so_credencial_mcp_e_live_bloqueado(
+        page, mesa_url, senha, evidence_dir):
+    """A configuração IQ não deve induzir o dono a colar chaves CCXT."""
+    entrar_como_dono(page, mesa_url, senha)
+    modo_avancado(page)
+    ir_para(page, "config")
+
+    page.select_option("#TRADINGAGENTS_EXCHANGE", "iq_option")
+
+    expect(page.locator("#IQ_OPTION_MCP_BEARER_TOKEN")).to_be_visible()
+    expect(page.locator("#EXCHANGE_API_KEY")).not_to_be_visible()
+    expect(page.get_by_role("button", name="Validar configuração")).not_to_be_visible()
+    expect(page.locator("#REAL_READ_ONLY_API_KEY")).not_to_be_visible()
+    expect(page.locator("#REAL_READ_ONLY_API_SECRET")).not_to_be_visible()
+    expect(page.locator("#page-config")).to_contain_text(
+        "IQ Option usa MCP separado")
+    expect(page.locator("#page-config")).to_contain_text(
+        "execução continua bloqueada")
+
+    page.select_option("#TRADINGAGENTS_EXCHANGE", "binance")
+
+    expect(page.locator("#REAL_READ_ONLY_API_KEY")).to_be_visible()
+    expect(page.locator("#REAL_READ_ONLY_API_SECRET")).to_be_visible()
+    expect(page.locator("#EXCHANGE_API_KEY")).to_be_visible()
+    expect(page.get_by_role("button", name="Validar configuração")).to_be_visible()
+    expect(page.locator("#IQ_OPTION_MCP_BEARER_TOKEN")).not_to_be_visible()
+    page.screenshot(path=str(evidence_dir / "fm6-02b-iq-option.png"))
+
+
 # ------------------------------------------------------------------- item 03
 def test_fm6_03_escola_central_no_painel(page, mesa_url, senha, evidence_dir):
     # §11 "Escola": a Escola Central abre no painel autenticado com contextos

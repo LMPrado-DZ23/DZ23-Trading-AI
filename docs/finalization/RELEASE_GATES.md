@@ -10,7 +10,7 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
 | Gate | Prova exigida | Estado no HEAD da branch |
 |---|---|---|
-| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.617 passaram localmente no último SHA de código (`2fbb384`); a matriz deve estar verde no HEAD publicado do PR #14 |
+| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.618 passaram localmente no código atual; a matriz deve estar verde no HEAD publicado do PR #14 |
 | lint | `ruff check .` | verde localmente; o job deve estar verde no HEAD publicado do PR #14 |
 | instalação limpa | job CI dedicado | exige job verde no HEAD publicado do PR #14 |
 | dependências/segredos/licenças/SBOM | jobs CI dedicados | exigem jobs verdes no HEAD publicado do PR #14 |
