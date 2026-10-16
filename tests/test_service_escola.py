@@ -5,6 +5,7 @@ com o motivo do fluxo de piloto; certificação não atravessa contexto; o
 controle aleatório entra só por opção explícita do dono.
 """
 import importlib
+import json
 from decimal import Decimal
 
 
@@ -528,11 +529,14 @@ class TestMesaEscolaE2E:
         monkeypatch.setattr(m, "probe_read_only_account", lambda env: {
             "exchange": "binance", "authenticated_read": True,
             "read_methods": ["fetch_balance"],
+            "broker_identity_verified": True,
+            "broker_identity_fingerprint": "b" * 64,
             "credential_fingerprint":
                 m.read_only_credential_fingerprint(env),
         })
         prova = c.post("/v1/live/preparacao-leitura", headers=H, json={
-            "conta": "real-principal", "confirmo_sem_trade": True,
+            "conta": "real-principal", "broker_account_id": "account-42",
+            "confirmo_sem_trade": True,
             "confirmo_sem_movimentacao": True})
         assert prova.status_code == 200, prova.text
 
@@ -548,6 +552,21 @@ class TestMesaEscolaE2E:
         assert rel["contexto_certificacao"]["conta"] == "paper-legacy"
         assert rel["contexto_certificacao"]["modo"] == "paper"
 
+        # Trocar a identidade da corretora mantendo o mesmo apelido não pode
+        # redirecionar um pedido existente para outra conta.
+        caminho = next(tmp_path.rglob("preparacao_real_leitura.json"))
+        prova_trocada = json.loads(caminho.read_text(encoding="utf-8"))
+        prova_trocada["broker_identity_fingerprint"] = "c" * 64
+        caminho.write_text(json.dumps(prova_trocada), encoding="utf-8")
+        redirecionada = c.post(
+            "/v1/escola/pilotos/trader-momentum/autorizar", headers=H)
+        assert redirecionada.status_code == 409
+        assert "mesma corretora e conta REAL" in redirecionada.json()["detail"]
+        assert c.post("/v1/live/preparacao-leitura", headers=H, json={
+            "conta": "real-principal", "broker_account_id": "account-42",
+            "confirmo_sem_trade": True,
+            "confirmo_sem_movimentacao": True}).status_code == 200
+
         # A prova é revalidada no CLIQUE de autorização, não só no pedido.
         # Rotacionar a chave entre as duas etapas mantém o piloto aguardando.
         assert c.post("/v1/config", headers=H, json={"vars": {
@@ -562,7 +581,8 @@ class TestMesaEscolaE2E:
         assert c.post("/v1/config", headers=H, json={"vars": {
             "REAL_READ_ONLY_API_KEY": "read-key"}}).status_code == 200
         assert c.post("/v1/live/preparacao-leitura", headers=H, json={
-            "conta": "real-principal", "confirmo_sem_trade": True,
+            "conta": "real-principal", "broker_account_id": "account-42",
+            "confirmo_sem_trade": True,
             "confirmo_sem_movimentacao": True}).status_code == 200
         monkeypatch.setattr(m, "_gates_do_ambiente", lambda *_args: [
             {"gate": nome, "ok": True, "detalhe": "teste isolado"}

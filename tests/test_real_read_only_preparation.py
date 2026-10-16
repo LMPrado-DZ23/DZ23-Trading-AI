@@ -10,6 +10,8 @@ from types import SimpleNamespace
 import pytest
 
 from tradingagents.brokers.ccxt_bridge import (
+    BrokerSecurityError,
+    _broker_identity_fingerprint,
     probe_read_only_account,
     read_only_credential_fingerprint,
 )
@@ -21,6 +23,28 @@ READ_CFG = {
     "REAL_READ_ONLY_API_KEY": "read-key",
     "REAL_READ_ONLY_API_SECRET": "read-secret",
 }
+BROKER_ACCOUNT_ID = "privado-e-nao-retornado"
+
+
+def _preparacao_body(conta="real-principal"):
+    return {
+        "conta": conta,
+        "broker_account_id": BROKER_ACCOUNT_ID,
+        "confirmo_sem_trade": True,
+        "confirmo_sem_movimentacao": True,
+    }
+
+
+def _resultado_prova(env, *, methods=None):
+    return {
+        "exchange": "binance",
+        "authenticated_read": True,
+        "read_methods": list(methods or ["fetch_balance"]),
+        "broker_identity_verified": True,
+        "broker_identity_fingerprint": _broker_identity_fingerprint(
+            env, BROKER_ACCOUNT_ID),
+        "credential_fingerprint": read_only_credential_fingerprint(env),
+    }
 
 
 class _ExchangeSomenteLeitura:
@@ -41,7 +65,7 @@ class _ExchangeSomenteLeitura:
 
     def fetch_accounts(self):
         self.chamadas.append("fetch_accounts")
-        return [{"id": "privado-e-nao-retornado"}]
+        return [{"id": BROKER_ACCOUNT_ID}]
 
     def create_order(self, *args, **kwargs):  # pragma: no cover - sentinela
         raise AssertionError("a prova de leitura tentou criar uma ordem")
@@ -175,9 +199,8 @@ def test_api_nao_aceita_forjar_vinculo_sem_novas_credenciais(
 
     import service.app as m
     monkeypatch.setattr(m, "probe_read_only_account", _nao_deve_chamar)
-    r = c.post("/v1/live/preparacao-leitura", headers=H, json={
-        "conta": "real-bybit", "confirmo_sem_trade": True,
-        "confirmo_sem_movimentacao": True})
+    r = c.post("/v1/live/preparacao-leitura", headers=H,
+               json=_preparacao_body("real-bybit"))
     assert r.status_code == 409
     assert chamado is False
 
@@ -187,13 +210,36 @@ def test_probe_chama_exclusivamente_metodos_de_leitura(monkeypatch):
     monkeypatch.setitem(
         sys.modules, "ccxt",
         SimpleNamespace(binance=_ExchangeSomenteLeitura))
-    resultado = probe_read_only_account(READ_CFG)
+    resultado = probe_read_only_account({
+        **READ_CFG, "REAL_READ_ONLY_ACCOUNT_ID": BROKER_ACCOUNT_ID})
     assert resultado["authenticated_read"] is True
     assert resultado["read_methods"] == [
         "fetch_balance", "fetch_open_orders", "fetch_accounts"]
     assert _ExchangeSomenteLeitura.chamadas == resultado["read_methods"]
     assert "read-key" not in str(resultado)
     assert "read-secret" not in str(resultado)
+    assert BROKER_ACCOUNT_ID not in str(resultado)
+    assert resultado["broker_identity_verified"] is True
+
+
+def test_probe_recusa_identidade_de_outra_conta(monkeypatch):
+    monkeypatch.setitem(
+        sys.modules, "ccxt",
+        SimpleNamespace(binance=_ExchangeSomenteLeitura))
+    with pytest.raises(BrokerSecurityError, match="não corresponde"):
+        probe_read_only_account({
+            **READ_CFG, "REAL_READ_ONLY_ACCOUNT_ID": "conta-incorreta"})
+
+
+def test_probe_recusa_corretora_sem_identidade_verificavel(monkeypatch):
+    class _ExchangeSemContas(_ExchangeSomenteLeitura):
+        has = {"fetchOpenOrders": True, "fetchAccounts": False}
+
+    monkeypatch.setitem(
+        sys.modules, "ccxt", SimpleNamespace(binance=_ExchangeSemContas))
+    with pytest.raises(BrokerSecurityError, match="identidade de conta"):
+        probe_read_only_account({
+            **READ_CFG, "REAL_READ_ONLY_ACCOUNT_ID": BROKER_ACCOUNT_ID})
 
 
 @pytest.mark.parametrize(
@@ -209,8 +255,7 @@ def test_endpoint_exige_as_duas_declaracoes(tmp_path, monkeypatch, campo):
         return {}
 
     monkeypatch.setattr(m, "probe_read_only_account", _nao_deve_chamar)
-    body = {"conta": "real-principal", "confirmo_sem_trade": True,
-            "confirmo_sem_movimentacao": True}
+    body = _preparacao_body()
     body[campo] = False
     assert c.post("/v1/live/preparacao-leitura", headers=H,
                   json=body).status_code == 422
@@ -232,9 +277,8 @@ def test_endpoint_recusa_credencial_vinculada_a_outra_corretora_sem_rede(
         return {}
 
     monkeypatch.setattr(m, "probe_read_only_account", _nao_deve_chamar)
-    r = c.post("/v1/live/preparacao-leitura", headers=H, json={
-        "conta": "real-bybit", "confirmo_sem_trade": True,
-        "confirmo_sem_movimentacao": True})
+    r = c.post("/v1/live/preparacao-leitura", headers=H,
+               json=_preparacao_body("real-bybit"))
     assert r.status_code == 409
     assert "não está vinculada" in r.json()["detail"]
     assert chamado is False
@@ -247,20 +291,17 @@ def test_prova_persistida_libera_itens_mas_nunca_o_live(tmp_path, monkeypatch):
 
     def _provar(env):
         capturado.update(env)
-        return {
-            "exchange": "binance", "ccxt_id": "binance",
-            "authenticated_read": True,
-            "read_methods": ["fetch_balance", "fetch_open_orders"],
-            "credential_fingerprint": read_only_credential_fingerprint(env),
-        }
+        return _resultado_prova(
+            env, methods=["fetch_balance", "fetch_open_orders"])
 
     monkeypatch.setattr(m, "probe_read_only_account", _provar)
-    r = c.post("/v1/live/preparacao-leitura", headers=H, json={
-        "conta": "real-principal", "confirmo_sem_trade": True,
-        "confirmo_sem_movimentacao": True})
+    r = c.post("/v1/live/preparacao-leitura", headers=H,
+               json=_preparacao_body())
     assert r.status_code == 200, r.text
     assert capturado["REAL_READ_ONLY_API_KEY"] == "read-key"
+    assert capturado["REAL_READ_ONLY_ACCOUNT_ID"] == BROKER_ACCOUNT_ID
     assert "read-key" not in r.text and "read-secret" not in r.text
+    assert BROKER_ACCOUNT_ID not in r.text
 
     status = c.get("/v1/live/status", headers=H).json()
     assert _item(status, "permissões mínimas")["pronto"] is True
@@ -273,6 +314,7 @@ def test_prova_persistida_libera_itens_mas_nunca_o_live(tmp_path, monkeypatch):
     prova = next((tmp_path / "desks").rglob("preparacao_real_leitura.json"))
     conteudo = prova.read_text(encoding="utf-8")
     assert "read-key" not in conteudo and "read-secret" not in conteudo
+    assert BROKER_ACCOUNT_ID not in conteudo
 
     class _Supervisor:
         @staticmethod
@@ -284,7 +326,11 @@ def test_prova_persistida_libera_itens_mas_nunca_o_live(tmp_path, monkeypatch):
             return [{"agent_id": "trader-momentum",
                      "estrategia": "momentum", "versao": "1",
                      "corretora": "binance", "conta": "real-principal",
-                         "conta_real": True,
+                     "conta_real": True,
+                     "broker_identity_fingerprint":
+                         _broker_identity_fingerprint(
+                             {**READ_CFG, "REAL_READ_ONLY_ACCOUNT_ID":
+                              BROKER_ACCOUNT_ID}, BROKER_ACCOUNT_ID),
                      "estado": "piloto_autorizado"}]
 
     monkeypatch.setattr(m, "_supervisor_of", lambda _request: _Supervisor())
@@ -299,14 +345,9 @@ def test_prova_persistida_libera_itens_mas_nunca_o_live(tmp_path, monkeypatch):
 def test_rotacao_da_chave_invalida_a_prova(tmp_path, monkeypatch):
     m, c = _app(tmp_path, monkeypatch)
     c.post("/v1/config", headers=H, json={"vars": READ_CFG})
-    monkeypatch.setattr(m, "probe_read_only_account", lambda env: {
-        "exchange": "binance", "authenticated_read": True,
-        "read_methods": ["fetch_balance"],
-        "credential_fingerprint": read_only_credential_fingerprint(env),
-    })
-    assert c.post("/v1/live/preparacao-leitura", headers=H, json={
-        "conta": "real-principal", "confirmo_sem_trade": True,
-        "confirmo_sem_movimentacao": True}).status_code == 200
+    monkeypatch.setattr(m, "probe_read_only_account", _resultado_prova)
+    assert c.post("/v1/live/preparacao-leitura", headers=H,
+                  json=_preparacao_body()).status_code == 200
 
     c.post("/v1/config", headers=H, json={"vars": {
         "REAL_READ_ONLY_API_KEY": "rotated-key"}})
@@ -319,14 +360,9 @@ def test_rotacao_da_chave_invalida_a_prova(tmp_path, monkeypatch):
 def test_prova_de_leitura_expira_e_bloqueia_o_piloto(tmp_path, monkeypatch):
     m, c = _app(tmp_path, monkeypatch)
     c.post("/v1/config", headers=H, json={"vars": READ_CFG})
-    monkeypatch.setattr(m, "probe_read_only_account", lambda env: {
-        "exchange": "binance", "authenticated_read": True,
-        "read_methods": ["fetch_balance"],
-        "credential_fingerprint": read_only_credential_fingerprint(env),
-    })
-    assert c.post("/v1/live/preparacao-leitura", headers=H, json={
-        "conta": "real-principal", "confirmo_sem_trade": True,
-        "confirmo_sem_movimentacao": True}).status_code == 200
+    monkeypatch.setattr(m, "probe_read_only_account", _resultado_prova)
+    assert c.post("/v1/live/preparacao-leitura", headers=H,
+                  json=_preparacao_body()).status_code == 200
 
     caminho = next((tmp_path / "desks").rglob("preparacao_real_leitura.json"))
     prova = json.loads(caminho.read_text(encoding="utf-8"))
@@ -348,14 +384,9 @@ def test_prova_com_horario_ausente_invalido_ou_sem_fuso_falha_fechado(
         tmp_path, monkeypatch, horario):
     m, c = _app(tmp_path, monkeypatch)
     c.post("/v1/config", headers=H, json={"vars": READ_CFG})
-    monkeypatch.setattr(m, "probe_read_only_account", lambda env: {
-        "exchange": "binance", "authenticated_read": True,
-        "read_methods": ["fetch_balance"],
-        "credential_fingerprint": read_only_credential_fingerprint(env),
-    })
-    assert c.post("/v1/live/preparacao-leitura", headers=H, json={
-        "conta": "real-principal", "confirmo_sem_trade": True,
-        "confirmo_sem_movimentacao": True}).status_code == 200
+    monkeypatch.setattr(m, "probe_read_only_account", _resultado_prova)
+    assert c.post("/v1/live/preparacao-leitura", headers=H,
+                  json=_preparacao_body()).status_code == 200
     caminho = next((tmp_path / "desks").rglob("preparacao_real_leitura.json"))
     prova = json.loads(caminho.read_text(encoding="utf-8"))
     prova["verificada_em"] = horario
@@ -366,20 +397,15 @@ def test_prova_com_horario_ausente_invalido_ou_sem_fuso_falha_fechado(
     assert _item(status, "permissões mínimas")["pronto"] is False
 
 
-def test_prova_com_schema_desconhecido_falha_fechado(tmp_path, monkeypatch):
+def test_prova_legada_schema_1_falha_fechado(tmp_path, monkeypatch):
     m, c = _app(tmp_path, monkeypatch)
     c.post("/v1/config", headers=H, json={"vars": READ_CFG})
-    monkeypatch.setattr(m, "probe_read_only_account", lambda env: {
-        "exchange": "binance", "authenticated_read": True,
-        "read_methods": ["fetch_balance"],
-        "credential_fingerprint": read_only_credential_fingerprint(env),
-    })
-    assert c.post("/v1/live/preparacao-leitura", headers=H, json={
-        "conta": "real-principal", "confirmo_sem_trade": True,
-        "confirmo_sem_movimentacao": True}).status_code == 200
+    monkeypatch.setattr(m, "probe_read_only_account", _resultado_prova)
+    assert c.post("/v1/live/preparacao-leitura", headers=H,
+                  json=_preparacao_body()).status_code == 200
     caminho = next((tmp_path / "desks").rglob("preparacao_real_leitura.json"))
     prova = json.loads(caminho.read_text(encoding="utf-8"))
-    prova["schema"] = "dz23.preparacao-real-leitura/999"
+    prova["schema"] = "dz23.preparacao-real-leitura/1"
     caminho.write_text(json.dumps(prova), encoding="utf-8")
 
     status = c.get("/v1/live/status", headers=H).json()
@@ -393,7 +419,8 @@ def test_vigia_live_bloqueia_piloto_sem_vinculo_ou_com_prova_invalida(
     estado = SimpleNamespace(value="piloto_autorizado")
     real = SimpleNamespace(
         agent_id="trader-real", estado=estado, conta_real=True,
-        corretora="binance", conta="real-principal")
+        corretora="binance", conta="real-principal",
+        broker_identity_fingerprint="b" * 64)
     legado = SimpleNamespace(
         agent_id="trader-legado", estado=estado, conta_real=False,
         corretora="binance", conta="paper-legacy")
@@ -401,7 +428,8 @@ def test_vigia_live_bloqueia_piloto_sem_vinculo_ou_com_prova_invalida(
     prova = {
         "exchange": "binance", "conta": "real-principal",
         "authenticated_read": True, "sem_trade_declarado": True,
-        "sem_saque_declarado": True,
+        "sem_saque_declarado": True, "broker_identity_verified": True,
+        "broker_identity_fingerprint": "b" * 64,
     }
 
     bloqueios = m._bloqueios_de_conta_real(supervisor, prova, True)
@@ -418,14 +446,9 @@ def test_certificacao_amarra_estrategia_conta_risco_e_reconciliacao(
     c.post("/v1/config", headers=H, json={"vars": {
         **READ_CFG, "LIVE_MAX_ORDER_VALUE": "40",
         "LIVE_MAX_DAILY_LOSS": "8"}})
-    monkeypatch.setattr(m, "probe_read_only_account", lambda env: {
-        "exchange": "binance", "authenticated_read": True,
-        "read_methods": ["fetch_balance"],
-        "credential_fingerprint": read_only_credential_fingerprint(env),
-    })
-    assert c.post("/v1/live/preparacao-leitura", headers=H, json={
-        "conta": "real-principal", "confirmo_sem_trade": True,
-        "confirmo_sem_movimentacao": True}).status_code == 200
+    monkeypatch.setattr(m, "probe_read_only_account", _resultado_prova)
+    assert c.post("/v1/live/preparacao-leitura", headers=H,
+                  json=_preparacao_body()).status_code == 200
 
     class _Supervisor:
         @staticmethod
@@ -439,6 +462,9 @@ def test_certificacao_amarra_estrategia_conta_risco_e_reconciliacao(
                 "estrategia": "momentum", "versao": "1",
                 "corretora": "binance", "conta": "real-principal",
                 "conta_real": True,
+                "broker_identity_fingerprint": _broker_identity_fingerprint(
+                    {**READ_CFG, "REAL_READ_ONLY_ACCOUNT_ID":
+                     BROKER_ACCOUNT_ID}, BROKER_ACCOUNT_ID),
                 "capital_maximo": "100", "perda_diaria_maxima": "10",
                 "perda_total_maxima": "30", "valido_ate": "2027-01-01",
                 "estado": "piloto_autorizado",
@@ -467,14 +493,9 @@ def test_status_revalida_escola_e_recusa_autorizacao_obsoleta(
         tmp_path, monkeypatch):
     m, c = _app(tmp_path, monkeypatch)
     c.post("/v1/config", headers=H, json={"vars": READ_CFG})
-    monkeypatch.setattr(m, "probe_read_only_account", lambda env: {
-        "exchange": "binance", "authenticated_read": True,
-        "read_methods": ["fetch_balance"],
-        "credential_fingerprint": read_only_credential_fingerprint(env),
-    })
-    assert c.post("/v1/live/preparacao-leitura", headers=H, json={
-        "conta": "real-principal", "confirmo_sem_trade": True,
-        "confirmo_sem_movimentacao": True}).status_code == 200
+    monkeypatch.setattr(m, "probe_read_only_account", _resultado_prova)
+    assert c.post("/v1/live/preparacao-leitura", headers=H,
+                  json=_preparacao_body()).status_code == 200
 
     class _Supervisor:
         estado = "piloto_autorizado"
@@ -489,6 +510,10 @@ def test_status_revalida_escola_e_recusa_autorizacao_obsoleta(
             return [{"agent_id": "trader-momentum",
                      "estrategia": "momentum", "versao": "1",
                      "corretora": "binance", "conta": "real-principal",
+                     "broker_identity_fingerprint":
+                         _broker_identity_fingerprint(
+                             {**READ_CFG, "REAL_READ_ONLY_ACCOUNT_ID":
+                              BROKER_ACCOUNT_ID}, BROKER_ACCOUNT_ID),
                      "estado": cls.estado}]
 
     monkeypatch.setattr(m, "_supervisor_of", lambda _request: _Supervisor())
@@ -502,7 +527,9 @@ def test_limite_global_acima_do_piloto_e_reconciliacao_pendente_bloqueiam(
     m, c = _app(tmp_path, monkeypatch)
     prova = {"exchange": "binance", "conta": "real-principal",
              "authenticated_read": True, "sem_trade_declarado": True,
-             "sem_saque_declarado": True}
+             "sem_saque_declarado": True,
+             "broker_identity_verified": True,
+             "broker_identity_fingerprint": "b" * 64}
     monkeypatch.setattr(m, "_prova_leitura_real", lambda _request, _cfg: (
         prova, True))
     c.post("/v1/config", headers=H, json={"vars": {
@@ -521,6 +548,7 @@ def test_limite_global_acima_do_piloto_e_reconciliacao_pendente_bloqueiam(
                 "estrategia": "momentum", "versao": "1",
                 "corretora": "binance", "conta": "real-principal",
                 "conta_real": True,
+                "broker_identity_fingerprint": "b" * 64,
                 "capital_maximo": "100", "perda_diaria_maxima": "10",
                 "perda_total_maxima": "30", "estado": "piloto_autorizado",
             }]

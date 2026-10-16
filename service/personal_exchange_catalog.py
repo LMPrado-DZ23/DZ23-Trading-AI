@@ -2,6 +2,18 @@
 from dataclasses import dataclass
 from typing import Literal
 
+IQ_OPTION_AI_INTEGRATION_URL = (
+    "https://iqoption.com/en/profile/ai-integration")
+IQ_OPTION_MCP_ENDPOINTS = (
+    "https://binary-options.mcp.iqoption.com/mcp",
+    "https://blitz-options.mcp.iqoption.com/mcp",
+    "https://digital-options.mcp.iqoption.com/mcp",
+    "https://marginal-cfd.mcp.iqoption.com/mcp",
+    "https://marginal-crypto.mcp.iqoption.com/mcp",
+    "https://marginal-forex.mcp.iqoption.com/mcp",
+    "https://turbo-options.mcp.iqoption.com/mcp",
+)
+
 
 @dataclass(frozen=True)
 class PersonalExchange:
@@ -14,6 +26,9 @@ class PersonalExchange:
     requires_password: bool = False
     read_only_enabled: bool = True
     live_enabled: bool = False
+    integration: Literal["ccxt", "mcp"] = "ccxt"
+    official_integration_url: str | None = None
+    mcp_endpoints: tuple[str, ...] = ()
 
 EXCHANGES: tuple[PersonalExchange, ...] = (
     PersonalExchange("binance", "Binance", "binance", "spot", "exchange", True),
@@ -29,8 +44,11 @@ EXCHANGES: tuple[PersonalExchange, ...] = (
                      "spot", "internal"),
     PersonalExchange("bitget", "Bitget", "bitget", "spot", "internal",
                      False, True),
-    PersonalExchange("iq_option", "IQ Option", None, "experimental",
-                     "unverified", read_only_enabled=False),
+    PersonalExchange(
+        "iq_option", "IQ Option", None, "experimental", "unverified",
+        read_only_enabled=False, integration="mcp",
+        official_integration_url=IQ_OPTION_AI_INTEGRATION_URL,
+        mcp_endpoints=IQ_OPTION_MCP_ENDPOINTS),
 )
 _BY_SLUG = {exchange.slug: exchange for exchange in EXCHANGES}
 _BY_SLUG["mercado_bitcoin"] = _BY_SLUG["mercadobitcoin"]  # legado
@@ -62,11 +80,14 @@ def public_catalog() -> list[dict[str, object]]:
          "simulation": x.sandbox, "live_enabled": x.live_enabled,
          "testnet_enabled": x.testnet_enabled,
          "read_only_enabled": x.read_only_enabled,
+         "integration": x.integration,
+         "official_integration_url": x.official_integration_url,
+         "mcp_endpoints": list(x.mcp_endpoints),
          "requires_password": x.requires_password,
          "required_execution_credentials": list(
              required_execution_credentials(x.slug)),
          "integration_status": (
-             "EXPERIMENTAL_NOT_ELIGIBLE" if x.market == "experimental"
+             "OFFICIAL_MCP_PENDING_VALIDATION" if x.integration == "mcp"
              else "AVAILABLE_TESTNET" if x.testnet_enabled
              else "AVAILABLE_READ_ONLY")}
         for x in EXCHANGES

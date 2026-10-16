@@ -20,6 +20,7 @@ Regras (decisão do Prado, dono do sistema):
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import time
@@ -62,6 +63,14 @@ def read_only_credential_fingerprint(env: dict) -> str:
     return hashlib.sha256("\0".join(partes).encode()).hexdigest()
 
 
+def _broker_identity_fingerprint(env: dict, account_id: str) -> str:
+    """Vincula a identidade devolvida pela corretora sem persistir o ID."""
+    chave = bytes.fromhex(read_only_credential_fingerprint(env))
+    mensagem = (str(env.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+                + "\0" + account_id.strip()).encode()
+    return hmac.new(chave, mensagem, hashlib.sha256).hexdigest()
+
+
 def testnet_credential_fingerprint(env: dict) -> str:
     """Identifica a credencial usada na homologação TESTNET sem guardá-la.
 
@@ -96,6 +105,11 @@ def probe_read_only_account(env: dict) -> dict:
     api_secret = env.get("REAL_READ_ONLY_API_SECRET") or ""
     password = env.get("REAL_READ_ONLY_API_PASSWORD") or ""
     uid = env.get("REAL_READ_ONLY_API_UID") or ""
+    expected_account_id = str(
+        env.get("REAL_READ_ONLY_ACCOUNT_ID") or "").strip()
+    if not expected_account_id:
+        raise BrokerSecurityError(
+            "informe o identificador real exibido pela corretora")
     if not api_key or not api_secret:
         raise BrokerSecurityError(
             "a prova REAL somente leitura exige chave e segredo próprios")
@@ -120,6 +134,7 @@ def probe_read_only_account(env: dict) -> dict:
             + ", ".join(faltando) + ".")
 
     chamadas = []
+    account_ids: list[str] = []
     try:
         if not hasattr(exchange, "fetch_balance"):
             raise BrokerSecurityError(
@@ -133,8 +148,14 @@ def probe_read_only_account(env: dict) -> dict:
             chamadas.append("fetch_open_orders")
         if capacidades.get("fetchAccounts") and hasattr(
                 exchange, "fetch_accounts"):
-            exchange.fetch_accounts()
+            accounts = exchange.fetch_accounts()
             chamadas.append("fetch_accounts")
+            if isinstance(accounts, list):
+                account_ids = [
+                    str(account.get("id") or "").strip()
+                    for account in accounts if isinstance(account, dict)
+                    and str(account.get("id") or "").strip()
+                ]
     except BrokerSecurityError:
         raise
     except Exception as exc:
@@ -145,11 +166,23 @@ def probe_read_only_account(env: dict) -> dict:
         fechar = getattr(exchange, "close", None)
         if callable(fechar):
             fechar()
+    if not account_ids:
+        raise BrokerSecurityError(
+            "a corretora não devolveu uma identidade de conta verificável; "
+            "a leitura foi autenticada, mas o gate de identidade permanece "
+            "bloqueado")
+    if not any(hmac.compare_digest(expected_account_id, item)
+               for item in account_ids):
+        raise BrokerSecurityError(
+            "o identificador informado não corresponde à conta autenticada")
     return {
         "exchange": exchange_name,
         "ccxt_id": ccxt_id,
         "authenticated_read": True,
         "read_methods": chamadas,
+        "broker_identity_verified": True,
+        "broker_identity_fingerprint": _broker_identity_fingerprint(
+            env, expected_account_id),
         "credential_fingerprint": read_only_credential_fingerprint(env),
     }
 

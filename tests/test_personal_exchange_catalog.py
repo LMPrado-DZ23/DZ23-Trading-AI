@@ -16,10 +16,14 @@ class PersonalExchangeCatalogTests(unittest.TestCase):
     def test_all_live_disabled(self):
         self.assertTrue(all(not row["live_enabled"] for row in public_catalog()))
 
-    def test_iq_is_experimental_without_ccxt(self):
+    def test_iq_uses_official_mcp_without_claiming_operational_proof(self):
         iq = get_personal_exchange("iq_option")
         self.assertEqual(iq.market, "experimental")
         self.assertIsNone(iq.ccxt_id)
+        self.assertEqual(iq.integration, "mcp")
+        self.assertEqual(len(iq.mcp_endpoints), 7)
+        self.assertTrue(all(x.startswith("https://") and x.endswith("/mcp")
+                            for x in iq.mcp_endpoints))
 
     def test_unknown_exchange_rejected(self):
         with self.assertRaises(KeyError):
@@ -32,7 +36,8 @@ class PersonalExchangeCatalogTests(unittest.TestCase):
         self.assertEqual(catalogo["kraken"]["integration_status"],
                          "AVAILABLE_READ_ONLY")
         self.assertEqual(catalogo["iq_option"]["integration_status"],
-                         "EXPERIMENTAL_NOT_ELIGIBLE")
+                         "OFFICIAL_MCP_PENDING_VALIDATION")
+        self.assertEqual(catalogo["iq_option"]["integration"], "mcp")
         self.assertFalse(catalogo["iq_option"]["read_only_enabled"])
         self.assertTrue(all(x["read_only_enabled"] for slug, x in
                             catalogo.items() if slug != "iq_option"))

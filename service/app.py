@@ -4079,6 +4079,7 @@ async def escola_piloto_solicitar(req: Request, _=Depends(auth),
                  "certificou a estratégia")
     conta_real = (body.get("conta_real") is True
                   or conta_alvo != contexto.conta)
+    broker_identity_fingerprint = ""
     if conta_real:
         cfg = load_cfg(request_tenant(req))
         prova, valida = _prova_leitura_real(req, cfg)
@@ -4090,6 +4091,8 @@ async def escola_piloto_solicitar(req: Request, _=Depends(auth),
             raise HTTPException(
                 409, "a conta REAL de destino precisa de prova autenticada "
                      "somente leitura válida antes de receber o piloto")
+        broker_identity_fingerprint = str(
+            prova.get("broker_identity_fingerprint") or "")
     sup = SupervisorDePiloto(
         esc["armazem"], tenant_id=esc["tenant_id"],
         escola=EscolaDoPiloto(esc["central"], contexto))
@@ -4106,7 +4109,8 @@ async def escola_piloto_solicitar(req: Request, _=Depends(auth),
             prazo_dias=prazo,
             condicoes_de_suspensao=tuple(body.get("condicoes_de_suspensao")
                                          or ()),
-            contexto=contexto.como_dict(), conta_real=conta_real)
+            contexto=contexto.como_dict(), conta_real=conta_real,
+            broker_identity_fingerprint=broker_identity_fingerprint)
     except (ValueError, SalaError) as exc:
         raise HTTPException(409, str(exc)) from exc
     return {"ok": True, "autorizacao": aut.como_dict()}
@@ -4533,7 +4537,7 @@ def _registrar_prova_testnet(request: Request, d: dict,
 
 
 _CHAVE_PREPARACAO_REAL = "preparacao_real_leitura"
-_SCHEMA_PREPARACAO_REAL = "dz23.preparacao-real-leitura/1"
+_SCHEMA_PREPARACAO_REAL = "dz23.preparacao-real-leitura/2"
 _VALIDADE_PREPARACAO_REAL = timedelta(hours=24)
 _TOLERANCIA_RELOGIO_PREPARACAO_REAL = timedelta(minutes=5)
 
@@ -4577,6 +4581,9 @@ def _prova_leitura_real_armazem(armazem, tenant_id: str,
     valida = bool(
         prova.get("schema") == _SCHEMA_PREPARACAO_REAL
         and prova.get("credential_fingerprint")
+        and prova.get("broker_identity_verified") is True
+        and _fingerprint_sha256_valido(
+            prova.get("broker_identity_fingerprint"))
         and hmac.compare_digest(str(prova["credential_fingerprint"]), atual)
         and prova.get("exchange") == (
             cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
@@ -4596,12 +4603,16 @@ def _prova_real_serve_piloto(prova: dict | None, valida: bool, piloto) -> bool:
     return bool(
         valida and prova
         and prova.get("authenticated_read") is True
+        and prova.get("broker_identity_verified") is True
         and prova.get("sem_trade_declarado") is True
         and prova.get("sem_saque_declarado") is True
         and str(prova.get("exchange") or "").strip().lower()
         == str(getattr(piloto, "corretora", "") or "").strip().lower()
         and str(prova.get("conta") or "").strip()
         == str(getattr(piloto, "conta", "") or "").strip()
+        and hmac.compare_digest(
+            str(prova.get("broker_identity_fingerprint") or ""),
+            str(getattr(piloto, "broker_identity_fingerprint", "") or ""))
     )
 
 
@@ -4650,6 +4661,8 @@ def _prova_publica(prova: dict | None, valida: bool) -> dict:
         "verificada_em": prova.get("verificada_em", ""),
         "expira_em": expira_em,
         "authenticated_read": bool(prova.get("authenticated_read")),
+        "broker_identity_verified": bool(
+            prova.get("broker_identity_verified")),
         "read_methods": list(prova.get("read_methods") or ()),
         "sem_trade_declarado": bool(prova.get("sem_trade_declarado")),
         "sem_saque_declarado": bool(prova.get("sem_saque_declarado")),
@@ -4676,6 +4689,9 @@ def _certificacoes_real(request: Request, cfg: dict,
     muda mandato, modo da mesa nem capacidade de enviar ordens.
     """
     if not (prova_valida and prova and prova.get("authenticated_read")
+            and prova.get("broker_identity_verified") is True
+            and _fingerprint_sha256_valido(
+                prova.get("broker_identity_fingerprint"))
             and prova.get("sem_trade_declarado")
             and prova.get("sem_saque_declarado")):
         return []
@@ -4699,6 +4715,10 @@ def _certificacoes_real(request: Request, cfg: dict,
         if str(piloto.get("corretora") or "").strip().lower() != exchange:
             continue
         if str(piloto.get("conta") or "").strip() != conta:
+            continue
+        if not hmac.compare_digest(
+                str(piloto.get("broker_identity_fingerprint") or ""),
+                str(prova.get("broker_identity_fingerprint") or "")):
             continue
         capital = _decimal_positivo(piloto.get("capital_maximo"))
         perda_dia = _decimal_positivo(piloto.get("perda_diaria_maxima"))
@@ -4765,6 +4785,10 @@ async def live_preparacao_leitura(req: Request, _=Depends(auth),
     conta = str(body.get("conta") or "").strip()
     if not conta:
         raise HTTPException(422, "identifique a conta REAL que será preparada")
+    broker_account_id = str(body.get("broker_account_id") or "").strip()
+    if not broker_account_id:
+        raise HTTPException(
+            422, "informe o identificador real exibido pela corretora")
     if body.get("confirmo_sem_trade") is not True:
         raise HTTPException(
             422, "confirme que a chave REAL separada não possui permissão de trade")
@@ -4781,6 +4805,7 @@ async def live_preparacao_leitura(req: Request, _=Depends(auth),
                  "corretora selecionada; escolha a corretora e informe a "
                  "chave e o segredo correspondentes")
     env = _env_leitura_real(cfg)
+    env["REAL_READ_ONLY_ACCOUNT_ID"] = broker_account_id
     try:
         resultado = probe_read_only_account(env)
     except BrokerSecurityError as exc:
@@ -4791,6 +4816,10 @@ async def live_preparacao_leitura(req: Request, _=Depends(auth),
         "exchange": resultado["exchange"],
         "conta": conta,
         "authenticated_read": bool(resultado["authenticated_read"]),
+        "broker_identity_verified": bool(
+            resultado["broker_identity_verified"]),
+        "broker_identity_fingerprint": resultado[
+            "broker_identity_fingerprint"],
         "read_methods": list(resultado.get("read_methods") or ()),
         "sem_trade_declarado": True,
         "sem_saque_declarado": True,
@@ -4821,7 +4850,8 @@ def live_status(request: Request, _=Depends(auth)):
         acesso_leitura_ok and prova_leitura.get("sem_trade_declarado")
         and prova_leitura.get("sem_saque_declarado"))
     identidade_ok = bool(
-        acesso_leitura_ok and str(prova_leitura.get("conta") or "").strip())
+        acesso_leitura_ok
+        and prova_leitura.get("broker_identity_verified") is True)
     certificacoes = _certificacoes_real(
         request, cfg, prova_leitura, prova_valida)
     pilotos_no_contexto = certificacoes
@@ -4846,8 +4876,8 @@ def live_status(request: Request, _=Depends(auth)):
                   "permissões também no painel da corretora")},
         {"item": "Identidade da conta REAL confirmada",
          "pronto": identidade_ok,
-         "acao": ("Identifique a conta durante a prova de leitura; a consulta "
-                  "autenticada liga essa declaração à credencial salva")},
+         "acao": ("Informe o ID real exibido pela corretora; ele será "
+                  "comparado em memória e somente um hash será persistido")},
         {"item": "Estratégia e conta com piloto autorizado vigente",
          "pronto": bool(pilotos_no_contexto),
          "acao": ("Forme o agente na Escola Central deste contexto, configure "

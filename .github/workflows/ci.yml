@@ -14,7 +14,9 @@ concurrency:
   # Push da branch e atualização do PR precisam disputar o MESMO grupo.
   # `github.ref` difere entre eles (`refs/heads/...` x `refs/pull/...`) e
   # fazia o pipeline inteiro rodar duas vezes para o mesmo SHA.
-  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  # O repositório de origem distingue branches homônimas de forks diferentes,
+  # sem separar push e PR quando ambos pertencem ao próprio repositório.
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:

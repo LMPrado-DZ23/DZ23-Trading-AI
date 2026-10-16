@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+import pytest
+
 from tradingagents.desk.traders import TrendTrader, default_desk
 from tradingagents.desk.validation import (
     JanelaValidacao,
@@ -70,6 +72,24 @@ class TestSemOlharOFuturo:
         consolidado = consolidar_walk_forward(janelas)
         assert consolidado.total == sum(
             janela.resultado.total for janela in janelas)
+
+    def test_consolidacao_recusa_janela_oos_repetida_ou_sobreposta(self):
+        resultado = ResultadoValidacao("e", "BTC/USDT", "binance")
+        primeira = JanelaValidacao(0, 10, 10, 20, resultado)
+        repetida = JanelaValidacao(0, 10, 10, 20, resultado)
+        sobreposta = JanelaValidacao(5, 15, 15, 25, resultado)
+        with pytest.raises(ValueError, match="duplicadas ou sobrepostas"):
+            consolidar_walk_forward([primeira, repetida])
+        with pytest.raises(ValueError, match="duplicadas ou sobrepostas"):
+            consolidar_walk_forward([primeira, sobreposta])
+
+    def test_consolidacao_preserva_janelas_oos_contiguas(self):
+        resultado = ResultadoValidacao("e", "BTC/USDT", "binance")
+        janelas = [
+            JanelaValidacao(0, 10, 10, 20, resultado),
+            JanelaValidacao(10, 20, 20, 30, resultado),
+        ]
+        assert consolidar_walk_forward(janelas).total == 0
 
     def test_posicao_aberta_e_marcada_a_mercado_no_fim_da_janela(self):
         class NuncaSai:

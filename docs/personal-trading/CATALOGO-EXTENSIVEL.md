@@ -9,7 +9,10 @@ A plataforma pessoal não ficará restrita a seis corretoras. `service/personal_
 - Implementado: descoberta local dos IDs da CCXT e seleção declarativa para **futura homologação**. Nenhuma credencial, requisição à exchange ou envio de ordem é realizado pelo catálogo.
 - Implementado: testes unitários de deduplicação, nomes inválidos, seleção e impossibilidade de habilitar execução pelo catálogo.
 - **Ainda pendente**: integrar catálogo à API e ao painel, matriz de capacidades (readTicker/ohlcv/orderBook/balances/orders), verificação pública sem credenciais, API autenticada para paper/testnet em cada exchange, restrições geográficas, taxa/rate limits, telemetria, CI e E2E.
-- IQ Option permanece **fora de CCXT**, como sala experimental separada.
+- IQ Option permanece **fora de CCXT**, como sala separada. A integração MCP
+  oficial e seus sete endpoints foram reconhecidos no catálogo, mas continuam
+  sem credenciais importadas e sem conexão operacional até a validação segura
+  do servidor e do sandbox/demo. Esse reconhecimento não habilita ordens.
 - Operações LIVE continuam bloqueadas. Listar uma corretora **não** significa que sua integração foi testada ou liberada para ordens.
 
 ## Política para muitas exchanges

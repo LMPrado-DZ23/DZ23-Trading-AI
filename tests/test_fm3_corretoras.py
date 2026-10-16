@@ -108,7 +108,7 @@ class TestTelaCorretora:
         t = _funcao(html, "async function catalogoCarregar(")
         assert "'/v1/personal/exchanges'" in t
         for estado in ("AVAILABLE_TESTNET", "AVAILABLE_READ_ONLY",
-                       "EXPERIMENTAL_NOT_ELIGIBLE"):
+                       "OFFICIAL_MCP_PENDING_VALIDATION"):
             assert estado in t, "estado real do catálogo precisa aparecer como é"
         assert "execution_enabled" in t, (
             "o painel precisa mostrar que execução está desligada")

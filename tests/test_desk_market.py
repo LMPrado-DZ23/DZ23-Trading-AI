@@ -140,6 +140,23 @@ class TestHistoricoPaginado:
         assert len(snap.closes) == 119
         assert snap.quality == "degraded: apenas 119/500 velas fechadas"
 
+    def test_historico_completo_mas_velho_falha_fechado(self):
+        ex = FakePagedExchange(n=100)
+        chamadas = 0
+
+        def pagina_antiga(_symbol, _timeframe="1h", _since=None, limit=99):
+            nonlocal chamadas
+            chamadas += 1
+            return ex.rows[:limit] if chamadas == 1 else []
+
+        ex.fetch_ohlcv = pagina_antiga
+        feed = PublicMarketFeed("binance", client=ex)
+        snap = feed.historical_snapshot(
+            "BTC/USDT", "1h", limit=99, now=NOW + timedelta(days=10),
+            page_size=99)
+        assert len(snap.closes) == 99
+        assert snap.quality.startswith("degraded: dado histórico atrasado")
+
 
 class TestEscolhaDeCorretora:
     def test_default_is_paper_never_external(self):

@@ -237,6 +237,15 @@ def consolidar_walk_forward(
     """Consolida somente os blocos OOS não sobrepostos."""
     if not janelas:
         raise ValueError("nenhuma janela walk-forward completa")
+    intervalos = []
+    for janela in janelas:
+        inicio, fim = int(janela.test_start), int(janela.test_end)
+        if inicio >= fim:
+            raise ValueError("janela OOS com intervalo inválido")
+        for anterior_inicio, anterior_fim in intervalos:
+            if not (fim <= anterior_inicio or anterior_fim <= inicio):
+                raise ValueError("janelas OOS duplicadas ou sobrepostas")
+        intervalos.append((inicio, fim))
     primeiro = janelas[0].resultado
     total = ResultadoValidacao(
         primeiro.estrategia, primeiro.instrumento, primeiro.exchange)

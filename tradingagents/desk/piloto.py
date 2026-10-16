@@ -79,6 +79,7 @@ class AutorizacaoDePiloto:
     revogada_em: str | None = None
     motivo_revogacao: str = ""
     motivo_suspensao: str = ""
+    broker_identity_fingerprint: str = ""
     modo: str = MODO_DO_PILOTO
     schema: str = SCHEMA_PILOTO
 
@@ -104,6 +105,7 @@ class AutorizacaoDePiloto:
             "revogada_em": self.revogada_em,
             "motivo_revogacao": self.motivo_revogacao,
             "motivo_suspensao": self.motivo_suspensao,
+            "broker_identity_fingerprint": self.broker_identity_fingerprint,
             "modo": self.modo, "schema": self.schema,
         }
 
@@ -173,6 +175,8 @@ class SupervisorDePiloto:
             revogada_em=d.get("revogada_em"),
             motivo_revogacao=d.get("motivo_revogacao", ""),
             motivo_suspensao=d.get("motivo_suspensao", ""),
+            broker_identity_fingerprint=d.get(
+                "broker_identity_fingerprint", ""),
             modo=d.get("modo", MODO_DO_PILOTO),
             schema=d.get("schema", SCHEMA_PILOTO))
 
@@ -281,6 +285,7 @@ class SupervisorDePiloto:
                   perda_diaria_maxima: Decimal, perda_total_maxima: Decimal,
                   prazo_dias: int, condicoes_de_suspensao=(),
                   contexto: dict | None = None, conta_real: bool = False,
+                  broker_identity_fingerprint: str = "",
                   agora: datetime | None = None) -> AutorizacaoDePiloto:
         """Registra o PEDIDO do proprietário — ainda sem autorizar nada.
 
@@ -318,6 +323,8 @@ class SupervisorDePiloto:
             "estrategia": estrategia, "versao": str(versao or "1"),
             "corretora": corretora, "conta": conta,
             "conta_real": bool(conta_real),
+            "broker_identity_fingerprint": str(
+                broker_identity_fingerprint or ""),
             "capital_maximo": str(capital_maximo),
             "perda_diaria_maxima": str(perda_diaria_maxima),
             "perda_total_maxima": str(perda_total_maxima),
@@ -583,6 +590,8 @@ class SupervisorDePiloto:
                 "estrategia": a.estrategia, "versao": a.versao,
                 "corretora": a.corretora, "conta": a.conta,
                 "conta_real": a.conta_real,
+                "broker_identity_fingerprint": (
+                    a.broker_identity_fingerprint),
                 "capital_maximo": str(a.capital_maximo),
                 "perda_diaria_maxima": str(a.perda_diaria_maxima),
                 "perda_total_maxima": str(a.perda_total_maxima),

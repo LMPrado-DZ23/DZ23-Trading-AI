@@ -135,8 +135,15 @@ class PublicMarketFeed:
                 source=f"{self.exchange_id}:{timeframe}:historico",
                 quality="degraded: nenhuma vela fechada")
         cutoff = fechadas[-1][0]
-        quality = ("ok" if len(fechadas) == limit else
-                   f"degraded: apenas {len(fechadas)}/{limit} velas fechadas")
+        atraso = now - cutoff
+        if len(fechadas) != limit:
+            quality = f"degraded: apenas {len(fechadas)}/{limit} velas fechadas"
+        elif atraso > timedelta(milliseconds=step_ms * 3):
+            quality = (
+                "degraded: dado histórico atrasado "
+                f"{int(atraso.total_seconds() // 60)} min")
+        else:
+            quality = "ok"
         return MarketSnapshot(
             instrument, timeframe, cutoff,
             tuple(close for _, close in fechadas),
