@@ -1,7 +1,7 @@
 {
   "schema": "dz23-validacao-oos-v1",
-  "gerado_em": "2026-10-16T01:38:51.511184+00:00",
-  "revisao_codigo": "ecb8f4b0a8837afd7a21d3dd01920b57b5475e69-dirty",
+  "gerado_em": "2026-10-16T01:46:05.836040+00:00",
+  "revisao_codigo": "e50e88ddaf4d3d00a89051e8ed869b9b6be88843",
   "exchange": "binance",
   "timeframe": "1h",
   "configuracao": {
