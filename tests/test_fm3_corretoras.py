@@ -26,6 +26,7 @@ HTML = ROOT / "service" / "static" / "index.html"
 
 CAP_ROTA = "/v1/personal/exchanges/{exchange_id}/capabilities"
 HEALTH_ROTA = "/v1/personal/exchanges/{exchange_id}/public-health"
+IQ_MCP_ROTA = "/v1/personal/exchanges/iq_option/mcp-health"
 
 
 def _html() -> str:
@@ -83,6 +84,13 @@ class TestRotaCapacidades:
         assert rotas[0].methods == {"GET"}
         assert any(d.call is auth for d in rotas[0].dependant.dependencies)
 
+    def test_sonda_iq_mcp_get_only_e_autenticada(self):
+        rotas = [r for r in app.routes
+                 if isinstance(r, APIRoute) and r.path == IQ_MCP_ROTA]
+        assert len(rotas) == 1
+        assert rotas[0].methods == {"GET"}
+        assert any(d.call is auth for d in rotas[0].dependant.dependencies)
+
 
 # ------------------------------------------------------------------ painel
 
@@ -131,6 +139,15 @@ class TestTelaCorretora:
         assert "'/public-health'" in sonda
         assert "nenhuma credencial usada" in sonda
         assert "ordem enviada" in sonda
+
+    def test_iq_option_tem_sonda_mcp_passiva(self):
+        html = _html()
+        catalogo = _funcao(html, "async function catalogoCarregar(")
+        sonda = _funcao(html, "async function saudeMcpIqOption(")
+        assert "saudeMcpIqOption" in catalogo
+        assert "'/v1/personal/exchanges/iq_option/mcp-health'" in sonda
+        assert "nenhuma ferramenta chamada" in sonda
+        assert "nenhuma ordem enviada" in sonda
 
     def test_reconciliacao_usa_a_rota_real(self):
         html = _html()

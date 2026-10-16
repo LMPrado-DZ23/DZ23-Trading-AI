@@ -1466,6 +1466,13 @@ def personal_exchange_public_health(exchange_id: str, _=Depends(auth)):
         raise HTTPException(404, "corretora fora da linha DZ23") from exc
 
 
+@app.get("/v1/personal/exchanges/iq_option/mcp-health")
+def iq_option_mcp_health(_=Depends(auth)):
+    """Handshake+tools/list nos sete MCPs; nunca chama ferramenta remota."""
+    from service.iq_option_mcp import probe_iq_option_mcp
+    return probe_iq_option_mcp()
+
+
 @app.get("/v1/broker/status")
 def broker_status(request: Request, _=Depends(auth)):
     """Valida a configuração de corretora SEM enviar ordem nenhuma."""

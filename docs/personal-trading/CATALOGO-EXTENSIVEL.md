@@ -10,9 +10,11 @@ A plataforma pessoal não ficará restrita a seis corretoras. `service/personal_
 - Implementado: testes unitários de deduplicação, nomes inválidos, seleção e impossibilidade de habilitar execução pelo catálogo.
 - **Ainda pendente**: integrar catálogo à API e ao painel, matriz de capacidades (readTicker/ohlcv/orderBook/balances/orders), verificação pública sem credenciais, API autenticada para paper/testnet em cada exchange, restrições geográficas, taxa/rate limits, telemetria, CI e E2E.
 - IQ Option permanece **fora de CCXT**, como sala separada. A integração MCP
-  oficial e seus sete endpoints foram reconhecidos no catálogo, mas continuam
-  sem credenciais importadas e sem conexão operacional até a validação segura
-  do servidor e do sandbox/demo. Esse reconhecimento não habilita ordens.
+  oficial e seus sete endpoints estão configurados por referência à variável
+  `IQ_OPTION_MCP_BEARER_TOKEN`. A sonda autenticada executa apenas o handshake
+  e `tools/list`; nenhuma ferramenta remota é chamável pelo DZ23. Falta uma
+  credencial nova para provar os sete servidores em demo. Esse reconhecimento
+  e essa configuração não habilitam ordens.
 - Operações LIVE continuam bloqueadas. Listar uma corretora **não** significa que sua integração foi testada ou liberada para ordens.
 
 ## Política para muitas exchanges

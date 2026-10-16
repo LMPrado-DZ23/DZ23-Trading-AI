@@ -64,7 +64,7 @@ uv run python scripts/validar_estrategias.py --exchange binance `
 | KuCoin | sim | não há sandbox nativo | passphrase |
 | Mercado Bitcoin | sim | não há sandbox nativo | — |
 | Bitget | sim | não há sandbox nativo | passphrase |
-| IQ Option | MCP oficial reconhecido | validação demo pendente | token MCP |
+| IQ Option | 7 MCPs oficiais configurados | autenticação demo pendente | token MCP novo via ambiente |
 
 As quatro corretoras sem sandbox ficam disponíveis para leitura pública,
 catálogo de capacidades e preparação da conta. O sistema recusa apresentá-las
@@ -78,11 +78,13 @@ exigem também a passphrase; somente chave e segredo permanecem bloqueados
 nessas quatro integrações.
 
 A IQ Option usa uma integração MCP oficial separada do CCXT, com sete
-servidores por classe de instrumento. O catálogo reconhece essa integração e
-publica o estado `OFFICIAL_MCP_PENDING_VALIDATION`; ela não é apresentada como
-operacional enquanto os servidores não forem aprovados pela política local e
-testados em leitura/demo. Tokens MCP nunca são importados de arquivos anexados
-nem reutilizados como credenciais de execução.
+servidores por classe de instrumento. Os sete endpoints estão configurados no
+Codex usando apenas a referência `IQ_OPTION_MCP_BEARER_TOKEN`, sem token
+embutido. O catálogo publica `OFFICIAL_MCP_PENDING_VALIDATION` até que uma
+credencial nova prove os sete handshakes em demo. A sonda do DZ23 executa
+somente `initialize` e `tools/list`: todas as ferramentas listadas ficam
+bloqueadas e não existe chamada de ordem nesse caminho. Tokens MCP de arquivos
+anexados nunca são importados nem reutilizados como credenciais de execução.
 
 As credenciais de execução também ficam vinculadas à corretora escolhida.
 Trocar o seletor não reaproveita chave, segredo ou passphrase de outro
