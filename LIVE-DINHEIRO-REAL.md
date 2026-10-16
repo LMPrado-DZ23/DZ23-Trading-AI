@@ -4,6 +4,39 @@ O caminho para dinheiro real existe e está pronto. Ele **não liga sozinho**:
 são cinco fechaduras independentes — quatro na sua mão e um selo de código
 que o painel não concede (você vê o estado real de todas elas na mesma tela).
 
+## Estado seguro desta branch
+
+Esta branch prepara a sala real, mas **não autoriza operação LIVE**. Quando um
+agente conclui a Escola Central, ele entra automaticamente na fila
+`aguardando_configuracao_do_proprietario`. Esse encaminhamento não contém
+capital, limites nem autorização para enviar ordens.
+
+O proprietário ainda precisa configurar o piloto por estratégia, versão e
+conta. Depois disso, a autorização do piloto é uma ação explícita e separada,
+com nova validação da certificação no instante da autorização. Mesmo um piloto
+autorizado continua sujeito ao selo global `MESA_LIVE_LIBERADA=False` e às
+demais fechaduras descritas abaixo.
+
+### Corretoras disponíveis
+
+| Corretora | Dados públicos | TESTNET pelo CCXT instalado | Credencial adicional |
+|---|---:|---:|---|
+| Binance | sim | sim | — |
+| Bybit | sim | sim | — |
+| OKX | sim | sim | passphrase |
+| Coinbase Exchange | sim | sim | passphrase |
+| Gate.io | sim | sim | — |
+| Kraken | sim | não há sandbox nativo | — |
+| KuCoin | sim | não há sandbox nativo | passphrase |
+| Mercado Bitcoin | sim | não há sandbox nativo | — |
+| Bitget | sim | não há sandbox nativo | passphrase |
+
+As quatro corretoras sem sandbox ficam disponíveis para leitura pública,
+catálogo de capacidades e preparação da conta. O sistema recusa apresentá-las
+como TESTNET operacional. Chaves, segredos, passphrases e UID são armazenados
+pelos mesmos controles de segredo do painel e nunca devem ser copiados para
+documentação, commits ou tickets.
+
 ## Antes de tudo
 Perdas com dinheiro real são **suas e irreversíveis**. Nenhum resultado de
 teste, backtest ou paper prevê lucro futuro. Ligue com dinheiro que você

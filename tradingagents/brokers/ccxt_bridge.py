@@ -64,6 +64,8 @@ class CCXTBridge:
         mode = (env.get("TRADINGAGENTS_BROKER_MODE") or "").strip().lower()
         self.api_key = env.get("EXCHANGE_API_KEY") or ""
         self.api_secret = env.get("EXCHANGE_API_SECRET") or ""
+        self.api_password = env.get("EXCHANGE_API_PASSWORD") or ""
+        self.api_uid = env.get("EXCHANGE_API_UID") or ""
         self.journal_path = Path(journal_path or env.get(
             "TRADINGAGENTS_BROKER_JOURNAL", "/data/broker-journal.jsonl"))
 
@@ -112,6 +114,7 @@ class CCXTBridge:
                 f"ccxt instalado não possui {ccxt_id!r}; atualizar dependência.")
         self._ex = getattr(ccxt, ccxt_id)({
             "apiKey": self.api_key, "secret": self.api_secret,
+            "password": self.api_password, "uid": self.api_uid,
             "enableRateLimit": True,
         })
         if self.mode == "testnet":
@@ -119,9 +122,21 @@ class CCXTBridge:
                 raise BrokerSecurityError(
                     f"{self.exchange_name} não expõe testnet no CCXT. Em "
                     "testnet use binance, bybit, okx, gateio ou coinbase; "
-                    "para as demais, o modo live (com a frase de autorização) "
-                    "é o único caminho — nunca degrado silenciosamente.")
+                    "para as demais, use apenas dados públicos enquanto "
+                    "LIVE estiver bloqueado — nunca degrado silenciosamente.")
             self._ex.set_sandbox_mode(True)
+        requisitos = getattr(self._ex, "requiredCredentials", {}) or {}
+        faltando = []
+        for nome, valor in (("apiKey", self.api_key),
+                            ("secret", self.api_secret),
+                            ("password", self.api_password),
+                            ("uid", self.api_uid)):
+            if requisitos.get(nome) is True and not valor:
+                faltando.append(nome)
+        if faltando:
+            raise BrokerSecurityError(
+                f"{self.exchange_name} exige credenciais adicionais: "
+                + ", ".join(faltando) + ".")
 
     # ------------------------------------------------------------------
     @staticmethod

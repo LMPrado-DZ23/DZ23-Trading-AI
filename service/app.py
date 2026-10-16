@@ -201,7 +201,8 @@ ALLOWED_KEYS = [
     "OPENROUTER_API_KEY", "OPENAI_COMPATIBLE_API_KEY",
     "FRED_API_KEY", "ALPHA_VANTAGE_API_KEY",
     "TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
-    "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET",
+    "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET", "EXCHANGE_API_PASSWORD",
+    "EXCHANGE_API_UID",
     "TRADINGAGENTS_DESK_FEED", "TRADINGAGENTS_DESK_BROKER",
     "TRADINGAGENTS_DESK_INSTRUMENTS", "TRADINGAGENTS_DESK_CAPITAL",
     "TRADINGAGENTS_DESK_CONTROLE", "TRADINGAGENTS_DESK_TETO_EXPOSICAO",
@@ -224,7 +225,8 @@ SEGREDOS_DECLARADOS = {
     "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "GOOGLE_API_KEY",
     "GROQ_API_KEY", "MISTRAL_API_KEY", "OPENROUTER_API_KEY",
     "OPENAI_COMPATIBLE_API_KEY", "FRED_API_KEY", "ALPHA_VANTAGE_API_KEY",
-    "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET",
+    "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET", "EXCHANGE_API_PASSWORD",
+    "EXCHANGE_API_UID",
     "ALERTA_TELEGRAM_TOKEN", "ALERTA_TELEGRAM_CHAT", "ALERTA_WEBHOOK_URL",
     "ALERTA_TELEGRAM_WEBHOOK_SECRET", "ALERTA_DISCORD_WEBHOOK",
     "ALERTA_WHATSAPP_TOKEN", "EMAIL_SMTP_PASS",
@@ -1416,7 +1418,9 @@ def broker_status(request: Request, _=Depends(auth)):
     cfg = load_cfg(request_tenant(request))
     env = {k: cfg.get(k, "") for k in
            ("TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
-            "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET", "LIVE_TRADING_CONFIRM",
+            "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET",
+            "EXCHANGE_API_PASSWORD", "EXCHANGE_API_UID",
+            "LIVE_TRADING_CONFIRM",
             "LIVE_MAX_ORDER_VALUE", "LIVE_MAX_DAILY_LOSS")}
     try:
         from tradingagents.brokers.ccxt_bridge import CCXTBridge
@@ -3626,7 +3630,13 @@ async def escola_avaliar(req: Request, _=Depends(auth),
     """Avalia uma estratégia NO CONTEXTO de uma sala: acumula amostras,
     candidata e forma. É o único caminho pelo qual a escola avança — e
     avançar aqui significa elegibilidade, nunca autorização de operar."""
-    from tradingagents.desk.salas import SalaError
+    from tradingagents.desk.escola import EstadoDaEscola
+    from tradingagents.desk.piloto import SupervisorDePiloto
+    from tradingagents.desk.salas import (
+        ContextoDeCertificacao,
+        EscolaDoPiloto,
+        SalaError,
+    )
     body = await _json_body(req)
     esc = _escola_of(req)
     sala = _sala_por_chave(esc, str(body.get("chave") or ""))
@@ -3641,6 +3651,34 @@ async def escola_avaliar(req: Request, _=Depends(auth),
             horizonte=str(body.get("horizonte") or "1h"))
     except SalaError as exc:
         raise HTTPException(422, str(exc)) from exc
+    encaminhamento = None
+    if av.estado is EstadoDaEscola.FORMADA:
+        d = _DESKS.get(request_tenant(req))
+        candidatos = [] if d is None else [
+            t for t in d["orchestrator"].traders
+            if t.strategy == estrategia and str(t.spec.version) == av.versao]
+        if len(candidatos) == 1:
+            contexto = ContextoDeCertificacao(
+                corretora=sala.contexto.corretora,
+                conta=sala.contexto.conta,
+                mercado=sala.contexto.mercado,
+                modo=sala.contexto.modo,
+                ativo=ativo,
+                horizonte=str(body.get("horizonte") or "1h"),
+                payout=sala.contexto.payout)
+            sup = SupervisorDePiloto(
+                esc["armazem"], tenant_id=esc["tenant_id"],
+                escola=EscolaDoPiloto(esc["central"], contexto))
+            encaminhamento = sup.encaminhar_formado(
+                candidatos[0].spec.agent_id,
+                estrategia=estrategia, versao=av.versao,
+                contexto=contexto.como_dict())
+        else:
+            encaminhamento = {
+                "estado": "nao_encaminhado",
+                "motivo": ("estratégia sem agente único na mesa; nada foi "
+                           "liberado automaticamente"),
+            }
     return {"ok": True, "avaliacao": {
         "chave": av.chave, "estrategia": av.estrategia, "versao": av.versao,
         "estado": av.estado.value, "motivo": av.motivo,
@@ -3648,6 +3686,7 @@ async def escola_avaliar(req: Request, _=Depends(auth),
         "media": str(av.media), "ic_inferior": str(av.ic_inferior),
         "ic_superior": str(av.ic_superior), "aprovada": av.aprovada,
         "atualizada_em": av.atualizada_em},
+        "sala_real": encaminhamento,
         "aviso": ("formação habilita apenas o PROCESSO de autorização; "
                   "negociação real continua exclusiva do proprietário")}
 
@@ -3800,6 +3839,7 @@ def escola_pilotos(request: Request, _=Depends(auth)):
     sup = _supervisor_of(request)
     return {"modo": MODO_DO_PILOTO, "gates_esperados": list(GATES_ESPERADOS),
             "autorizacoes": sup.relatorio(),
+            "encaminhamentos": sup.encaminhamentos(),
             "vigia": sup.vigiar(central=esc["central"]),
             "aviso": ("a formação não habilita negociação real; autorizar "
                       "piloto é ato exclusivo do proprietário")}
@@ -3889,11 +3929,13 @@ def escola_piloto_autorizar(agent_id: str, request: Request,
     """Ato EXPLÍCITO do proprietário. Os gates são medidos no estado real
     da mesa; qualquer reprovação devolve o motivo exato."""
     d = _desk_of(request)
+    esc = _escola_of(request)
     sup = _supervisor_of(request)
     try:
         aut = sup.autorizar(agent_id,
                             gates=_gates_do_ambiente(request_tenant(request),
-                                                     d))
+                                                     d),
+                            central=esc["central"])
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
     return {"ok": True, "autorizacao": aut.como_dict(),

@@ -159,6 +159,42 @@ def _entrada_sorteada(t, n=2000):
 
 
 class TestCadeiaObrigatoria:
+    CONTEXTO = {
+        "corretora": "binance", "conta": "paper-1", "mercado": "spot",
+        "modo": "paper", "ativo": "BTC/USDT", "horizonte": "1h",
+    }
+
+    def test_formatura_encaminha_para_sala_real_sem_autorizar(self):
+        sup, _, _ = _supervisor_formado()
+        fila = sup.encaminhar_formado(
+            AGENTE, estrategia="trend_following", contexto=self.CONTEXTO,
+            agora=AGORA)
+        assert fila["estado"] == "aguardando_configuracao_do_proprietario"
+        assert fila["authorization_id"] is None
+        assert sup.de(AGENTE) is None
+        assert "sala REAL" in sup.bloqueios()[AGENTE]
+        with pytest.raises(ValueError, match="não tem pedido"):
+            sup.autorizar(AGENTE, gates=_gates_ok(), agora=AGORA)
+
+    def test_encaminhamento_e_idempotente_persistente_e_consumido(self):
+        arm = ArmazemFake()
+        esc, _ = _escola_formada()
+        sup = SupervisorDePiloto(armazem=arm, escola=esc)
+        primeiro = sup.encaminhar_formado(
+            AGENTE, estrategia="trend_following", contexto=self.CONTEXTO,
+            agora=AGORA)
+        segundo = sup.encaminhar_formado(
+            AGENTE, estrategia="trend_following", contexto=self.CONTEXTO,
+            agora=AGORA + timedelta(minutes=1))
+        assert primeiro["encaminhamento_id"] == segundo["encaminhamento_id"]
+        assert len(sup.encaminhamentos()) == 1
+        sup2 = SupervisorDePiloto(armazem=arm, escola=esc)
+        assert len(sup2.encaminhamentos()) == 1
+        _solicitar(sup2, contexto=self.CONTEXTO)
+        fila = sup2.encaminhamentos()[0]
+        assert fila["estado"] == "configurado_aguardando_autorizacao"
+        assert fila["authorization_id"] == sup2.de(AGENTE).authorization_id
+
     def test_sem_formatura_solicitar_recusa(self):
         esc = EscolaDeTraders(armazem=ArmazemFake())
         sup = SupervisorDePiloto(armazem=ArmazemFake(), escola=esc)
@@ -218,6 +254,14 @@ class TestCadeiaObrigatoria:
             sup.autorizar(AGENTE,
                           gates=[{"gate": "risco", "ok": True, "detalhe": ""}],
                           agora=AGORA)
+        assert sup.de(AGENTE).estado is EstadoDoPiloto.AGUARDANDO_AUTORIZACAO
+
+    def test_autorizar_revalida_formatura_no_ultimo_instante(self):
+        sup, esc, t2 = _supervisor_formado()
+        _solicitar(sup)
+        _revogar_escola(esc, "trend_following", t2)
+        with pytest.raises(ValueError, match="elegibilidade retirada"):
+            sup.autorizar(AGENTE, gates=_gates_ok(), agora=AGORA)
         assert sup.de(AGENTE).estado is EstadoDoPiloto.AGUARDANDO_AUTORIZACAO
 
     def test_cadeia_completa_autoriza(self):

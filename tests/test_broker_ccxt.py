@@ -153,6 +153,16 @@ class TestAliasesMatchDecision:
                                          "kraken", "gateio", "kucoin",
                                          "mercadobitcoin", "bitget"}
 
+    @pytest.mark.parametrize("exchange", ["okx", "coinbase", "kucoin", "bitget"])
+    def test_passphrase_required_exchange_fails_closed(self, exchange,
+                                                       tmp_path):
+        env = _env(TRADINGAGENTS_EXCHANGE=exchange,
+                   TRADINGAGENTS_BROKER_MODE="live",
+                   LIVE_TRADING_CONFIRM="EU AUTORIZO OPERAR COM DINHEIRO REAL",
+                   LIVE_MAX_ORDER_VALUE="10", LIVE_MAX_DAILY_LOSS="10")
+        with pytest.raises(BrokerSecurityError, match="password"):
+            CCXTBridge(env=env, journal_path=tmp_path / "j.jsonl")
+
 
 class TestDinheiroRealTemFreios:
     """Live existe por decisão do dono — e vem com freios que ele controla."""

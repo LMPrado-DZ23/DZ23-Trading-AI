@@ -339,6 +339,31 @@ class TestMesaEscolaE2E:
         av = r.json()["avaliacao"]
         assert av["estado"] == "formada" and av["aprovada"] is True
         assert av["amostras"] >= 500
+        fila = r.json()["sala_real"]
+        assert fila["agent_id"] == "trader-momentum"
+        assert fila["estado"] == "aguardando_configuracao_do_proprietario"
+        pilotos = c.get("/v1/escola/pilotos", headers=H).json()
+        assert pilotos["autorizacoes"] == []
+        assert len(pilotos["encaminhamentos"]) == 1
+        assert c.post("/v1/escola/pilotos/trader-momentum/autorizar",
+                      headers=H).status_code == 409
+
+        # Reavaliar uma formatura já registrada é idempotente: não cria
+        # outra fila e não aproxima o agente da autorização.
+        r2 = c.post("/v1/escola/avaliar", headers=H, json={
+            "chave": self.CHAVE, "estrategia": "momentum",
+            "ativo": "BTC/USDT"})
+        assert r2.status_code == 200
+        assert r2.json()["sala_real"]["encaminhamento_id"] == \
+            fila["encaminhamento_id"]
+        assert len(c.get("/v1/escola/pilotos", headers=H).json()[
+            "encaminhamentos"]) == 1
+
+        # Ao sair da escola o trader para: a fila não concede capital.
+        ciclo = c.post("/v1/desk/cycle", headers=H).json()
+        assert len(ciclo["ordens"]) == 1
+        assert any("trader-momentum" in a and "sala REAL" in a
+                   for a in ciclo["abstencoes"])
 
         bin_ = c.get("/v1/escola/certificacao", headers=H, params={
             "estrategia": "momentum", "corretora": "binance",

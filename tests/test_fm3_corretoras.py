@@ -99,8 +99,9 @@ class TestTelaCorretora:
         html = _html()
         t = _funcao(html, "async function catalogoCarregar(")
         assert "'/v1/personal/exchanges'" in t
-        assert "PLANNED_NOT_VALIDATED" in t, (
-            "estado real do catálogo precisa aparecer como é")
+        for estado in ("AVAILABLE_TESTNET", "AVAILABLE_READ_ONLY",
+                       "EXPERIMENTAL_NOT_ELIGIBLE"):
+            assert estado in t, "estado real do catálogo precisa aparecer como é"
         assert "execution_enabled" in t, (
             "o painel precisa mostrar que execução está desligada")
         assert "escapeHtml" in t, "dados do servidor entram escapados (AUD rodada-8)"

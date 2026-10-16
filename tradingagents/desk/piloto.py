@@ -2,8 +2,9 @@
 
 A cadeia é obrigatória e não tem atalho:
 
-    FORMADO na escola → ELEGÍVEL PARA LIVE (processo) →
-    AGUARDANDO AUTORIZAÇÃO DO PROPRIETÁRIO → PILOTO AUTORIZADO
+    FORMADO na escola → SALA REAL (preparação, bloqueada) →
+    LIMITES DO PROPRIETÁRIO → AGUARDANDO AUTORIZAÇÃO →
+    PILOTO AUTORIZADO
 
 O que este módulo garante, por construção:
 
@@ -31,6 +32,7 @@ from enum import Enum
 
 MODO_DO_PILOTO = "paper (simulado)"
 SCHEMA_PILOTO = "dz23.piloto/1"
+SCHEMA_ENCAMINHAMENTO = "dz23.sala-real-preparacao/1"
 PRAZO_MIN_DIAS = 1
 PRAZO_MAX_DIAS = 365
 
@@ -121,6 +123,7 @@ class SupervisorDePiloto:
         # A escola é a ÚNICA fonte de elegibilidade: sem ela nada autoriza.
         self.escola = escola
         self._autorizacoes: dict[str, dict] = {}
+        self._encaminhamentos: dict[str, dict] = {}
         self._carregar()
 
     # -- persistência ---------------------------------------------------
@@ -132,12 +135,16 @@ class SupervisorDePiloto:
             conteudo = dados.get("autorizacoes")
             if isinstance(conteudo, dict):
                 self._autorizacoes = conteudo
+            encaminhamentos = dados.get("encaminhamentos")
+            if isinstance(encaminhamentos, dict):
+                self._encaminhamentos = encaminhamentos
 
     def salvar(self) -> None:
         if self.armazem is None:
             return
         self.armazem.salvar(self.tenant_id, self.CHAVE_ARMAZEM,
-                            {"autorizacoes": self._autorizacoes})
+                            {"autorizacoes": self._autorizacoes,
+                             "encaminhamentos": self._encaminhamentos})
 
     # -- helpers --------------------------------------------------------
     @staticmethod
@@ -186,6 +193,66 @@ class SupervisorDePiloto:
 
     def autorizacoes(self) -> list[AutorizacaoDePiloto]:
         return [self._de_dict(d) for d in self._autorizacoes.values()]
+
+    @staticmethod
+    def _chave_encaminhamento(agent_id: str, contexto: dict) -> str:
+        partes = [agent_id] + [str(contexto.get(k) or "") for k in (
+            "corretora", "conta", "mercado", "modo", "ativo",
+            "horizonte", "payout")]
+        return "|".join(partes)
+
+    def encaminhar_formado(self, agent_id: str, *, estrategia: str,
+                           versao: str = "1", contexto: dict,
+                           agora: datetime | None = None) -> dict:
+        """Coloca um formando na fila da sala REAL, sem dar capital.
+
+        A fila é uma preparação auditável: não possui limites, não aceita
+        autorização direta e bloqueia novas entradas do agente até o dono
+        configurar o pedido de piloto. Chamadas repetidas são idempotentes.
+        """
+        agora = _utc(agora or datetime.now(timezone.utc))
+        agent_id = (agent_id or "").strip()
+        estrategia = (estrategia or "").strip()
+        if not agent_id or not estrategia:
+            raise ValueError("agent_id e estrategia são obrigatórios")
+        if self.escola is None:
+            raise ValueError("escola ausente: elegibilidade não é verificável")
+        ok, motivo = self.escola.elegivel_para_live(estrategia, versao)
+        if not ok:
+            raise ValueError(f"trader não elegível ao processo: {motivo}")
+        contexto = dict(contexto or {})
+        chave = self._chave_encaminhamento(agent_id, contexto)
+        existente = self._encaminhamentos.get(chave)
+        if existente:
+            existente["elegibilidade_verificada_em"] = agora.isoformat()
+            existente["motivo_elegibilidade"] = motivo[:400]
+            self.salvar()
+            return dict(existente)
+        registro = {
+            "encaminhamento_id": f"REAL-{agora:%Y%m%d}-{uuid.uuid4().hex[:8]}",
+            "tenant_id": self.tenant_id, "agent_id": agent_id,
+            "estrategia": estrategia, "versao": str(versao or "1"),
+            "contexto": contexto,
+            "corretora": str(contexto.get("corretora") or ""),
+            "conta": str(contexto.get("conta") or ""),
+            "ativo": str(contexto.get("ativo") or ""),
+            "horizonte": str(contexto.get("horizonte") or "1h"),
+            "estado": "aguardando_configuracao_do_proprietario",
+            "criado_em": agora.isoformat(),
+            "elegibilidade_verificada_em": agora.isoformat(),
+            "motivo_elegibilidade": motivo[:400],
+            "authorization_id": None,
+            "schema": SCHEMA_ENCAMINHAMENTO,
+            "aviso": ("sala REAL apenas preparada; sem limites, sem "
+                      "autorização e sem capacidade de enviar ordens"),
+        }
+        self._encaminhamentos[chave] = registro
+        self.salvar()
+        return dict(registro)
+
+    def encaminhamentos(self) -> list[dict]:
+        return [dict(self._encaminhamentos[k])
+                for k in sorted(self._encaminhamentos)]
 
     # -- cadeia obrigatória ---------------------------------------------
     def solicitar(self, agent_id: str, *, estrategia: str, versao: str = "1",
@@ -250,6 +317,12 @@ class SupervisorDePiloto:
                 "motivo": "pedido do proprietário registrado"}],
         }
         self._autorizacoes[agent_id] = registro
+        chave = self._chave_encaminhamento(agent_id, dict(contexto or {}))
+        encaminhamento = self._encaminhamentos.get(chave)
+        if encaminhamento:
+            encaminhamento["estado"] = "configurado_aguardando_autorizacao"
+            encaminhamento["authorization_id"] = registro["authorization_id"]
+            encaminhamento["configurado_em"] = agora.isoformat()
         self.salvar()
         return self._de_dict(registro)
 
@@ -282,7 +355,7 @@ class SupervisorDePiloto:
                "envio real ATIVO — proibido: LIVE bloqueado nesta missão"),
         ]
 
-    def autorizar(self, agent_id: str, *, gates,
+    def autorizar(self, agent_id: str, *, gates, central=None,
                   agora: datetime | None = None) -> AutorizacaoDePiloto:
         """Ato EXPLÍCITO do proprietário: pedido + todos os gates aprovados."""
         agora = _utc(agora or datetime.now(timezone.utc))
@@ -292,6 +365,14 @@ class SupervisorDePiloto:
         estado = EstadoDoPiloto(d["estado"])
         if estado is not EstadoDoPiloto.AGUARDANDO_AUTORIZACAO:
             raise ValueError(f"estado {estado.value} não aceita autorização")
+        escola = self._escola_da(d, central)
+        if escola is None:
+            raise ValueError("escola indisponível: elegibilidade não verificável")
+        elegivel, motivo = escola.elegivel_para_live(
+            d.get("estrategia", ""), str(d.get("versao", "1")))
+        if not elegivel:
+            raise ValueError("elegibilidade retirada antes da autorização: "
+                             + motivo)
         faltando = [g for g in GATES_ESPERADOS
                     if g not in {item.get("gate") for item in gates}]
         reprovados = [item for item in gates if not item.get("ok")]
@@ -446,6 +527,12 @@ class SupervisorDePiloto:
                 bloqueados[agent_id] = "autorização expirada"
             else:  # REVOGADO
                 bloqueados[agent_id] = "autorização revogada"
+        for d in self._encaminhamentos.values():
+            if d.get("estado") == "aguardando_configuracao_do_proprietario":
+                bloqueados.setdefault(
+                    str(d.get("agent_id") or ""),
+                    "formado na escola; sala REAL aguardando configuração "
+                    "e autorização explícita do proprietário")
         return bloqueados
 
     # -- relatório ------------------------------------------------------
@@ -482,5 +569,5 @@ class SupervisorDePiloto:
 __all__ = [
     "AutorizacaoDePiloto", "EstadoDoPiloto", "SupervisorDePiloto",
     "MODO_DO_PILOTO", "SCHEMA_PILOTO", "PRAZO_MIN_DIAS", "PRAZO_MAX_DIAS",
-    "ENCERRADOS", "GATES_ESPERADOS",
+    "SCHEMA_ENCAMINHAMENTO", "ENCERRADOS", "GATES_ESPERADOS",
 ]
