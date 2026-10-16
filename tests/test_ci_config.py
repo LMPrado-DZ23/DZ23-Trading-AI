@@ -30,6 +30,12 @@ class TestCustoDoPipeline:
     def test_runs_are_cancelled_when_superseded(self):
         assert CI["concurrency"]["cancel-in-progress"] is True
 
+    def test_push_e_pr_da_mesma_branch_compartilham_o_grupo(self):
+        grupo = CI["concurrency"]["group"]
+        assert "github.head_ref" in grupo and "github.ref_name" in grupo
+        assert "github.ref }}" not in grupo, (
+            "github.ref separa push e pull_request e duplica o pipeline")
+
     def test_working_branch_is_covered(self):
         branches = CI["on"]["push"]["branches"]
         assert "main" in branches and "unificacao" in branches
