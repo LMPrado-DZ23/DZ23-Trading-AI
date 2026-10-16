@@ -4858,6 +4858,28 @@ def _recuperacao_local_para_prontidao() -> dict:
         }
 
 
+def _recuperacao_postgres_para_prontidao() -> dict:
+    """Exige restore lógico somente quando há PostgreSQL configurado."""
+    from tradingagents.desk.postgres_recovery import (
+        not_required_status,
+        validate_postgres_restore_proof,
+    )
+
+    database_url = (DATABASE_URL or os.environ.get("DATABASE_URL") or "").strip()
+    if not database_url:
+        return not_required_status()
+    try:
+        return validate_postgres_restore_proof(DATA, database_url)
+    except Exception as exc:
+        return {
+            "necessaria": True,
+            "valida": False,
+            "verificado_em": "",
+            "cobre_postgresql_externo": True,
+            "motivo": f"prova PostgreSQL indisponível ({type(exc).__name__})",
+        }
+
+
 _CATEGORIAS_LIBERACAO_REAL = (
     "acao_do_proprietario",
     "prova_externa",
@@ -5030,6 +5052,7 @@ def _live_status_payload(request: Request) -> dict:
     parada_desarmada = _parada_desarmada_para_prontidao(
         request_tenant(request))
     recuperacao_local = _recuperacao_local_para_prontidao()
+    recuperacao_postgres = _recuperacao_postgres_para_prontidao()
     frase_ok = (cfg.get("LIVE_TRADING_CONFIRM") or "").strip() == LIVE_CONFIRM_PHRASE
     checklist = [
         {"item": "Frase de autorização digitada", "pronto": frase_ok,
@@ -5098,6 +5121,15 @@ def _live_status_payload(request: Request) -> dict:
          "acao": ("Gere o backup e execute scripts/verify_local_restore.py; "
                   "a prova vale por 30 dias e não substitui o restore do "
                   "PostgreSQL externo")},
+        {"item": "Backup PostgreSQL restaurado e verificado recentemente",
+         "pronto": recuperacao_postgres["valida"],
+         "categoria": "controle_operacional",
+         "acao": (
+             "Não aplicável: esta instalação não usa PostgreSQL externo"
+             if not recuperacao_postgres["necessaria"] else
+             "Pare as escritas, forneça um banco vazio e distinto em "
+             "POSTGRES_RESTORE_DATABASE_URL e execute "
+             "scripts/verify_postgres_restore.py; a prova vale por 30 dias")},
         # O selo de CÓDIGO da mesa (ADR-006). Sem ele, mesmo com todos os
         # itens acima verdes, a mesa recusa arrancar em LIVE — e é bom que
         # recuse: o painel nunca é a última fechadura de dinheiro real.
@@ -5119,6 +5151,7 @@ def _live_status_payload(request: Request) -> dict:
             "homologacao_testnet": prova_testnet,
             "reconciliacao": reconciliacao,
             "recuperacao_local": recuperacao_local,
+            "recuperacao_postgresql": recuperacao_postgres,
             "certificacoes_estrategia_conta": certificacoes,
             "pilotos_autorizados_no_contexto": [
                 {"agent_id": p.get("agent_id"),

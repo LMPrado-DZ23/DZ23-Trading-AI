@@ -108,6 +108,19 @@ Se `DATABASE_URL` estiver ativo, o estado persistido no PostgreSQL **não**
 está dentro do arquivo local: gere e teste separadamente o backup lógico pelo
 provedor do banco. Um backup só conta como gate depois de um restore provado.
 
+Use um banco vazio e descartável, diferente da origem, e mantenha os DSNs
+somente no ambiente:
+
+```bash
+export DATABASE_URL='postgresql://...origem...'
+export POSTGRES_RESTORE_DATABASE_URL='postgresql://...banco-vazio...'
+python3 scripts/verify_postgres_restore.py --data-dir ./data
+```
+
+O destino ocupado, a origem em mudança, qualquer divergência de conteúdo ou
+um dump adulterado falham fechados. O script nunca limpa o destino nem envia
+ordens.
+
 O ensaio automatizado restaura em diretório temporário e valida também a
 estrutura interna dos bancos SQLite e dos documentos JSON/JSONL. A prova local
 vale por 30 dias e fica vinculada ao hash do backup presente em

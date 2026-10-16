@@ -42,6 +42,14 @@ def test_operational_readiness_exige_autenticacao_e_falha_fechado(
     }
     assert body["dinheiro_real"]["pode_operar_real"] is False
     assert body["dinheiro_real"]["recuperacao_local"]["valida"] is False
+    assert body["dinheiro_real"]["recuperacao_postgresql"] == {
+        "necessaria": False,
+        "valida": True,
+        "verificado_em": "",
+        "idade_maxima_dias": 30,
+        "cobre_postgresql_externo": False,
+        "motivo": "PostgreSQL externo não está configurado nesta instalação",
+    }
     assert any(
         item["item"] == "Backup local restaurado e verificado recentemente"
         and item["pronto"] is False
@@ -49,6 +57,37 @@ def test_operational_readiness_exige_autenticacao_e_falha_fechado(
     assert body["dinheiro_real"]["estado_de_liberacao"]["estado"] == (
         "preparacao_pendente")
     assert m.MESA_LIVE_LIBERADA is False
+
+
+def test_operational_readiness_requires_postgres_restore_when_configured(
+        tmp_path, monkeypatch):
+    m, client = _app(tmp_path, monkeypatch)
+    import tradingagents.desk.postgres_recovery as postgres_recovery
+
+    monkeypatch.setattr(m, "DATABASE_URL", "postgresql://configured")
+    monkeypatch.setattr(
+        postgres_recovery,
+        "validate_postgres_restore_proof",
+        lambda *_args, **_kwargs: {
+            "necessaria": True,
+            "valida": False,
+            "verificado_em": "",
+            "cobre_postgresql_externo": True,
+            "motivo": "ensaio de restore PostgreSQL ainda não registrado",
+        },
+    )
+
+    body = client.get("/v1/operational-readiness", headers=H).json()
+
+    status = body["dinheiro_real"]["recuperacao_postgresql"]
+    assert status["necessaria"] is True
+    assert status["valida"] is False
+    item = next(
+        item for item in body["dinheiro_real"]["checklist"]
+        if item["item"] == "Backup PostgreSQL restaurado e verificado recentemente"
+    )
+    assert item["pronto"] is False
+    assert body["invariantes"]["envio_real_habilitado"] is False
 
 
 def test_operational_readiness_nao_expoe_segredos(tmp_path, monkeypatch):

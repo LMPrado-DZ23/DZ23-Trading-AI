@@ -192,6 +192,38 @@ jobs:
         env:
           DATABASE_URL: postgresql://dz23:dz23-ci@127.0.0.1:5432/dz23_ci
         run: uv run pytest tests/test_modo_da_mesa.py -q
+      - name: Backup lógico e restore real em banco vazio
+        env:
+          DATABASE_URL: postgresql://dz23:dz23-ci@127.0.0.1:5432/dz23_ci
+          POSTGRES_RESTORE_DATABASE_URL: postgresql://dz23:dz23-ci@127.0.0.1:5432/dz23_restore_ci
+          DATA_DIR: ${{ runner.temp }}/dz23-postgres-proof
+        run: |
+          if ! command -v pg_dump >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+          uv run python - <<'PY'
+          import os
+          from pathlib import Path
+          import psycopg
+          from tradingagents.desk.storage import ArmazemDeEstado
+          from tradingagents.job_store import JobStore
+
+          dsn = os.environ["DATABASE_URL"]
+          JobStore(Path(os.environ["DATA_DIR"]) / "unused.db", dsn)
+          ArmazemDeEstado(dsn, Path(os.environ["DATA_DIR"]) / "desks")
+          with psycopg.connect(dsn, autocommit=True) as connection:
+              connection.execute("CREATE DATABASE dz23_restore_ci")
+          PY
+          uv run python scripts/verify_postgres_restore.py --data-dir "$DATA_DIR"
+          uv run python - <<'PY'
+          import os
+          from tradingagents.desk.postgres_recovery import validate_postgres_restore_proof
+
+          result = validate_postgres_restore_proof(
+              os.environ["DATA_DIR"], os.environ["DATABASE_URL"])
+          assert result["valida"] is True, result
+          PY
 
   arm64-deps:
     name: ARM64 build (dependências aarch64 — NÃO é homologação Oracle)

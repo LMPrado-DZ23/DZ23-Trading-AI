@@ -73,6 +73,24 @@ Escola/Sala REAL/pilotos; proteja-o como credencial. Estado em PostgreSQL
 externo exige backup lógico e restore separados. Consulte
 [docs/mission/ROLLBACK.md](docs/mission/ROLLBACK.md).
 
+Quando `DATABASE_URL` estiver ativo, prepare um segundo banco PostgreSQL
+**vazio e descartável**, distinto da origem. As credenciais ficam somente no
+ambiente; nunca as coloque nos argumentos do comando:
+
+```bash
+export DATABASE_URL='postgresql://...origem...'
+export POSTGRES_RESTORE_DATABASE_URL='postgresql://...banco-vazio...'
+python3 scripts/verify_postgres_restore.py --data-dir /data
+```
+
+O utilitário usa `pg_dump`/`pg_restore`, recusa destino ocupado ou igual à
+origem, não executa `DROP`/`--clean`, compara esquema e conteúdo das tabelas
+DZ23 e grava `/data/postgres-restore-proof.json`. A prova não contém DSN,
+senha ou linhas do banco; vale por 30 dias e é invalidada se o dump for
+removido, alterado ou pertencer a outra origem. O banco restaurado não é
+apagado automaticamente: preserve-o para inspeção ou descarte-o pelo processo
+controlado do provedor.
+
 O último comando restaura novamente em área temporária, valida hashes,
 SQLite/JSON/JSONL e grava `/data/local-restore-proof.json`. A prova vale por
 30 dias, permanece vinculada ao hash do arquivo ensaiado e entra no preflight

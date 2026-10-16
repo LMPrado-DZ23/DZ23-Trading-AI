@@ -53,6 +53,36 @@ Somente depois dessa prova troque o volume. Se for indispensável restaurar
 sobre um destino ocupado, preserve uma cópia dele e use `--overwrite` de
 forma explícita.
 
+## Recuperação do PostgreSQL externo
+
+Pare as escritas do DZ23 e crie pelo provedor um banco temporário vazio. Ele
+deve ser distinto da origem. Exporte os DSNs apenas no ambiente da sessão e
+execute:
+
+```bash
+export DATABASE_URL='postgresql://...origem...'
+export POSTGRES_RESTORE_DATABASE_URL='postgresql://...banco-vazio...'
+python scripts/verify_postgres_restore.py --data-dir /data
+```
+
+O comando:
+
+- inclui somente as tabelas DZ23 conhecidas e exige `jobs` e
+  `dz23_desk_state`;
+- recusa origem e destino iguais e recusa qualquer tabela já existente no
+  schema `public` do destino;
+- usa formato custom do `pg_dump`, sem dono ou privilégios;
+- não usa `--clean`, não executa `DROP` e não apaga o banco restaurado;
+- mede a origem antes e depois do dump e recusa se ela mudou;
+- compara hashes de esquema e de todas as linhas após o restore;
+- mantém senha/DSN fora da linha de comando, logs e prova.
+
+O resultado válido gera o dump em `/data/backups` e a prova
+`/data/postgres-restore-proof.json`, ambos vinculados por SHA-256. A prova
+expira em 30 dias e também fecha se a origem configurada mudar. Descarte o
+banco temporário somente pelo fluxo controlado do provedor, depois de guardar
+a evidência necessária.
+
 ## Rollback de código
 
 Faça o rollback pelo mecanismo do deployment para um SHA conhecido e
