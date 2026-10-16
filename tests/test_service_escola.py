@@ -534,6 +534,20 @@ class TestMesaEscolaE2E:
         rel = c.get("/v1/escola/pilotos", headers=H).json()["autorizacoes"][0]
         assert rel["estado"] == "aguardando_autorizacao"
 
+        assert c.post("/v1/config", headers=H, json={"vars": {
+            "REAL_READ_ONLY_API_KEY": "read-key"}}).status_code == 200
+        assert c.post("/v1/live/preparacao-leitura", headers=H, json={
+            "conta": "real-principal", "confirmo_sem_trade": True,
+            "confirmo_sem_movimentacao": True}).status_code == 200
+        monkeypatch.setattr(m, "_gates_do_ambiente", lambda *_args: [
+            {"gate": nome, "ok": True, "detalhe": "teste isolado"}
+            for nome in ("segurança", "integração", "risco", "execução")])
+        autorizada = c.post(
+            "/v1/escola/pilotos/trader-momentum/autorizar", headers=H)
+        assert autorizada.status_code == 200, autorizada.text
+        assert autorizada.json()["autorizacao"]["estado"] == (
+            "piloto_autorizado")
+
     def test_conta_real_nao_transfere_certificacao_entre_corretoras(
             self, tmp_path, monkeypatch):
         c, m = _client(tmp_path, monkeypatch)
