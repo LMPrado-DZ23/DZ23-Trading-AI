@@ -10,7 +10,7 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
 | Gate | Prova exigida | Estado no HEAD da branch |
 |---|---|---|
-| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.651 passaram localmente no código atual; a matriz deve estar verde no HEAD publicado do PR #14 |
+| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.660 passaram localmente no código atual; a matriz deve estar verde no HEAD publicado do PR #14 |
 | lint | `ruff check .` | verde localmente; o job deve estar verde no HEAD publicado do PR #14 |
 | instalação limpa | job CI dedicado | exige job verde no HEAD publicado do PR #14 |
 | dependências/segredos/licenças/SBOM | jobs CI dedicados | exigem jobs verdes no HEAD publicado do PR #14 |
@@ -24,6 +24,11 @@ de limites financeiros `NaN`/infinitos, o bloqueio fail-closed de telemetria
 de risco inválida, não finita ou negativa e a contenção transitória do replace
 atômico no Windows. A identidade do encaminhamento também isola estratégia e
 versão, com migração idempotente das chaves persistidas pelo formato anterior.
+As nove corretoras CCXT do catálogo abrem salas PAPER spot isoladas na Escola.
+A IQ Option permanece laboratório PAPER, mas uma estratégia formada pode
+entrar na fila bloqueada da Sala REAL graças à integração MCP oficial; isso
+não cria executor, não habilita LIVE e não dispensa a prova de conta somente
+leitura.
 Nenhuma dessas provas abre o selo LIVE.
 
 ## Gate do ambiente de destino

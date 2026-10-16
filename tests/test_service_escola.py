@@ -184,14 +184,15 @@ class TestCertificacaoEPilotos:
         assert d["elegivel"] is False and d["estado"] == "coletando"
         assert "nenhuma evidência" in d["motivo"]
 
-    def test_laboratorio_jamais_elegivel(self, tmp_path, monkeypatch):
+    def test_iq_option_sem_evidencia_ainda_nao_e_elegivel(
+            self, tmp_path, monkeypatch):
         c, _ = _client(tmp_path, monkeypatch)
         d = c.get("/v1/escola/certificacao", headers=H,
                   params={"estrategia": "trend_following",
                           "corretora": "iq_option",
                           "mercado": "opcoes_binarias",
                           "ativo": "EUR/USD"}).json()
-        assert d["elegivel"] is False and "laboratório" in d["motivo"]
+        assert d["elegivel"] is False and "nenhuma evidência" in d["motivo"]
 
     def test_pilotos_vazio_e_cadeia_guardada(self, tmp_path, monkeypatch):
         c, _ = _client(tmp_path, monkeypatch)

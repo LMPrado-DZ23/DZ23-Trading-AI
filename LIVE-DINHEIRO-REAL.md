@@ -73,6 +73,11 @@ como TESTNET operacional. Chaves, segredos, passphrases e UID são armazenados
 pelos mesmos controles de segredo do painel e nunca devem ser copiados para
 documentação, commits ou tickets.
 
+As nove corretoras CCXT também possuem adaptador de sala da Escola para
+mercado spot; Binance, Bybit e OKX mantêm ainda o mercado de futuros já
+declarado. Isso permite formar e encaminhar agentes por corretora/conta sem
+inventar capacidade de TESTNET nas quatro que não oferecem sandbox nativo.
+
 O checklist de execução valida os campos mínimos por corretora antes de
 mostrar as credenciais como prontas. OKX, Coinbase Exchange, KuCoin e Bitget
 exigem também a passphrase; somente chave e segredo permanecem bloqueados
@@ -95,6 +100,12 @@ nesta branch e exige confirmação no momento da ação. Não existe ferramenta 
 ordem no módulo de leitura, não há sandbox homologado e nada disso autoriza
 execução. O token pode ficar cifrado pelo painel ou apenas no ambiente e nunca
 é reutilizado como credencial de execução pelo DZ23.
+
+A integração oficial também permite que uma estratégia IQ Option formada em
+sua sala PAPER entre na fila bloqueada da Sala REAL. A IQ Option continua
+marcada como laboratório, não cria sala LIVE, não possui executor de ordens
+nesta camada e ainda exige a prova autenticada somente leitura da conta antes
+de qualquer pedido de piloto para conta REAL.
 
 O painel oficial da IQ Option foi verificado em 2026-10-16: `Read access` é
 sempre habilitado e os acessos de negociação de Options e Margin Products são
