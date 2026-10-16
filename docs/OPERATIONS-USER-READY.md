@@ -52,6 +52,11 @@ ao selo foram comprovados. Não autoriza LIVE. `--target live` permanece
 bloqueado até uma futura liberação de código auditada e confirmação do dono no
 momento da ação.
 
+O gate operacional também exige uma janela contínua RED e entrega de alerta
+externo. Execute `scripts/verify_observability_window.py` conforme
+`docs/OBSERVABILITY.md`; URL, bearer e canal são lidos exclusivamente do
+ambiente, e a prova sanitizada expira em 24 horas.
+
 ## Fluxo recomendado
 
 O primeiro uso deve ser feito em Shadow Trading. Registre uma intenção pelo endpoint protegido `/v1/execution/shadow` e confirme em `/v1/execution/shadow` que `orders_sent` continua igual a zero. Depois use `/v1/execution/paper`, que exige decisão tipada, evidência, snapshot de mercado e validação determinística do Risk Engine.

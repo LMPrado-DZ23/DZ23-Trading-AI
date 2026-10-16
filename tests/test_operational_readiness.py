@@ -50,6 +50,12 @@ def test_operational_readiness_exige_autenticacao_e_falha_fechado(
         "cobre_postgresql_externo": False,
         "motivo": "PostgreSQL externo não está configurado nesta instalação",
     }
+    assert body["dinheiro_real"]["observabilidade_operacional"]["valida"] is False
+    assert any(
+        item["item"] == "Observabilidade contínua e alerta externo comprovados"
+        and item["pronto"] is False
+        for item in body["dinheiro_real"]["checklist"]
+    )
     assert any(
         item["item"] == "Backup local restaurado e verificado recentemente"
         and item["pronto"] is False

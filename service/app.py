@@ -4880,6 +4880,27 @@ def _recuperacao_postgres_para_prontidao() -> dict:
         }
 
 
+def _observabilidade_para_prontidao() -> dict:
+    """Valida evidência temporal; uma consulta isolada nunca aprova o gate."""
+    try:
+        from tradingagents.desk.operational_observability import (
+            validate_observability_proof,
+        )
+        return validate_observability_proof(
+            DATA,
+            expected_instance_id=METRICS.snapshot(detailed=True)[
+                "process_instance_id"
+            ],
+        )
+    except Exception as exc:
+        return {
+            "valida": False,
+            "verificado_em": "",
+            "idade_maxima_horas": 24,
+            "motivo": f"prova de observabilidade indisponível ({type(exc).__name__})",
+        }
+
+
 _CATEGORIAS_LIBERACAO_REAL = (
     "acao_do_proprietario",
     "prova_externa",
@@ -5053,6 +5074,7 @@ def _live_status_payload(request: Request) -> dict:
         request_tenant(request))
     recuperacao_local = _recuperacao_local_para_prontidao()
     recuperacao_postgres = _recuperacao_postgres_para_prontidao()
+    observabilidade = _observabilidade_para_prontidao()
     frase_ok = (cfg.get("LIVE_TRADING_CONFIRM") or "").strip() == LIVE_CONFIRM_PHRASE
     checklist = [
         {"item": "Frase de autorização digitada", "pronto": frase_ok,
@@ -5130,6 +5152,12 @@ def _live_status_payload(request: Request) -> dict:
              "Pare as escritas, forneça um banco vazio e distinto em "
              "POSTGRES_RESTORE_DATABASE_URL e execute "
              "scripts/verify_postgres_restore.py; a prova vale por 30 dias")},
+        {"item": "Observabilidade contínua e alerta externo comprovados",
+         "pronto": observabilidade["valida"],
+         "categoria": "controle_operacional",
+         "acao": ("Configure o monitor externo e execute "
+                  "scripts/verify_observability_window.py por ao menos 1 hora; "
+                  "a prova vale por 24 horas e nunca autoriza LIVE")},
         # O selo de CÓDIGO da mesa (ADR-006). Sem ele, mesmo com todos os
         # itens acima verdes, a mesa recusa arrancar em LIVE — e é bom que
         # recuse: o painel nunca é a última fechadura de dinheiro real.
@@ -5152,6 +5180,7 @@ def _live_status_payload(request: Request) -> dict:
             "reconciliacao": reconciliacao,
             "recuperacao_local": recuperacao_local,
             "recuperacao_postgresql": recuperacao_postgres,
+            "observabilidade_operacional": observabilidade,
             "certificacoes_estrategia_conta": certificacoes,
             "pilotos_autorizados_no_contexto": [
                 {"agent_id": p.get("agent_id"),

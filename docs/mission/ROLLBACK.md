@@ -83,6 +83,13 @@ expira em 30 dias e também fecha se a origem configurada mudar. Descarte o
 banco temporário somente pelo fluxo controlado do provedor, depois de guardar
 a evidência necessária.
 
+## Prova de observabilidade
+
+`observability-proof.json` é apenas evidência sanitizada e pode ser removida
+para fechar imediatamente esse gate. Sua ausência, expiração, adulteração,
+mudança em `ops/alerts.yml` ou falha de reavaliação mantém a prontidão bloqueada;
+remover a prova não altera monitor, canais, banco ou estado de negociação.
+
 ## Rollback de código
 
 Faça o rollback pelo mecanismo do deployment para um SHA conhecido e

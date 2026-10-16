@@ -15,6 +15,8 @@ def test_metrics_preserve_legacy_shape_and_publish_bounded_histogram():
 
     snapshot = metrics.snapshot(detailed=True)
     assert snapshot["schema"] == "dz23.metrics/2"
+    assert snapshot["process_instance_id"]
+    assert snapshot["process_started_at"].endswith("+00:00")
     assert snapshot["counters"]["execution.attempts"] == 1
     assert snapshot["counter_series"] == [
         {"name": "http.requests", "labels": labels, "value": 1}
@@ -28,6 +30,19 @@ def test_metrics_preserve_legacy_shape_and_publish_bounded_histogram():
         {"le": 500.0, "count": 3},
     ]
     assert histogram["p95_upper_bound"] == 500.0
+
+
+def test_metrics_instance_identifies_restart_and_default_has_two_second_bucket():
+    first = MetricsRegistry()
+    second = MetricsRegistry()
+    labels = {"route": "/healthz"}
+    first.observe("http.request.duration_ms", 10, labels=labels)
+
+    one = first.snapshot(detailed=True)
+    two = second.snapshot(detailed=True)
+
+    assert one["process_instance_id"] != two["process_instance_id"]
+    assert 2000.0 in [item["le"] for item in one["histogram_series"][0]["buckets"]]
 
 
 def test_metrics_reject_secret_shaped_or_unbounded_labels():

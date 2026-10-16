@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import math
 import re
+import uuid
 from collections import Counter
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from threading import Lock
 
 _METRIC_NAME = re.compile(r"^[a-z][a-z0-9_.]{0,95}$")
 _LABEL_NAME = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
-_DEFAULT_BUCKETS_MS = (10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0)
+_DEFAULT_BUCKETS_MS = (
+    10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2000.0, 2500.0, 5000.0
+)
 
 
 class MetricsRegistry:
@@ -30,6 +34,8 @@ class MetricsRegistry:
             tuple[str, tuple[tuple[str, str], ...]], dict[str, object]
         ] = {}
         self._max_labeled_series = max_labeled_series
+        self._instance_id = str(uuid.uuid4())
+        self._started_at = datetime.now(timezone.utc).isoformat()
 
     @staticmethod
     def _metric_name(name: str) -> str:
@@ -179,6 +185,8 @@ class MetricsRegistry:
                 )
             return {
                 "schema": "dz23.metrics/2",
+                "process_instance_id": self._instance_id,
+                "process_started_at": self._started_at,
                 **legacy,
                 "counter_series": counter_series,
                 "histogram_series": histogram_series,
