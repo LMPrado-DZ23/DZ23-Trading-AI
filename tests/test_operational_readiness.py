@@ -41,6 +41,11 @@ def test_operational_readiness_exige_autenticacao_e_falha_fechado(
         "exige_confirmacao_no_momento_da_acao": True,
     }
     assert body["dinheiro_real"]["pode_operar_real"] is False
+    assert body["dinheiro_real"]["recuperacao_local"]["valida"] is False
+    assert any(
+        item["item"] == "Backup local restaurado e verificado recentemente"
+        and item["pronto"] is False
+        for item in body["dinheiro_real"]["checklist"])
     assert body["dinheiro_real"]["estado_de_liberacao"]["estado"] == (
         "preparacao_pendente")
     assert m.MESA_LIVE_LIBERADA is False
@@ -62,6 +67,25 @@ def test_operational_readiness_nao_expoe_segredos(tmp_path, monkeypatch):
     for value in secrets.values():
         if value != "binance":
             assert value not in text
+
+
+def test_operational_readiness_recognizes_verified_local_restore(
+        tmp_path, monkeypatch):
+    _, client = _app(tmp_path, monkeypatch)
+    from tradingagents.desk.backup import create_backup
+    from tradingagents.desk.recovery import rehearse_local_restore
+    archive = tmp_path / "backups" / "readiness.tar.gz"
+    create_backup(tmp_path, archive)
+    rehearse_local_restore(tmp_path, archive)
+
+    body = client.get("/v1/operational-readiness", headers=H).json()
+
+    assert body["dinheiro_real"]["recuperacao_local"]["valida"] is True
+    item = next(
+        item for item in body["dinheiro_real"]["checklist"]
+        if item["item"] == "Backup local restaurado e verificado recentemente")
+    assert item["pronto"] is True
+    assert body["invariantes"]["envio_real_habilitado"] is False
 
 
 def test_status_publico_nao_anuncia_mais_rota_ausente(tmp_path, monkeypatch):

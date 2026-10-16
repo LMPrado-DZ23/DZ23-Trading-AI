@@ -10,13 +10,13 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
 | Gate | Prova exigida | Estado no HEAD da branch |
 |---|---|---|
-| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.546 passaram localmente; CI do novo SHA pendente |
+| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.552 passaram localmente; CI do novo SHA pendente |
 | lint | `ruff check .` | verde localmente; CI do novo SHA pendente |
-| instalação limpa | job CI dedicado | verde no PR #14 até `c59a400` |
-| dependências/segredos/licenças/SBOM | jobs CI dedicados | verdes no PR #14 até `c59a400` |
-| PostgreSQL e ARM64 | jobs CI dedicados | verdes no PR #14 até `c59a400` |
+| instalação limpa | job CI dedicado | verde no PR #14 até `205edaa` |
+| dependências/segredos/licenças/SBOM | jobs CI dedicados | verdes no PR #14 até `205edaa` |
+| PostgreSQL e ARM64 | jobs CI dedicados | verdes no PR #14 até `205edaa` |
 | LIVE fechado | testes + `/v1/operational-readiness` | `MESA_LIVE_LIBERADA=False` |
-| rollback | backup local íntegro + runbook | implementado; homologação no host ainda externa |
+| rollback | backup local + restore isolado + prova recente | implementado; ensaio no host ainda externo |
 
 ## Gate do ambiente de destino
 

@@ -43,6 +43,7 @@ ROOT_ITEMS = (
     "live-halts.json",
     "ia-uso.json",
     "broker-journal.jsonl",
+    "local-restore-proof.json",
     # Compatibilidade com instalações antigas.
     "desk-state.json",
     "desk-broker.jsonl",

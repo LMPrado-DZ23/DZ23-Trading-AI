@@ -254,6 +254,21 @@ alvo `preparacao` exige todos os pré-requisitos sem abrir o selo; o alvo
 liberados. Ambos retornam código diferente de zero quando o contrato está
 incompleto, indisponível ou contraditório.
 
+O checklist também exige um ensaio local de recuperação recente. Depois de
+gerar o backup pelo painel, execute no host:
+
+```powershell
+python scripts/verify_local_restore.py `
+  --data-dir .\data `
+  --archive .\data\backups\dz23-backup-AAAAMMDD-HHMMSS.tar.gz
+```
+
+O ensaio restaura em área temporária, valida hashes, SQLite, JSON e JSONL e
+grava uma prova válida por 30 dias. Não inicia a mesa e não envia ordens. A
+prova local não cobre PostgreSQL externo; quando `DATABASE_URL` estiver ativo,
+o backup lógico e o restore desse banco continuam sendo um gate separado do
+ambiente de destino.
+
 ## Ordem recomendada (não pule)
 1. Rode em **testnet** até ver uma ordem preenchida e reconciliada.
    Ao concluir a reconciliação segura, o DZ23 grava uma prova durável vinculada

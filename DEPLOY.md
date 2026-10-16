@@ -61,15 +61,22 @@ Não exponha o PostgreSQL (nem o próprio serviço) publicamente. Coloque o serv
 Antes de promover qualquer ambiente, prove o restore em um diretório isolado:
 
 ```bash
-python3 scripts/backup_data.py backup /data /backup/dz23-pre-deploy.tar.gz
-python3 scripts/backup_data.py inspect /backup/dz23-pre-deploy.tar.gz
-python3 scripts/backup_data.py restore /data-restaurado /backup/dz23-pre-deploy.tar.gz
+python3 scripts/backup_data.py backup /data /data/backups/dz23-pre-deploy.tar.gz
+python3 scripts/backup_data.py inspect /data/backups/dz23-pre-deploy.tar.gz
+python3 scripts/backup_data.py restore /data-restaurado /data/backups/dz23-pre-deploy.tar.gz
+python3 scripts/verify_local_restore.py \
+  --data-dir /data --archive /data/backups/dz23-pre-deploy.tar.gz
 ```
 
 O pacote local contém segredos e todo o estado permitido do volume, inclusive
 Escola/Sala REAL/pilotos; proteja-o como credencial. Estado em PostgreSQL
 externo exige backup lógico e restore separados. Consulte
 [docs/mission/ROLLBACK.md](docs/mission/ROLLBACK.md).
+
+O último comando restaura novamente em área temporária, valida hashes,
+SQLite/JSON/JSONL e grava `/data/local-restore-proof.json`. A prova vale por
+30 dias, permanece vinculada ao hash do arquivo ensaiado e entra no preflight
+REAL; mover, apagar ou alterar o backup fecha o gate automaticamente.
 
 Para um proxy Caddy de referência, consulte [ops/Caddyfile.example](ops/Caddyfile.example). O domínio, DNS, portas 80/443, certificado e política de backup devem ser configurados pelo operador do ambiente.
 

@@ -52,6 +52,15 @@ o motivo por trader ("sem operar: ..."). Causas comuns:
   `DATABASE_URL`, faça também backup/restore lógico do PostgreSQL: ele não
   entra no pacote do volume local.
 
+- **Registrar o ensaio local** (no servidor, sem iniciar outra mesa):
+  ```
+  python scripts/verify_local_restore.py --data-dir /data \
+    --archive /data/backups/dz23-backup-AAAAMMDD-HHMMSS.tar.gz
+  ```
+  O comando usa uma área temporária, valida hashes, integridade SQLite e
+  documentos JSON/JSONL, não envia ordens e registra uma prova válida por 30
+  dias. Se o arquivo for alterado ou removido, o preflight volta a bloquear.
+
 ## Incidentes
 | Sintoma | O que fazer |
 |---|---|

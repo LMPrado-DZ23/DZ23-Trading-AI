@@ -22,8 +22,8 @@ um plano de contingência externo.
 5. confirme `/healthz`, `/readyz` e `/v1/operational-readiness` antes da troca.
 
 ```bash
-python scripts/backup_data.py backup /data /backup/dz23-pre-change.tar.gz
-python scripts/backup_data.py inspect /backup/dz23-pre-change.tar.gz
+python scripts/backup_data.py backup /data /data/backups/dz23-pre-change.tar.gz
+python scripts/backup_data.py inspect /data/backups/dz23-pre-change.tar.gz
 ```
 
 ## Recuperação de dados local
@@ -31,8 +31,14 @@ python scripts/backup_data.py inspect /backup/dz23-pre-change.tar.gz
 Com o serviço parado, restaure em um diretório vazio:
 
 ```bash
-python scripts/backup_data.py restore /data-restaurado /backup/dz23-pre-change.tar.gz
+python scripts/backup_data.py restore /data-restaurado /data/backups/dz23-pre-change.tar.gz
+python scripts/verify_local_restore.py \
+  --data-dir /data --archive /data/backups/dz23-pre-change.tar.gz
 ```
+
+Para registrar o gate, o arquivo ensaiado deve estar diretamente em
+`DATA_DIR/backups`. A prova expira após 30 dias e é invalidada se esse arquivo
+for removido ou tiver o hash alterado.
 
 Suba uma instância isolada apontando para `/data-restaurado` e valide:
 

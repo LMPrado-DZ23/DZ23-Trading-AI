@@ -4786,6 +4786,20 @@ def _parada_desarmada_para_prontidao(tenant_id: str) -> bool:
         return False
 
 
+def _recuperacao_local_para_prontidao() -> dict:
+    """Prova de restore é lida sem restaurar ou alterar o serviço ativo."""
+    try:
+        from tradingagents.desk.recovery import validate_local_restore_proof
+        return validate_local_restore_proof(DATA)
+    except Exception as exc:
+        return {
+            "valida": False,
+            "verificado_em": "",
+            "cobre_postgresql_externo": False,
+            "motivo": f"prova de recuperação indisponível ({type(exc).__name__})",
+        }
+
+
 _CATEGORIAS_LIBERACAO_REAL = (
     "acao_do_proprietario",
     "prova_externa",
@@ -4957,6 +4971,7 @@ def _live_status_payload(request: Request) -> dict:
     reconciliacao = _reconciliacao_para_prontidao(request_tenant(request))
     parada_desarmada = _parada_desarmada_para_prontidao(
         request_tenant(request))
+    recuperacao_local = _recuperacao_local_para_prontidao()
     frase_ok = (cfg.get("LIVE_TRADING_CONFIRM") or "").strip() == LIVE_CONFIRM_PHRASE
     checklist = [
         {"item": "Frase de autorização digitada", "pronto": frase_ok,
@@ -5019,6 +5034,12 @@ def _live_status_payload(request: Request) -> dict:
          "categoria": "controle_operacional",
          "acao": ("Resolva a causa da parada, reconcilie o estado e libere-a "
                   "explicitamente antes de qualquer operação")},
+        {"item": "Backup local restaurado e verificado recentemente",
+         "pronto": recuperacao_local["valida"],
+         "categoria": "controle_operacional",
+         "acao": ("Gere o backup e execute scripts/verify_local_restore.py; "
+                  "a prova vale por 30 dias e não substitui o restore do "
+                  "PostgreSQL externo")},
         # O selo de CÓDIGO da mesa (ADR-006). Sem ele, mesmo com todos os
         # itens acima verdes, a mesa recusa arrancar em LIVE — e é bom que
         # recuse: o painel nunca é a última fechadura de dinheiro real.
@@ -5039,6 +5060,7 @@ def _live_status_payload(request: Request) -> dict:
             "preparacao_leitura": _prova_publica(prova_leitura, prova_valida),
             "homologacao_testnet": prova_testnet,
             "reconciliacao": reconciliacao,
+            "recuperacao_local": recuperacao_local,
             "certificacoes_estrategia_conta": certificacoes,
             "pilotos_autorizados_no_contexto": [
                 {"agent_id": p.get("agent_id"),

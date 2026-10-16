@@ -86,15 +86,17 @@ kill switch, estados PAPER/SHADOW e checkpoints. Por isso o pacote é criado
 com permissão restrita e deve ser tratado como segredo:
 
 ```bash
-python3 scripts/backup_data.py backup ./data ./backups/dz23-$(date -u +%Y%m%dT%H%M%SZ).tar.gz
-python3 scripts/backup_data.py inspect ./backups/dz23-ARQUIVO.tar.gz
+python3 scripts/backup_data.py backup ./data ./data/backups/dz23-$(date -u +%Y%m%dT%H%M%SZ).tar.gz
+python3 scripts/backup_data.py inspect ./data/backups/dz23-ARQUIVO.tar.gz
 ```
 
 Para restaurar, pare o serviço, preserve a pasta atual e restaure primeiro em
 um diretório vazio:
 
 ```bash
-python3 scripts/backup_data.py restore ./data-restaurado ./backups/arquivo.tar.gz
+python3 scripts/backup_data.py restore ./data-restaurado ./data/backups/arquivo.tar.gz
+python3 scripts/verify_local_restore.py \
+  --data-dir ./data --archive ./data/backups/arquivo.tar.gz
 ```
 
 Suba uma instância isolada sobre `./data-restaurado` e confira healthchecks,
@@ -105,6 +107,12 @@ extras, links, caminhos inseguros e pacotes adulterados são recusados.
 Se `DATABASE_URL` estiver ativo, o estado persistido no PostgreSQL **não**
 está dentro do arquivo local: gere e teste separadamente o backup lógico pelo
 provedor do banco. Um backup só conta como gate depois de um restore provado.
+
+O ensaio automatizado restaura em diretório temporário e valida também a
+estrutura interna dos bancos SQLite e dos documentos JSON/JSONL. A prova local
+vale por 30 dias e fica vinculada ao hash do backup presente em
+`DATA_DIR/backups`; não contém conteúdo de credencial e declara explicitamente
+que nenhuma ordem foi enviada. Ela aparece em `/v1/operational-readiness`.
 
 ## Promoção de estratégia
 
