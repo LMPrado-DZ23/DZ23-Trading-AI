@@ -4304,6 +4304,7 @@ def _registrar_prova_testnet(request: Request, d: dict,
 
 
 _CHAVE_PREPARACAO_REAL = "preparacao_real_leitura"
+_SCHEMA_PREPARACAO_REAL = "dz23.preparacao-real-leitura/1"
 _VALIDADE_PREPARACAO_REAL = timedelta(hours=24)
 _TOLERANCIA_RELOGIO_PREPARACAO_REAL = timedelta(minutes=5)
 
@@ -4346,7 +4347,8 @@ def _prova_leitura_real(request: Request, cfg: dict) -> tuple[dict | None, bool]
         return None, False
     atual = read_only_credential_fingerprint(_env_leitura_real(cfg))
     valida = bool(
-        prova.get("credential_fingerprint")
+        prova.get("schema") == _SCHEMA_PREPARACAO_REAL
+        and prova.get("credential_fingerprint")
         and hmac.compare_digest(str(prova["credential_fingerprint"]), atual)
         and prova.get("exchange") == (
             cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
@@ -4509,7 +4511,7 @@ async def live_preparacao_leitura(req: Request, _=Depends(auth),
         raise HTTPException(409, str(exc)) from exc
     agora = datetime.now(timezone.utc).isoformat()
     prova = {
-        "schema": "dz23.preparacao-real-leitura/1",
+        "schema": _SCHEMA_PREPARACAO_REAL,
         "exchange": resultado["exchange"],
         "conta": conta,
         "authenticated_read": bool(resultado["authenticated_read"]),
@@ -4556,10 +4558,11 @@ def live_status(request: Request, _=Depends(auth)):
         {"item": "Chaves da corretora configuradas",
          "pronto": bool(cfg.get("EXCHANGE_API_KEY") and cfg.get("EXCHANGE_API_SECRET")),
          "acao": "Cole a chave e o segredo da sua corretora"},
-        {"item": "Acesso REAL de leitura e permissões mínimas registrados",
+        {"item": "Acesso REAL de leitura recente e permissões mínimas registradas",
          "pronto": permissoes_minimas_ok,
          "acao": ("Use uma chave REAL separada, sem trade e sem saque; o "
-                  "servidor fará apenas consultas autenticadas. Confira as "
+                  "servidor fará apenas consultas autenticadas e exigirá "
+                  "renovação da prova a cada 24 horas. Confira as "
                   "permissões também no painel da corretora")},
         {"item": "Identidade da conta REAL confirmada",
          "pronto": identidade_ok,

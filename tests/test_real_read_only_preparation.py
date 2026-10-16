@@ -226,6 +226,27 @@ def test_prova_com_horario_ausente_invalido_ou_sem_fuso_falha_fechado(
     assert _item(status, "permissões mínimas")["pronto"] is False
 
 
+def test_prova_com_schema_desconhecido_falha_fechado(tmp_path, monkeypatch):
+    m, c = _app(tmp_path, monkeypatch)
+    c.post("/v1/config", headers=H, json={"vars": READ_CFG})
+    monkeypatch.setattr(m, "probe_read_only_account", lambda env: {
+        "exchange": "binance", "authenticated_read": True,
+        "read_methods": ["fetch_balance"],
+        "credential_fingerprint": read_only_credential_fingerprint(env),
+    })
+    assert c.post("/v1/live/preparacao-leitura", headers=H, json={
+        "conta": "real-principal", "confirmo_sem_trade": True,
+        "confirmo_sem_movimentacao": True}).status_code == 200
+    caminho = next((tmp_path / "desks").rglob("preparacao_real_leitura.json"))
+    prova = json.loads(caminho.read_text(encoding="utf-8"))
+    prova["schema"] = "dz23.preparacao-real-leitura/999"
+    caminho.write_text(json.dumps(prova), encoding="utf-8")
+
+    status = c.get("/v1/live/status", headers=H).json()
+    assert status["preparacao_leitura"]["valida"] is False
+    assert _item(status, "permissões mínimas")["pronto"] is False
+
+
 def test_certificacao_amarra_estrategia_conta_risco_e_reconciliacao(
         tmp_path, monkeypatch):
     m, c = _app(tmp_path, monkeypatch)
