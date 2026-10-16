@@ -4700,6 +4700,12 @@ def _certificacoes_real(request: Request, cfg: dict,
         sup = _supervisor_of(request)
         sup.vigiar(central=esc["central"])
         relatorio = sup.relatorio()
+        identidades_fn = getattr(sup, "identidades_de_conta", None)
+        identidades = (identidades_fn() if callable(identidades_fn) else {
+            str(p.get("authorization_id") or ""): str(
+                p.get("broker_identity_fingerprint") or "")
+            for p in relatorio
+        })
     except Exception:
         return []
     exchange = (cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
@@ -4717,7 +4723,8 @@ def _certificacoes_real(request: Request, cfg: dict,
         if str(piloto.get("conta") or "").strip() != conta:
             continue
         if not hmac.compare_digest(
-                str(piloto.get("broker_identity_fingerprint") or ""),
+                str(identidades.get(str(
+                    piloto.get("authorization_id") or "")) or ""),
                 str(prova.get("broker_identity_fingerprint") or "")):
             continue
         capital = _decimal_positivo(piloto.get("capital_maximo"))

@@ -105,7 +105,6 @@ class AutorizacaoDePiloto:
             "revogada_em": self.revogada_em,
             "motivo_revogacao": self.motivo_revogacao,
             "motivo_suspensao": self.motivo_suspensao,
-            "broker_identity_fingerprint": self.broker_identity_fingerprint,
             "modo": self.modo, "schema": self.schema,
         }
 
@@ -200,6 +199,15 @@ class SupervisorDePiloto:
 
     def autorizacoes(self) -> list[AutorizacaoDePiloto]:
         return [self._de_dict(d) for d in self._autorizacoes.values()]
+
+    def identidades_de_conta(self) -> dict[str, str]:
+        """Vínculos internos por autorização, sem expô-los no relatório."""
+        return {
+            str(d.get("authorization_id") or ""): str(
+                d.get("broker_identity_fingerprint") or "")
+            for d in self._autorizacoes.values()
+            if d.get("authorization_id")
+        }
 
     @staticmethod
     def _chave_encaminhamento(agent_id: str, contexto: dict) -> str:
@@ -590,8 +598,6 @@ class SupervisorDePiloto:
                 "estrategia": a.estrategia, "versao": a.versao,
                 "corretora": a.corretora, "conta": a.conta,
                 "conta_real": a.conta_real,
-                "broker_identity_fingerprint": (
-                    a.broker_identity_fingerprint),
                 "capital_maximo": str(a.capital_maximo),
                 "perda_diaria_maxima": str(a.perda_diaria_maxima),
                 "perda_total_maxima": str(a.perda_total_maxima),

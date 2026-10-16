@@ -64,6 +64,7 @@ uv run python scripts/validar_estrategias.py --exchange binance `
 | KuCoin | sim | não há sandbox nativo | passphrase |
 | Mercado Bitcoin | sim | não há sandbox nativo | — |
 | Bitget | sim | não há sandbox nativo | passphrase |
+| IQ Option | MCP oficial reconhecido | validação demo pendente | token MCP |
 
 As quatro corretoras sem sandbox ficam disponíveis para leitura pública,
 catálogo de capacidades e preparação da conta. O sistema recusa apresentá-las
@@ -75,6 +76,13 @@ O checklist de execução valida os campos mínimos por corretora antes de
 mostrar as credenciais como prontas. OKX, Coinbase Exchange, KuCoin e Bitget
 exigem também a passphrase; somente chave e segredo permanecem bloqueados
 nessas quatro integrações.
+
+A IQ Option usa uma integração MCP oficial separada do CCXT, com sete
+servidores por classe de instrumento. O catálogo reconhece essa integração e
+publica o estado `OFFICIAL_MCP_PENDING_VALIDATION`; ela não é apresentada como
+operacional enquanto os servidores não forem aprovados pela política local e
+testados em leitura/demo. Tokens MCP nunca são importados de arquivos anexados
+nem reutilizados como credenciais de execução.
 
 As credenciais de execução também ficam vinculadas à corretora escolhida.
 Trocar o seletor não reaproveita chave, segredo ou passphrase de outro
@@ -112,13 +120,17 @@ No painel, em **Configuração → Conta REAL — somente leitura**:
    fundos;
 2. cole a credencial no painel local e salve;
 3. clique em **Comprovar conta REAL somente leitura**;
-4. identifique a conta e confirme as duas restrições de permissão.
+4. informe um apelido local e, separadamente, o identificador real exibido
+   pela corretora;
+5. confirme as duas restrições de permissão.
 
-O servidor executa somente consultas autenticadas de saldo, ordens abertas e,
-quando o adaptador oferece, contas. Nenhum saldo, ordem ou identificador
-privado é devolvido ao painel. A prova durável contém apenas corretora, rótulo
-da conta, horário, nomes dos métodos de leitura e um hash da credencial. Trocar
-qualquer parte da credencial invalida a prova automaticamente.
+O servidor executa somente consultas autenticadas de saldo, ordens abertas e
+contas. O identificador informado é comparado em memória com o identificador
+devolvido pela corretora; adaptadores sem identidade verificável permanecem
+bloqueados. Nenhum saldo, ordem ou identificador privado é devolvido ao painel
+ou salvo. A prova durável contém apenas corretora, rótulo local, horário, nomes
+dos métodos de leitura, hash da credencial e uma impressão HMAC da identidade.
+Trocar qualquer parte da credencial invalida a prova automaticamente.
 
 A prova vale por 24 horas. Depois desse prazo, ou se o relógio registrado for
 inválido, o checklist volta a bloquear a conta e exige uma nova consulta
@@ -172,7 +184,10 @@ a prova de leitura expirar, os limites deixarem de ser compatíveis ou a
 reconciliação ficar pendente, a prontidão volta a ficar bloqueada
 automaticamente. O vigia LIVE também recusa continuamente qualquer piloto sem
 vínculo explícito com conta REAL ou cuja prova não corresponda mais à mesma
-corretora e conta.
+corretora e conta. A impressão da identidade verificada é copiada para o
+registro interno do pedido: refazer a prova com outra conta e manter o mesmo
+apelido não redireciona um piloto já autorizado. Essa impressão não é exposta
+pelas respostas públicas do piloto.
 
 ## Antes de tudo
 Perdas com dinheiro real são **suas e irreversíveis**. Nenhum resultado de

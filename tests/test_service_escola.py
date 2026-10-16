@@ -546,9 +546,11 @@ class TestMesaEscolaE2E:
         aut = resposta.json()["autorizacao"]
         assert aut["conta"] == "real-principal"
         assert aut["conta_real"] is True
+        assert "broker_identity_fingerprint" not in aut
         rel = c.get("/v1/escola/pilotos", headers=H).json()["autorizacoes"][0]
         assert rel["conta"] == "real-principal"
         assert rel["conta_real"] is True
+        assert "broker_identity_fingerprint" not in rel
         assert rel["contexto_certificacao"]["conta"] == "paper-legacy"
         assert rel["contexto_certificacao"]["modo"] == "paper"
 
