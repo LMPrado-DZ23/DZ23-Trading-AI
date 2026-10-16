@@ -27,7 +27,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
+from decimal import Decimal, DecimalException
 from enum import Enum
 
 MODO_DO_PILOTO = "paper (simulado)"
@@ -35,6 +35,15 @@ SCHEMA_PILOTO = "dz23.piloto/1"
 SCHEMA_ENCAMINHAMENTO = "dz23.sala-real-preparacao/1"
 PRAZO_MIN_DIAS = 1
 PRAZO_MAX_DIAS = 365
+
+
+def _decimal_finito(valor) -> Decimal | None:
+    """Converte número externo sem deixar NaN/infinito furar o fail-closed."""
+    try:
+        numero = Decimal(str(valor))
+    except (DecimalException, TypeError, ValueError):
+        return None
+    return numero if numero.is_finite() else None
 
 
 class EstadoDoPiloto(str, Enum):
@@ -319,12 +328,13 @@ class SupervisorDePiloto:
             raise ValueError(
                 f"{agent_id} já tem pedido em andamento "
                 f"({atual['estado']}) — revogue antes de solicitar outro")
-        capital_maximo = Decimal(str(capital_maximo))
-        perda_diaria_maxima = Decimal(str(perda_diaria_maxima))
-        perda_total_maxima = Decimal(str(perda_total_maxima))
-        if not all(numero.is_finite() for numero in (
+        capital_maximo = _decimal_finito(capital_maximo)
+        perda_diaria_maxima = _decimal_finito(perda_diaria_maxima)
+        perda_total_maxima = _decimal_finito(perda_total_maxima)
+        if any(numero is None for numero in (
                 capital_maximo, perda_diaria_maxima, perda_total_maxima)):
-            raise ValueError("limites financeiros precisam ser finitos")
+            raise ValueError(
+                "limites financeiros precisam ser numéricos e finitos")
         if capital_maximo <= 0:
             raise ValueError("capital máximo precisa ser positivo")
         if perda_diaria_maxima <= 0 or perda_total_maxima <= 0:
@@ -537,22 +547,52 @@ class SupervisorDePiloto:
         for agent_id, d in self._autorizacoes.items():
             estado = EstadoDoPiloto(d["estado"])
             if estado is EstadoDoPiloto.PILOTO_AUTORIZADO:
-                cap_max = Decimal(str(d.get("capital_maximo", "0")))
-                dia_max = Decimal(str(d.get("perda_diaria_maxima", "0")))
-                total_max = Decimal(str(d.get("perda_total_maxima", "0")))
-                em_uso = Decimal(str(uso.get(agent_id, 0)))
+                cap_max = _decimal_finito(d.get("capital_maximo", "0"))
+                dia_max = _decimal_finito(
+                    d.get("perda_diaria_maxima", "0"))
+                total_max = _decimal_finito(
+                    d.get("perda_total_maxima", "0"))
+                if (any(limite is None for limite in (
+                        cap_max, dia_max, total_max))
+                        or cap_max <= 0 or dia_max <= 0 or total_max <= 0
+                        or dia_max > total_max):
+                    motivo = "limites persistidos inválidos ou não finitos"
+                    self._transitar(
+                        agent_id, EstadoDoPiloto.SUSPENSO, agora=agora,
+                        motivo=motivo, motivo_suspensao=motivo)
+                    bloqueados[agent_id] = f"{motivo} — piloto suspenso"
+                    continue
+                metricas = (
+                    ("capital em uso", _decimal_finito(
+                        uso.get(agent_id, 0))),
+                    ("perda diária", _decimal_finito(
+                        hoje.get(agent_id, 0))),
+                    ("perda total", _decimal_finito(
+                        total.get(agent_id, 0))),
+                )
+                invalida = next(
+                    (nome for nome, valor in metricas if valor is None), None)
+                if invalida:
+                    bloqueados[agent_id] = (
+                        f"métrica de risco não finita ou inválida: {invalida}")
+                    continue
+                em_uso = metricas[0][1]
+                if em_uso < 0:
+                    bloqueados[agent_id] = (
+                        "métrica de risco inválida: capital em uso negativo")
+                    continue
                 if em_uso > cap_max:
                     bloqueados[agent_id] = (
                         f"capital em uso {em_uso} acima do máximo "
                         f"autorizado {cap_max}")
                     continue
-                perdido_hoje = Decimal(str(hoje.get(agent_id, 0)))
+                perdido_hoje = metricas[1][1]
                 if perdido_hoje >= dia_max:
                     bloqueados[agent_id] = (
                         f"perda diária {perdido_hoje} atingiu o limite "
                         f"autorizado {dia_max}")
                     continue
-                perdido = Decimal(str(total.get(agent_id, 0)))
+                perdido = metricas[2][1]
                 if perdido >= total_max:
                     self._transitar(
                         agent_id, EstadoDoPiloto.SUSPENSO, agora=agora,

@@ -10,7 +10,7 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
 | Gate | Prova exigida | Estado no HEAD da branch |
 |---|---|---|
-| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.629 passaram localmente no código atual; a matriz deve estar verde no HEAD publicado do PR #14 |
+| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.645 passaram localmente no código atual; a matriz deve estar verde no HEAD publicado do PR #14 |
 | lint | `ruff check .` | verde localmente; o job deve estar verde no HEAD publicado do PR #14 |
 | instalação limpa | job CI dedicado | exige job verde no HEAD publicado do PR #14 |
 | dependências/segredos/licenças/SBOM | jobs CI dedicados | exigem jobs verdes no HEAD publicado do PR #14 |
@@ -20,8 +20,9 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
 Os testes adversariais desse total cobrem a sincronização persistida entre a
 fila da Sala REAL e os estados autorizado/revogado/expirado/suspenso, a recusa
-de limites financeiros `NaN`/infinitos e a contenção transitória do replace
-atômico no Windows. Nenhuma dessas provas abre o selo LIVE.
+de limites financeiros `NaN`/infinitos, o bloqueio fail-closed de telemetria
+de risco inválida e a contenção transitória do replace atômico no Windows.
+Nenhuma dessas provas abre o selo LIVE.
 
 ## Gate do ambiente de destino
 

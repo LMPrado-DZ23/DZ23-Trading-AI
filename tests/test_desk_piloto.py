@@ -429,6 +429,48 @@ class TestLimitesEVigia:
                           perda_total={AGENTE: Decimal("199.99")})
         assert b == {}
 
+    @pytest.mark.parametrize(
+        "campo,valor",
+        [("capital_em_uso", Decimal("NaN")),
+         ("capital_em_uso", Decimal("Infinity")),
+         ("capital_em_uso", Decimal("-Infinity")),
+         ("perda_hoje", Decimal("NaN")),
+         ("perda_hoje", Decimal("Infinity")),
+         ("perda_hoje", Decimal("-Infinity")),
+         ("perda_total", Decimal("NaN")),
+         ("perda_total", Decimal("Infinity")),
+         ("perda_total", Decimal("-Infinity")),
+         ("capital_em_uso", "telemetria-corrompida"),
+         ("capital_em_uso", Decimal("-1"))],
+    )
+    def test_metrica_de_risco_invalida_bloqueia_sem_quebrar_o_vigia(
+            self, campo, valor):
+        sup, _, _ = self._autorizado()
+
+        bloqueios = sup.bloqueios(
+            agora=AGORA, **{campo: {AGENTE: valor}})
+
+        assert "métrica de risco" in bloqueios[AGENTE]
+        assert sup.de(AGENTE).estado is EstadoDoPiloto.PILOTO_AUTORIZADO
+
+    @pytest.mark.parametrize(
+        "alteracoes",
+        [{"capital_maximo": "NaN"},
+         {"capital_maximo": "0"},
+         {"perda_diaria_maxima": "-1"},
+         {"perda_total_maxima": "0"},
+         {"perda_diaria_maxima": "300", "perda_total_maxima": "200"}],
+    )
+    def test_limite_persistido_invalido_suspende_piloto_fail_closed(
+            self, alteracoes):
+        sup, _, _ = self._autorizado()
+        sup._autorizacoes[AGENTE].update(alteracoes)
+
+        bloqueios = sup.bloqueios(agora=AGORA)
+
+        assert "limites persistidos inválidos" in bloqueios[AGENTE]
+        assert sup.de(AGENTE).estado is EstadoDoPiloto.SUSPENSO
+
     def test_prazo_vencido_expira(self):
         sup, _, _ = self._autorizado(prazo_dias=1)
         notas = sup.vigiar(agora=AGORA + timedelta(days=3))
