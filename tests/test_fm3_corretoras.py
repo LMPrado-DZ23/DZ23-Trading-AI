@@ -175,6 +175,35 @@ class TestPreparacaoReal:
         assert "conta_real:true" in t
         assert "prova.valida" in t
 
+    def test_piloto_exibe_conta_limites_e_validade_antes_da_decisao(self):
+        html = _html()
+        t = _funcao(html, "async function escolaCentral(")
+        for campo in ("conta_real", "capital_maximo", "perda_diaria_maxima",
+                      "perda_total_maxima", "prazo_dias", "valido_ate"):
+            assert campo in t, f"o proprietário precisa revisar {campo} no painel"
+        assert "window._pilotosConfigurados" in t
+
+    def test_autorizacao_confirma_limites_e_permanece_paper(self):
+        html = _html()
+        t = _funcao(html, "async function pilotoAutorizar(")
+        assert "window._pilotosConfigurados" in t
+        for campo in ("capital_maximo", "perda_diaria_maxima",
+                      "perda_total_maxima", "prazo_dias"):
+            assert campo in t
+        assert "confirm(resumo)" in t
+        assert "'/autorizar'" in t
+        assert "method:'POST'" in t
+        assert "continua PAPER" in t and "LIVE permanece bloqueado" in t
+
+    def test_revogacao_exige_motivo_e_usa_rota_dedicada(self):
+        html = _html()
+        t = _funcao(html, "async function pilotoRevogar(")
+        assert "window._pilotosConfigurados" in t
+        assert "prompt(" in t and "motivo.trim()" in t
+        assert "'/revogar'" in t
+        assert "JSON.stringify({motivo:motivo.trim()})" in t
+        assert "method:'POST'" in t
+
 
 class TestTravasDoPainel:
     """O painel inteiro: sem caminho para dinheiro real, saque ou transferência."""
