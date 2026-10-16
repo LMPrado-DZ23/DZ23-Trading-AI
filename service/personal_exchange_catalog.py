@@ -25,6 +25,7 @@ class PersonalExchange:
     testnet_enabled: bool = False
     requires_password: bool = False
     read_only_enabled: bool = True
+    authenticated_read_only_enabled: bool = True
     live_enabled: bool = False
     integration: Literal["ccxt", "mcp"] = "ccxt"
     official_integration_url: str | None = None
@@ -80,6 +81,7 @@ def public_catalog() -> list[dict[str, object]]:
          "simulation": x.sandbox, "live_enabled": x.live_enabled,
          "testnet_enabled": x.testnet_enabled,
          "read_only_enabled": x.read_only_enabled,
+         "authenticated_read_only_enabled": x.authenticated_read_only_enabled,
          "integration": x.integration,
          "official_integration_url": x.official_integration_url,
          "mcp_endpoints": list(x.mcp_endpoints),
@@ -87,7 +89,7 @@ def public_catalog() -> list[dict[str, object]]:
          "required_execution_credentials": list(
              required_execution_credentials(x.slug)),
          "integration_status": (
-             "OFFICIAL_MCP_METADATA_VALIDATED" if x.integration == "mcp"
+             "OFFICIAL_MCP_READ_ONLY_PREPARED" if x.integration == "mcp"
              else "AVAILABLE_TESTNET" if x.testnet_enabled
              else "AVAILABLE_READ_ONLY")}
         for x in EXCHANGES

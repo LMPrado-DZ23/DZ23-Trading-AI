@@ -419,7 +419,7 @@ def test_modo_simples_assistente_conectar_modo_play(page, live_server, owner_pas
     expect(caps).to_contain_text("disponível", timeout=15000)
     expect(caps).to_contain_text("configuração necessária")
     expect(caps).to_contain_text("bloqueado por segurança")
-    expect(caps).to_contain_text("MCP oficial validado em modo passivo")
+    expect(caps).to_contain_text("Leitura REAL preparada, execução bloqueada")
     page.locator("#capacidadesLista").scroll_into_view_if_needed()
     page.screenshot(path=str(evidence_dir / "09b-inicio-capacidades.png"))
     page.locator('[data-abrir="mesa"]').first.click()

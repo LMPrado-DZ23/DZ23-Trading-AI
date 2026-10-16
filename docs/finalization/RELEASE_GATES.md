@@ -40,7 +40,10 @@ Todos os itens abaixo precisam de evidência nova no SHA implantado:
 - PAPER prolongado por agente/estratégia/conta;
 - limites do piloto e tetos globais compatíveis;
 - IQ Option com os sete handshakes passivos comprovados (7/7 em 2026-10-16),
-  sem ferramenta chamável, leitura de conta ou ordem;
+  contrato exato pinado e prova `list_balances(NORMAL)` preparada; a primeira
+  leitura autenticada da conta ainda é uma prova externa pendente,
+  sem ferramenta mutável ou ordem chamada; o token atual anuncia ferramentas
+  mutáveis e não satisfaz o gate de escopo read-only no provedor;
 - divergências e provas expiradas ausentes.
 
 ## Ações que continuam exigindo o proprietário no momento da ação

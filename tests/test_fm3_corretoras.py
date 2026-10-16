@@ -116,12 +116,14 @@ class TestTelaCorretora:
         t = _funcao(html, "async function catalogoCarregar(")
         assert "'/v1/personal/exchanges'" in t
         for estado in ("AVAILABLE_TESTNET", "AVAILABLE_READ_ONLY",
-                       "OFFICIAL_MCP_METADATA_VALIDATED"):
+                       "OFFICIAL_MCP_READ_ONLY_PREPARED"):
             assert estado in t, "estado real do catálogo precisa aparecer como é"
         assert "execution_enabled" in t, (
             "o painel precisa mostrar que execução está desligada")
         assert "escapeHtml" in t, "dados do servidor entram escapados (AUD rodada-8)"
         assert "sem credenciais" in t and "sem rede" in t
+        assert "x.read_only_enabled&&x.integration==='ccxt'" in t, (
+            "leitura pública CCXT não pode ser anunciada para a sala MCP")
 
     def test_capacidades_por_corretora_com_aviso_honesto(self):
         html = _html()

@@ -29,6 +29,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from service.api import segredos_em_repouso
 from service.api.ia_uso import RegistroDeUso
 from service.api.owner_credentials import CredenciaisDoDono, erro_de_senha
+from service.iq_option_read_only import (
+    IqOptionReadOnlyError,
+    probe_iq_option_read_only_account_async,
+)
 from tradingagents.agency import AgencyTask, build_llm_handler
 from tradingagents.agency.store import AgencyTaskStore
 from tradingagents.agency_runtime import AgencyRuntime
@@ -213,6 +217,7 @@ ALLOWED_KEYS = [
     "REAL_READ_ONLY_API_KEY", "REAL_READ_ONLY_API_SECRET",
     "REAL_READ_ONLY_API_PASSWORD", "REAL_READ_ONLY_API_UID",
     "REAL_READ_ONLY_EXCHANGE",
+    "IQ_OPTION_MCP_BEARER_TOKEN",
     "TRADINGAGENTS_DESK_FEED", "TRADINGAGENTS_DESK_BROKER",
     "TRADINGAGENTS_DESK_INSTRUMENTS", "TRADINGAGENTS_DESK_CAPITAL",
     "TRADINGAGENTS_DESK_CONTROLE", "TRADINGAGENTS_DESK_TETO_EXPOSICAO",
@@ -239,6 +244,7 @@ SEGREDOS_DECLARADOS = {
     "EXCHANGE_API_UID",
     "REAL_READ_ONLY_API_KEY", "REAL_READ_ONLY_API_SECRET",
     "REAL_READ_ONLY_API_PASSWORD", "REAL_READ_ONLY_API_UID",
+    "IQ_OPTION_MCP_BEARER_TOKEN",
     "ALERTA_TELEGRAM_TOKEN", "ALERTA_TELEGRAM_CHAT", "ALERTA_WEBHOOK_URL",
     "ALERTA_TELEGRAM_WEBHOOK_SECRET", "ALERTA_DISCORD_WEBHOOK",
     "ALERTA_WHATSAPP_TOKEN", "EMAIL_SMTP_PASS",
@@ -1270,6 +1276,20 @@ async def set_cfg(req: Request, _=Depends(auth)):
                 saved.append("REAL_READ_ONLY_EXCHANGE")
             if anterior != exchange:
                 changed.append("REAL_READ_ONLY_EXCHANGE")
+    token_iq = str(
+        vars_recebidas.get("IQ_OPTION_MCP_BEARER_TOKEN") or "").strip()
+    if token_iq:
+        exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+        if exchange != "iq_option":
+            raise HTTPException(
+                409, "o token MCP só pode ser vinculado à IQ Option")
+        anterior = str(
+            cfg.get("REAL_READ_ONLY_EXCHANGE") or "").strip().lower()
+        cfg["REAL_READ_ONLY_EXCHANGE"] = exchange
+        if "REAL_READ_ONLY_EXCHANGE" not in saved:
+            saved.append("REAL_READ_ONLY_EXCHANGE")
+        if anterior != exchange:
+            changed.append("REAL_READ_ONLY_EXCHANGE")
     # V8 §6: remover credencial/valor passou a ser possível. Antes o painel
     # só sabia SALVAR campo não-vazio — uma chave errada ficava presa para
     # sempre. A remoção tira do arquivo; se o ambiente do sistema ainda
@@ -1554,10 +1574,12 @@ def personal_exchange_public_health(exchange_id: str, _=Depends(auth)):
 
 
 @app.get("/v1/personal/exchanges/iq_option/mcp-health")
-def iq_option_mcp_health(_=Depends(auth)):
+def iq_option_mcp_health(request: Request, _=Depends(auth)):
     """Handshake+tools/list nos sete MCPs; nunca chama ferramenta remota."""
     from service.iq_option_mcp import probe_iq_option_mcp
-    return probe_iq_option_mcp()
+    cfg = load_cfg(request_tenant(request))
+    return probe_iq_option_mcp(
+        token=str(cfg.get("IQ_OPTION_MCP_BEARER_TOKEN") or ""))
 
 
 @app.get("/v1/broker/status")
@@ -4674,7 +4696,8 @@ def _env_leitura_real(cfg: dict) -> dict:
     return {k: cfg.get(k, "") for k in (
         "TRADINGAGENTS_EXCHANGE", "REAL_READ_ONLY_API_KEY",
         "REAL_READ_ONLY_API_SECRET", "REAL_READ_ONLY_API_PASSWORD",
-        "REAL_READ_ONLY_API_UID", "REAL_READ_ONLY_EXCHANGE")}
+        "REAL_READ_ONLY_API_UID", "REAL_READ_ONLY_EXCHANGE",
+        "IQ_OPTION_MCP_BEARER_TOKEN")}
 
 
 def _prova_leitura_real_recente(prova: dict, agora: datetime | None = None) -> bool:
@@ -4734,6 +4757,7 @@ def _prova_real_serve_piloto(prova: dict | None, valida: bool, piloto) -> bool:
         and prova.get("broker_identity_verified") is True
         and prova.get("sem_trade_declarado") is True
         and prova.get("sem_saque_declarado") is True
+        and prova.get("provider_mutating_tools_exposed") is not True
         and str(prova.get("exchange") or "").strip().lower()
         == str(getattr(piloto, "corretora", "") or "").strip().lower()
         and str(prova.get("conta") or "").strip()
@@ -4792,6 +4816,8 @@ def _prova_publica(prova: dict | None, valida: bool) -> dict:
         "broker_identity_verified": bool(
             prova.get("broker_identity_verified")),
         "read_methods": list(prova.get("read_methods") or ()),
+        "provider_mutating_tools_exposed": bool(
+            prova.get("provider_mutating_tools_exposed")),
         "sem_trade_declarado": bool(prova.get("sem_trade_declarado")),
         "sem_saque_declarado": bool(prova.get("sem_saque_declarado")),
         "aviso": aviso,
@@ -4821,7 +4847,8 @@ def _certificacoes_real(request: Request, cfg: dict,
             and _fingerprint_sha256_valido(
                 prova.get("broker_identity_fingerprint"))
             and prova.get("sem_trade_declarado")
-            and prova.get("sem_saque_declarado")):
+            and prova.get("sem_saque_declarado")
+            and prova.get("provider_mutating_tools_exposed") is not True):
         return []
     try:
         esc = _escola_of(request)
@@ -5084,8 +5111,11 @@ async def live_preparacao_leitura(req: Request, _=Depends(auth),
     env = _env_leitura_real(cfg)
     env["REAL_READ_ONLY_ACCOUNT_ID"] = broker_account_id
     try:
-        resultado = probe_read_only_account(env)
-    except BrokerSecurityError as exc:
+        if exchange == "iq_option":
+            resultado = await probe_iq_option_read_only_account_async(env)
+        else:
+            resultado = probe_read_only_account(env)
+    except (BrokerSecurityError, IqOptionReadOnlyError) as exc:
         raise HTTPException(409, str(exc)) from exc
     agora = datetime.now(timezone.utc).isoformat()
     prova = {
@@ -5098,13 +5128,20 @@ async def live_preparacao_leitura(req: Request, _=Depends(auth),
         "broker_identity_fingerprint": resultado[
             "broker_identity_fingerprint"],
         "read_methods": list(resultado.get("read_methods") or ()),
+        "provider_mutating_tools_exposed": bool(
+            resultado.get("provider_mutating_tools_exposed")),
         "sem_trade_declarado": True,
         "sem_saque_declarado": True,
         "credential_fingerprint": resultado["credential_fingerprint"],
         "verificada_em": agora,
-        "aviso": ("acesso de leitura comprovado; ausência de trade/saque foi "
-                  "declarada pelo proprietário e deve ser conferida também "
-                  "no painel da corretora"),
+        "aviso": (
+            "acesso de leitura comprovado; o token do provedor também anuncia "
+            "ferramentas mutáveis, que o DZ23 não expõe — permissões mínimas "
+            "continuam bloqueadas"
+            if resultado.get("provider_mutating_tools_exposed") else
+            "acesso de leitura comprovado; ausência de trade/saque foi "
+            "declarada pelo proprietário e deve ser conferida também no "
+            "painel da corretora"),
     }
     esc = _escola_of(req)
     esc["armazem"].salvar(esc["tenant_id"], _CHAVE_PREPARACAO_REAL, prova)
@@ -5124,7 +5161,8 @@ def _live_status_payload(request: Request) -> dict:
         prova_valida and prova_leitura.get("authenticated_read"))
     permissoes_minimas_ok = bool(
         acesso_leitura_ok and prova_leitura.get("sem_trade_declarado")
-        and prova_leitura.get("sem_saque_declarado"))
+        and prova_leitura.get("sem_saque_declarado")
+        and prova_leitura.get("provider_mutating_tools_exposed") is not True)
     identidade_ok = bool(
         acesso_leitura_ok
         and prova_leitura.get("broker_identity_verified") is True)
@@ -5152,10 +5190,17 @@ def _live_status_payload(request: Request) -> dict:
         {"item": "Acesso REAL de leitura recente e permissões mínimas registradas",
          "pronto": permissoes_minimas_ok,
          "categoria": "prova_externa",
-         "acao": ("Use uma chave REAL separada, sem trade e sem saque; o "
-                  "servidor fará apenas consultas autenticadas e exigirá "
-                  "renovação da prova a cada 24 horas. Confira as "
-                  "permissões também no painel da corretora")},
+         "acao": (
+             "O token IQ ainda anuncia ferramentas mutáveis no provedor. O "
+             "DZ23 chama apenas list_balances, mas o gate exige um token com "
+             "escopo read-only verificável antes de considerar permissões "
+             "mínimas prontas"
+             if prova_leitura and prova_leitura.get(
+                 "provider_mutating_tools_exposed") is True else
+             "Use uma chave REAL separada, sem trade e sem saque; o servidor "
+             "fará apenas consultas autenticadas e exigirá renovação da prova "
+             "a cada 24 horas. Confira as permissões também no painel da "
+             "corretora")},
         {"item": "Identidade da conta REAL confirmada",
          "pronto": identidade_ok,
          "categoria": "prova_externa",

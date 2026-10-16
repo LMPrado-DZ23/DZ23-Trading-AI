@@ -53,13 +53,17 @@ def read_only_credential_fingerprint(env: dict) -> str:
     A prova de leitura fica automaticamente obsoleta quando qualquer parte
     da credencial ou a corretora muda. O digest nunca é usado para autenticar.
     """
-    partes = [
-        (env.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower(),
-        env.get("REAL_READ_ONLY_API_KEY") or "",
-        env.get("REAL_READ_ONLY_API_SECRET") or "",
-        env.get("REAL_READ_ONLY_API_PASSWORD") or "",
-        env.get("REAL_READ_ONLY_API_UID") or "",
-    ]
+    exchange = (env.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    if exchange == "iq_option":
+        partes = [exchange, env.get("IQ_OPTION_MCP_BEARER_TOKEN") or ""]
+    else:
+        partes = [
+            exchange,
+            env.get("REAL_READ_ONLY_API_KEY") or "",
+            env.get("REAL_READ_ONLY_API_SECRET") or "",
+            env.get("REAL_READ_ONLY_API_PASSWORD") or "",
+            env.get("REAL_READ_ONLY_API_UID") or "",
+        ]
     return hashlib.sha256("\0".join(partes).encode()).hexdigest()
 
 

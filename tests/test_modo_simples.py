@@ -175,9 +175,9 @@ class TestCapacidadesVisiveisNoModoSimples:
         capacidades = _trecho(
             _html(), "async function capacidadesLoad(",
             "async function preparoRealLoad(")
-        assert "MCP oficial validado em modo passivo" in capacidades
+        assert "Leitura REAL preparada, execução bloqueada" in capacidades
         assert (
-            "Sem leitura de conta, sandbox comprovado ou caminho de ordem"
+            "A prova de conta usa somente list_balances NORMAL"
             in capacidades
         )
         assert "MCP oficial em validação passiva" not in capacidades

@@ -65,7 +65,7 @@ uv run python scripts/validar_estrategias.py --exchange binance `
 | KuCoin | sim | não há sandbox nativo | passphrase |
 | Mercado Bitcoin | sim | não há sandbox nativo | — |
 | Bitget | sim | não há sandbox nativo | passphrase |
-| IQ Option | 7 MCPs oficiais configurados | autenticação demo pendente | token MCP novo via ambiente |
+| IQ Option | 7 MCPs oficiais validados | prova de conta preparada; ainda não executada | token MCP oficial no painel cifrado ou ambiente |
 
 As quatro corretoras sem sandbox ficam disponíveis para leitura pública,
 catálogo de capacidades e preparação da conta. O sistema recusa apresentá-las
@@ -82,12 +82,25 @@ A IQ Option usa uma integração MCP oficial separada do CCXT, com sete
 servidores por classe de instrumento. Os sete endpoints estão configurados no
 Codex usando apenas a referência `IQ_OPTION_MCP_BEARER_TOKEN`, sem token
 embutido. Em 2026-10-16, uma credencial fornecida localmente pelo proprietário
-provou os sete handshakes e o catálogo passou a publicar
-`OFFICIAL_MCP_METADATA_VALIDATED`. A sonda do DZ23 executa somente `initialize`
-e `tools/list`: todas as ferramentas listadas ficam bloqueadas e não existe
-chamada de ordem nesse caminho. Essa prova não lê conta, não homologa sandbox
-e não autoriza execução. Tokens MCP nunca são persistidos ou reutilizados como
-credenciais de execução pelo DZ23.
+provou os sete handshakes. O catálogo publica
+`OFFICIAL_MCP_READ_ONLY_PREPARED`: a sonda passiva continua executando somente
+`initialize` e `tools/list`, e um módulo separado prepara uma única consulta
+autenticada literal, `list_balances` com filtro `NORMAL`. Antes dessa consulta,
+o catálogo remoto completo e as marcações `readOnly`/`destructive=false` são
+revalidados; qualquer drift fecha o caminho. O resultado compara apenas o
+`balance_id` informado pelo proprietário e não devolve nem persiste saldo,
+moeda ou ID bruto. Essa primeira consulta de conta ainda não foi executada
+nesta branch e exige confirmação no momento da ação. Não existe ferramenta de
+ordem no módulo de leitura, não há sandbox homologado e nada disso autoriza
+execução. O token pode ficar cifrado pelo painel ou apenas no ambiente e nunca
+é reutilizado como credencial de execução pelo DZ23.
+
+O catálogo desse token anuncia também 32 ferramentas mutáveis. O DZ23 não as
+expõe nem as chama, porém bloqueia honestamente o gate **permissões mínimas**:
+restrição no aplicativo não prova escopo read-only no provedor. Para uma futura
+homologação REAL da IQ Option, será necessário um token cujo escopo somente
+leitura possa ser comprovado no lado da corretora, além de todos os demais
+gates. Uma declaração manual não sobrepõe essa evidência técnica.
 
 Depois de autorizar a conexão e carregar o token somente no ambiente local, a
 prova reproduzível pode ser gerada sem credencial na linha de comando:

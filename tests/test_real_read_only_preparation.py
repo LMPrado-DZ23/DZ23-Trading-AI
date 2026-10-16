@@ -248,6 +248,90 @@ def test_probe_recusa_corretora_sem_identidade_verificavel(monkeypatch):
             **READ_CFG, "REAL_READ_ONLY_ACCOUNT_ID": BROKER_ACCOUNT_ID})
 
 
+def test_iq_option_usa_token_isolado_e_prova_mcp_sem_ccxt(
+        tmp_path, monkeypatch):
+    m, c = _app(tmp_path, monkeypatch)
+    token = "token-iq-opaco"
+    resposta = c.post("/v1/config", headers=H, json={"vars": {
+        "TRADINGAGENTS_EXCHANGE": "iq_option",
+        "IQ_OPTION_MCP_BEARER_TOKEN": token,
+    }})
+    assert resposta.status_code == 200, resposta.text
+    publica = c.get("/v1/config", headers=H).json()["config"]
+    assert publica["IQ_OPTION_MCP_BEARER_TOKEN"]["set"] is True
+    assert "value" not in publica["IQ_OPTION_MCP_BEARER_TOKEN"]
+    assert publica["REAL_READ_ONLY_EXCHANGE"]["value"] == "iq_option"
+
+    capturado = {}
+
+    async def provar(env):
+        capturado.update(env)
+        return {
+            "exchange": "iq_option",
+            "authenticated_read": True,
+            "read_methods": ["binary-options:list_balances[NORMAL]"],
+            "provider_mutating_tools_exposed": True,
+            "broker_identity_verified": True,
+            "broker_identity_fingerprint": _broker_identity_fingerprint(
+                env, BROKER_ACCOUNT_ID),
+            "credential_fingerprint": read_only_credential_fingerprint(env),
+        }
+
+    monkeypatch.setattr(m, "probe_iq_option_read_only_account_async", provar)
+    r = c.post("/v1/live/preparacao-leitura", headers=H,
+               json=_preparacao_body("iq-real-principal"))
+
+    assert r.status_code == 200, r.text
+    assert capturado["IQ_OPTION_MCP_BEARER_TOKEN"] == token
+    assert capturado["REAL_READ_ONLY_ACCOUNT_ID"] == BROKER_ACCOUNT_ID
+    assert token not in r.text and BROKER_ACCOUNT_ID not in r.text
+    assert r.json()["preparacao"]["exchange"] == "iq_option"
+    assert r.json()["preparacao"]["broker_identity_verified"] is True
+    assert r.json()["preparacao"]["provider_mutating_tools_exposed"] is True
+    status = c.get("/v1/live/status", headers=H).json()
+    assert _item(status, "permissões mínimas")["pronto"] is False
+    assert "ferramentas mutáveis" in _item(
+        status, "permissões mínimas")["acao"]
+
+
+def test_token_iq_nao_pode_ser_vinculado_a_outra_corretora(
+        tmp_path, monkeypatch):
+    _, c = _app(tmp_path, monkeypatch)
+
+    r = c.post("/v1/config", headers=H, json={"vars": {
+        "TRADINGAGENTS_EXCHANGE": "binance",
+        "IQ_OPTION_MCP_BEARER_TOKEN": "token-na-corretora-errada",
+    }})
+
+    assert r.status_code == 409
+    publica = c.get("/v1/config", headers=H).json()["config"]
+    assert publica["IQ_OPTION_MCP_BEARER_TOKEN"]["set"] is False
+
+
+def test_health_mcp_usa_token_cifrado_sem_devolve_lo(tmp_path, monkeypatch):
+    _, c = _app(tmp_path, monkeypatch)
+    token = "token-iq-para-health"
+    assert c.post("/v1/config", headers=H, json={"vars": {
+        "TRADINGAGENTS_EXCHANGE": "iq_option",
+        "IQ_OPTION_MCP_BEARER_TOKEN": token,
+    }}).status_code == 200
+    capturado = {}
+
+    def provar(*, token=None):
+        capturado["token"] = token
+        return {"id": "iq_option", "status": "MCP_METADATA_CONNECTED",
+                "ok": True, "connected": 7, "expected": 7, "probes": []}
+
+    import service.iq_option_mcp as iq_mcp
+    monkeypatch.setattr(iq_mcp, "probe_iq_option_mcp", provar)
+
+    r = c.get("/v1/personal/exchanges/iq_option/mcp-health", headers=H)
+
+    assert r.status_code == 200, r.text
+    assert capturado["token"] == token
+    assert token not in r.text
+
+
 @pytest.mark.parametrize(
     "campo", ["confirmo_sem_trade", "confirmo_sem_movimentacao"])
 def test_endpoint_exige_as_duas_declaracoes(tmp_path, monkeypatch, campo):

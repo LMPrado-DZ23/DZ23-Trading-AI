@@ -22,15 +22,19 @@ A plataforma pessoal não ficará restrita a seis corretoras. `service/personal_
   à corretora, fingerprint da credencial e instante do vínculo.
 - Implementado: testes unitários, adversariais, integração, CI e E2E para
   catálogo, probes públicos, preparação REAL e bloqueio de LIVE.
-- IQ Option permanece **fora de CCXT**, como sala separada. A integração MCP
-  oficial e seus sete endpoints estão configurados por referência à variável
-  `IQ_OPTION_MCP_BEARER_TOKEN`. A sonda autenticada executa apenas o handshake
-  e `tools/list`; nenhuma ferramenta remota é chamável pelo DZ23. Os dois
-  arquivos fornecidos pelo proprietário têm os mesmos sete endpoints e um
-  Bearer opaco consistente, mas sua validade ainda não foi testada: o
-  PolicyLayer não possui registro publicado para esses identificadores e a
-  conexão aguarda decisão explícita de prosseguir sem esse registro. Esse
-  reconhecimento e essa configuração não habilitam ordens.
+- IQ Option permanece **fora de CCXT**, como sala separada. Os sete handshakes
+  oficiais e seus contratos foram validados em 2026-10-16. A sonda passiva
+  executa apenas `initialize` e `tools/list`. Um módulo isolado prepara a prova
+  de conta com uma única chamada literal `list_balances({types: NORMAL})`,
+  revalida o contrato antes de chamar e descarta saldo, moeda e ID bruto. Esse
+  módulo não contém nomes nem caminhos de ferramentas mutáveis. A primeira
+  consulta autenticada de conta ainda depende da confirmação do proprietário;
+  portanto o estado é **preparado**, não homologado. O PolicyLayer continua
+  sem registro publicado para os sete identificadores (`unknown`). Nenhuma
+  dessas provas habilita ordens. Como o token anuncia também ferramentas
+  mutáveis, o gate de permissões mínimas permanece fechado até existir escopo
+  read-only verificável no provedor; o bloqueio local não é apresentado como
+  permissão mínima remota.
 - Operações LIVE continuam bloqueadas. Listar uma corretora **não** significa que sua integração foi testada ou liberada para ordens.
 
 ## Política para muitas exchanges
