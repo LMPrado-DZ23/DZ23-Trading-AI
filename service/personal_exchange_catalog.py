@@ -87,7 +87,7 @@ def public_catalog() -> list[dict[str, object]]:
          "required_execution_credentials": list(
              required_execution_credentials(x.slug)),
          "integration_status": (
-             "OFFICIAL_MCP_PENDING_VALIDATION" if x.integration == "mcp"
+             "OFFICIAL_MCP_METADATA_VALIDATED" if x.integration == "mcp"
              else "AVAILABLE_TESTNET" if x.testnet_enabled
              else "AVAILABLE_READ_ONLY")}
         for x in EXCHANGES

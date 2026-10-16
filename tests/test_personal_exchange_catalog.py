@@ -36,7 +36,7 @@ class PersonalExchangeCatalogTests(unittest.TestCase):
         self.assertEqual(catalogo["kraken"]["integration_status"],
                          "AVAILABLE_READ_ONLY")
         self.assertEqual(catalogo["iq_option"]["integration_status"],
-                         "OFFICIAL_MCP_PENDING_VALIDATION")
+                         "OFFICIAL_MCP_METADATA_VALIDATED")
         self.assertEqual(catalogo["iq_option"]["integration"], "mcp")
         self.assertFalse(catalogo["iq_option"]["read_only_enabled"])
         self.assertTrue(all(x["read_only_enabled"] for slug, x in
