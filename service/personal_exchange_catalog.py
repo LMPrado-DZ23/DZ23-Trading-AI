@@ -39,6 +39,22 @@ def get_personal_exchange(slug: str) -> PersonalExchange:
     """Resolve only an explicitly approved exchange."""
     return _BY_SLUG[slug]
 
+
+def required_execution_credentials(slug: str) -> tuple[str, ...]:
+    """Campos mínimos para autenticar o adaptador de execução.
+
+    Mantém o checklist alinhado ao contrato ``requiredCredentials`` do CCXT
+    sem construir um cliente de rede. ``password`` é a passphrase criada na
+    corretora; hoje OKX, Coinbase Exchange, KuCoin e Bitget a exigem.
+    """
+    exchange = get_personal_exchange(slug)
+    if exchange.ccxt_id is None:
+        return ()
+    campos = ["EXCHANGE_API_KEY", "EXCHANGE_API_SECRET"]
+    if exchange.requires_password:
+        campos.append("EXCHANGE_API_PASSWORD")
+    return tuple(campos)
+
 def public_catalog() -> list[dict[str, object]]:
     """Display-safe metadata; nothing here enables an exchange adapter."""
     return [
@@ -47,6 +63,8 @@ def public_catalog() -> list[dict[str, object]]:
          "testnet_enabled": x.testnet_enabled,
          "read_only_enabled": x.read_only_enabled,
          "requires_password": x.requires_password,
+         "required_execution_credentials": list(
+             required_execution_credentials(x.slug)),
          "integration_status": (
              "EXPERIMENTAL_NOT_ELIGIBLE" if x.market == "experimental"
              else "AVAILABLE_TESTNET" if x.testnet_enabled

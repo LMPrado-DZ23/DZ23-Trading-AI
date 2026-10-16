@@ -208,7 +208,7 @@ ALLOWED_KEYS = [
     "FRED_API_KEY", "ALPHA_VANTAGE_API_KEY",
     "TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
     "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET", "EXCHANGE_API_PASSWORD",
-    "EXCHANGE_API_UID",
+    "EXCHANGE_API_UID", "EXCHANGE_CREDENTIAL_EXCHANGE",
     "REAL_READ_ONLY_API_KEY", "REAL_READ_ONLY_API_SECRET",
     "REAL_READ_ONLY_API_PASSWORD", "REAL_READ_ONLY_API_UID",
     "REAL_READ_ONLY_EXCHANGE",
@@ -1159,8 +1159,12 @@ async def set_cfg(req: Request, _=Depends(auth)):
     tenant_id = request_tenant(req)
     cfg = load_cfg(tenant_id)
     saved, changed = [], []
-    for k, v in (body.get("vars") or {}).items():
-        if k in ALLOWED_KEYS and isinstance(v, str) and v.strip():
+    vars_recebidas = body.get("vars") or {}
+    vinculos_gerenciados = {
+        "EXCHANGE_CREDENTIAL_EXCHANGE", "REAL_READ_ONLY_EXCHANGE"}
+    for k, v in vars_recebidas.items():
+        if (k in ALLOWED_KEYS and k not in vinculos_gerenciados
+                and isinstance(v, str) and v.strip()):
             novo = v.strip()
             saved.append(k)
             atual = str(cfg.get(k) or "").strip()
@@ -1172,6 +1176,35 @@ async def set_cfg(req: Request, _=Depends(auth)):
             if atual != novo:
                 changed.append(k)
             cfg[k] = novo
+    # Uma credencial de execução nunca pode migrar silenciosamente para outra
+    # corretora. O vínculo só é (re)feito quando chave E segredo novos chegam
+    # juntos na mesma ação; trocar apenas o seletor deixa o checklist fechado.
+    chave_nova = str(vars_recebidas.get("EXCHANGE_API_KEY") or "").strip()
+    segredo_novo = str(vars_recebidas.get("EXCHANGE_API_SECRET") or "").strip()
+    if chave_nova and segredo_novo:
+        exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+        if exchange:
+            anterior = str(
+                cfg.get("EXCHANGE_CREDENTIAL_EXCHANGE") or "").strip().lower()
+            cfg["EXCHANGE_CREDENTIAL_EXCHANGE"] = exchange
+            if "EXCHANGE_CREDENTIAL_EXCHANGE" not in saved:
+                saved.append("EXCHANGE_CREDENTIAL_EXCHANGE")
+            if anterior != exchange:
+                changed.append("EXCHANGE_CREDENTIAL_EXCHANGE")
+    chave_leitura = str(
+        vars_recebidas.get("REAL_READ_ONLY_API_KEY") or "").strip()
+    segredo_leitura = str(
+        vars_recebidas.get("REAL_READ_ONLY_API_SECRET") or "").strip()
+    if chave_leitura and segredo_leitura:
+        exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+        if exchange:
+            anterior = str(
+                cfg.get("REAL_READ_ONLY_EXCHANGE") or "").strip().lower()
+            cfg["REAL_READ_ONLY_EXCHANGE"] = exchange
+            if "REAL_READ_ONLY_EXCHANGE" not in saved:
+                saved.append("REAL_READ_ONLY_EXCHANGE")
+            if anterior != exchange:
+                changed.append("REAL_READ_ONLY_EXCHANGE")
     # V8 §6: remover credencial/valor passou a ser possível. Antes o painel
     # só sabia SALVAR campo não-vazio — uma chave errada ficava presa para
     # sempre. A remoção tira do arquivo; se o ambiente do sistema ainda
@@ -1437,6 +1470,11 @@ def personal_exchange_public_health(exchange_id: str, _=Depends(auth)):
 def broker_status(request: Request, _=Depends(auth)):
     """Valida a configuração de corretora SEM enviar ordem nenhuma."""
     cfg = load_cfg(request_tenant(request))
+    credenciais_ok, faltando = _credenciais_execucao_prontas(cfg)
+    if not credenciais_ok:
+        return {"ready": False,
+                "erro": "credencial incompatível ou incompleta: "
+                         + ", ".join(faltando)}
     env = {k: cfg.get(k, "") for k in
            ("TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
             "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET",
@@ -4168,6 +4206,8 @@ def onboarding(request: Request, _=Depends(auth)):
         tem_analise = bool(JOB_STORE.list(request_tenant(request), limit=1))
     except Exception:
         tem_analise = False
+    corretora_treino_pronta, corretora_treino_faltando = (
+        _credenciais_execucao_prontas(cfg))
     desk = _DESKS.get(request_tenant(request))
     itens = [
         {"passo": "Escolher a IA e colar a chave", "pronto": tem_ia,
@@ -4178,8 +4218,10 @@ def onboarding(request: Request, _=Depends(auth)):
         {"passo": "Fazer a primeira análise", "pronto": tem_analise,
          "acao": "Em Análises: ativo (ex.: BTC/USDT) + data e iniciar"},
         {"passo": "Corretora de treino",
-         "pronto": bool(cfg.get("EXCHANGE_API_KEY") and cfg.get("EXCHANGE_API_SECRET")),
-         "acao": "Chave grátis em testnet.binance.vision"},
+         "pronto": corretora_treino_pronta,
+         "acao": ("Credenciais completas da corretora de treino"
+                  if corretora_treino_pronta else
+                  "Informe: " + ", ".join(corretora_treino_faltando))},
         {"passo": "Ligar a mesa de agentes",
          "pronto": bool(desk and desk["scheduler"] and desk["scheduler"].running),
          "acao": "Em Mesa de Agentes: Ligar mesa autônoma"},
@@ -4296,6 +4338,38 @@ def _teto_positivo(cfg: dict, chave: str) -> bool:
     except (InvalidOperation, ValueError):
         return False
     return valor.is_finite() and valor > 0
+
+
+def _credenciais_execucao_prontas(cfg: dict) -> tuple[bool, list[str]]:
+    """Valida os campos exigidos pela corretora sem iniciar conexão.
+
+    Chave+segredo não bastam nas corretoras que usam passphrase. O checklist
+    deve falhar antes da construção do CCXT, com a pendência exata, em vez de
+    apresentar um falso verde que só seria descoberto ao iniciar a mesa.
+    """
+    from service.personal_exchange_catalog import (
+        required_execution_credentials,
+    )
+
+    exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    try:
+        exigidos = required_execution_credentials(exchange)
+    except KeyError:
+        return False, ["corretora suportada"]
+    if not exigidos:
+        return False, ["adaptador de execução homologado"]
+    vinculo = str(
+        cfg.get("EXCHANGE_CREDENTIAL_EXCHANGE") or "").strip().lower()
+    if vinculo != exchange:
+        return False, ["nova chave e novo segredo desta corretora"]
+    rotulos = {
+        "EXCHANGE_API_KEY": "chave",
+        "EXCHANGE_API_SECRET": "segredo",
+        "EXCHANGE_API_PASSWORD": "passphrase",
+    }
+    faltando = [rotulos[campo] for campo in exigidos
+                if not str(cfg.get(campo) or "").strip()]
+    return not faltando, faltando
 
 
 def _fill_de_corretora_externa(d):
@@ -4693,6 +4767,8 @@ def live_status(request: Request, _=Depends(auth)):
     """Diz, sem rodeio, se este inquilino pode operar dinheiro real e o que
     falta para poder."""
     cfg = load_cfg(request_tenant(request))
+    credenciais_execucao_ok, credenciais_execucao_faltando = (
+        _credenciais_execucao_prontas(cfg))
     prova_leitura, prova_valida = _prova_leitura_real(request, cfg)
     prova_testnet, prova_testnet_valida = _prova_testnet(request, cfg)
     acesso_leitura_ok = bool(
@@ -4714,8 +4790,10 @@ def live_status(request: Request, _=Depends(auth)):
         {"item": "Frase de autorização digitada", "pronto": frase_ok,
          "acao": f"Digite exatamente: {LIVE_CONFIRM_PHRASE}"},
         {"item": "Chaves da corretora configuradas",
-         "pronto": bool(cfg.get("EXCHANGE_API_KEY") and cfg.get("EXCHANGE_API_SECRET")),
-         "acao": "Cole a chave e o segredo da sua corretora"},
+         "pronto": credenciais_execucao_ok,
+         "acao": ("Credenciais completas para a corretora selecionada"
+                  if credenciais_execucao_ok else
+                  "Informe: " + ", ".join(credenciais_execucao_faltando))},
         {"item": "Acesso REAL de leitura recente e permissões mínimas registradas",
          "pronto": permissoes_minimas_ok,
          "acao": ("Use uma chave REAL separada, sem trade e sem saque; o "

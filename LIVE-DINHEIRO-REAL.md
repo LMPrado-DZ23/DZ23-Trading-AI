@@ -71,6 +71,16 @@ como TESTNET operacional. Chaves, segredos, passphrases e UID são armazenados
 pelos mesmos controles de segredo do painel e nunca devem ser copiados para
 documentação, commits ou tickets.
 
+O checklist de execução valida os campos mínimos por corretora antes de
+mostrar as credenciais como prontas. OKX, Coinbase Exchange, KuCoin e Bitget
+exigem também a passphrase; somente chave e segredo permanecem bloqueados
+nessas quatro integrações.
+
+As credenciais de execução também ficam vinculadas à corretora escolhida.
+Trocar o seletor não reaproveita chave, segredo ou passphrase de outro
+provedor: o checklist, o teste de conexão e a construção da mesa permanecem
+bloqueados até que uma nova chave e um novo segredo sejam informados juntos.
+
 O botão **Testar leitura pública** consulta ticker e três velas de um mercado
 conhecido usando o adaptador CCXT da corretora, sem carregar chave e sem possuir
 caminho de ordem. A rodada de referência de 2026-10-16 confirmou leitura

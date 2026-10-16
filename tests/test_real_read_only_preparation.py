@@ -67,6 +67,121 @@ def _item(status, trecho):
                 if trecho.lower() in i["item"].lower())
 
 
+@pytest.mark.parametrize("exchange", ["okx", "coinbase", "kucoin", "bitget"])
+def test_checklist_exige_passphrase_nas_corretoras_que_precisam(
+        tmp_path, monkeypatch, exchange):
+    _, c = _app(tmp_path, monkeypatch)
+    r = c.post("/v1/config", headers=H, json={"vars": {
+        "TRADINGAGENTS_EXCHANGE": exchange,
+        "EXCHANGE_API_KEY": "execution-key",
+        "EXCHANGE_API_SECRET": "execution-secret",
+    }})
+    assert r.status_code == 200, r.text
+
+    sem = _item(c.get("/v1/live/status", headers=H).json(),
+                "Chaves da corretora")
+    assert sem["pronto"] is False
+    assert "passphrase" in sem["acao"]
+
+    assert c.post("/v1/config", headers=H, json={"vars": {
+        "EXCHANGE_API_PASSWORD": "execution-passphrase",
+    }}).status_code == 200
+    com = _item(c.get("/v1/live/status", headers=H).json(),
+                "Chaves da corretora")
+    assert com["pronto"] is True
+
+
+@pytest.mark.parametrize(
+    "exchange", ["binance", "bybit", "gateio", "kraken", "mercadobitcoin"])
+def test_checklist_nao_inventa_passphrase_nas_demais_corretoras(
+        tmp_path, monkeypatch, exchange):
+    _, c = _app(tmp_path, monkeypatch)
+    r = c.post("/v1/config", headers=H, json={"vars": {
+        "TRADINGAGENTS_EXCHANGE": exchange,
+        "EXCHANGE_API_KEY": "execution-key",
+        "EXCHANGE_API_SECRET": "execution-secret",
+    }})
+    assert r.status_code == 200, r.text
+    item = _item(c.get("/v1/live/status", headers=H).json(),
+                 "Chaves da corretora")
+    assert item["pronto"] is True
+    assert "passphrase" not in item["acao"]
+
+
+def test_trocar_corretora_nao_reusa_credencial_de_execucao(
+        tmp_path, monkeypatch):
+    _, c = _app(tmp_path, monkeypatch)
+    assert c.post("/v1/config", headers=H, json={"vars": {
+        "TRADINGAGENTS_EXCHANGE": "binance",
+        "TRADINGAGENTS_BROKER_MODE": "testnet",
+        "EXCHANGE_API_KEY": "binance-key",
+        "EXCHANGE_API_SECRET": "binance-secret",
+    }}).status_code == 200
+    assert _item(c.get("/v1/live/status", headers=H).json(),
+                 "Chaves da corretora")["pronto"] is True
+
+    assert c.post("/v1/config", headers=H, json={"vars": {
+        "TRADINGAGENTS_EXCHANGE": "bybit",
+    }}).status_code == 200
+    trocada = _item(c.get("/v1/live/status", headers=H).json(),
+                    "Chaves da corretora")
+    assert trocada["pronto"] is False
+    assert "nova chave e novo segredo" in trocada["acao"]
+    primeiros = c.get("/v1/primeiros-passos", headers=H).json()
+    treino = next(x for x in primeiros["itens"]
+                  if x["passo"] == "Corretora de treino")
+    assert treino["pronto"] is False
+    broker = c.get("/v1/broker/status", headers=H).json()
+    assert broker["ready"] is False
+    assert "incompatível" in broker["erro"]
+
+    resposta = c.post("/v1/config", headers=H, json={"vars": {
+        "EXCHANGE_API_KEY": "bybit-key",
+        "EXCHANGE_API_SECRET": "bybit-secret",
+    }})
+    assert resposta.status_code == 200
+    config_publica = c.get("/v1/config", headers=H).json()["config"]
+    assert config_publica["EXCHANGE_CREDENTIAL_EXCHANGE"]["value"] == "bybit"
+    assert _item(c.get("/v1/live/status", headers=H).json(),
+                 "Chaves da corretora")["pronto"] is True
+
+
+def test_api_nao_aceita_forjar_vinculo_sem_novas_credenciais(
+        tmp_path, monkeypatch):
+    _, c = _app(tmp_path, monkeypatch)
+    assert c.post("/v1/config", headers=H, json={"vars": READ_CFG}).status_code == 200
+    assert c.post("/v1/config", headers=H, json={"vars": {
+        "EXCHANGE_API_KEY": "binance-key",
+        "EXCHANGE_API_SECRET": "binance-secret",
+    }}).status_code == 200
+
+    assert c.post("/v1/config", headers=H, json={"vars": {
+        "TRADINGAGENTS_EXCHANGE": "bybit",
+        "EXCHANGE_CREDENTIAL_EXCHANGE": "bybit",
+        "REAL_READ_ONLY_EXCHANGE": "bybit",
+    }}).status_code == 200
+    publica = c.get("/v1/config", headers=H).json()["config"]
+    assert publica["EXCHANGE_CREDENTIAL_EXCHANGE"]["value"] == "binance"
+    assert publica["REAL_READ_ONLY_EXCHANGE"]["value"] == "binance"
+    assert _item(c.get("/v1/live/status", headers=H).json(),
+                 "Chaves da corretora")["pronto"] is False
+
+    chamado = False
+
+    def _nao_deve_chamar(_env):
+        nonlocal chamado
+        chamado = True
+        return {}
+
+    import service.app as m
+    monkeypatch.setattr(m, "probe_read_only_account", _nao_deve_chamar)
+    r = c.post("/v1/live/preparacao-leitura", headers=H, json={
+        "conta": "real-bybit", "confirmo_sem_trade": True,
+        "confirmo_sem_movimentacao": True})
+    assert r.status_code == 409
+    assert chamado is False
+
+
 def test_probe_chama_exclusivamente_metodos_de_leitura(monkeypatch):
     _ExchangeSomenteLeitura.chamadas = []
     monkeypatch.setitem(
@@ -105,8 +220,10 @@ def test_endpoint_exige_as_duas_declaracoes(tmp_path, monkeypatch, campo):
 def test_endpoint_recusa_credencial_vinculada_a_outra_corretora_sem_rede(
         tmp_path, monkeypatch):
     m, c = _app(tmp_path, monkeypatch)
-    c.post("/v1/config", headers=H, json={"vars": {
-        **READ_CFG, "TRADINGAGENTS_EXCHANGE": "bybit"}})
+    assert c.post("/v1/config", headers=H,
+                  json={"vars": READ_CFG}).status_code == 200
+    assert c.post("/v1/config", headers=H, json={"vars": {
+        "TRADINGAGENTS_EXCHANGE": "bybit"}}).status_code == 200
     chamado = False
 
     def _nao_deve_chamar(_env):

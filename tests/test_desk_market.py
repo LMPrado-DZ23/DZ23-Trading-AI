@@ -150,13 +150,28 @@ class TestEscolhaDeCorretora:
         from tradingagents.brokers.ccxt_bridge import BrokerSecurityError
         with pytest.raises(BrokerSecurityError, match="testnet"):
             build_desk_broker({"TRADINGAGENTS_DESK_BROKER": "ccxt",
-                               "TRADINGAGENTS_EXCHANGE": "binance"}, final_state={})
+                               "TRADINGAGENTS_EXCHANGE": "binance",
+                               "EXCHANGE_CREDENTIAL_EXCHANGE": "binance"},
+                              final_state={})
+
+    def test_ccxt_recusa_credencial_de_outra_corretora_antes_da_rede(self):
+        from tradingagents.brokers.ccxt_bridge import BrokerSecurityError
+        with pytest.raises(BrokerSecurityError, match="não está vinculada"):
+            build_desk_broker({
+                "TRADINGAGENTS_DESK_BROKER": "ccxt",
+                "TRADINGAGENTS_EXCHANGE": "bybit",
+                "EXCHANGE_CREDENTIAL_EXCHANGE": "binance",
+                "TRADINGAGENTS_BROKER_MODE": "testnet",
+                "EXCHANGE_API_KEY": "binance-key",
+                "EXCHANGE_API_SECRET": "binance-secret",
+            }, final_state={})
 
     def test_ccxt_testnet_builds_and_reports_mode(self, tmp_path):
         broker, mode = build_desk_broker(
             {"TRADINGAGENTS_DESK_BROKER": "ccxt", "TRADINGAGENTS_EXCHANGE": "binance",
              "TRADINGAGENTS_BROKER_MODE": "testnet", "EXCHANGE_API_KEY": "k",
-             "EXCHANGE_API_SECRET": "s"},
+             "EXCHANGE_API_SECRET": "s",
+             "EXCHANGE_CREDENTIAL_EXCHANGE": "binance"},
             final_state={}, journal_path=str(tmp_path / "j.jsonl"))
         assert mode == "testnet" and broker.status()["sandbox"] is True
 
@@ -165,7 +180,8 @@ class TestEscolhaDeCorretora:
         broker, _ = build_desk_broker(
             {"TRADINGAGENTS_DESK_BROKER": "ccxt", "TRADINGAGENTS_EXCHANGE": "binance",
              "TRADINGAGENTS_BROKER_MODE": "testnet", "EXCHANGE_API_KEY": "k",
-             "EXCHANGE_API_SECRET": "s"},
+             "EXCHANGE_API_SECRET": "s",
+             "EXCHANGE_CREDENTIAL_EXCHANGE": "binance"},
             final_state={}, journal_path=str(tmp_path / "j.jsonl"))
         called = {"n": 0}
         broker.bridge._ex.create_order = lambda *a, **k: called.__setitem__("n", 1)
@@ -177,7 +193,8 @@ class TestEscolhaDeCorretora:
         broker, _ = build_desk_broker(
             {"TRADINGAGENTS_DESK_BROKER": "ccxt", "TRADINGAGENTS_EXCHANGE": "binance",
              "TRADINGAGENTS_BROKER_MODE": "testnet", "EXCHANGE_API_KEY": "k",
-             "EXCHANGE_API_SECRET": "s"},
+             "EXCHANGE_API_SECRET": "s",
+             "EXCHANGE_CREDENTIAL_EXCHANGE": "binance"},
             final_state={}, journal_path=str(tmp_path / "j.jsonl"))
         sent = []
         broker.bridge.submit_order = lambda *a, **k: (

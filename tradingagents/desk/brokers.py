@@ -379,6 +379,15 @@ def build_desk_broker(cfg: dict, *, final_state: dict, journal_path: str | None 
     from .execution import PaperBroker
     if (cfg.get("TRADINGAGENTS_DESK_BROKER") or "paper").strip().lower() != "ccxt":
         return PaperBroker(paper_price), "paper"
+    exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    vinculo = str(
+        cfg.get("EXCHANGE_CREDENTIAL_EXCHANGE") or "").strip().lower()
+    if not exchange or vinculo != exchange:
+        from tradingagents.brokers.ccxt_bridge import BrokerSecurityError
+        raise BrokerSecurityError(
+            "credencial de execução não está vinculada à corretora "
+            "selecionada; informe nova chave e novo segredo para esta "
+            "corretora antes de iniciar a mesa")
     modo_pedido = (cfg.get("TRADINGAGENTS_BROKER_MODE") or "").strip().lower()
     if modo_pedido == "live" and not live_authorized:
         from tradingagents.brokers.ccxt_bridge import BrokerSecurityError
