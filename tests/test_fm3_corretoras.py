@@ -175,6 +175,14 @@ class TestPreparacaoReal:
         assert "conta_real:true" in t
         assert "prova.valida" in t
 
+    def test_prova_salva_corretora_e_nao_reusa_chave_em_outro_provedor(self):
+        html = _html()
+        t = _funcao(html, "async function brokerPrepararLeitura(")
+        assert "TRADINGAGENTS_EXCHANGE:exchange" in t
+        assert "REAL_READ_ONLY_EXCHANGE" in t
+        assert "exchange!==realReadOnlyExchange" in t
+        assert "(!chave||!segredo)" in t
+
     def test_piloto_exibe_conta_limites_e_validade_antes_da_decisao(self):
         html = _html()
         t = _funcao(html, "async function escolaCentral(")

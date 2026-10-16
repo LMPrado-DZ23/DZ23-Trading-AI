@@ -495,6 +495,7 @@ class TestMesaEscolaE2E:
 
         cfg = {
             "TRADINGAGENTS_EXCHANGE": "binance",
+            "REAL_READ_ONLY_EXCHANGE": "binance",
             "REAL_READ_ONLY_API_KEY": "read-key",
             "REAL_READ_ONLY_API_SECRET": "read-secret",
         }

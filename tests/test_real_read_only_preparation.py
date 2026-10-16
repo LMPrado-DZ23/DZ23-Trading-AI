@@ -17,6 +17,7 @@ from tradingagents.brokers.ccxt_bridge import (
 H = {"Authorization": "Bearer s3nh4"}
 READ_CFG = {
     "TRADINGAGENTS_EXCHANGE": "binance",
+    "REAL_READ_ONLY_EXCHANGE": "binance",
     "REAL_READ_ONLY_API_KEY": "read-key",
     "REAL_READ_ONLY_API_SECRET": "read-secret",
 }
@@ -98,6 +99,27 @@ def test_endpoint_exige_as_duas_declaracoes(tmp_path, monkeypatch, campo):
     body[campo] = False
     assert c.post("/v1/live/preparacao-leitura", headers=H,
                   json=body).status_code == 422
+    assert chamado is False
+
+
+def test_endpoint_recusa_credencial_vinculada_a_outra_corretora_sem_rede(
+        tmp_path, monkeypatch):
+    m, c = _app(tmp_path, monkeypatch)
+    c.post("/v1/config", headers=H, json={"vars": {
+        **READ_CFG, "TRADINGAGENTS_EXCHANGE": "bybit"}})
+    chamado = False
+
+    def _nao_deve_chamar(_env):
+        nonlocal chamado
+        chamado = True
+        return {}
+
+    monkeypatch.setattr(m, "probe_read_only_account", _nao_deve_chamar)
+    r = c.post("/v1/live/preparacao-leitura", headers=H, json={
+        "conta": "real-bybit", "confirmo_sem_trade": True,
+        "confirmo_sem_movimentacao": True})
+    assert r.status_code == 409
+    assert "não está vinculada" in r.json()["detail"]
     assert chamado is False
 
 

@@ -211,6 +211,7 @@ ALLOWED_KEYS = [
     "EXCHANGE_API_UID",
     "REAL_READ_ONLY_API_KEY", "REAL_READ_ONLY_API_SECRET",
     "REAL_READ_ONLY_API_PASSWORD", "REAL_READ_ONLY_API_UID",
+    "REAL_READ_ONLY_EXCHANGE",
     "TRADINGAGENTS_DESK_FEED", "TRADINGAGENTS_DESK_BROKER",
     "TRADINGAGENTS_DESK_INSTRUMENTS", "TRADINGAGENTS_DESK_CAPITAL",
     "TRADINGAGENTS_DESK_CONTROLE", "TRADINGAGENTS_DESK_TETO_EXPOSICAO",
@@ -4330,7 +4331,7 @@ def _env_leitura_real(cfg: dict) -> dict:
     return {k: cfg.get(k, "") for k in (
         "TRADINGAGENTS_EXCHANGE", "REAL_READ_ONLY_API_KEY",
         "REAL_READ_ONLY_API_SECRET", "REAL_READ_ONLY_API_PASSWORD",
-        "REAL_READ_ONLY_API_UID")}
+        "REAL_READ_ONLY_API_UID", "REAL_READ_ONLY_EXCHANGE")}
 
 
 def _prova_leitura_real_recente(prova: dict, agora: datetime | None = None) -> bool:
@@ -4560,6 +4561,14 @@ async def live_preparacao_leitura(req: Request, _=Depends(auth),
         raise HTTPException(
             422, "confirme que a chave REAL separada não possui permissão de saque")
     cfg = load_cfg(request_tenant(req))
+    exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    exchange_da_credencial = str(
+        cfg.get("REAL_READ_ONLY_EXCHANGE") or "").strip().lower()
+    if not exchange_da_credencial or exchange_da_credencial != exchange:
+        raise HTTPException(
+            409, "a credencial somente leitura não está vinculada à "
+                 "corretora selecionada; escolha a corretora e informe a "
+                 "chave e o segredo correspondentes")
     env = _env_leitura_real(cfg)
     try:
         resultado = probe_read_only_account(env)

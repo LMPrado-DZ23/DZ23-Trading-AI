@@ -90,8 +90,11 @@ uv run python scripts/verificar_corretoras_publicas.py `
 
 A credencial da conta REAL é separada da credencial TESTNET e usa os campos
 `REAL_READ_ONLY_API_KEY`, `REAL_READ_ONLY_API_SECRET`,
-`REAL_READ_ONLY_API_PASSWORD` e `REAL_READ_ONLY_API_UID`. Ela não é lida pelo
-adaptador que envia ordens.
+`REAL_READ_ONLY_API_PASSWORD` e `REAL_READ_ONLY_API_UID`. O DZ23 também grava
+`REAL_READ_ONLY_EXCHANGE`, que vincula esse conjunto à corretora selecionada.
+Ela não é lida pelo adaptador que envia ordens. Ao trocar de corretora, o
+painel exige nova chave e novo segredo antes de qualquer consulta, evitando
+enviar por engano a credencial de uma corretora para outra.
 
 No painel, em **Configuração → Conta REAL — somente leitura**:
 
