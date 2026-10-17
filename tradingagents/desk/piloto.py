@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, DecimalException
 from enum import Enum
@@ -90,6 +90,7 @@ class AutorizacaoDePiloto:
     motivo_revogacao: str = ""
     motivo_suspensao: str = ""
     broker_identity_fingerprint: str = ""
+    contexto: dict = field(default_factory=dict)
     modo: str = MODO_DO_PILOTO
     schema: str = SCHEMA_PILOTO
 
@@ -115,6 +116,7 @@ class AutorizacaoDePiloto:
             "revogada_em": self.revogada_em,
             "motivo_revogacao": self.motivo_revogacao,
             "motivo_suspensao": self.motivo_suspensao,
+            "contexto": dict(self.contexto),
             "modo": self.modo, "schema": self.schema,
         }
 
@@ -186,6 +188,7 @@ class SupervisorDePiloto:
             motivo_suspensao=d.get("motivo_suspensao", ""),
             broker_identity_fingerprint=d.get(
                 "broker_identity_fingerprint", ""),
+            contexto=dict(d.get("contexto") or {}),
             modo=d.get("modo", MODO_DO_PILOTO),
             schema=d.get("schema", SCHEMA_PILOTO))
 

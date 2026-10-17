@@ -9,6 +9,7 @@ from __future__ import annotations
 import hmac
 import json
 from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from service.iq_option_mcp import (
@@ -32,6 +33,57 @@ SessionReader = Callable[
     [str, str, dict[str, str]],
     Awaitable[tuple[Sequence[Any], dict[str, Any]]],
 ]
+
+
+@dataclass(frozen=True, repr=False, slots=True)
+class IqOptionResolvedLiveAccount:
+    """Identidade privada usada somente para montar o runtime de execucao.
+
+    O ``balance_id`` nunca integra a prova publica e o ``repr`` e redigido
+    para evitar vazamento acidental em logs ou mensagens de erro.
+    """
+
+    balance_id: int
+    broker_identity_fingerprint: str
+    credential_fingerprint: str
+    trade_tools_verified: tuple[str, ...]
+
+    def __repr__(self) -> str:
+        return (
+            "IqOptionResolvedLiveAccount(balance_id=<redacted>, "
+            "fingerprints=<redacted>)"
+        )
+
+    def public_proof(self) -> dict[str, object]:
+        return {
+            "exchange": "iq_option",
+            "mcp_server": IQ_OPTION_LIVE_SERVER,
+            "authenticated_read": True,
+            "read_methods": [
+                "binary-options:tools/list",
+                "binary-options:list_balances[NORMAL]",
+            ],
+            "trade_tools_verified": list(self.trade_tools_verified),
+            "broker_identity_verified": True,
+            "broker_identity_fingerprint": (
+                self.broker_identity_fingerprint),
+            "credential_fingerprint": self.credential_fingerprint,
+        }
+
+
+def _parse_balance_id(value: Any) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        raise IqOptionExecutionPreparationError(
+            "resposta MCP passiva inválida")
+    raw = str(value).strip()
+    if not raw.isascii() or not raw.isdecimal():
+        raise IqOptionExecutionPreparationError(
+            "resposta MCP passiva inválida")
+    parsed = int(raw)
+    if parsed <= 0:
+        raise IqOptionExecutionPreparationError(
+            "resposta MCP passiva inválida")
+    return parsed
 
 
 def _annotation(tool: Any, name: str) -> Any:
@@ -129,10 +181,10 @@ async def _read_session_remote(
             return tools, _payload_from_result(result)
 
 
-async def probe_iq_option_live_execution_account_async(
+async def resolve_iq_option_live_account_async(
         env: dict, *, session_reader: SessionReader = _read_session_remote,
-        ) -> dict[str, object]:
-    """Comprova credencial de trade sem executar ou simular uma ordem."""
+        ) -> IqOptionResolvedLiveAccount:
+    """Resolve a conta LIVE em memoria sem executar ou simular uma ordem."""
     exchange = str(env.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
     bound = str(env.get("LIVE_EXECUTION_EXCHANGE") or "").strip().lower()
     if exchange != "iq_option" or bound != exchange:
@@ -147,12 +199,15 @@ async def probe_iq_option_live_execution_account_async(
         raise IqOptionExecutionPreparationError(
             "o token MCP LIVE deve ser separado do token somente leitura")
 
-    expected_account_id = str(
+    expected_account_raw = str(
         env.get("LIVE_EXECUTION_ACCOUNT_ID") or "").strip()
     discover_unique = env.get("IQ_OPTION_CONFIRM_UNIQUE_REGULAR_ACCOUNT") is True
-    if not expected_account_id and not discover_unique:
+    if not expected_account_raw and not discover_unique:
         raise IqOptionExecutionPreparationError(
             "confirme a conta REAL regular única")
+    expected_account_id = (
+        _parse_balance_id(expected_account_raw)
+        if expected_account_raw else None)
 
     endpoint = IQ_OPTION_MCP_SERVERS[IQ_OPTION_LIVE_SERVER]
     try:
@@ -168,23 +223,19 @@ async def probe_iq_option_live_execution_account_async(
     balances = payload.get("balances") if isinstance(payload, dict) else None
     if not isinstance(balances, list):
         raise IqOptionExecutionPreparationError("resposta MCP passiva inválida")
-    ids: list[str] = []
+    ids: list[int] = []
     for balance in balances:
         if not isinstance(balance, dict) or balance.get("type") != "regular":
             raise IqOptionExecutionPreparationError("resposta MCP passiva inválida")
-        balance_id = balance.get("balance_id")
-        if (isinstance(balance_id, bool)
-                or not isinstance(balance_id, (int, str))
-                or not str(balance_id).strip()):
-            raise IqOptionExecutionPreparationError("resposta MCP passiva inválida")
-        ids.append(str(balance_id).strip())
-    if discover_unique and not expected_account_id:
+        ids.append(_parse_balance_id(balance.get("balance_id")))
+    if discover_unique and expected_account_id is None:
         if len(ids) != 1:
             raise IqOptionExecutionPreparationError(
                 "a confirmação exige exatamente uma conta REAL regular")
         expected_account_id = ids[0]
-    if not expected_account_id or not any(
-            hmac.compare_digest(expected_account_id, item) for item in ids):
+    if expected_account_id is None or not any(
+            hmac.compare_digest(str(expected_account_id), str(item))
+            for item in ids):
         raise IqOptionExecutionPreparationError(
             "a conta autenticada não corresponde à prova somente leitura")
 
@@ -192,25 +243,29 @@ async def probe_iq_option_live_execution_account_async(
         "TRADINGAGENTS_EXCHANGE": "iq_option",
         "IQ_OPTION_MCP_BEARER_TOKEN": read_token,
     }
-    return {
-        "exchange": "iq_option",
-        "mcp_server": IQ_OPTION_LIVE_SERVER,
-        "authenticated_read": True,
-        "read_methods": [
-            "binary-options:tools/list",
-            "binary-options:list_balances[NORMAL]",
-        ],
-        "trade_tools_verified": write_tools,
-        "broker_identity_verified": True,
-        "broker_identity_fingerprint": broker_identity_fingerprint(
-            identity_env, expected_account_id),
-        "credential_fingerprint": live_execution_credential_fingerprint(env),
-    }
+    return IqOptionResolvedLiveAccount(
+        balance_id=expected_account_id,
+        broker_identity_fingerprint=broker_identity_fingerprint(
+            identity_env, str(expected_account_id)),
+        credential_fingerprint=live_execution_credential_fingerprint(env),
+        trade_tools_verified=tuple(write_tools),
+    )
+
+
+async def probe_iq_option_live_execution_account_async(
+        env: dict, *, session_reader: SessionReader = _read_session_remote,
+        ) -> dict[str, object]:
+    """Comprova credencial de trade sem expor o balance_id resolvido."""
+    resolved = await resolve_iq_option_live_account_async(
+        env, session_reader=session_reader)
+    return resolved.public_proof()
 
 
 __all__ = [
     "IQ_OPTION_LIVE_SERVER",
     "IQ_OPTION_LIVE_TOKEN_ENV",
+    "IqOptionResolvedLiveAccount",
     "IqOptionExecutionPreparationError",
     "probe_iq_option_live_execution_account_async",
+    "resolve_iq_option_live_account_async",
 ]

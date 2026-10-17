@@ -21,7 +21,7 @@ from tradingagents.brokers.ccxt_bridge import (
 )
 
 H = {"Authorization": "Bearer s3nh4"}
-ACCOUNT_ID = "private-balance-id"
+ACCOUNT_ID = "912345"
 
 
 def _run(coroutine):

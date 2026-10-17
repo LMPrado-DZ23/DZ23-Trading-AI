@@ -103,9 +103,11 @@ execução. O token pode ficar cifrado pelo painel ou apenas no ambiente e nunca
 
 A integração oficial também permite que uma estratégia IQ Option formada em
 sua sala PAPER entre na fila bloqueada da Sala REAL. A IQ Option continua
-marcada como laboratório, não cria sala LIVE, não possui executor de ordens
-nesta camada e ainda exige a prova autenticada somente leitura da conta antes
-de qualquer pedido de piloto para conta REAL. Ao selecionar IQ Option no
+marcada como laboratório e não cria sala LIVE automaticamente. O executor
+binário existe, mas permanece desconectado do serviço e inacessível enquanto
+o selo global estiver fechado; a prova autenticada somente leitura da conta
+continua obrigatória antes de qualquer pedido de piloto para conta REAL. Ao
+selecionar IQ Option no
 painel, o proprietário precisa declarar o payout observado, entre 0 e 1. O
 boot então cria a sala isolada `opcoes_binarias|paper`; payout ausente, não
 finito, zero, negativo ou acima de 1 falha fechado e fica visível no status da
@@ -130,6 +132,12 @@ valida o catálogo completo do servidor `binary-options` por `tools/list`,
 incluindo `place_trade`, `rollover_position` e `sell_position`, mas nunca chama
 essas ferramentas: a única execução remota é `list_balances(NORMAL)`. O token,
 o `balance_id` e os saldos não são gravados na evidência.
+
+O resolvedor privado da conta de execução aceita somente um `balance_id`
+inteiro positivo devolvido por `list_balances(NORMAL)`. Esse valor existe
+apenas no objeto em memória usado pelo runtime: seu `repr` é redigido e a
+prova pública não possui o campo. Zero, booleano, texto não numérico, conta
+ausente ou descoberta com mais de uma conta regular falham fechado.
 
 O contrato binário canônico também já está isolado em
 `tradingagents/brokers/iq_option_binary.py`. Ele aceita um plano somente quando
@@ -171,11 +179,23 @@ identificada de extrato da conta (`iq_option_account_statement`) com o retorno
 total e referência externa. Repetir a mesma prova após restart é idempotente;
 prova de outra posição, resultado ou fonte falha fechado.
 
-Esse coordenador ainda não está ligado ao fluxo dos agentes. Faltam a resolução
+O contrato `tradingagents/desk/binary_agent.py` fecha a fronteira entre agente
+e coordenador. A estratégia precisa declarar `call` ou `put`, vencimento
+inteiro exato, piso de payout, valor, reserva e contexto completo de
+certificação. `BUY`/`SELL` nunca é convertido por suposição. Antes do
+coordenador, o gateway compara agente, estratégia, versão, sala certificada,
+autorização do piloto, conta REAL, impressão da identidade da corretora e teto
+de capital; qualquer divergência falha antes do transporte. O contexto exato
+da escola agora também integra a autorização persistida.
+
+Esse gateway ainda não está ligado ao loop do serviço. Faltam a resolução
 operacional de intenções ambíguas sem `position_id`, a fonte operacional
-homologada que produz essa prova de extrato, a geração de vencimento/direção
-pelo contrato da estratégia e a homologação em conta de treinamento antes de
-qualquer proposta de ligação LIVE.
+homologada que produz a prova de extrato, a montagem persistente do runtime e
+a homologação em conta de treinamento antes de qualquer proposta de ligação
+LIVE. A documentação pública da IQ Option confirma que vitória devolve a
+aposta mais o lucro e empate devolve a aposta, mas o schema MCP acessível não
+documenta um campo inequívoco de retorno total; por isso `profit` continua
+proibido como substituto dessa prova.
 
 Depois de autorizar a conexão e carregar o token somente no ambiente local, a
 prova reproduzível pode ser gerada sem credencial na linha de comando:
