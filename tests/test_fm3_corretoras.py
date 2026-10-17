@@ -244,6 +244,8 @@ class TestPreparacaoReal:
         html = _html()
         status = _funcao(html, "async function liveStatus(")
         ativar = _funcao(html, "async function liveAtivar(")
+        assert "nunca um botão de tela" not in html
+        assert "somente aparece após todos os gates do servidor" in html
         assert "ativacao_final" in status and "disponivel" in status
         assert "liveAtivar" in status
         assert "'/v1/live/ativar/'" in ativar

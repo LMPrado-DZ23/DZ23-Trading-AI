@@ -10,11 +10,11 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
 | Gate | Prova exigida | Estado no HEAD da branch |
 |---|---|---|
-| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.691 passaram localmente no código atual; a matriz deve estar verde no HEAD publicado do PR #14 |
-| lint | `ruff check .` | verde localmente; o job deve estar verde no HEAD publicado do PR #14 |
-| instalação limpa | job CI dedicado | exige job verde no HEAD publicado do PR #14 |
-| dependências/segredos/licenças/SBOM | jobs CI dedicados | exigem jobs verdes no HEAD publicado do PR #14 |
-| PostgreSQL e ARM64 | jobs CI dedicados | exigem jobs verdes no HEAD publicado do PR #14; ARM64 valida dependências, não homologa host Oracle |
+| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.691 passaram na última suíte local integral; 46 testes focados passaram após o ajuste final de interface; matriz 3.10–3.13 verde no run `38996159731` do PR #14 |
+| lint | `ruff check .` | verde no run `38996159731` do PR #14 |
+| instalação limpa | job CI dedicado | verde no run `38996159731` do PR #14 |
+| dependências/segredos/licenças/SBOM | jobs CI dedicados | verdes no run `38996159731` do PR #14 |
+| PostgreSQL e ARM64 | jobs CI dedicados | verdes no run `38996159731` do PR #14; ARM64 valida dependências, não homologa host Oracle |
 | LIVE fechado | testes + `/v1/operational-readiness` | `MESA_LIVE_LIBERADA=False` |
 | rollback | backup local + restore isolado + prova recente | implementado; ensaio no host ainda externo |
 
@@ -33,6 +33,18 @@ payout observado foi declarado explicitamente no painel e validado no
 intervalo `(0, 1]`; ausência e valores inválidos falham fechado, sem sala e
 com motivo visível.
 Nenhuma dessas provas abre o selo LIVE.
+
+## Preflight local isolado
+
+Em 2026-10-17, o preflight `--target preparacao` foi executado contra uma
+instância local descartável, sem credenciais de corretora e sem chamadas de
+ordem. O serviço respondeu saudável, mas o preflight recusou prontidão com
+`preparacao_pendente`, `selo_de_codigo_live=false`,
+`envio_real_habilitado=false` e 14 pendências classificadas. O código de saída
+2 é a prova fail-closed esperada; não é falha do release check. No mesmo estado,
+`scripts/release_check.py` aprovou arquivos, defaults seguros, isolamento de
+serviços e dependência PostgreSQL. Essa execução não homologa produção nem
+substitui as provas externas abaixo.
 
 ## Gate do ambiente de destino
 
