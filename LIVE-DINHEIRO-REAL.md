@@ -134,10 +134,12 @@ essas ferramentas: a única execução remota é `list_balances(NORMAL)`. O toke
 o `balance_id` e os saldos não são gravados na evidência.
 
 O resolvedor privado da conta de execução aceita somente um `balance_id`
-inteiro positivo devolvido por `list_balances(NORMAL)`. Esse valor existe
-apenas no objeto em memória usado pelo runtime: seu `repr` é redigido e a
-prova pública não possui o campo. Zero, booleano, texto não numérico, conta
-ausente ou descoberta com mais de uma conta regular falham fechado.
+inteiro positivo devolvido por `list_balances(NORMAL)`. Seu `repr` é redigido
+e a prova pública não possui o campo. Quando uma intenção chegar ao WAL, o ID
+integra somente o estado operacional interno necessário à reconciliação após
+reinício; esse arquivo não é evidência pública e deve ser tratado como dado
+sensível. Zero, booleano, texto não numérico, conta ausente ou descoberta com
+mais de uma conta regular falham fechado.
 
 O contrato binário canônico também já está isolado em
 `tradingagents/brokers/iq_option_binary.py`. Ele aceita um plano somente quando
@@ -188,11 +190,17 @@ autorização do piloto, conta REAL, impressão da identidade da corretora e tet
 de capital; qualquer divergência falha antes do transporte. O contexto exato
 da escola agora também integra a autorização persistida.
 
-Esse gateway ainda não está ligado ao loop do serviço. Faltam a resolução
-operacional de intenções ambíguas sem `position_id`, a fonte operacional
-homologada que produz a prova de extrato, a montagem persistente do runtime e
-a homologação em conta de treinamento antes de qualquer proposta de ligação
-LIVE. A documentação pública da IQ Option confirma que vitória devolve a
+O módulo `service/iq_option_binary_runtime.py` já monta resolvedor, transporte,
+WAL, subledger e gateway como uma unidade persistente vinculada a uma única
+autorização. Selo de código ou frase inválidos bloqueiam antes da leitura da
+conta; identidade divergente bloqueia antes de criar o transporte. Após
+reinício, um pedido já aberto é restaurado sem repetir `place_trade`.
+
+Esse runtime ainda não está ligado ao loop nem às rotas do aplicativo. Faltam
+a resolução operacional de intenções ambíguas sem `position_id`, a fonte
+operacional homologada que produz a prova de extrato e a homologação em conta
+de treinamento antes de qualquer proposta de ligação LIVE. A documentação
+pública da IQ Option confirma que vitória devolve a
 aposta mais o lucro e empate devolve a aposta, mas o schema MCP acessível não
 documenta um campo inequívoco de retorno total; por isso `profit` continua
 proibido como substituto dessa prova.

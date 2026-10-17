@@ -10,7 +10,7 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
 | Gate | Prova exigida | Estado no HEAD da branch |
 |---|---|---|
-| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.823 passaram, 5 ignorados e 71 subtestes passaram na última suíte local integral; 79 testes focados do novo contrato/resolvedor e da cadeia binária passaram; matriz 3.10–3.13 aguardará o push deste HEAD no PR #14 |
+| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.823 passaram, 5 ignorados e 71 subtestes passaram na última suíte local integral; 183 testes focados do contrato, resolvedor, runtime e cadeia binária passaram; matriz 3.10–3.13 aguardará o push deste HEAD no PR #14 |
 | lint | `ruff check .` | verde local no HEAD e no run `39027792071` do PR #14 |
 | instalação limpa | job CI dedicado | verde no run `39027792071` do PR #14 |
 | dependências/segredos/licenças/SBOM | jobs CI dedicados | verdes no run `39027792071` do PR #14 |
@@ -66,13 +66,16 @@ final, sem reenviar `place_trade`. Um contrato de agente agora exige
 `call`/`put` e vencimento explícitos, sem converter `BUY`/`SELL`, e vincula a
 decisão à mesma estratégia, versão, certificação, autorização, conta REAL e
 impressão de identidade. O resolvedor privado entrega ao runtime apenas um
-`balance_id` inteiro positivo, sem expô-lo na prova pública ou no `repr`.
+`balance_id` inteiro positivo, sem expô-lo na prova pública ou no `repr`. A
+fábrica persistente compõe resolvedor, transporte, coordenador, subledger e
+gateway por autorização; selo/frase inválidos bloqueiam antes da rede e o
+restart de uma abertura confirmada não reenvia a ordem.
 Um subledger específico já mantém
 aposta aberta e liquidação por retorno total comprovado, com vitória, perda,
-empate, cancelamento e repetição pós-restart exatamente uma vez. Faltam a
-montagem persistente desse runtime no serviço, a fonte operacional homologada
-que produz a prova de extrato do retorno total, a resolução operacional do
-caso ambíguo sem `position_id` e a homologação na conta de treinamento;
+empate, cancelamento e repetição pós-restart exatamente uma vez. Faltam ligar
+esse runtime ao loop/rotas do aplicativo, a fonte operacional homologada que
+produz a prova de extrato do retorno total, a resolução operacional do caso
+ambíguo sem `position_id` e a homologação na conta de treinamento;
 adaptar o livro spot por aparência continua expressamente proibido.
 
 Em 2026-10-17, a sonda pública foi repetida no HEAD
