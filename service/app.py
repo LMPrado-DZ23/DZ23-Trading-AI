@@ -29,6 +29,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from service.api import segredos_em_repouso
 from service.api.ia_uso import RegistroDeUso
 from service.api.owner_credentials import CredenciaisDoDono, erro_de_senha
+from service.iq_option_binary_runtime import (
+    IqOptionBinaryRuntimeError,
+    build_iq_option_binary_runtime,
+)
 from service.iq_option_execution import (
     IqOptionExecutionPreparationError,
     probe_iq_option_live_execution_account_async,
@@ -2511,6 +2515,7 @@ def oauth_callback(provider: str, code: str = "", state: str = ""):
 # agentes, carteira, ordens ou ciclos de outro — isolamento é requisito do
 # produto, não detalhe. Modo PAPER; esta superfície não liga capital real.
 _DESKS: dict[str, dict] = {}
+_IQ_BINARY_RUNTIMES: dict[str, object] = {}
 
 # Centro Inteligente de Alertas ⑤: fila durável por inquilino. Só o
 # despachante grava; o teste injeta transportes por aqui para nunca tocar
@@ -3516,6 +3521,7 @@ def _desk_of(request: Request) -> dict:
 
 def _desk_reset(tenant_id: str) -> None:
     """Configuração mudou: parada controlada e reconstrução no próximo uso."""
+    _IQ_BINARY_RUNTIMES.pop(tenant_id, None)
     desk = _DESKS.pop(tenant_id, None)
     if desk and desk.get("scheduler") and desk["scheduler"].running:
         desk["scheduler"].stop()
@@ -4925,6 +4931,30 @@ def _env_live_execution(cfg: dict) -> dict:
         "IQ_OPTION_MCP_LIVE_BEARER_TOKEN")}
 
 
+async def _build_iq_binary_runtime(
+        *, cfg: dict, tenant_id: str, authorization, store,
+        confirmation_phrase: str):
+    """Compõe a sala binária sem submeter decisão ou ordem à corretora."""
+    env = _env_live_execution(cfg)
+    # A preparação pública nunca persiste o identificador bruto da conta. O
+    # runtime pode descobri-lo somente quando a credencial enxerga exatamente
+    # uma conta regular, mantendo o valor dentro da fronteira de execução.
+    env["LIVE_EXECUTION_ACCOUNT_ID"] = ""
+    env["IQ_OPTION_CONFIRM_UNIQUE_REGULAR_ACCOUNT"] = True
+    return await build_iq_option_binary_runtime(
+        env=env,
+        tenant_id=tenant_id,
+        authorization=authorization,
+        ledger=None,
+        opening_cash=cfg.get("TRADINGAGENTS_DESK_CAPITAL"),
+        store=store,
+        live_code_authorized=MESA_LIVE_LIBERADA,
+        confirmation_phrase=confirmation_phrase,
+        max_order_value=cfg.get("LIVE_MAX_ORDER_VALUE"),
+        max_daily_loss=cfg.get("LIVE_MAX_DAILY_LOSS"),
+    )
+
+
 def _env_live_como_leitura(cfg: dict) -> dict:
     """Visão da chave LIVE para a sonda que não possui caminho de ordem."""
     return live_execution_as_read_only_env(_env_live_execution(cfg))
@@ -5981,12 +6011,11 @@ async def live_ativar_mesa(agent_id: str, req: Request, _=Depends(auth),
         raise HTTPException(422, "confirme a conta REAL exata desta ativação")
     tid = request_tenant(req)
     cfg = load_cfg(tid)
-    if (str(cfg.get("TRADINGAGENTS_DESK_BROKER") or "").strip().lower()
-            != "ccxt"):
+    exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    broker = str(
+        cfg.get("TRADINGAGENTS_DESK_BROKER") or "").strip().lower()
+    if exchange != "iq_option" and broker != "ccxt":
         raise HTTPException(409, "a ativação LIVE exige o executor CCXT")
-    if str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower() == "iq_option":
-        raise HTTPException(
-            409, "IQ Option não possui executor LIVE homologado no DZ23")
     if str(cfg.get("TRADINGAGENTS_BROKER_MODE") or "testnet").lower() != "testnet":
         raise HTTPException(
             409, "prepare e reconcilie a mesa em TESTNET antes da ativação")
@@ -6042,19 +6071,42 @@ async def live_ativar_mesa(agent_id: str, req: Request, _=Depends(auth),
     }
     cfg_live = {**cfg, "TRADINGAGENTS_BROKER_MODE": "live"}
     cfg_live.pop("LIVE_TRADING_CONFIRM", None)
-    try:
-        nova = _desk_boot(tid, cfg_override=cfg_live,
-                          live_activation=ativacao)
-    except BrokerSecurityError as exc:
-        raise HTTPException(409, f"mesa LIVE recusada: {exc}"[:400]) from exc
+    if exchange == "iq_option":
+        try:
+            nova_iq = await _build_iq_binary_runtime(
+                cfg=cfg,
+                tenant_id=tid,
+                authorization=piloto,
+                store=esc["armazem"],
+                confirmation_phrase=str(body.get("frase") or "").strip(),
+            )
+        except IqOptionBinaryRuntimeError as exc:
+            raise HTTPException(
+                409, f"runtime binário IQ Option recusado: {exc}"[:400]) from exc
+        nova = None
+    else:
+        try:
+            nova = _desk_boot(tid, cfg_override=cfg_live,
+                              live_activation=ativacao)
+        except BrokerSecurityError as exc:
+            raise HTTPException(
+                409, f"mesa LIVE recusada: {exc}"[:400]) from exc
+        nova_iq = None
     # Só persiste a decisão depois que a composição segura foi construída.
     esc["armazem"].salvar(tid, _CHAVE_ATIVACAO_LIVE,
                            {k: v for k, v in ativacao.items() if k != "valida"})
     save_cfg(cfg_live, tid)
-    _DESKS[tid] = nova
+    if exchange == "iq_option":
+        _DESKS.pop(tid, None)
+        _IQ_BINARY_RUNTIMES[tid] = nova_iq
+    else:
+        _IQ_BINARY_RUNTIMES.pop(tid, None)
+        _DESKS[tid] = nova
     return {
         "ok": True,
         "modo": "live",
+        "runtime": (
+            "iq_option_binary" if exchange == "iq_option" else "ccxt"),
         "agent_id": agent_id,
         "conta": conta_confirmada,
         "envio_real_habilitado": False,
@@ -6070,6 +6122,7 @@ def live_desativar_mesa(request: Request, _=Depends(auth),
                         __=Depends(require_plan)):
     """Volta para TESTNET e revoga o mandato global sem apagar evidências."""
     tid = request_tenant(request)
+    _IQ_BINARY_RUNTIMES.pop(tid, None)
     d = _DESKS.get(tid)
     if d and d.get("scheduler") and d["scheduler"].running:
         d["scheduler"].stop()
@@ -6122,6 +6175,7 @@ def live_emergency(request: Request, _=Depends(auth)):
     tid = request_tenant(request)
     parada = _parada(tid)
     parada.acionar("acionada pelo painel", por=tid)
+    _IQ_BINARY_RUNTIMES.pop(tid, None)
     d = _DESKS.get(tid)
     if d is None:
         return {"ok": True, "parado": True, "a_encerrar": [],
@@ -6167,6 +6221,7 @@ async def live_resume(req: Request, _=Depends(auth)):
     except KillSwitchError as exc:
         raise HTTPException(409, str(exc)) from None
     _DESKS.pop(tid, None)          # reconstrói limpo no próximo uso
+    _IQ_BINARY_RUNTIMES.pop(tid, None)
     return {"ok": True, "liberado": True,
             "aviso": "envios liberados; confira os tetos antes de retomar"}
 

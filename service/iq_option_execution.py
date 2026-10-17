@@ -44,6 +44,7 @@ class IqOptionResolvedLiveAccount:
     """
 
     balance_id: int
+    currency: str
     broker_identity_fingerprint: str
     credential_fingerprint: str
     trade_tools_verified: tuple[str, ...]
@@ -84,6 +85,15 @@ def _parse_balance_id(value: Any) -> int:
         raise IqOptionExecutionPreparationError(
             "resposta MCP passiva inválida")
     return parsed
+
+
+def _parse_currency(value: Any) -> str:
+    currency = str(value or "").strip().upper()
+    if (not 3 <= len(currency) <= 5 or not currency.isascii()
+            or not currency.isalpha()):
+        raise IqOptionExecutionPreparationError(
+            "resposta MCP passiva inválida")
+    return currency
 
 
 def _annotation(tool: Any, name: str) -> Any:
@@ -223,11 +233,18 @@ async def resolve_iq_option_live_account_async(
     balances = payload.get("balances") if isinstance(payload, dict) else None
     if not isinstance(balances, list):
         raise IqOptionExecutionPreparationError("resposta MCP passiva inválida")
-    ids: list[int] = []
+    accounts: list[tuple[int, str]] = []
     for balance in balances:
         if not isinstance(balance, dict) or balance.get("type") != "regular":
             raise IqOptionExecutionPreparationError("resposta MCP passiva inválida")
-        ids.append(_parse_balance_id(balance.get("balance_id")))
+        accounts.append((
+            _parse_balance_id(balance.get("balance_id")),
+            _parse_currency(balance.get("currency")),
+        ))
+    ids = [balance_id for balance_id, _currency in accounts]
+    if len(ids) != len(set(ids)):
+        raise IqOptionExecutionPreparationError(
+            "resposta MCP passiva inválida")
     if discover_unique and expected_account_id is None:
         if len(ids) != 1:
             raise IqOptionExecutionPreparationError(
@@ -238,6 +255,9 @@ async def resolve_iq_option_live_account_async(
             for item in ids):
         raise IqOptionExecutionPreparationError(
             "a conta autenticada não corresponde à prova somente leitura")
+    currency = next(
+        currency for balance_id, currency in accounts
+        if balance_id == expected_account_id)
 
     identity_env = {
         "TRADINGAGENTS_EXCHANGE": "iq_option",
@@ -245,6 +265,7 @@ async def resolve_iq_option_live_account_async(
     }
     return IqOptionResolvedLiveAccount(
         balance_id=expected_account_id,
+        currency=currency,
         broker_identity_fingerprint=broker_identity_fingerprint(
             identity_env, str(expected_account_id)),
         credential_fingerprint=live_execution_credential_fingerprint(env),

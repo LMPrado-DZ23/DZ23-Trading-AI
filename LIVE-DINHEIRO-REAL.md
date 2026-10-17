@@ -196,10 +196,14 @@ autorização. Selo de código ou frase inválidos bloqueiam antes da leitura da
 conta; identidade divergente bloqueia antes de criar o transporte. Após
 reinício, um pedido já aberto é restaurado sem repetir `place_trade`.
 
-Esse runtime ainda não está ligado ao loop nem às rotas do aplicativo. Faltam
-a resolução operacional de intenções ambíguas sem `position_id`, a fonte
+Esse runtime agora está ligado **somente** à rota final de ativação: depois de
+todos os gates comuns, a rota resolve a conta, valida moeda e identidade e
+monta a sala binária persistente, sem chamar `place_trade` e sem iniciar um
+laço autônomo. Desativação, alteração de configuração e parada de emergência
+removem o runtime da memória. Ainda faltam a resolução operacional de intenções
+ambíguas sem `position_id`, a fonte
 operacional homologada que produz a prova de extrato e a homologação em conta
-de treinamento antes de qualquer proposta de ligação LIVE. A documentação
+de treinamento antes de qualquer proposta de envio LIVE. A documentação
 pública da IQ Option confirma que vitória devolve a
 aposta mais o lucro e empate devolve a aposta, mas o schema MCP acessível não
 documenta um campo inequívoco de retorno total; por isso `profit` continua
@@ -299,7 +303,8 @@ Na IQ Option, esse namespace é `IQ_OPTION_MCP_LIVE_BEARER_TOKEN`, também
 vinculado por `LIVE_EXECUTION_EXCHANGE`. A preparação exige simultaneamente o
 token somente leitura e o token LIVE, recusa reutilizar o mesmo valor e compara
 em memória a identidade da conta regular. Isso certifica a credencial e seu
-escopo; não implementa nem homologa o envio de ordens da IQ Option.
+escopo. A ativação final já consegue montar o runtime binário selado, mas não
+submete decisão nem ordem; a homologação operacional continua pendente.
 
 Em **Configuração → Conta REAL — credencial de execução futura**, o
 proprietário salva essa terceira credencial e confirma que ela possui trade,
@@ -488,6 +493,7 @@ ambiente de destino.
 Botão vermelho **PARADA DE EMERGÊNCIA** no painel:
 - bloqueia imediatamente qualquer envio de ordem deste inquilino;
 - para o laço autônomo e as entradas novas;
+- desmonta da memória o runtime binário da IQ Option, quando presente;
 - **não fecha posições sozinho** — posição aberta continua aberta, sob o
   guardião. Fechar é decisão sua, consciente.
 

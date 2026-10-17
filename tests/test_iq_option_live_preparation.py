@@ -76,7 +76,8 @@ def test_prova_live_iq_autentica_por_leitura_sem_chamar_trade():
     async def reader(endpoint, token, arguments):
         chamadas.append((endpoint, token, arguments))
         return _tools(), {
-            "balances": [{"type": "regular", "balance_id": ACCOUNT_ID}]}
+            "balances": [{"type": "regular", "balance_id": ACCOUNT_ID,
+                          "currency": "USD"}]}
 
     result = _run(probe_iq_option_live_execution_account_async(
         _env(), session_reader=reader))
@@ -108,7 +109,8 @@ def test_prova_live_iq_recusa_escopo_sem_trade_ou_contrato_desconhecido(
         tools):
     async def reader(_endpoint, _token, _arguments):
         return tools, {
-            "balances": [{"type": "regular", "balance_id": ACCOUNT_ID}]}
+            "balances": [{"type": "regular", "balance_id": ACCOUNT_ID,
+                          "currency": "USD"}]}
 
     with pytest.raises(IqOptionExecutionPreparationError, match="contrato|trade"):
         _run(probe_iq_option_live_execution_account_async(

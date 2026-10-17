@@ -121,6 +121,7 @@ def _env():
 async def _resolver(_env):
     return IqOptionResolvedLiveAccount(
         balance_id=912345,
+        currency="USD",
         broker_identity_fingerprint="account-fingerprint",
         credential_fingerprint="credential-fingerprint",
         trade_tools_verified=(
@@ -219,6 +220,7 @@ def test_identidade_divergente_falha_antes_de_criar_transporte():
     async def divergent(_env):
         return IqOptionResolvedLiveAccount(
             balance_id=912345,
+            currency="USD",
             broker_identity_fingerprint="other-account",
             credential_fingerprint="credential-fingerprint",
             trade_tools_verified=(
@@ -234,6 +236,55 @@ def test_identidade_divergente_falha_antes_de_criar_transporte():
             account_resolver=divergent,
             transport_factory=lambda **_: calls.append("transport"),
             now=lambda: NOW,
+        ))
+
+    assert calls == []
+
+
+def test_runtime_novo_abre_subledger_na_moeda_resolvida_sem_presumir_usd():
+    tools = FakeTools()
+
+    async def resolver_brl(_env):
+        return IqOptionResolvedLiveAccount(
+            balance_id=912345,
+            currency="BRL",
+            broker_identity_fingerprint="account-fingerprint",
+            credential_fingerprint="credential-fingerprint",
+            trade_tools_verified=(
+                "place_trade", "rollover_position", "sell_position"),
+        )
+
+    runtime = _run(build_iq_option_binary_runtime(
+        env=_env(), tenant_id="tenant-1", authorization=_authorization(),
+        ledger=None, opening_cash="1000", store=Store(),
+        live_code_authorized=True,
+        confirmation_phrase=LIVE_CONFIRM_PHRASE,
+        account_resolver=resolver_brl,
+        transport_factory=lambda **_: tools,
+        now=lambda: NOW,
+        max_order_value="100",
+        max_daily_loss="50",
+    ))
+
+    assert runtime.coordinator.ledger.currency == "BRL"
+    assert runtime.coordinator.ledger.cash_available() == Decimal("1000")
+    assert tools.calls == []
+
+
+def test_ledger_injetado_em_outra_moeda_falha_antes_do_transporte():
+    calls = []
+
+    with pytest.raises(IqOptionBinaryRuntimeError, match="moeda"):
+        _run(build_iq_option_binary_runtime(
+            env=_env(), tenant_id="tenant-1", authorization=_authorization(),
+            ledger=Ledger(Decimal("1000"), "BRL"), store=Store(),
+            live_code_authorized=True,
+            confirmation_phrase=LIVE_CONFIRM_PHRASE,
+            account_resolver=_resolver,
+            transport_factory=lambda **_: calls.append("transport"),
+            now=lambda: NOW,
+            max_order_value="100",
+            max_daily_loss="50",
         ))
 
     assert calls == []

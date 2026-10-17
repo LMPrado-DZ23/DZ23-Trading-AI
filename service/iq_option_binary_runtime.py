@@ -11,6 +11,7 @@ import hmac
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from service.iq_option_binary_transport import IqOptionBinaryMcpTransport
@@ -113,6 +114,7 @@ async def build_iq_option_binary_runtime(
         *, env: dict[str, Any], tenant_id: str,
         authorization: AutorizacaoDePiloto, ledger: Ledger | None,
         store: Any, live_code_authorized: bool, confirmation_phrase: str,
+        opening_cash: Any = None,
         max_order_value: Any = None, max_daily_loss: Any = None,
         account_resolver: AccountResolver = (
             resolve_iq_option_live_account_async),
@@ -154,6 +156,20 @@ async def build_iq_option_binary_runtime(
             "identidade da conta diverge da autorizacao")
     try:
         restored = store.carregar(tenant, state_key)
+        if restored is None and ledger is None:
+            try:
+                opening = Decimal(str(opening_cash))
+            except (InvalidOperation, TypeError, ValueError):
+                raise IqOptionBinaryRuntimeError(
+                    "capital inicial do runtime invalido") from None
+            if not opening.is_finite() or opening <= 0:
+                raise IqOptionBinaryRuntimeError(
+                    "capital inicial do runtime invalido")
+            ledger = Ledger(opening, account.currency)
+        if (restored is None and isinstance(ledger, Ledger)
+                and ledger.currency != account.currency):
+            raise IqOptionBinaryRuntimeError(
+                "moeda do ledger diverge da conta resolvida")
         transport = transport_factory(token=live_token)
 
         def persist(document: dict[str, Any]) -> None:
@@ -170,6 +186,11 @@ async def build_iq_option_binary_runtime(
             restored_state=restored,
         )
         gateway = BinaryAgentExecutionGateway(coordinator, now=now)
+        if coordinator.ledger.currency != account.currency:
+            raise IqOptionBinaryRuntimeError(
+                "moeda restaurada diverge da conta resolvida")
+    except IqOptionBinaryRuntimeError:
+        raise
     except Exception as exc:
         raise IqOptionBinaryRuntimeError(
             f"montagem do runtime binario falhou ({type(exc).__name__})") \

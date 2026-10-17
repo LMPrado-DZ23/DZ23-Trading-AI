@@ -10,7 +10,7 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
 | Gate | Prova exigida | Estado no HEAD da branch |
 |---|---|---|
-| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.823 passaram, 5 ignorados e 71 subtestes passaram na última suíte local integral; 183 testes focados do contrato, resolvedor, runtime e cadeia binária passaram; matriz 3.10–3.13 aguardará o push deste HEAD no PR #14 |
+| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.841 passaram, 5 ignorados e 71 subtestes passaram na suíte local integral; 64 testes focados da ativação final, selo, prontidão, resolvedor e runtime IQ passaram; matriz 3.10–3.13 aguardará o push deste HEAD no PR #14 |
 | lint | `ruff check .` | verde local no HEAD e no run `39027792071` do PR #14 |
 | instalação limpa | job CI dedicado | verde no run `39027792071` do PR #14 |
 | dependências/segredos/licenças/SBOM | jobs CI dedicados | verdes no run `39027792071` do PR #14 |
@@ -37,8 +37,9 @@ negativos, texto, infinito, `NaN` ou teto por ordem acima da exposição. Os
 limites individuais do piloto também não recebem defaults financeiros.
 As nove corretoras CCXT do catálogo abrem salas PAPER spot isoladas na Escola.
 A IQ Option permanece laboratório PAPER, mas uma estratégia formada pode
-entrar na fila bloqueada da Sala REAL graças à integração MCP oficial; isso
-não cria runtime LIVE, não habilita LIVE e não dispensa a prova de conta
+entrar na fila bloqueada da Sala REAL graças à integração MCP oficial. A rota
+final consegue montar um runtime binário isolado somente depois de todos os
+gates, sem enviar ordem; isso não habilita LIVE nem dispensa a prova de conta
 somente leitura. Seu boot de produção abre uma sala `opcoes_binarias` somente quando o
 payout observado foi declarado explicitamente no painel e validado no
 intervalo `(0, 1]`; ausência e valores inválidos falham fechado, sem sala e
@@ -49,11 +50,13 @@ A credencial de negociação da IQ Option pode ser preparada em namespace
 separado (`IQ_OPTION_MCP_LIVE_BEARER_TOKEN`). O gate comprova por `tools/list`
 que o token expõe exatamente o contrato oficial de negociação do servidor
 `binary-options` e autentica a mesma conta com `list_balances(NORMAL)`. Nenhuma
-ferramenta mutável é chamada. O executor de ordens continua não homologado e
-`MESA_LIVE_LIBERADA=False` permanece obrigatório neste release.
+ferramenta mutável é chamada durante a preparação ou montagem. A execução em
+conta de treinamento continua não homologada e `MESA_LIVE_LIBERADA=False`
+permanece obrigatório neste release.
 
 O planejamento canônico de opções binárias está implementado com transporte
-selado e ainda desconectado do loop do serviço:
+selado e conectado apenas à rota final de ativação, ainda desconectado do loop
+autônomo do serviço:
 ativo aberto e único, limites de valor, payout mínimo e vencimento exatamente
 oferecido são obrigatórios; a reconciliação por `position_id` preserva
 `UNKNOWN` quando a janela não prova o destino. Antes de `place_trade`, o executor
@@ -72,8 +75,10 @@ gateway por autorização; selo/frase inválidos bloqueiam antes da rede e o
 restart de uma abertura confirmada não reenvia a ordem.
 Um subledger específico já mantém
 aposta aberta e liquidação por retorno total comprovado, com vitória, perda,
-empate, cancelamento e repetição pós-restart exatamente uma vez. Faltam ligar
-esse runtime ao loop/rotas do aplicativo, a fonte operacional homologada que
+empate, cancelamento e repetição pós-restart exatamente uma vez. A ativação
+monta esse runtime sem chamar ferramenta mutável; desativação, reset e parada
+de emergência o removem da memória. Faltam o loop de submissão autorizado, a
+fonte operacional homologada que
 produz a prova de extrato do retorno total, a resolução operacional do caso
 ambíguo sem `position_id` e a homologação na conta de treinamento;
 adaptar o livro spot por aparência continua expressamente proibido.
