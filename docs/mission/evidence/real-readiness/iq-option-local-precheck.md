@@ -109,8 +109,30 @@ passiva foi executada no HEAD
 - `orders_enabled=false` e `ordens_enviadas=false`.
 
 Essa prova substitui o diagnóstico do token antigo com 32 ferramentas
-mutáveis e fecha o gate de permissão mínima do token. Ela não executou
-`list_balances`, não leu saldo e não confirmou a identidade da conta. A
-próxima prova externa permanece a chamada literal
-`list_balances({types: NORMAL})`, depois de o proprietário indicar a conta e
-o `balance_id` regular a comparar somente em memória.
+mutáveis e fecha o gate de permissão mínima do token. Naquele momento ela
+ainda não havia executado `list_balances`, lido a conta ou confirmado sua
+identidade; a etapa seguinte está registrada abaixo.
+
+## Conta regular autenticada sem persistir identidade bruta
+
+Em 2026-10-17, o DZ23 executou a chamada literal somente leitura
+`list_balances({types: NORMAL})` com o token `DZ23 Read Only`. O provedor
+devolveu exatamente uma conta `regular`, com um único identificador não vazio.
+Esse identificador foi comparado somente em memória por uma segunda chamada
+do mesmo método, sob nova validação do contrato `tools/list`.
+
+Resultado sanitizado:
+
+- leitura autenticada e identidade da conta confirmadas;
+- rótulo local `IQ Option Real Principal`;
+- uma única conta regular e um único método de leitura utilizado;
+- zero ferramenta mutável exposta ao DZ23;
+- token mantido cifrado no armazenamento local;
+- nenhum saldo, moeda, token, `balance_id` ou identificador pessoal impresso;
+- nenhum identificador bruto persistido;
+- nenhuma ordem, saque, transferência ou alteração de conta executada.
+
+A prova local foi validada pelo próprio gate de prontidão e vale por 24 horas.
+Ela fecha os itens "Acesso REAL de leitura recente e permissões mínimas" e
+"Identidade da conta REAL confirmada". Não cria credencial de execução, não
+homologa TESTNET da IQ Option e não abre o selo LIVE.

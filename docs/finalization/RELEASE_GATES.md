@@ -87,9 +87,12 @@ e janela contínua de pelo menos uma hora.
   2026-10-17 no HEAD `99025cb`: o token `DZ23 Read Only` anunciou 60
   ferramentas somente leitura, zero mutáveis, zero desconhecidas, zero
   ausentes e zero chamáveis; `Read access` ficou ligado e todos os nove
-  controles de `Trading access` desligados. A primeira chamada autenticada
-  `list_balances(NORMAL)` e a confirmação da identidade da conta continuam
-  como prova externa pendente; nenhuma ferramenta ou ordem foi chamada;
+  controles de `Trading access` desligados. Em 2026-10-17, a chamada
+  autenticada `list_balances(NORMAL)` encontrou exatamente uma conta regular
+  e confirmou sua identidade somente em memória. A prova sanitizada local está
+  válida, nenhum identificador bruto foi persistido e nenhuma ordem foi
+  enviada. Essa prova expira em 24 horas e não substitui homologação TESTNET,
+  credencial de execução separada ou certificação de estratégia/conta;
 - divergências e provas expiradas ausentes.
 
 ## Ações que continuam exigindo o proprietário no momento da ação
