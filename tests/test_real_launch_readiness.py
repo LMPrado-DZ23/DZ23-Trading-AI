@@ -30,6 +30,11 @@ def test_status_separa_pendencias_por_responsabilidade(tmp_path, monkeypatch):
     assert readiness["estado"] == "preparacao_pendente"
     assert readiness["pre_requisitos_sem_selo_concluidos"] is False
     assert readiness["exige_confirmacao_no_momento_da_acao"] is True
+    assert body["ativacao_final"] == {
+        "disponivel": False,
+        "exige_confirmacao_no_momento_da_acao": True,
+        "agentes": [],
+    }
     assert sum(readiness["quantidade_por_categoria"].values()) == body[
         "pendencias"]
     assert readiness["bloqueios_por_categoria"]["liberacao_de_codigo"] == [
@@ -131,6 +136,27 @@ def test_preparacao_completa_e_alcancavel_sem_trocar_testnet_para_live(
     ]
     assert cfg["TRADINGAGENTS_BROKER_MODE"] == "testnet"
     assert m.MESA_LIVE_LIBERADA is False
+
+    monkeypatch.setattr(m, "MESA_LIVE_LIBERADA", True)
+    pronto_para_decisao = client.get("/v1/live/status", headers=H).json()
+
+    assert pronto_para_decisao["pode_operar_real"] is False
+    assert pronto_para_decisao["ativacao_final"] == {
+        "disponivel": True,
+        "exige_confirmacao_no_momento_da_acao": True,
+        "agentes": [{
+            "agent_id": "agente-formado",
+            "estrategia": "momentum",
+            "versao": "v1",
+            "conta": "real-principal",
+        }],
+    }
+    assert cfg["TRADINGAGENTS_BROKER_MODE"] == "testnet"
+
+    certificacao["risco_compativel"] = False
+    risco_incompativel = client.get("/v1/live/status", headers=H).json()
+    assert risco_incompativel["ativacao_final"]["disponivel"] is False
+    assert risco_incompativel["ativacao_final"]["agentes"] == []
 
 
 def test_confirmacao_live_nao_pode_ser_persistida_em_configuracao(

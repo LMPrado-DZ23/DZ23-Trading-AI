@@ -5820,9 +5820,29 @@ def _live_status_payload(request: Request) -> dict:
     faltam = [i for i in checklist if not i["pronto"]]
     estado_de_liberacao = _estado_de_liberacao_real(checklist)
     sala_real = _resumo_sala_real(request)
+    agentes_ativaveis = [
+        {"agent_id": p.get("agent_id"),
+         "estrategia": p.get("estrategia"),
+         "versao": p.get("versao"),
+         "conta": p.get("conta")}
+        for p in certificacoes
+        if p.get("risco_compativel") is True
+    ]
+    ativacao_final_disponivel = bool(
+        MESA_LIVE_LIBERADA
+        and estado_de_liberacao["pre_requisitos_sem_selo_concluidos"]
+        and (cfg.get("TRADINGAGENTS_BROKER_MODE") or "") != "live"
+        and agentes_ativaveis
+    )
     return {"pode_operar_real": not faltam, "checklist": checklist,
             "pendencias": len(faltam),
             "estado_de_liberacao": estado_de_liberacao,
+            "ativacao_final": {
+                "disponivel": ativacao_final_disponivel,
+                "exige_confirmacao_no_momento_da_acao": True,
+                "agentes": (agentes_ativaveis
+                            if ativacao_final_disponivel else []),
+            },
             "sala_real": sala_real,
             "preparacao_leitura": _prova_publica(prova_leitura, prova_valida),
             "preparacao_execucao": _prova_execucao_publica(

@@ -6,9 +6,9 @@ O que estes contratos pinam:
   credenciais e sem rede), o detalhe da validação (`/v1/broker/status`) e a
   reconciliação (`/v1/desk/reconciliar`); rotação = trocar (colar e salvar)
   ou remover a chave salva.
-- §4: a preparação para REAL é VISÍVEL e verificável (checklist de 6 itens
-  de `/v1/live/status`) — e continua BLOQUEADA: nenhuma tela ativa LIVE,
-  nenhum caminho de saque/transferência existe no painel.
+- §4: a preparação para REAL é VISÍVEL e verificável pelo checklist de
+  `/v1/live/status`. A ação final só aparece quando o servidor declara que
+  todos os gates estão prontos; não há atalho de saque/transferência.
 """
 from __future__ import annotations
 
@@ -234,6 +234,19 @@ class TestPreparacaoReal:
         assert "JSON.stringify({motivo:motivo.trim()})" in t
         assert "method:'POST'" in t
 
+    def test_liberacao_final_so_aparece_quando_servidor_autoriza(self):
+        html = _html()
+        status = _funcao(html, "async function liveStatus(")
+        ativar = _funcao(html, "async function liveAtivar(")
+        assert "ativacao_final" in status and "disponivel" in status
+        assert "liveAtivar" in status
+        assert "'/v1/live/ativar/'" in ativar
+        assert "prompt(" in ativar and "confirm(" in ativar
+        assert "EU AUTORIZO OPERAR COM DINHEIRO REAL" in ativar
+        assert "JSON.stringify({frase,conta})" in ativar
+        for persistencia in ("localStorage", "sessionStorage", "/v1/config"):
+            assert persistencia not in ativar
+
 
 class TestTravasDoPainel:
     """O painel inteiro: sem caminho para dinheiro real, saque ou transferência."""
@@ -245,7 +258,7 @@ class TestTravasDoPainel:
             assert proibido not in html.lower(), (
                 f"{proibido!r} não pode existir no painel (missão §3)")
 
-    def test_live_nunca_habilitado_pelo_painel(self):
+    def test_live_nao_e_configuracao_selecionavel(self):
         html = _html()
         assert "MESA_LIVE_LIBERADA" not in html, (
             "o painel não fala de liberação de código — é trava de código, "

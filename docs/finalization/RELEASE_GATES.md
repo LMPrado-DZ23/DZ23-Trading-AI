@@ -10,7 +10,7 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
 | Gate | Prova exigida | Estado no HEAD da branch |
 |---|---|---|
-| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.660 passaram localmente no código atual; a matriz deve estar verde no HEAD publicado do PR #14 |
+| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.691 passaram localmente no código atual; a matriz deve estar verde no HEAD publicado do PR #14 |
 | lint | `ruff check .` | verde localmente; o job deve estar verde no HEAD publicado do PR #14 |
 | instalação limpa | job CI dedicado | exige job verde no HEAD publicado do PR #14 |
 | dependências/segredos/licenças/SBOM | jobs CI dedicados | exigem jobs verdes no HEAD publicado do PR #14 |
@@ -70,7 +70,12 @@ Merge definitivo, deploy de produção, DNS, migração destrutiva, rotação de
 credencial crítica, ativação LIVE e qualquer ordem/dinheiro real. Preparar o
 software não concede essa autorização. A frase de confirmação não é aceita em
 `/v1/config`, não é persistida nem restaurada por backup; ela é validada apenas
-no pedido final vinculado ao agente e à conta.
+no pedido final vinculado ao agente e à conta. O painel só apresenta essa ação
+final quando `/v1/live/status` informa `ativacao_final.disponivel=true`; em
+qualquer outro estado, a lista de agentes ativáveis e o botão ficam ausentes.
+Mesmo nessa etapa, o proprietário precisa digitar a conta e a frase exatas e
+confirmar novamente. A ação prepara a mesa com reconciliação obrigatória e não
+envia ordem.
 
 ## Condição de liberação futura
 
