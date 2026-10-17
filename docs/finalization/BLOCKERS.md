@@ -1,8 +1,15 @@
-# BLOCKERS
+# BLOCKERS HISTÓRICOS — auditoria F1/F2
+
+> **Snapshot histórico, não é a lista de bloqueios operacionais atual.** Os
+> itens F3–F6 e K1–K6 abaixo foram fechados em ciclos posteriores e estão
+> registrados como `PASS_LOCAL` em `../mission/TRADING-GATES.md`. Para a lista
+> atual de gates de dinheiro real, use `RELEASE_GATES.md`. Permanecem externos
+> credenciais de conta, provas TESTNET, observabilidade do host, assinatura do
+> release e autorização final do proprietário.
 
 Ordem por dano financeiro potencial. Fechado só com teste que prova.
 
-## Abertos
+## Abertos naquele snapshot
 
 ### Fee pipeline — patch da auditoria (F1/F2) — ✅ COMPLETO (B1–B10)
 A auditoria adversarial encontrou blockers DENTRO de F1/F2. Todos fechados

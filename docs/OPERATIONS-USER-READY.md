@@ -17,19 +17,22 @@ MT5_MODE=DEMO
 
 ## Instalação local
 
-```bash
-git clone https://github.com/LMPrado-DZ23/tradingagents-dz23.git
-cd tradingagents-dz23
-git checkout feat/dz23-trading-agency
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -e ".[dev]"
-cp .env.agency.example .env
-mkdir -p data
-export DATA_DIR="$PWD/data"
-export ACCESS_PASSWORD='defina-uma-senha-forte-fora-do-codigo'
-uvicorn service.app:app --host 127.0.0.1 --port 8000
+```powershell
+git clone https://github.com/LMPrado-DZ23/DZ23-Trading-AI.git
+Set-Location DZ23-Trading-AI
+git checkout main
+uv sync --extra desk --extra dev
+Copy-Item .env.agency.example .env
+New-Item -ItemType Directory -Force data | Out-Null
+$env:DATA_DIR = (Resolve-Path data).Path
+$env:ACCESS_PASSWORD = Read-Host 'Defina a senha forte do dono'
+uv run uvicorn service.app:app --host 127.0.0.1 --port 8000
 ```
+
+Enquanto o PR #14 ainda não tiver sido integrado, a reprodução exata do
+release candidate deve usar a branch `feat/real-room-auto-handoff` e conferir
+o SHA registrado em `docs/finalization/RELEASE_GATES.md`. Não use uma branch
+antiga de outro repositório como fonte de instalação.
 
 O endpoint `/healthz` verifica se o processo está vivo. O endpoint `/readyz` verifica se o modo operacional não está bloqueado pelo KillSwitch e se o Paper Adapter está disponível. A API protegida exige Bearer Token igual ao valor de `ACCESS_PASSWORD`.
 

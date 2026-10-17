@@ -1,13 +1,18 @@
-# STATUS — finalização DZ23 Trading
+# STATUS HISTÓRICO — auditoria F1/F2
 
-> Documento de retomada. Se a sessão cair, comece por aqui.
+> **Arquivo histórico, não use como estado operacional atual.** Este snapshot
+> registra a antiga branch `correcao-auditoria`. Para retomar o trabalho atual,
+> comece por `RELEASE_GATES.md` e pelo PR #14
+> (`feat/real-room-auto-handoff`). Os blockers financeiros F3–F6/K1–K6 foram
+> posteriormente fechados e revalidados; a evidência corrente está em
+> `../mission/TRADING-GATES.md` e na CI citada em `RELEASE_GATES.md`.
 
-## Onde estamos
+## Onde estávamos neste snapshot
 
 | | |
 |---|---|
-| Repositório | `LMPrado-DZ23/tradingagents-dz23` |
-| Branch | `correcao-auditoria` |
+| Repositório à época | `LMPrado-DZ23/tradingagents-dz23` |
+| Branch histórica | `correcao-auditoria` |
 | HEAD | ver seção *Histórico* abaixo (sempre o topo) |
 | Fase atual | Fase 1 · patch F1/F2 da auditoria **COMPLETO** (B1–B10 fechados). Próximo: F3/F4 |
 | LIVE | **BLOQUEADO** — não habilitar nesta missão |
@@ -79,7 +84,7 @@ O prompt de finalização esperava HEAD `ef2a234`. O HEAD real era
 `8925e0d` — dois commits à frente, ambos do Fee Pipeline. Seguimos o HEAD
 real como fonte de verdade, conforme a regra do próprio prompt.
 
-## Próximos três itens
+## Próximos três itens naquele momento (já superados)
 
 1. **F3** — valoração por OCORRÊNCIA: uma cotação por horário/ocorrência, não
    uma cotação única aplicada a taxas de instantes diferentes.
@@ -108,7 +113,7 @@ antes desta).
 | `AuthenticatedActorContext` | `BLOCKED_BY_ARCHITECTURE` — exige camada de auth |
 | Corretora real | não usada; PAPER/SHADOW apenas |
 
-## Instrução de retomada
+## Instrução histórica de retomada (não executar hoje)
 
 Ler este arquivo, depois `BLOCKERS.md`. Rodar a baseline acima e confirmar
 que bate. Pegar o primeiro item de *Próximos três* e seguir o loop:
