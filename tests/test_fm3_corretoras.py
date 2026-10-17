@@ -103,6 +103,12 @@ class TestTelaCorretora:
         assert 'onclick="brokerReconciliar()"' in html
         assert 'onclick="brokerTest()"' in html
 
+    def test_carregamento_assincrono_nao_desfaz_escolha_do_usuario(self):
+        html = _html()
+        t = _funcao(html, "async function loadConfig(")
+        assert "valoresAntes" in t
+        assert "el.value===valoresAntes[k]" in t
+
     def test_rotacao_remover_chaves_salvas(self):
         html = _html()
         assert 'id="r_EXCHANGE_API_KEY"' in html, (
