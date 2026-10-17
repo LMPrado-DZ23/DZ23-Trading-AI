@@ -1008,3 +1008,20 @@ Quatro achados examinados diretamente no commit `4b83e16` e tratados um a um —
 4. `POST /v1/live/desativar` para o scheduler, revoga o mandato persistido e retorna a TESTNET. IQ Option segue sem executor LIVE homologado; sua escola PAPER e leitura autenticada não viram capacidade de ordem.
 5. Prova adversarial focada: selo fechado não é contornável pela rota; configuração LIVE isolada não basta; mandato LIVE exige ativação vinculada; TESTNET usa `Mode.TESTNET`; boot LIVE nasce sem scheduler e com reconciliação armada; a rota futura persiste agente/conta sem persistir a frase e responde `envio_real_habilitado=False`.
 6. Verificação local hermética: bateria afetada `124 passed`; suíte ampla `3638 passed, 41 skipped, 2 deselected, 20 warnings, 71 subtests` em 357,92 s. Os dois deselects são incompatibilidades deliberadas do harness sem rede/sem Registro (`test_construction_when_extra_installed`, que tenta credencial AWS, e `test_identidade_registrada_no_windows`, que grava no Registro); não pertencem ao caminho financeiro alterado. Ruff e `git diff --check` limpos. Nenhuma ordem, credencial externa ou produção foi usada.
+# Checkpoint — credencial de execução REAL isolada (PR #14)
+
+- A credencial futura de execução REAL usa `LIVE_EXCHANGE_API_*`; não reutiliza
+  `EXCHANGE_API_*` (TESTNET) nem `REAL_READ_ONLY_*` (certificação da conta).
+- A prova LIVE chama somente métodos de leitura, exige a mesma identidade já
+  comprovada pela chave read-only, persiste apenas fingerprints e expira em 24h.
+- Rotação, troca de corretora, prova read-only inválida ou identidade divergente
+  invalida a ativação inclusive no reinício.
+- A construção futura do broker LIVE recebe a credencial `LIVE_*` apenas em
+  memória. TESTNET permanece vinculada à credencial que produziu seu fill.
+- `MESA_LIVE_LIBERADA=False` permanece inalterado; nenhuma ordem real, merge,
+  deploy, tag ou release foi realizado neste checkpoint.
+- Validação local: baterias focadas `111 passed` e painel `151 passed`; suíte
+  ampla `3682 passed, 5 skipped, 20 warnings, 71 subtests`. Um teste do
+  executor hermético encontrou um diretório temporário externo já removido;
+  a repetição isolada passou (`1 passed`). CI do PR permanece a autoridade
+  final para o ambiente limpo.

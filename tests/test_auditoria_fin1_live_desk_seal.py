@@ -34,6 +34,9 @@ CFG_LIVE_COMPLETO = {
     "EXCHANGE_API_KEY": "k",
     "EXCHANGE_API_SECRET": "s",
     "EXCHANGE_CREDENTIAL_EXCHANGE": "binance",
+    "LIVE_EXCHANGE_API_KEY": "live-k",
+    "LIVE_EXCHANGE_API_SECRET": "live-s",
+    "LIVE_EXECUTION_EXCHANGE": "binance",
     "LIVE_TRADING_CONFIRM": "EU AUTORIZO OPERAR COM DINHEIRO REAL",
     "LIVE_MAX_ORDER_VALUE": "50",
     "LIVE_MAX_DAILY_LOSS": "25",
@@ -229,6 +232,11 @@ class TestPontaAPontaNoServico:
         monkeypatch.setattr(
             m, "_prova_leitura_real", lambda _req, _cfg: ({}, True))
         monkeypatch.setattr(
+            m, "_prova_execucao_live", lambda _req, _cfg: ({
+                "conta": "principal",
+                "verificada_em": "2026-10-16T00:00:00+00:00",
+            }, True))
+        monkeypatch.setattr(
             m, "_prova_real_serve_piloto", lambda *_args: True)
         monkeypatch.setattr(
             m, "_desk_boot", lambda *_args, **_kwargs: mesa)
@@ -249,5 +257,8 @@ class TestPontaAPontaNoServico:
         registro = salvos[("legacy", m._CHAVE_ATIVACAO_LIVE)]
         assert registro["agent_id"] == "trader-momentum"
         assert registro["conta"] == "principal"
+        assert registro["execution_credential_fingerprint"] == (
+            m.live_execution_credential_fingerprint(
+                m._env_live_execution(cfg)))
         assert "frase" not in registro
         assert m._DESKS["legacy"] is mesa

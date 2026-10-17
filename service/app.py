@@ -38,6 +38,10 @@ from tradingagents.agency.store import AgencyTaskStore
 from tradingagents.agency_runtime import AgencyRuntime
 from tradingagents.brokers.ccxt_bridge import (
     BrokerSecurityError,
+    broker_identity_fingerprint,
+    live_execution_as_read_only_env,
+    live_execution_credential_fingerprint,
+    probe_live_execution_account,
     probe_read_only_account,
     read_only_credential_fingerprint,
     testnet_credential_fingerprint,
@@ -214,6 +218,9 @@ ALLOWED_KEYS = [
     "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET", "EXCHANGE_API_PASSWORD",
     "EXCHANGE_API_UID", "EXCHANGE_CREDENTIAL_EXCHANGE",
     "EXCHANGE_CREDENTIAL_BOUND_AT",
+    "LIVE_EXCHANGE_API_KEY", "LIVE_EXCHANGE_API_SECRET",
+    "LIVE_EXCHANGE_API_PASSWORD", "LIVE_EXCHANGE_API_UID",
+    "LIVE_EXECUTION_EXCHANGE", "LIVE_EXECUTION_CREDENTIAL_BOUND_AT",
     "REAL_READ_ONLY_API_KEY", "REAL_READ_ONLY_API_SECRET",
     "REAL_READ_ONLY_API_PASSWORD", "REAL_READ_ONLY_API_UID",
     "REAL_READ_ONLY_EXCHANGE",
@@ -243,6 +250,8 @@ SEGREDOS_DECLARADOS = {
     "OPENAI_COMPATIBLE_API_KEY", "FRED_API_KEY", "ALPHA_VANTAGE_API_KEY",
     "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET", "EXCHANGE_API_PASSWORD",
     "EXCHANGE_API_UID",
+    "LIVE_EXCHANGE_API_KEY", "LIVE_EXCHANGE_API_SECRET",
+    "LIVE_EXCHANGE_API_PASSWORD", "LIVE_EXCHANGE_API_UID",
     "REAL_READ_ONLY_API_KEY", "REAL_READ_ONLY_API_SECRET",
     "REAL_READ_ONLY_API_PASSWORD", "REAL_READ_ONLY_API_UID",
     "IQ_OPTION_MCP_BEARER_TOKEN",
@@ -1229,6 +1238,7 @@ async def set_cfg(req: Request, _=Depends(auth)):
             "TRADINGAGENTS_EXCHANGE", "EXCHANGE_API_KEY",
             "EXCHANGE_API_SECRET", "EXCHANGE_API_PASSWORD",
             "EXCHANGE_API_UID")})
+    fingerprint_live_anterior = live_execution_credential_fingerprint(cfg)
     saved, changed = [], []
     vars_recebidas = body.get("vars") or {}
     payout_recebido = vars_recebidas.get("TRADINGAGENTS_DESK_PAYOUT")
@@ -1247,6 +1257,7 @@ async def set_cfg(req: Request, _=Depends(auth)):
                 422, "payout da escola IQ Option precisa estar entre 0 e 1")
     vinculos_gerenciados = {
         "EXCHANGE_CREDENTIAL_EXCHANGE", "EXCHANGE_CREDENTIAL_BOUND_AT",
+        "LIVE_EXECUTION_EXCHANGE", "LIVE_EXECUTION_CREDENTIAL_BOUND_AT",
         "REAL_READ_ONLY_EXCHANGE"}
     for k, v in vars_recebidas.items():
         if (k in ALLOWED_KEYS and k not in vinculos_gerenciados
@@ -1277,6 +1288,20 @@ async def set_cfg(req: Request, _=Depends(auth)):
                 saved.append("EXCHANGE_CREDENTIAL_EXCHANGE")
             if anterior != exchange:
                 changed.append("EXCHANGE_CREDENTIAL_EXCHANGE")
+    chave_live_nova = str(
+        vars_recebidas.get("LIVE_EXCHANGE_API_KEY") or "").strip()
+    segredo_live_novo = str(
+        vars_recebidas.get("LIVE_EXCHANGE_API_SECRET") or "").strip()
+    if chave_live_nova and segredo_live_novo:
+        exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+        if exchange:
+            anterior = str(
+                cfg.get("LIVE_EXECUTION_EXCHANGE") or "").strip().lower()
+            cfg["LIVE_EXECUTION_EXCHANGE"] = exchange
+            if "LIVE_EXECUTION_EXCHANGE" not in saved:
+                saved.append("LIVE_EXECUTION_EXCHANGE")
+            if anterior != exchange:
+                changed.append("LIVE_EXECUTION_EXCHANGE")
     chave_leitura = str(
         vars_recebidas.get("REAL_READ_ONLY_API_KEY") or "").strip()
     segredo_leitura = str(
@@ -1337,6 +1362,22 @@ async def set_cfg(req: Request, _=Depends(auth)):
             changed.append("EXCHANGE_CREDENTIAL_BOUND_AT")
     elif cfg.pop("EXCHANGE_CREDENTIAL_BOUND_AT", None) is not None:
         changed.append("EXCHANGE_CREDENTIAL_BOUND_AT")
+    credencial_live_completa = bool(
+        str(cfg.get("LIVE_EXCHANGE_API_KEY") or "").strip()
+        and str(cfg.get("LIVE_EXCHANGE_API_SECRET") or "").strip()
+        and str(cfg.get("LIVE_EXECUTION_EXCHANGE") or "").strip().lower()
+        == exchange_execucao)
+    fingerprint_live_atual = live_execution_credential_fingerprint(cfg)
+    if credencial_live_completa:
+        if (fingerprint_live_atual != fingerprint_live_anterior
+                or not _horario_testnet_valido(
+                    cfg.get("LIVE_EXECUTION_CREDENTIAL_BOUND_AT"))):
+            cfg["LIVE_EXECUTION_CREDENTIAL_BOUND_AT"] = (
+                datetime.now(timezone.utc).isoformat())
+            saved.append("LIVE_EXECUTION_CREDENTIAL_BOUND_AT")
+            changed.append("LIVE_EXECUTION_CREDENTIAL_BOUND_AT")
+    elif cfg.pop("LIVE_EXECUTION_CREDENTIAL_BOUND_AT", None) is not None:
+        changed.append("LIVE_EXECUTION_CREDENTIAL_BOUND_AT")
     if not saved and not pedidos:
         raise HTTPException(400, "nada para salvar")
     save_cfg(cfg, tenant_id)
@@ -2816,10 +2857,17 @@ def _validar_ativacao_live_salva(armazem, tenant_id: str, cfg: dict) -> dict:
         return registro
     if not hmac.compare_digest(
             str(registro.get("execution_credential_fingerprint") or ""),
-            testnet_credential_fingerprint(_env_testnet(cfg))):
+            live_execution_credential_fingerprint(
+                _env_live_execution(cfg))):
         return registro
     prova, prova_valida = _prova_leitura_real_armazem(
         armazem, tenant_id, cfg)
+    prova_execucao, prova_execucao_valida = _prova_execucao_live_armazem(
+        armazem, tenant_id, cfg)
+    if not (prova_execucao_valida and prova_execucao
+            and str(prova_execucao.get("conta") or "").strip()
+            == str(registro.get("conta") or "").strip()):
+        return registro
     supervisor = SupervisorDePiloto(armazem, tenant_id=tenant_id)
     try:
         supervisor.vigiar(
@@ -2985,8 +3033,9 @@ def _desk_boot(tenant_id: str, *, cfg_override: dict | None = None,
         data_dir = DATA / "desks" / tenant_id
     # A autorização de LIVE é de CÓDIGO + ato explícito vinculado à conta.
     # Salvar TRADINGAGENTS_BROKER_MODE=live jamais basta (FIN-1/ADR-006).
+    broker_cfg = _cfg_para_broker_live(cfg) if mandate.mode is Mode.LIVE else cfg
     broker, broker_mode = build_desk_broker(
-        cfg, final_state={}, journal_path=str(data_dir / "broker.jsonl"),
+        broker_cfg, final_state={}, journal_path=str(data_dir / "broker.jsonl"),
         paper_price=Decimal("100"), live_authorized=mandate.live_authorized)
     coord = ExecutionCoordinator(mandate, ledger, risk,
                                  worker_id=f"worker-{tenant_id}", broker=broker)
@@ -4652,6 +4701,37 @@ def _credenciais_execucao_prontas(cfg: dict) -> tuple[bool, list[str]]:
     return not faltando, faltando
 
 
+def _credenciais_live_prontas(cfg: dict) -> tuple[bool, list[str]]:
+    """Valida a chave REAL sem confundi-la com a chave TESTNET homologada."""
+    from service.personal_exchange_catalog import (
+        required_execution_credentials,
+    )
+
+    exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    try:
+        exigidos = required_execution_credentials(exchange)
+    except KeyError:
+        return False, ["corretora suportada"]
+    if not exigidos:
+        return False, ["executor LIVE homologado"]
+    vinculo = str(
+        cfg.get("LIVE_EXECUTION_EXCHANGE") or "").strip().lower()
+    if vinculo != exchange:
+        return False, ["nova chave LIVE e novo segredo desta corretora"]
+    mapa = {
+        "EXCHANGE_API_KEY": ("LIVE_EXCHANGE_API_KEY", "chave LIVE"),
+        "EXCHANGE_API_SECRET": ("LIVE_EXCHANGE_API_SECRET", "segredo LIVE"),
+        "EXCHANGE_API_PASSWORD": (
+            "LIVE_EXCHANGE_API_PASSWORD", "passphrase LIVE"),
+    }
+    faltando = []
+    for campo in exigidos:
+        chave, rotulo = mapa[campo]
+        if not str(cfg.get(chave) or "").strip():
+            faltando.append(rotulo)
+    return not faltando, faltando
+
+
 def _fill_de_corretora_externa(d, *, exchange: str,
                                credential_fingerprint: str,
                                credential_bound_at: str):
@@ -4711,6 +4791,40 @@ def _env_testnet(cfg: dict) -> dict:
     return {k: cfg.get(k, "") for k in (
         "TRADINGAGENTS_EXCHANGE", "EXCHANGE_API_KEY",
         "EXCHANGE_API_SECRET", "EXCHANGE_API_PASSWORD", "EXCHANGE_API_UID")}
+
+
+def _env_live_execution(cfg: dict) -> dict:
+    """Credencial REAL de execução em namespace isolado da TESTNET/leitura."""
+    return {k: cfg.get(k, "") for k in (
+        "TRADINGAGENTS_EXCHANGE", "LIVE_EXCHANGE_API_KEY",
+        "LIVE_EXCHANGE_API_SECRET", "LIVE_EXCHANGE_API_PASSWORD",
+        "LIVE_EXCHANGE_API_UID", "LIVE_EXECUTION_EXCHANGE",
+        "LIVE_EXECUTION_CREDENTIAL_BOUND_AT")}
+
+
+def _env_live_como_leitura(cfg: dict) -> dict:
+    """Visão da chave LIVE para a sonda que não possui caminho de ordem."""
+    return live_execution_as_read_only_env(_env_live_execution(cfg))
+
+
+def _cfg_para_broker_live(cfg: dict) -> dict:
+    """Materializa a chave LIVE só na construção do broker LIVE.
+
+    O documento persistido mantém as chaves TESTNET e LIVE separadas. Esta
+    projeção em memória é a única ponte para o contrato legado do CCXTBridge.
+    """
+    saida = dict(cfg)
+    saida.update({
+        "EXCHANGE_API_KEY": cfg.get("LIVE_EXCHANGE_API_KEY", ""),
+        "EXCHANGE_API_SECRET": cfg.get("LIVE_EXCHANGE_API_SECRET", ""),
+        "EXCHANGE_API_PASSWORD": cfg.get("LIVE_EXCHANGE_API_PASSWORD", ""),
+        "EXCHANGE_API_UID": cfg.get("LIVE_EXCHANGE_API_UID", ""),
+        "EXCHANGE_CREDENTIAL_EXCHANGE": cfg.get(
+            "LIVE_EXECUTION_EXCHANGE", ""),
+        "EXCHANGE_CREDENTIAL_BOUND_AT": cfg.get(
+            "LIVE_EXECUTION_CREDENTIAL_BOUND_AT", ""),
+    })
+    return saida
 
 
 def _horario_testnet_valido(valor, agora: datetime | None = None) -> bool:
@@ -4848,6 +4962,8 @@ def _registrar_prova_testnet(request: Request, d: dict,
 
 _CHAVE_PREPARACAO_REAL = "preparacao_real_leitura"
 _SCHEMA_PREPARACAO_REAL = "dz23.preparacao-real-leitura/2"
+_CHAVE_PREPARACAO_EXECUCAO = "preparacao_real_execucao"
+_SCHEMA_PREPARACAO_EXECUCAO = "dz23.preparacao-real-execucao/1"
 _VALIDADE_PREPARACAO_REAL = timedelta(hours=24)
 _TOLERANCIA_RELOGIO_PREPARACAO_REAL = timedelta(minutes=5)
 
@@ -4907,6 +5023,68 @@ def _prova_leitura_real(request: Request, cfg: dict) -> tuple[dict | None, bool]
     esc = _escola_of(request)
     return _prova_leitura_real_armazem(
         esc["armazem"], esc["tenant_id"], cfg)
+
+
+def _prova_execucao_live_documento(
+        prova: dict | None, cfg: dict,
+        prova_leitura: dict | None, leitura_valida: bool
+        ) -> tuple[dict | None, bool]:
+    """Valida a prova LIVE contra as credenciais e a leitura atuais."""
+    if not isinstance(prova, dict):
+        return None, False
+    exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    atual = live_execution_credential_fingerprint(_env_live_execution(cfg))
+    leitura_fingerprint = str(
+        (prova_leitura or {}).get("credential_fingerprint") or "")
+    leitura_identidade = str(
+        (prova_leitura or {}).get("broker_identity_fingerprint") or "")
+    valida = bool(
+        prova.get("schema") == _SCHEMA_PREPARACAO_EXECUCAO
+        and prova.get("exchange") == exchange
+        and str(prova.get("conta") or "").strip()
+        and prova.get("authenticated_read") is True
+        and prova.get("broker_identity_verified") is True
+        and prova.get("trade_habilitado_declarado") is True
+        and prova.get("sem_saque_declarado") is True
+        and _fingerprint_sha256_valido(
+            prova.get("broker_identity_fingerprint"))
+        and _fingerprint_sha256_valido(
+            prova.get("credential_fingerprint"))
+        and hmac.compare_digest(
+            str(prova.get("credential_fingerprint") or ""), atual)
+        and str(cfg.get("LIVE_EXECUTION_EXCHANGE") or "").strip().lower()
+        == exchange
+        and _prova_leitura_real_recente(prova)
+        and leitura_valida and prova_leitura
+        and hmac.compare_digest(
+            str(prova.get("read_only_credential_fingerprint") or ""),
+            leitura_fingerprint)
+        and hmac.compare_digest(
+            str(prova.get("read_only_broker_identity_fingerprint") or ""),
+            leitura_identidade)
+        and str(prova.get("conta") or "").strip()
+        == str(prova_leitura.get("conta") or "").strip()
+    )
+    return prova, valida
+
+
+def _prova_execucao_live_armazem(
+        armazem, tenant_id: str, cfg: dict) -> tuple[dict | None, bool]:
+    prova = armazem.carregar(tenant_id, _CHAVE_PREPARACAO_EXECUCAO)
+    leitura, leitura_valida = _prova_leitura_real_armazem(
+        armazem, tenant_id, cfg)
+    return _prova_execucao_live_documento(
+        prova, cfg, leitura, leitura_valida)
+
+
+def _prova_execucao_live(request: Request,
+                         cfg: dict) -> tuple[dict | None, bool]:
+    esc = _escola_of(request)
+    prova = esc["armazem"].carregar(
+        esc["tenant_id"], _CHAVE_PREPARACAO_EXECUCAO)
+    leitura, leitura_valida = _prova_leitura_real(request, cfg)
+    return _prova_execucao_live_documento(
+        prova, cfg, leitura, leitura_valida)
 
 
 def _prova_real_serve_piloto(prova: dict | None, valida: bool, piloto) -> bool:
@@ -4982,6 +5160,23 @@ def _prova_publica(prova: dict | None, valida: bool) -> dict:
         "sem_saque_declarado": bool(prova.get("sem_saque_declarado")),
         "aviso": aviso,
     }
+
+
+def _prova_execucao_publica(prova: dict | None, valida: bool) -> dict:
+    """Resumo sem segredos, IDs de conta ou fingerprints internos."""
+    if not prova:
+        return {"registrada": False, "valida": False}
+    resumo = _prova_publica(prova, valida)
+    resumo.pop("provider_mutating_tools_exposed", None)
+    resumo.pop("sem_trade_declarado", None)
+    resumo["trade_habilitado_declarado"] = bool(
+        prova.get("trade_habilitado_declarado"))
+    resumo["aviso"] = (
+        "credencial LIVE autenticada por leitura e vinculada à conta atual"
+        if valida else
+        "prova LIVE expirada, obsoleta ou incompatível; refaça a comprovação"
+    )
+    return resumo
 
 
 def _decimal_positivo(valor) -> Decimal | None:
@@ -5323,6 +5518,104 @@ async def live_preparacao_leitura(req: Request, _=Depends(auth),
             "aviso": prova["aviso"]}
 
 
+@app.post("/v1/live/preparacao-execucao")
+async def live_preparacao_execucao(req: Request, _=Depends(auth),
+                                   __=Depends(require_plan)):
+    """Comprova a chave LIVE por leitura, sem construir o executor de ordens."""
+    body = await _json_body(req)
+    conta = str(body.get("conta") or "").strip()
+    broker_account_id = str(body.get("broker_account_id") or "").strip()
+    if not conta:
+        raise HTTPException(422, "identifique a conta REAL que será preparada")
+    if not broker_account_id:
+        raise HTTPException(
+            422, "informe o identificador real exibido pela corretora")
+    if body.get("confirmo_trade") is not True:
+        raise HTTPException(
+            422, "confirme que esta chave separada possui permissão de trade")
+    if body.get("confirmo_sem_movimentacao") is not True:
+        raise HTTPException(
+            422, "confirme que a chave LIVE não possui permissão de saque")
+
+    cfg = load_cfg(request_tenant(req))
+    exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    if exchange == "iq_option":
+        raise HTTPException(
+            409, "IQ Option não possui executor LIVE homologado no DZ23")
+    credenciais_ok, faltando = _credenciais_live_prontas(cfg)
+    if not credenciais_ok:
+        raise HTTPException(
+            409, "credencial de execução REAL incompleta: "
+                 + ", ".join(faltando))
+    prova_leitura, leitura_valida = _prova_leitura_real(req, cfg)
+    if not (leitura_valida and prova_leitura
+            and prova_leitura.get("authenticated_read") is True
+            and prova_leitura.get("broker_identity_verified") is True
+            and prova_leitura.get("sem_trade_declarado") is True
+            and prova_leitura.get("sem_saque_declarado") is True
+            and prova_leitura.get("provider_mutating_tools_exposed") is not True
+            and str(prova_leitura.get("conta") or "").strip() == conta):
+        raise HTTPException(
+            409, "faça primeiro a prova somente leitura vigente para esta conta")
+
+    env_live = _env_live_execution(cfg)
+    live_fingerprint = live_execution_credential_fingerprint(env_live)
+    if hmac.compare_digest(
+            live_fingerprint,
+            testnet_credential_fingerprint(_env_testnet(cfg))):
+        raise HTTPException(
+            409, "a credencial de execução REAL deve ser diferente da TESTNET")
+    if hmac.compare_digest(
+            live_fingerprint,
+            read_only_credential_fingerprint(_env_leitura_real(cfg))):
+        raise HTTPException(
+            409, "a credencial de execução REAL deve ser diferente da chave "
+                 "somente leitura")
+
+    identidade_lida = broker_identity_fingerprint(
+        _env_leitura_real(cfg), broker_account_id)
+    if not hmac.compare_digest(
+            identidade_lida,
+            str(prova_leitura.get("broker_identity_fingerprint") or "")):
+        raise HTTPException(
+            409, "o identificador informado não corresponde à conta da prova "
+                 "somente leitura")
+    env_live["LIVE_EXECUTION_ACCOUNT_ID"] = broker_account_id
+    try:
+        resultado = probe_live_execution_account(env_live)
+    except BrokerSecurityError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+    prova = {
+        "schema": _SCHEMA_PREPARACAO_EXECUCAO,
+        "exchange": resultado["exchange"],
+        "conta": conta,
+        "authenticated_read": bool(resultado["authenticated_read"]),
+        "broker_identity_verified": bool(
+            resultado["broker_identity_verified"]),
+        "broker_identity_fingerprint": resultado[
+            "broker_identity_fingerprint"],
+        "credential_fingerprint": resultado["credential_fingerprint"],
+        "read_methods": list(resultado.get("read_methods") or ()),
+        "trade_habilitado_declarado": True,
+        "sem_saque_declarado": True,
+        "read_only_credential_fingerprint": prova_leitura[
+            "credential_fingerprint"],
+        "read_only_broker_identity_fingerprint": prova_leitura[
+            "broker_identity_fingerprint"],
+        "verificada_em": datetime.now(timezone.utc).isoformat(),
+    }
+    esc = _escola_of(req)
+    esc["armazem"].salvar(
+        esc["tenant_id"], _CHAVE_PREPARACAO_EXECUCAO, prova)
+    return {
+        "ok": True,
+        "preparacao": _prova_execucao_publica(prova, True),
+        "aviso": ("chave LIVE autenticada somente por consultas; nenhuma "
+                  "ordem foi enviada e o modo LIVE permanece bloqueado"),
+    }
+
+
 def _live_status_payload(request: Request) -> dict:
     """Diz, sem rodeio, se este inquilino pode operar dinheiro real e o que
     falta para poder."""
@@ -5330,6 +5623,7 @@ def _live_status_payload(request: Request) -> dict:
     credenciais_execucao_ok, credenciais_execucao_faltando = (
         _credenciais_execucao_prontas(cfg))
     prova_leitura, prova_valida = _prova_leitura_real(request, cfg)
+    prova_execucao, prova_execucao_valida = _prova_execucao_live(request, cfg)
     prova_testnet, prova_testnet_valida = _prova_testnet(request, cfg)
     acesso_leitura_ok = bool(
         prova_valida and prova_leitura.get("authenticated_read"))
@@ -5380,6 +5674,12 @@ def _live_status_payload(request: Request) -> dict:
          "categoria": "prova_externa",
          "acao": ("Informe o ID real exibido pela corretora; ele será "
                   "comparado em memória e somente um hash será persistido")},
+        {"item": "Credencial de execução REAL separada e comprovada",
+         "pronto": prova_execucao_valida,
+         "categoria": "prova_externa",
+         "acao": ("Salve uma chave LIVE distinta da TESTNET e da chave de "
+                  "leitura, com trade e sem saque; o servidor confirmará por "
+                  "consultas que ela pertence à mesma conta REAL")},
         {"item": "Estratégia e conta com piloto autorizado vigente",
          "pronto": bool(pilotos_no_contexto),
          "categoria": "acao_do_proprietario",
@@ -5460,6 +5760,8 @@ def _live_status_payload(request: Request) -> dict:
             "estado_de_liberacao": estado_de_liberacao,
             "sala_real": sala_real,
             "preparacao_leitura": _prova_publica(prova_leitura, prova_valida),
+            "preparacao_execucao": _prova_execucao_publica(
+                prova_execucao, prova_execucao_valida),
             "homologacao_testnet": prova_testnet,
             "reconciliacao": reconciliacao,
             "recuperacao_local": recuperacao_local,
@@ -5540,6 +5842,13 @@ async def live_ativar_mesa(agent_id: str, req: Request, _=Depends(auth),
             prova, prova_valida, piloto):
         raise HTTPException(
             409, "a prova somente leitura já não corresponde ao piloto e à conta")
+    prova_execucao, prova_execucao_valida = _prova_execucao_live(req, cfg)
+    if not (prova_execucao_valida and prova_execucao
+            and str(prova_execucao.get("conta") or "").strip()
+            == conta_confirmada):
+        raise HTTPException(
+            409, "a credencial de execução REAL não possui prova vigente "
+                 "para a conta confirmada")
     ativacao = {
         "schema": _SCHEMA_ATIVACAO_LIVE,
         "tenant_id": tid,
@@ -5547,8 +5856,10 @@ async def live_ativar_mesa(agent_id: str, req: Request, _=Depends(auth),
         "conta": conta_confirmada,
         "agent_id": agent_id,
         "authorization_id": piloto.authorization_id,
-        "execution_credential_fingerprint": testnet_credential_fingerprint(
-            _env_testnet(cfg)),
+        "execution_credential_fingerprint": (
+            live_execution_credential_fingerprint(
+                _env_live_execution(cfg))),
+        "execution_proof_verified_at": prova_execucao.get("verificada_em"),
         "autorizada_em": datetime.now(timezone.utc).isoformat(),
         "valida": True,
     }

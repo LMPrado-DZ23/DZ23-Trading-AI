@@ -191,6 +191,35 @@ inválido, o checklist volta a bloquear a conta e exige uma nova consulta
 autenticada. O painel mostra quando a prova expira; renovar a prova continua
 usando somente métodos de leitura e não envia ordens.
 
+### Credencial de execução REAL separada
+
+A futura execução LIVE não reutiliza a credencial TESTNET nem a chave somente
+leitura. Ela possui namespace próprio: `LIVE_EXCHANGE_API_KEY`,
+`LIVE_EXCHANGE_API_SECRET`, `LIVE_EXCHANGE_API_PASSWORD` e
+`LIVE_EXCHANGE_API_UID`, vinculados à corretora por
+`LIVE_EXECUTION_EXCHANGE`. O painel recusa preparar a credencial se sua
+impressão for igual à TESTNET ou à chave somente leitura.
+
+Em **Configuração → Conta REAL — credencial de execução futura**, o
+proprietário salva essa terceira credencial e confirma que ela possui trade,
+mas não saque ou movimentação de fundos. A comprovação constrói somente a
+sonda isolada de leitura: consulta saldo, ordens abertas e identidade de conta,
+sem construir o executor e sem chamar `create_order`. O mesmo ID bruto já
+confirmado pela chave somente leitura é comparado em memória; apenas hashes
+vinculados a cada credencial são persistidos.
+
+A prova de execução também vale 24 horas. Rotacionar qualquer uma das duas
+credenciais reais, mudar a corretora, expirar a prova de leitura ou trocar a
+identidade da conta invalida a prova e a ativação persistida. Em um futuro
+reinício LIVE, a mesa revalida tudo e projeta a credencial `LIVE_*` para o
+cliente CCXT apenas em memória. `EXCHANGE_API_*` continua sendo exclusivamente
+a credencial de homologação TESTNET.
+
+Esta preparação **não libera LIVE**. Nesta branch,
+`MESA_LIVE_LIBERADA=False`; nenhuma ordem é enviada e a ativação final continua
+dependendo de mudança de código auditada e de novo ato explícito do
+proprietário.
+
 A homologação TESTNET também é vinculada ao conjunto exato de chave, segredo,
 passphrase e UID que produziu o fill reconciliado. Qualquer rotação invalida a
 prova anterior e exige novo fill seguido de reconciliação. Horários futuros ou

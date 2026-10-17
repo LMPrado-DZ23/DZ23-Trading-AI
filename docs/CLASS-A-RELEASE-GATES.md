@@ -20,7 +20,7 @@ Este documento separa claramente o que foi verificado no repositório do que dep
 | Segurança multi-tenant | PARCIAL | Testes de isolamento e RBAC locais; falta teste dinâmico autenticado no deployment |
 | MT5 Demo | PENDENTE EXTERNO | Terminal, conta Demo, `order_check`, `order_send`, fill e reconciliação |
 | Painel administrativo | PARCIAL | Endpoints Admin existem; UI completa de gestão ainda requer validação de produto |
-| Live Trading | BLOQUEADO | Não faz parte deste release; `LIVE_TRADING=false` |
+| Live Trading | BLOQUEADO / PREPARAÇÃO IMPLEMENTADA | Chaves TESTNET, leitura REAL e execução REAL são separadas; provas expiram e são vinculadas à mesma conta. Não faz parte deste release; `MESA_LIVE_LIBERADA=False` e nenhuma ordem real é autorizada |
 | Revisão regulatória | PENDENTE HUMANO | Deve ser feita conforme jurisdição, produto e público-alvo |
 
 ## Critério de release

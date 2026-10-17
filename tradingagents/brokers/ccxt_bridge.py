@@ -91,6 +91,56 @@ def testnet_credential_fingerprint(env: dict) -> str:
     return hashlib.sha256("\0".join(partes).encode()).hexdigest()
 
 
+def live_execution_credential_fingerprint(env: dict) -> str:
+    """Identifica apenas a credencial de execução REAL, sem expô-la.
+
+    A credencial LIVE tem namespace próprio: ela não pode herdar a chave da
+    homologação TESTNET nem a chave somente leitura usada para certificar a
+    identidade da conta.
+    """
+    partes = [
+        (env.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower(),
+        env.get("LIVE_EXCHANGE_API_KEY") or "",
+        env.get("LIVE_EXCHANGE_API_SECRET") or "",
+        env.get("LIVE_EXCHANGE_API_PASSWORD") or "",
+        env.get("LIVE_EXCHANGE_API_UID") or "",
+    ]
+    return hashlib.sha256("\0".join(partes).encode()).hexdigest()
+
+
+def live_execution_as_read_only_env(env: dict) -> dict:
+    """Mapeia a credencial LIVE para a sonda que não possui método de ordem."""
+    return {
+        "TRADINGAGENTS_EXCHANGE": env.get("TRADINGAGENTS_EXCHANGE") or "",
+        "REAL_READ_ONLY_API_KEY": env.get("LIVE_EXCHANGE_API_KEY") or "",
+        "REAL_READ_ONLY_API_SECRET": env.get("LIVE_EXCHANGE_API_SECRET") or "",
+        "REAL_READ_ONLY_API_PASSWORD": (
+            env.get("LIVE_EXCHANGE_API_PASSWORD") or ""),
+        "REAL_READ_ONLY_API_UID": env.get("LIVE_EXCHANGE_API_UID") or "",
+        "REAL_READ_ONLY_ACCOUNT_ID": (
+            env.get("LIVE_EXECUTION_ACCOUNT_ID") or ""),
+    }
+
+
+def broker_identity_fingerprint(env: dict, account_id: str) -> str:
+    """API pública para vincular uma prova à identidade sem guardar o ID."""
+    return _broker_identity_fingerprint(env, account_id)
+
+
+def probe_live_execution_account(env: dict) -> dict:
+    """Autentica a chave LIVE usando exclusivamente operações de leitura.
+
+    A função reutiliza a sonda isolada que nunca constrói ``CCXTBridge``.
+    Portanto, mesmo uma chave com permissão de trade não alcança
+    ``create_order`` durante a preparação.
+    """
+    leitura = live_execution_as_read_only_env(env)
+    resultado = probe_read_only_account(leitura)
+    resultado["credential_fingerprint"] = (
+        live_execution_credential_fingerprint(env))
+    return resultado
+
+
 def probe_read_only_account(env: dict) -> dict:
     """Prova autenticação REAL usando exclusivamente métodos de leitura.
 

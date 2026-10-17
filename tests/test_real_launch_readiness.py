@@ -93,6 +93,14 @@ def test_preparacao_completa_e_alcancavel_sem_trocar_testnet_para_live(
     monkeypatch.setattr(
         m, "_prova_leitura_real", lambda _request, _cfg: (prova, True))
     monkeypatch.setattr(
+        m, "_prova_execucao_live", lambda _request, _cfg: ({
+            "conta": "real-principal",
+            "authenticated_read": True,
+            "broker_identity_verified": True,
+            "trade_habilitado_declarado": True,
+            "sem_saque_declarado": True,
+        }, True))
+    monkeypatch.setattr(
         m, "_prova_testnet", lambda _request, _cfg: (
             {"valida": True, "exchange": "binance"}, True))
     monkeypatch.setattr(
