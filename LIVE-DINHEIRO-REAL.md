@@ -212,6 +212,13 @@ aposta mais o lucro e empate devolve a aposta, mas o schema MCP acessível não
 documenta um campo inequívoco de retorno total; por isso `profit` continua
 proibido como substituto dessa prova.
 
+Para a homologação em treinamento, `service/iq_option_training.py` descobre o
+filtro da conta diretamente no enum do schema oficial de `list_balances`.
+Exige exatamente um entre `TRAINING`, `PRACTICE` ou `DEMO`, uma única conta e
+tipo de resposta correspondente; enum ausente, ambíguo ou diferente falha
+fechado. Essa etapa é somente leitura e não registra uma homologação: o fill e
+a reconciliação da conta de treino ainda precisam de ato explícito posterior.
+
 Depois de autorizar a conexão e carregar o token somente no ambiente local, a
 prova reproduzível pode ser gerada sem credencial na linha de comando:
 

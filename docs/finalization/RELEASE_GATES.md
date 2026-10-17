@@ -10,7 +10,7 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
 | Gate | Prova exigida | Estado no HEAD da branch |
 |---|---|---|
-| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.841 passaram, 5 ignorados e 71 subtestes passaram na suíte local integral; 68 testes focados da ativação final, selo, prontidão, resolvedor e runtime IQ passaram; matriz 3.10–3.13 aguardará o push deste HEAD no PR #14 |
+| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.859 passaram, 5 ignorados e 71 subtestes passaram na suíte local integral; 82 testes focados da ativação final, selo, prontidão, resolvedores de conta REAL/treino e runtime IQ passaram; matriz 3.10–3.13 aguardará o push deste HEAD no PR #14 |
 | lint | `ruff check .` | verde local no HEAD e no run `39027792071` do PR #14 |
 | instalação limpa | job CI dedicado | verde no run `39027792071` do PR #14 |
 | dependências/segredos/licenças/SBOM | jobs CI dedicados | verdes no run `39027792071` do PR #14 |
@@ -84,6 +84,12 @@ fonte operacional homologada que
 produz a prova de extrato do retorno total, a resolução operacional do caso
 ambíguo sem `position_id` e a homologação na conta de treinamento;
 adaptar o livro spot por aparência continua expressamente proibido.
+
+O primeiro gate da homologação IQ em treinamento já é fail-closed: o resolvedor
+não presume o nome do saldo. Ele lê o enum de `list_balances` na mesma sessão,
+exige um único filtro `TRAINING`, `PRACTICE` ou `DEMO` e uma única conta do tipo
+correspondente. Isso não executa nem certifica ordem; somente torna a seleção
+da conta de treino verificável antes do ato externo.
 
 Em 2026-10-17, a sonda pública foi repetida no HEAD
 `e9a357a211b1f11c9d9ac03fc979546b03521749`: as nove corretoras CCXT
