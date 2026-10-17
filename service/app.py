@@ -45,6 +45,12 @@ from service.iq_option_training import (
     IqOptionTrainingAccountError,
     resolve_iq_option_training_account_async,
 )
+from service.iq_option_training_homologation import (
+    IQ_OPTION_TRAINING_PROOF_KEY,
+    IQ_OPTION_TRAINING_PROOF_SCHEMA,
+    IqOptionTrainingHomologationError,
+    build_iq_option_training_homologation_runtime,
+)
 from tradingagents.agency import AgencyTask, build_llm_handler
 from tradingagents.agency.store import AgencyTaskStore
 from tradingagents.agency_runtime import AgencyRuntime
@@ -58,6 +64,7 @@ from tradingagents.brokers.ccxt_bridge import (
     read_only_credential_fingerprint,
     testnet_credential_fingerprint,
 )
+from tradingagents.brokers.iq_option_binary import TRAINING_CONFIRM_PHRASE
 from tradingagents.desk.models import AgentStage
 from tradingagents.desk.modo import EstadoDaMesa, ModoBloqueado
 from tradingagents.desk.storage import escrever_json_atomico
@@ -4930,7 +4937,8 @@ def _env_testnet(cfg: dict) -> dict:
 def _env_live_execution(cfg: dict) -> dict:
     """Credencial REAL de execução em namespace isolado da TESTNET/leitura."""
     return {k: cfg.get(k, "") for k in (
-        "TRADINGAGENTS_EXCHANGE", "LIVE_EXCHANGE_API_KEY",
+        "TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
+        "LIVE_EXCHANGE_API_KEY",
         "LIVE_EXCHANGE_API_SECRET", "LIVE_EXCHANGE_API_PASSWORD",
         "LIVE_EXCHANGE_API_UID", "LIVE_EXECUTION_EXCHANGE",
         "LIVE_EXECUTION_CREDENTIAL_BOUND_AT", "IQ_OPTION_MCP_BEARER_TOKEN",
@@ -5015,12 +5023,22 @@ def _prova_testnet(request: Request, cfg: dict) -> tuple[dict, bool]:
     """Lê a homologação durável da corretora atualmente selecionada."""
     exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
     esc = _escola_of(request)
-    provas = esc["armazem"].carregar(
-        esc["tenant_id"], _CHAVE_HOMOLOGACAO_TESTNET)
-    if not isinstance(provas, dict):
-        provas = {}
-    prova = provas.get(exchange)
-    fingerprint_atual = testnet_credential_fingerprint(_env_testnet(cfg))
+    if exchange == "iq_option":
+        prova = esc["armazem"].carregar(
+            esc["tenant_id"], IQ_OPTION_TRAINING_PROOF_KEY)
+        fingerprint_atual = live_execution_credential_fingerprint(
+            _env_live_execution(cfg))
+        schema_esperado = IQ_OPTION_TRAINING_PROOF_SCHEMA
+        modo_esperado = "training"
+    else:
+        provas = esc["armazem"].carregar(
+            esc["tenant_id"], _CHAVE_HOMOLOGACAO_TESTNET)
+        if not isinstance(provas, dict):
+            provas = {}
+        prova = provas.get(exchange)
+        fingerprint_atual = testnet_credential_fingerprint(_env_testnet(cfg))
+        schema_esperado = _SCHEMA_HOMOLOGACAO_TESTNET
+        modo_esperado = "testnet"
     credencial_compativel = bool(
         isinstance(prova, dict)
         and _fingerprint_sha256_valido(prova.get("credential_fingerprint"))
@@ -5035,8 +5053,9 @@ def _prova_testnet(request: Request, cfg: dict) -> tuple[dict, bool]:
             prova.get("external_order_fingerprint")))
     valida = bool(
         isinstance(prova, dict)
-        and prova.get("schema") == _SCHEMA_HOMOLOGACAO_TESTNET
+        and prova.get("schema") == schema_esperado
         and str(prova.get("exchange") or "").strip().lower() == exchange
+        and str(prova.get("mode") or "").strip().lower() == modo_esperado
         and prova.get("filled_external_order") is True
         and prova.get("reconciled") is True
         and credencial_compativel
@@ -5061,7 +5080,7 @@ def _prova_testnet(request: Request, cfg: dict) -> tuple[dict, bool]:
         "valida": valida,
         "exchange": prova.get("exchange"),
         "verified_at": prova.get("verified_at"),
-        "mode": "testnet",
+        "mode": modo_esperado,
         "filled_external_order": bool(prova.get("filled_external_order")),
         "reconciled": bool(prova.get("reconciled")),
         "motivo": motivo,
@@ -5862,6 +5881,118 @@ async def preparar_conta_treino_iq_option(
         "aviso": (
             "conta de treinamento identificada por leitura; nenhum fill foi "
             "executado e a homologacao continua pendente"),
+    }
+
+
+def _preparacao_iq_treino_valida(request: Request, cfg: dict) -> bool:
+    """Vincula o consentimento mutável à leitura passiva mais recente."""
+    esc = _escola_of(request)
+    proof = esc["armazem"].carregar(
+        esc["tenant_id"], _CHAVE_PREPARACAO_IQ_TREINO)
+    if not isinstance(proof, dict):
+        return False
+    current = live_execution_credential_fingerprint(
+        _env_live_execution(cfg))
+    observed = str(proof.get("credential_fingerprint") or "")
+    return bool(
+        proof.get("schema") == _SCHEMA_PREPARACAO_IQ_TREINO
+        and proof.get("exchange") == "iq_option"
+        and proof.get("account_kind") == "training"
+        and proof.get("authenticated_read") is True
+        and _fingerprint_sha256_valido(observed)
+        and hmac.compare_digest(observed, current)
+        and _horario_testnet_valido(proof.get("verificada_em"))
+    )
+
+
+def _confirmacao_treino(body: dict, field: str) -> str:
+    if body.get(field) is not True:
+        raise HTTPException(422, "confirmação explícita de treinamento ausente")
+    phrase = str(body.get("frase_confirmacao") or "").strip()
+    if not hmac.compare_digest(phrase, TRAINING_CONFIRM_PHRASE):
+        raise HTTPException(422, "frase explícita de treinamento inválida")
+    return phrase
+
+
+@app.post("/v1/live/homologacao-iq-option/executar-conta-treino")
+async def executar_conta_treino_iq_option(
+        req: Request, _=Depends(auth), __=Depends(require_plan)):
+    """Envia no máximo uma aposta de uma unidade, nunca na conta regular."""
+    body = await _json_body(req)
+    phrase = _confirmacao_treino(body, "confirmo_uma_ordem_treinamento")
+    tid = request_tenant(req)
+    cfg = load_cfg(tid)
+    if not _preparacao_iq_treino_valida(req, cfg):
+        raise HTTPException(
+            409, "prepare novamente a conta de treinamento desta credencial")
+    esc = _escola_of(req)
+    try:
+        runtime = await build_iq_option_training_homologation_runtime(
+            env=_env_live_execution(cfg),
+            tenant_id=esc["tenant_id"],
+            store=esc["armazem"],
+            confirmation_phrase=phrase,
+        )
+        intent = runtime.submit(
+            client_order_id=body.get("client_order_id"),
+            instrument=body.get("instrument"),
+            direction=body.get("direction"),
+            amount=body.get("amount"),
+            expiration=body.get("expiration"),
+            min_profit_percent=body.get("min_profit_percent"),
+        )
+    except IqOptionTrainingHomologationError as exc:
+        raise HTTPException(
+            409, f"homologação IQ Option recusada: {exc}"[:400]) from exc
+    position_fingerprint = hashlib.sha256(
+        f"iq_option\0training\0{intent.position_id}".encode()
+    ).hexdigest()
+    return {
+        "ok": True,
+        "state": intent.state.value,
+        "amount": "1",
+        "position_fingerprint": position_fingerprint,
+        "homologacao_concluida": False,
+        "mesa_live_liberada": MESA_LIVE_LIBERADA,
+        "aviso": "ordem de treinamento enviada; reconciliação ainda obrigatória",
+    }
+
+
+@app.post("/v1/live/homologacao-iq-option/reconciliar-conta-treino")
+async def reconciliar_conta_treino_iq_option(
+        req: Request, _=Depends(auth), __=Depends(require_plan)):
+    """Certifica apenas o resultado terminal retornado pelo histórico MCP."""
+    body = await _json_body(req)
+    phrase = _confirmacao_treino(
+        body, "confirmo_reconciliacao_treinamento")
+    tid = request_tenant(req)
+    cfg = load_cfg(tid)
+    if not _preparacao_iq_treino_valida(req, cfg):
+        raise HTTPException(
+            409, "prepare novamente a conta de treinamento desta credencial")
+    esc = _escola_of(req)
+    try:
+        runtime = await build_iq_option_training_homologation_runtime(
+            env=_env_live_execution(cfg),
+            tenant_id=esc["tenant_id"],
+            store=esc["armazem"],
+            confirmation_phrase=phrase,
+        )
+        proof = runtime.reconcile_and_certify(body.get("client_order_id"))
+    except IqOptionTrainingHomologationError as exc:
+        raise HTTPException(
+            409, f"reconciliação IQ Option recusada: {exc}"[:400]) from exc
+    return {
+        "ok": True,
+        "homologacao": {
+            "schema": proof["schema"],
+            "exchange": proof["exchange"],
+            "mode": proof["mode"],
+            "filled_external_order": proof["filled_external_order"],
+            "reconciled": proof["reconciled"],
+            "verified_at": proof["verified_at"],
+        },
+        "mesa_live_liberada": MESA_LIVE_LIBERADA,
     }
 
 

@@ -13,6 +13,7 @@ from typing import Any
 
 from tradingagents.brokers.iq_option_binary import (
     BinaryAmbiguousSubmission,
+    BinaryAuthorizationScope,
     BinaryContractError,
     BinarySubmissionState,
     IqOptionBinaryExecutor,
@@ -154,7 +155,9 @@ class BinaryExecutionCoordinator:
             persist: StateWriter, live_authorized: bool,
             confirmation_phrase: str, max_order_value: Any,
             max_daily_loss: Any,
-            restored_state: dict[str, Any] | None = None) -> None:
+            restored_state: dict[str, Any] | None = None,
+            authorization_scope: BinaryAuthorizationScope = (
+                BinaryAuthorizationScope.LIVE)) -> None:
         if not callable(persist):
             raise BinaryCoordinatorRecoveryRequired(
                 "persistência composta obrigatória ausente")
@@ -175,6 +178,7 @@ class BinaryExecutionCoordinator:
             max_order_value=max_order_value,
             max_daily_loss=max_daily_loss,
             restored_state=executor_state,
+            authorization_scope=authorization_scope,
         )
 
     @staticmethod

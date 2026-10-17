@@ -50,8 +50,11 @@ A credencial de negociação da IQ Option pode ser preparada em namespace
 separado (`IQ_OPTION_MCP_LIVE_BEARER_TOKEN`). O gate comprova por `tools/list`
 que o token expõe exatamente o contrato oficial de negociação do servidor
 `binary-options` e autentica a mesma conta com `list_balances(NORMAL)`. Nenhuma
-ferramenta mutável é chamada durante a preparação ou montagem. A execução em
-conta de treinamento continua não homologada e `MESA_LIVE_LIBERADA=False`
+ferramenta mutável é chamada durante a preparação ou montagem. Existe agora
+um caminho separado para uma única ordem de homologação na conta de
+treinamento, mas ele só pode ser acionado por uma nova confirmação explícita
+do proprietário. A execução externa ainda precisa ser realizada e observada;
+testes com transporte falso não são homologação. `MESA_LIVE_LIBERADA=False`
 permanece obrigatório neste release.
 
 O planejamento canônico de opções binárias está implementado com transporte
@@ -79,10 +82,19 @@ Um subledger específico já mantém
 aposta aberta e liquidação por retorno total comprovado, com vitória, perda,
 empate, cancelamento e repetição pós-restart exatamente uma vez. A ativação
 monta esse runtime sem chamar ferramenta mutável; desativação, reset e parada
-de emergência o removem da memória. Faltam o loop de submissão autorizado, a
-fonte operacional homologada que
-produz a prova de extrato do retorno total, a resolução operacional do caso
-ambíguo sem `position_id` e a homologação na conta de treinamento;
+de emergência o removem da memória. O caminho de treinamento usa escopo e
+frase diferentes de LIVE, aceita exatamente uma unidade e uma única identidade
+de ordem por credencial, vincula o WAL ao fingerprint da credencial e da conta
+e nunca restaura estado de treinamento como LIVE. A reconciliação não aceita
+retorno digitado pelo navegador: deriva vitória, perda ou empate do resultado
+no histórico MCP identificado pelo `position_id` e confere a vitória contra o
+payout fixado no WAL. Cancelamento permanece pendente porque o contrato não
+prova o retorno total. O runtime exige exposição contábil zero e só então
+persiste prova pública sem IDs brutos. Essa prova passa a
+satisfazer o gate de homologação da IQ Option e é invalidada pela rotação do
+token. Faltam executar esse ciclo contra a conta de treinamento do
+proprietário, resolver operacionalmente eventual envio ambíguo sem
+`position_id` e homologar o artefato final;
 adaptar o livro spot por aparência continua expressamente proibido.
 
 O primeiro gate da homologação IQ em treinamento já é fail-closed: o resolvedor
@@ -92,7 +104,11 @@ correspondente. Isso não executa nem certifica ordem; somente torna a seleção
 da conta de treino verificável antes do ato externo. A rota autenticada exige
 IQ Option em TESTNET e confirmação explícita, persiste somente uma allowlist da
 prova pública e responde `ordem_enviada=false` e
-`homologacao_concluida=false`.
+`homologacao_concluida=false`. As rotas seguintes exigem a frase exclusiva
+`EU AUTORIZO UMA ORDEM NA CONTA DE TREINAMENTO IQ OPTION` em cada chamada:
+`executar-conta-treino` grava o WAL antes de `place_trade` e
+`reconciliar-conta-treino` consulta o histórico e certifica somente resultado
+terminal. Nenhuma dessas rotas altera o selo LIVE ou autoriza conta regular.
 
 Em 2026-10-17, a sonda pública foi repetida no HEAD
 `e9a357a211b1f11c9d9ac03fc979546b03521749`: as nove corretoras CCXT

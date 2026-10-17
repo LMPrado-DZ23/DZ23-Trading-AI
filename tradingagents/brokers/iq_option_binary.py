@@ -33,6 +33,18 @@ class BinaryAmbiguousSubmission(BinaryContractError):
     """A operação pode existir no provedor e portanto não pode ser reenviada."""
 
 
+class BinaryAuthorizationScope(str, Enum):
+    """Domínio fechado da autorização de mutação binária."""
+
+    LIVE = "live"
+    TRAINING = "training"
+
+
+TRAINING_CONFIRM_PHRASE = (
+    "EU AUTORIZO UMA ORDEM NA CONTA DE TREINAMENTO IQ OPTION"
+)
+
+
 class BinaryReconciliationState(str, Enum):
     OPEN = "open"
     SETTLED = "settled"
@@ -277,14 +289,29 @@ class IqOptionBinaryExecutor:
             self, *, tool_caller: ToolCaller, persist: StateWriter,
             live_authorized: bool, confirmation_phrase: str,
             max_order_value: Any, max_daily_loss: Any,
-            restored_state: dict[str, Any] | None = None) -> None:
+            restored_state: dict[str, Any] | None = None,
+            authorization_scope: BinaryAuthorizationScope = (
+                BinaryAuthorizationScope.LIVE)) -> None:
+        if not isinstance(authorization_scope, BinaryAuthorizationScope):
+            raise BinaryExecutionSecurityError(
+                "escopo de autorização binária inválido")
         if live_authorized is not True:
             raise BinaryExecutionSecurityError(
-                "selo de codigo LIVE não autorizado")
+                "selo de codigo de execução não autorizado")
+        expected_phrase = (
+            LIVE_CONFIRM_PHRASE
+            if authorization_scope is BinaryAuthorizationScope.LIVE
+            else TRAINING_CONFIRM_PHRASE
+        )
+        scope_label = (
+            "LIVE" if authorization_scope is BinaryAuthorizationScope.LIVE
+            else "treinamento"
+        )
         if not hmac.compare_digest(
-                str(confirmation_phrase or "").strip(), LIVE_CONFIRM_PHRASE):
+                str(confirmation_phrase or "").strip(), expected_phrase):
             raise BinaryExecutionSecurityError(
-                "frase explícita de autorização LIVE inválida")
+                "frase explícita de autorização "
+                f"{scope_label} inválida")
         if not callable(tool_caller):
             raise BinaryExecutionSecurityError(
                 "transporte MCP de execução ausente")
@@ -299,6 +326,7 @@ class IqOptionBinaryExecutor:
         except BinaryContractError as exc:
             raise BinaryExecutionSecurityError(str(exc)) from None
         self.current_daily_loss = Decimal("0")
+        self.authorization_scope = authorization_scope
         self._call_tool = tool_caller
         self._persist = persist
         self._submissions: dict[str, BinarySubmission] = {}
@@ -340,6 +368,7 @@ class IqOptionBinaryExecutor:
     def snapshot_state(self) -> dict[str, Any]:
         return {
             "schema": self.SCHEMA,
+            "authorization_scope": self.authorization_scope.value,
             "current_daily_loss": str(self.current_daily_loss),
             "submissions": [{
                 "client_order_id": item.client_order_id,
@@ -382,6 +411,13 @@ class IqOptionBinaryExecutor:
                 or not isinstance(document.get("submissions"), list)):
             raise BinaryExecutionSecurityError(
                 "estado binário restaurado inválido")
+        restored_scope = document.get("authorization_scope")
+        # Documentos anteriores ao escopo explícito eram exclusivamente LIVE.
+        if restored_scope is None:
+            restored_scope = BinaryAuthorizationScope.LIVE.value
+        if restored_scope != self.authorization_scope.value:
+            raise BinaryExecutionSecurityError(
+                "escopo do estado binário restaurado diverge da execução")
         restored: dict[str, BinarySubmission] = {}
         try:
             self.set_daily_loss(document.get("current_daily_loss", "0"))
@@ -535,6 +571,7 @@ class IqOptionBinaryExecutor:
 
 
 __all__ = [
+    "BinaryAuthorizationScope",
     "BinaryAmbiguousSubmission",
     "BinaryContractError",
     "BinaryExecutionSecurityError",
@@ -544,6 +581,7 @@ __all__ = [
     "BinarySubmissionState",
     "BinaryTradePlan",
     "IqOptionBinaryExecutor",
+    "TRAINING_CONFIRM_PHRASE",
     "plan_binary_trade",
     "reconcile_binary_trade",
 ]

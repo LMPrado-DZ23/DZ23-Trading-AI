@@ -7,7 +7,9 @@ import pytest
 
 from tradingagents.brokers.ccxt_bridge import LIVE_CONFIRM_PHRASE
 from tradingagents.brokers.iq_option_binary import (
+    TRAINING_CONFIRM_PHRASE,
     BinaryAmbiguousSubmission,
+    BinaryAuthorizationScope,
     BinaryContractError,
     BinaryExecutionSecurityError,
     BinaryReconciliationState,
@@ -110,6 +112,41 @@ def _executor(tools, durable, **overrides):
 def test_executor_recusa_construcao_sem_todas_as_travas(overrides, message):
     with pytest.raises(BinaryExecutionSecurityError, match=message):
         _executor(FakeTools(), DurableCapture(), **overrides)
+
+
+def test_frases_live_e_treinamento_sao_isoladas_e_persistidas():
+    tools = FakeTools()
+    durable = DurableCapture()
+
+    with pytest.raises(BinaryExecutionSecurityError, match="treinamento"):
+        _executor(
+            tools,
+            durable,
+            authorization_scope=BinaryAuthorizationScope.TRAINING,
+        )
+
+    training = _executor(
+        tools,
+        durable,
+        authorization_scope=BinaryAuthorizationScope.TRAINING,
+        confirmation_phrase=TRAINING_CONFIRM_PHRASE,
+        max_order_value="1",
+    )
+    snapshot = training.snapshot_state()
+    assert snapshot["authorization_scope"] == "training"
+
+    with pytest.raises(BinaryExecutionSecurityError, match="escopo"):
+        _executor(FakeTools(), DurableCapture(), restored_state=snapshot)
+
+    restored = _executor(
+        FakeTools(),
+        DurableCapture(),
+        authorization_scope=BinaryAuthorizationScope.TRAINING,
+        confirmation_phrase=TRAINING_CONFIRM_PHRASE,
+        max_order_value="1",
+        restored_state=snapshot,
+    )
+    assert restored.snapshot_state()["authorization_scope"] == "training"
 
 
 def test_persiste_prepared_antes_do_unico_place_trade_e_ack_depois():
