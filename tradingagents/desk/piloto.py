@@ -509,11 +509,8 @@ class SupervisorDePiloto:
         return self._de_dict(self._autorizacoes[agent_id])
 
     # -- supervisão contínua --------------------------------------------
-    def _escola_da(self, d: dict, central):
-        """Escola que reavalia ESTE piloto: a do contexto em que o pedido
-        foi feito (via Escola Central), quando ambas conhecidas; senão a
-        escola fixa do supervisor (comportamento antigo)."""
-        doc = d.get("contexto")
+    def _escola_do_contexto(self, doc, central):
+        """Resolve a escola exata de um contexto, sem cruzar certificações."""
         if central is not None and isinstance(doc, dict) and doc:
             try:
                 from .salas import ContextoDeCertificacao, EscolaDoPiloto
@@ -522,6 +519,12 @@ class SupervisorDePiloto:
             except Exception:
                 return self.escola
         return self.escola
+
+    def _escola_da(self, d: dict, central):
+        """Escola que reavalia ESTE piloto: a do contexto em que o pedido
+        foi feito (via Escola Central), quando ambas conhecidas; senão a
+        escola fixa do supervisor (comportamento antigo)."""
+        return self._escola_do_contexto(d.get("contexto"), central)
 
     def vigiar(self, *, agora: datetime | None = None,
                central=None) -> list[str]:
@@ -537,11 +540,38 @@ class SupervisorDePiloto:
         """
         agora = _utc(agora or datetime.now(timezone.utc))
         notas: list[str] = []
+        encaminhamentos_alterados = False
+        for d in self._encaminhamentos.values():
+            if (d.get("estado") != "aguardando_configuracao_do_proprietario"
+                    or d.get("authorization_id")):
+                continue
+            escola = self._escola_do_contexto(d.get("contexto"), central)
+            if escola is None:
+                # A fila já bloqueia o agente. Sem fonte verificável, não
+                # inventamos uma revogação nem promovemos o registro.
+                continue
+            ok, motivo = escola.elegivel_para_live(
+                str(d.get("estrategia") or ""),
+                str(d.get("versao") or "1"))
+            if ok:
+                continue
+            d["estado"] = "elegibilidade_retirada"
+            d["atualizada_em"] = agora.isoformat()
+            d["motivo_elegibilidade"] = f"escola: {motivo}"[:400]
+            d["aviso"] = (
+                "fila REAL retirada: a certificação deixou de ser válida; "
+                "uma nova versão precisa concluir a escola")
+            encaminhamentos_alterados = True
+            notas.append(
+                f"{d.get('agent_id', '')}: fila REAL RETIRADA — {motivo}")
         for agent_id, d in list(self._autorizacoes.items()):
-            if EstadoDoPiloto(d["estado"]) is not EstadoDoPiloto.PILOTO_AUTORIZADO:
+            estado = EstadoDoPiloto(d["estado"])
+            if estado not in (EstadoDoPiloto.AGUARDANDO_AUTORIZACAO,
+                              EstadoDoPiloto.PILOTO_AUTORIZADO):
                 continue
             valido_ate = d.get("valido_ate")
-            if valido_ate and agora >= _utc(datetime.fromisoformat(valido_ate)):
+            if (estado is EstadoDoPiloto.PILOTO_AUTORIZADO and valido_ate
+                    and agora >= _utc(datetime.fromisoformat(valido_ate))):
                 self._transitar(
                     agent_id, EstadoDoPiloto.EXPIRADO, agora=agora,
                     motivo=f"prazo do piloto venceu em {valido_ate}")
@@ -565,6 +595,8 @@ class SupervisorDePiloto:
                     motivo=f"escola retirou a elegibilidade: {motivo}",
                     motivo_suspensao=f"escola: {motivo}"[:400])
                 notas.append(f"{agent_id}: piloto SUSPENSO — {motivo}")
+        if encaminhamentos_alterados:
+            self.salvar()
         return notas
 
     def bloqueios(self, *, capital_em_uso=None, perda_hoje=None,
@@ -658,11 +690,16 @@ class SupervisorDePiloto:
             else:  # REVOGADO
                 bloqueados[agent_id] = "autorização revogada"
         for d in self._encaminhamentos.values():
-            if d.get("estado") == "aguardando_configuracao_do_proprietario":
+            estado_fila = d.get("estado")
+            if estado_fila == "aguardando_configuracao_do_proprietario":
                 bloqueados.setdefault(
                     str(d.get("agent_id") or ""),
                     "formado na escola; sala REAL aguardando configuração "
                     "e autorização explícita do proprietário")
+            elif estado_fila == "elegibilidade_retirada":
+                bloqueados.setdefault(
+                    str(d.get("agent_id") or ""),
+                    "sala REAL bloqueada: elegibilidade retirada pela escola")
         if exigir_autorizacao:
             for agent_id in agentes_esperados:
                 agent_id = str(agent_id or "").strip()

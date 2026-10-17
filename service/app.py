@@ -4425,10 +4425,14 @@ def escola_pilotos(request: Request, _=Depends(auth)):
     from tradingagents.desk.piloto import GATES_ESPERADOS, MODO_DO_PILOTO
     esc = _escola_of(request)
     sup = _supervisor_of(request)
+    # O painel deve refletir o estado revalidado NESTA mesma resposta. Montar
+    # os relatórios antes do vigia deixava expiração/revogação visível somente
+    # na chamada seguinte, embora a execução já permanecesse fail-closed.
+    notas_vigia = sup.vigiar(central=esc["central"])
     return {"modo": MODO_DO_PILOTO, "gates_esperados": list(GATES_ESPERADOS),
             "autorizacoes": sup.relatorio(),
             "encaminhamentos": sup.encaminhamentos(),
-            "vigia": sup.vigiar(central=esc["central"]),
+            "vigia": notas_vigia,
             "aviso": ("a formação não habilita negociação real; autorizar "
                       "piloto é ato exclusivo do proprietário")}
 

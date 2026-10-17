@@ -10,7 +10,7 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
 | Gate | Prova exigida | Estado no HEAD da branch |
 |---|---|---|
-| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.708 passaram na última suíte local integral; 87 testes focados dos controles REAL passaram; matriz 3.10–3.13 verde no run `39027792071`, commit `4938b20`, do PR #14 |
+| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.711 passaram na última suíte local integral; 188 testes focados da Escola, piloto e prontidão REAL passaram; matriz 3.10–3.13 verde no run `39029753802`, commit `a39ebd8`, do PR #14 |
 | lint | `ruff check .` | verde local no HEAD e no run `39027792071` do PR #14 |
 | instalação limpa | job CI dedicado | verde no run `39027792071` do PR #14 |
 | dependências/segredos/licenças/SBOM | jobs CI dedicados | verdes no run `39027792071` do PR #14 |
@@ -27,6 +27,10 @@ de limites financeiros `NaN`/infinitos, o bloqueio fail-closed de telemetria
 de risco inválida, não finita ou negativa e a contenção transitória do replace
 atômico no Windows. A identidade do encaminhamento também isola estratégia e
 versão, com migração idempotente das chaves persistidas pelo formato anterior.
+O vigia agora revalida também o intervalo anterior à autorização: formatura
+retirada elimina a elegibilidade da fila ainda sem limites e suspende o pedido
+já configurado. A API executa essa revalidação antes de serializar a resposta,
+portanto o painel não apresenta por uma chamada o estado obsoleto.
 Os limites globais exigidos pela prontidão agora podem ser informados no
 painel sem valor sugerido; a API recusa a gravação inteira para zero,
 negativos, texto, infinito, `NaN` ou teto por ordem acima da exposição. Os

@@ -61,6 +61,39 @@ class TestRotasRegistradas:
         assert c.get("/v1/escola/pilotos").status_code == 401
         assert c.post("/v1/escola/salas", json={}).status_code == 401
 
+    def test_pilotos_roda_vigia_antes_de_serializar_estado(
+            self, tmp_path, monkeypatch):
+        c, m = _client(tmp_path, monkeypatch)
+
+        class SupervisorMudando:
+            estado = "piloto_autorizado"
+
+            @classmethod
+            def vigiar(cls, **_kwargs):
+                cls.estado = "suspenso"
+                return ["trader-momentum: piloto SUSPENSO"]
+
+            @classmethod
+            def relatorio(cls):
+                return [{"agent_id": "trader-momentum",
+                         "estado": cls.estado}]
+
+            @classmethod
+            def encaminhamentos(cls):
+                return [{"agent_id": "trader-momentum",
+                         "estado": cls.estado}]
+
+        monkeypatch.setattr(
+            m, "_supervisor_of", lambda _request: SupervisorMudando())
+
+        resposta = c.get("/v1/escola/pilotos", headers=H)
+
+        assert resposta.status_code == 200
+        body = resposta.json()
+        assert body["vigia"] == ["trader-momentum: piloto SUSPENSO"]
+        assert body["autorizacoes"][0]["estado"] == "suspenso"
+        assert body["encaminhamentos"][0]["estado"] == "suspenso"
+
 
 class TestEscolaCentralEBandeja:
     def test_central_vazia_e_honesta(self, tmp_path, monkeypatch):

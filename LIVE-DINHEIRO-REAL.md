@@ -285,6 +285,13 @@ registro interno do pedido: refazer a prova com outra conta e manter o mesmo
 apelido não redireciona um piloto já autorizado. Essa impressão não é exposta
 pelas respostas públicas do piloto.
 
+A própria fila da Sala REAL também é revalidada antes de ser exibida. Se a
+Escola retirar a certificação antes da configuração dos limites, o
+encaminhamento muda para `elegibilidade_retirada`. Se isso ocorrer depois da
+configuração e antes da autorização, o pedido muda para `suspenso`. A resposta
+que executa o vigia já publica o novo estado — não existe uma chamada de atraso
+em que o painel ofereça uma ação baseada na certificação antiga.
+
 ## Antes de tudo
 Perdas com dinheiro real são **suas e irreversíveis**. Nenhum resultado de
 teste, backtest ou paper prevê lucro futuro. Ligue com dinheiro que você

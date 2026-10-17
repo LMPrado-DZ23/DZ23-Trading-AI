@@ -332,6 +332,35 @@ class TestCadeiaObrigatoria:
         assert outro.de(AGENTE).estado is EstadoDoPiloto.SUSPENSO
         assert outro.encaminhamentos()[0]["estado"] == "suspenso"
 
+    def test_formatura_revogada_retira_fila_ainda_sem_limites(self):
+        sup, escola, formado_em = _supervisor_formado()
+        sup.encaminhar_formado(
+            AGENTE, estrategia="trend_following", contexto=self.CONTEXTO,
+            agora=AGORA)
+        _revogar_escola(escola, "trend_following", formado_em)
+
+        notas = sup.vigiar(agora=AGORA + timedelta(minutes=1))
+
+        fila = sup.encaminhamentos()[0]
+        assert fila["estado"] == "elegibilidade_retirada"
+        assert "escola" in fila["motivo_elegibilidade"]
+        assert any("fila REAL RETIRADA" in nota for nota in notas)
+        assert "elegibilidade retirada" in sup.bloqueios()[AGENTE]
+
+    def test_formatura_revogada_suspende_pedido_antes_da_autorizacao(self):
+        sup, escola, formado_em = _supervisor_formado()
+        sup.encaminhar_formado(
+            AGENTE, estrategia="trend_following", contexto=self.CONTEXTO,
+            agora=AGORA)
+        _solicitar(sup, contexto=self.CONTEXTO, agora=AGORA)
+        _revogar_escola(escola, "trend_following", formado_em)
+
+        notas = sup.vigiar(agora=AGORA + timedelta(minutes=1))
+
+        assert sup.de(AGENTE).estado is EstadoDoPiloto.SUSPENSO
+        assert sup.encaminhamentos()[0]["estado"] == "suspenso"
+        assert any("SUSPENSO" in nota for nota in notas)
+
     def test_sem_formatura_solicitar_recusa(self):
         esc = EscolaDeTraders(armazem=ArmazemFake())
         sup = SupervisorDePiloto(armazem=ArmazemFake(), escola=esc)
