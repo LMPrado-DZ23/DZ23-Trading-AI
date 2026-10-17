@@ -138,8 +138,20 @@ recém-lidos, o payout inteiro atende ao piso da estratégia e o vencimento é
 exatamente um dos timestamps oferecidos. A reconciliação usa `position_id` e
 distingue posição aberta, liquidação oficial (`win`, `loss`, `equal` ou
 `canceled`) e `UNKNOWN`; não encontrar uma posição na janela consultada nunca é
-tratado como cancelamento. Essa camada é pura e não abre sessão MCP nem possui
-função de envio.
+tratado como cancelamento. O executor selado exige o selo LIVE de código, a
+frase exata do proprietário, teto por ordem, teto de perda diária e um WAL
+durável antes da única chamada possível a `place_trade`. Como a ferramenta
+oficial não recebe `client_order_id`, qualquer queda depois do envio deixa a
+intenção `UNKNOWN`; `PREPARED` restaurado e `UNKNOWN` recusam reenvio mesmo
+após reinício. Apenas um `ACK` com `position_id` pode ser repetido localmente
+sem nova chamada.
+
+O transporte em `service/iq_option_binary_transport.py` abre somente o servidor
+oficial `binary-options`, renova e valida o catálogo na mesma sessão antes da
+ferramenta e expõe ao executor apenas `list_assets`, `place_trade`,
+`list_positions` e `get_trade_history`, com argumentos exatos. Nomes livres,
+schema alterado, redirecionamento, payload de erro e segredo remoto não
+atravessam essa fronteira.
 
 O livro agora possui um subledger separado para aposta e liquidação binária.
 Uma abertura confirmada move o valor da reserva identificada para
@@ -147,9 +159,11 @@ Uma abertura confirmada move o valor da reserva identificada para
 exposição pelo **retorno total comprovado**, atribuem o resultado ao agente e
 são idempotentes após reinício. O campo remoto `profit` não é usado como se sua
 semântica fosse conhecida: a integração futura precisa provar quanto voltou ao
-caixa. Esse subledger ainda não está conectado ao OMS nem a `place_trade`.
-Faltam o adaptador MCP selado, a recuperação de timeout ambíguo e a homologação
-em conta de treinamento antes de qualquer proposta de ligação LIVE.
+caixa. Esse subledger ainda não está conectado ao coordenador binário nem ao
+fluxo dos agentes. Faltam a composição durável executor↔subledger, a resolução
+operacional de intenções ambíguas sem `position_id`, a geração de
+vencimento/direção pelo contrato da estratégia e a homologação em conta de
+treinamento antes de qualquer proposta de ligação LIVE.
 
 Depois de autorizar a conexão e carregar o token somente no ambiente local, a
 prova reproduzível pode ser gerada sem credencial na linha de comando:
