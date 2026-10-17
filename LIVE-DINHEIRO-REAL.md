@@ -131,6 +131,18 @@ incluindo `place_trade`, `rollover_position` e `sell_position`, mas nunca chama
 essas ferramentas: a única execução remota é `list_balances(NORMAL)`. O token,
 o `balance_id` e os saldos não são gravados na evidência.
 
+O contrato binário canônico também já está isolado em
+`tradingagents/brokers/iq_option_binary.py`. Ele aceita um plano somente quando
+o ativo é identificado de forma única, está aberto, o valor respeita os limites
+recém-lidos, o payout inteiro atende ao piso da estratégia e o vencimento é
+exatamente um dos timestamps oferecidos. A reconciliação usa `position_id` e
+distingue posição aberta, liquidação oficial (`win`, `loss`, `equal` ou
+`canceled`) e `UNKNOWN`; não encontrar uma posição na janela consultada nunca é
+tratado como cancelamento. Essa camada é pura e não abre sessão MCP nem possui
+função de envio. Ela ainda não é conectada ao OMS porque o livro atual modela
+compra/posição/venda spot, não aposta e liquidação binária. Ligar os dois sem um
+subledger binário homologado criaria saldo e P/L falsos.
+
 Depois de autorizar a conexão e carregar o token somente no ambiente local, a
 prova reproduzível pode ser gerada sem credencial na linha de comando:
 

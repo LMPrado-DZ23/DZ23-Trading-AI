@@ -10,7 +10,7 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
 | Gate | Prova exigida | Estado no HEAD da branch |
 |---|---|---|
-| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.711 passaram na última suíte local integral; 188 testes focados da Escola, piloto e prontidão REAL passaram; matriz 3.10–3.13 verde no run `39029753802`, commit `a39ebd8`, do PR #14 |
+| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.736 passaram na última suíte local integral; 120 testes focados de IQ Option, Escola e prontidão REAL passaram; matriz 3.10–3.13 aguardará o push deste HEAD no PR #14 |
 | lint | `ruff check .` | verde local no HEAD e no run `39027792071` do PR #14 |
 | instalação limpa | job CI dedicado | verde no run `39027792071` do PR #14 |
 | dependências/segredos/licenças/SBOM | jobs CI dedicados | verdes no run `39027792071` do PR #14 |
@@ -51,6 +51,14 @@ que o token expõe exatamente o contrato oficial de negociação do servidor
 `binary-options` e autentica a mesma conta com `list_balances(NORMAL)`. Nenhuma
 ferramenta mutável é chamada. O executor de ordens continua não homologado e
 `MESA_LIVE_LIBERADA=False` permanece obrigatório neste release.
+
+O planejamento canônico de opções binárias está implementado sem transporte:
+ativo aberto e único, limites de valor, payout mínimo e vencimento exatamente
+oferecido são obrigatórios; a reconciliação por `position_id` preserva
+`UNKNOWN` quando a janela não prova o destino. O módulo não expõe chamada de
+`place_trade` e não está ligado ao OMS spot. A integração só poderá avançar
+depois de um subledger específico para aposta/liquidação e testes de recovery
+exactly-once; adaptar o livro spot por aparência está expressamente proibido.
 
 Em 2026-10-17, a sonda pública foi repetida no HEAD
 `e9a357a211b1f11c9d9ac03fc979546b03521749`: as nove corretoras CCXT
