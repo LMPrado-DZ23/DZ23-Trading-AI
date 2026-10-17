@@ -10,7 +10,7 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
 | Gate | Prova exigida | Estado no HEAD da branch |
 |---|---|---|
-| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.736 passaram na última suíte local integral; 120 testes focados de IQ Option, Escola e prontidão REAL passaram; matriz 3.10–3.13 aguardará o push deste HEAD no PR #14 |
+| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.750 passaram na última suíte local integral; 195 testes focados de IQ Option, ledger, risco e recovery passaram; matriz 3.10–3.13 aguardará o push deste HEAD no PR #14 |
 | lint | `ruff check .` | verde local no HEAD e no run `39027792071` do PR #14 |
 | instalação limpa | job CI dedicado | verde no run `39027792071` do PR #14 |
 | dependências/segredos/licenças/SBOM | jobs CI dedicados | verdes no run `39027792071` do PR #14 |
@@ -56,9 +56,12 @@ O planejamento canônico de opções binárias está implementado sem transporte
 ativo aberto e único, limites de valor, payout mínimo e vencimento exatamente
 oferecido são obrigatórios; a reconciliação por `position_id` preserva
 `UNKNOWN` quando a janela não prova o destino. O módulo não expõe chamada de
-`place_trade` e não está ligado ao OMS spot. A integração só poderá avançar
-depois de um subledger específico para aposta/liquidação e testes de recovery
-exactly-once; adaptar o livro spot por aparência está expressamente proibido.
+`place_trade` e não está ligado ao OMS spot. Um subledger específico já mantém
+aposta aberta e liquidação por retorno total comprovado, com vitória, perda,
+empate, cancelamento e repetição pós-restart exatamente uma vez. Ele permanece
+desconectado do transporte. Faltam o adaptador MCP selado, a recuperação de
+timeout ambíguo e a homologação na conta de treinamento; adaptar o livro spot
+por aparência continua expressamente proibido.
 
 Em 2026-10-17, a sonda pública foi repetida no HEAD
 `e9a357a211b1f11c9d9ac03fc979546b03521749`: as nove corretoras CCXT

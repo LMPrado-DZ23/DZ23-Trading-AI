@@ -139,9 +139,17 @@ exatamente um dos timestamps oferecidos. A reconciliação usa `position_id` e
 distingue posição aberta, liquidação oficial (`win`, `loss`, `equal` ou
 `canceled`) e `UNKNOWN`; não encontrar uma posição na janela consultada nunca é
 tratado como cancelamento. Essa camada é pura e não abre sessão MCP nem possui
-função de envio. Ela ainda não é conectada ao OMS porque o livro atual modela
-compra/posição/venda spot, não aposta e liquidação binária. Ligar os dois sem um
-subledger binário homologado criaria saldo e P/L falsos.
+função de envio.
+
+O livro agora possui um subledger separado para aposta e liquidação binária.
+Uma abertura confirmada move o valor da reserva identificada para
+`BINARY_OPTION:<position_id>`; vitória, perda, empate e cancelamento baixam essa
+exposição pelo **retorno total comprovado**, atribuem o resultado ao agente e
+são idempotentes após reinício. O campo remoto `profit` não é usado como se sua
+semântica fosse conhecida: a integração futura precisa provar quanto voltou ao
+caixa. Esse subledger ainda não está conectado ao OMS nem a `place_trade`.
+Faltam o adaptador MCP selado, a recuperação de timeout ambíguo e a homologação
+em conta de treinamento antes de qualquer proposta de ligação LIVE.
 
 Depois de autorizar a conexão e carregar o token somente no ambiente local, a
 prova reproduzível pode ser gerada sem credencial na linha de comando:
