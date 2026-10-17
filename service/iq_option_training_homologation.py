@@ -32,7 +32,7 @@ from tradingagents.desk.binary_execution import (
 from tradingagents.desk.ledger import Ledger
 
 IQ_OPTION_TRAINING_STAKE = Decimal("1")
-_STATE_KEY = "iq_option_training_homologation::wal"
+_STATE_KEY_PREFIX = "iq_option_training_homologation::wal::"
 IQ_OPTION_TRAINING_PROOF_KEY = "iq_option_training_homologation::proof"
 _STATE_SCHEMA = "dz23.iq-option-training-runtime/1"
 IQ_OPTION_TRAINING_PROOF_SCHEMA = "dz23.homologacao-iq-training/1"
@@ -267,8 +267,9 @@ async def build_iq_option_training_homologation_runtime(
         raise IqOptionTrainingHomologationError(
             "resolvedor devolveu conta de treinamento inválida")
     binding = _account_fingerprint(account)
+    state_key = _STATE_KEY_PREFIX + account.credential_fingerprint
     try:
-        wrapper = store.carregar(tenant, _STATE_KEY)
+        wrapper = store.carregar(tenant, state_key)
         restored = None
         if wrapper is not None:
             if (not isinstance(wrapper, dict)
@@ -284,7 +285,7 @@ async def build_iq_option_training_homologation_runtime(
             restored = wrapper["coordinator"]
 
         def persist(document: dict[str, Any]) -> None:
-            store.salvar(tenant, _STATE_KEY, {
+            store.salvar(tenant, state_key, {
                 "schema": _STATE_SCHEMA,
                 "credential_fingerprint": account.credential_fingerprint,
                 "account_fingerprint": binding,

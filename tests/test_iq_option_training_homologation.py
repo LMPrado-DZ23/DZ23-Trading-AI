@@ -36,7 +36,7 @@ class Store:
 
     def salvar(self, tenant_id, key, document):
         self.documents[(tenant_id, key)] = deepcopy(document)
-        if key.endswith("::wal"):
+        if key.startswith("iq_option_training_homologation::wal::"):
             coordinator = document["coordinator"]
             intent = coordinator["intents"]
             submissions = coordinator["executor"]["submissions"]
@@ -179,6 +179,35 @@ def test_uma_unica_ordem_de_homologacao_por_credencial():
         _submit(runtime, client_order_id="training-check-2")
 
     assert len(tools.calls) == calls_before
+
+
+def test_rotacao_abre_novo_wal_sem_apagar_o_anterior():
+    store = Store()
+    first = _build(tools=FakeTools(), store=store)
+    _submit(first)
+
+    async def rotated_resolver(_env):
+        return IqOptionResolvedTrainingAccount(
+            balance_id=912345,
+            currency="USD",
+            balance_filter="PRACTICE",
+            credential_fingerprint="b" * 64,
+            trade_tools_verified=(
+                "place_trade", "rollover_position", "sell_position"),
+        )
+
+    second = _build(
+        tools=FakeTools(), store=store, resolver=rotated_resolver)
+    _submit(second, client_order_id="training-check-2")
+
+    wal_keys = [
+        key for tenant, key in store.documents
+        if tenant == "tenant-1"
+        and key.startswith("iq_option_training_homologation::wal::")
+    ]
+    assert len(wal_keys) == 2
+    assert any(key.endswith("a" * 64) for key in wal_keys)
+    assert any(key.endswith("b" * 64) for key in wal_keys)
 
 
 def test_so_certifica_apos_reconciliacao_e_baixa_total_sanitizada():
