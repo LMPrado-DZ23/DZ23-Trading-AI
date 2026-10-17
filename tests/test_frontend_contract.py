@@ -160,6 +160,19 @@ def test_iq_option_possui_token_live_separado_e_preparo_sem_ordem():
     assert "confirmo_trade:true" in trecho
 
 
+def test_painel_expoe_homologacao_iq_training_sem_liberar_live():
+    html = (ROOT / "service/static/index.html").read_text(encoding="utf-8")
+    assert 'id="grupoIqTreino"' in html
+    assert "function iqTreinoPreparar" in html
+    assert "function iqTreinoExecutar" in html
+    assert "function iqTreinoReconciliar" in html
+    assert "/v1/live/homologacao-iq-option/preparar-conta-treino" in html
+    assert "/v1/live/homologacao-iq-option/executar-conta-treino" in html
+    assert "/v1/live/homologacao-iq-option/reconciliar-conta-treino" in html
+    assert "amount:'1'" in html
+    assert "execução continua bloqueada para dinheiro real" in html
+
+
 def test_painel_tem_saida_do_aplicativo():
     # C009: sem console, o usuário só fecharia o app pelo Gerenciador de
     # Tarefas. O painel do dono precisa de um botão que encerra o servidor,
