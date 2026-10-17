@@ -98,8 +98,16 @@ def live_execution_credential_fingerprint(env: dict) -> str:
     homologação TESTNET nem a chave somente leitura usada para certificar a
     identidade da conta.
     """
+    exchange = (env.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    if exchange == "iq_option":
+        partes = [
+            exchange,
+            env.get("IQ_OPTION_MCP_LIVE_BEARER_TOKEN") or "",
+            env.get("IQ_OPTION_MCP_LIVE_SERVER") or "binary-options",
+        ]
+        return hashlib.sha256("\0".join(partes).encode()).hexdigest()
     partes = [
-        (env.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower(),
+        exchange,
         env.get("LIVE_EXCHANGE_API_KEY") or "",
         env.get("LIVE_EXCHANGE_API_SECRET") or "",
         env.get("LIVE_EXCHANGE_API_PASSWORD") or "",

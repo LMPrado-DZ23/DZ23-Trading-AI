@@ -29,6 +29,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from service.api import segredos_em_repouso
 from service.api.ia_uso import RegistroDeUso
 from service.api.owner_credentials import CredenciaisDoDono, erro_de_senha
+from service.iq_option_execution import (
+    IqOptionExecutionPreparationError,
+    probe_iq_option_live_execution_account_async,
+)
 from service.iq_option_read_only import (
     IqOptionReadOnlyError,
     probe_iq_option_read_only_account_async,
@@ -224,7 +228,7 @@ ALLOWED_KEYS = [
     "REAL_READ_ONLY_API_KEY", "REAL_READ_ONLY_API_SECRET",
     "REAL_READ_ONLY_API_PASSWORD", "REAL_READ_ONLY_API_UID",
     "REAL_READ_ONLY_EXCHANGE",
-    "IQ_OPTION_MCP_BEARER_TOKEN",
+    "IQ_OPTION_MCP_BEARER_TOKEN", "IQ_OPTION_MCP_LIVE_BEARER_TOKEN",
     "TRADINGAGENTS_DESK_FEED", "TRADINGAGENTS_DESK_BROKER",
     "TRADINGAGENTS_DESK_INSTRUMENTS", "TRADINGAGENTS_DESK_CAPITAL",
     "TRADINGAGENTS_DESK_PAYOUT",
@@ -253,7 +257,7 @@ SEGREDOS_DECLARADOS = {
     "LIVE_EXCHANGE_API_PASSWORD", "LIVE_EXCHANGE_API_UID",
     "REAL_READ_ONLY_API_KEY", "REAL_READ_ONLY_API_SECRET",
     "REAL_READ_ONLY_API_PASSWORD", "REAL_READ_ONLY_API_UID",
-    "IQ_OPTION_MCP_BEARER_TOKEN",
+    "IQ_OPTION_MCP_BEARER_TOKEN", "IQ_OPTION_MCP_LIVE_BEARER_TOKEN",
     "ALERTA_TELEGRAM_TOKEN", "ALERTA_TELEGRAM_CHAT", "ALERTA_WEBHOOK_URL",
     "ALERTA_TELEGRAM_WEBHOOK_SECRET", "ALERTA_DISCORD_WEBHOOK",
     "ALERTA_WHATSAPP_TOKEN", "EMAIL_SMTP_PASS",
@@ -1381,6 +1385,20 @@ async def set_cfg(req: Request, _=Depends(auth)):
             saved.append("REAL_READ_ONLY_EXCHANGE")
         if anterior != exchange:
             changed.append("REAL_READ_ONLY_EXCHANGE")
+    token_live_iq = str(
+        vars_recebidas.get("IQ_OPTION_MCP_LIVE_BEARER_TOKEN") or "").strip()
+    if token_live_iq:
+        exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+        if exchange != "iq_option":
+            raise HTTPException(
+                409, "o token MCP LIVE só pode ser vinculado à IQ Option")
+        anterior = str(
+            cfg.get("LIVE_EXECUTION_EXCHANGE") or "").strip().lower()
+        cfg["LIVE_EXECUTION_EXCHANGE"] = exchange
+        if "LIVE_EXECUTION_EXCHANGE" not in saved:
+            saved.append("LIVE_EXECUTION_EXCHANGE")
+        if anterior != exchange:
+            changed.append("LIVE_EXECUTION_EXCHANGE")
     # V8 §6: remover credencial/valor passou a ser possível. Antes o painel
     # só sabia SALVAR campo não-vazio — uma chave errada ficava presa para
     # sempre. A remoção tira do arquivo; se o ambiente do sistema ainda
@@ -1414,8 +1432,12 @@ async def set_cfg(req: Request, _=Depends(auth)):
     elif cfg.pop("EXCHANGE_CREDENTIAL_BOUND_AT", None) is not None:
         changed.append("EXCHANGE_CREDENTIAL_BOUND_AT")
     credencial_live_completa = bool(
-        str(cfg.get("LIVE_EXCHANGE_API_KEY") or "").strip()
-        and str(cfg.get("LIVE_EXCHANGE_API_SECRET") or "").strip()
+        (exchange_execucao == "iq_option"
+         and str(cfg.get("IQ_OPTION_MCP_LIVE_BEARER_TOKEN") or "").strip())
+        or (str(cfg.get("LIVE_EXCHANGE_API_KEY") or "").strip()
+            and str(cfg.get("LIVE_EXCHANGE_API_SECRET") or "").strip()))
+    credencial_live_completa = bool(
+        credencial_live_completa
         and str(cfg.get("LIVE_EXECUTION_EXCHANGE") or "").strip().lower()
         == exchange_execucao)
     fingerprint_live_atual = live_execution_credential_fingerprint(cfg)
@@ -4799,6 +4821,15 @@ def _credenciais_live_prontas(cfg: dict) -> tuple[bool, list[str]]:
     )
 
     exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    if exchange == "iq_option":
+        vinculo = str(
+            cfg.get("LIVE_EXECUTION_EXCHANGE") or "").strip().lower()
+        faltando = []
+        if vinculo != exchange:
+            faltando.append("token MCP LIVE vinculado à IQ Option")
+        if not str(cfg.get("IQ_OPTION_MCP_LIVE_BEARER_TOKEN") or "").strip():
+            faltando.append("token MCP LIVE")
+        return not faltando, faltando
     try:
         exigidos = required_execution_credentials(exchange)
     except KeyError:
@@ -4890,7 +4921,8 @@ def _env_live_execution(cfg: dict) -> dict:
         "TRADINGAGENTS_EXCHANGE", "LIVE_EXCHANGE_API_KEY",
         "LIVE_EXCHANGE_API_SECRET", "LIVE_EXCHANGE_API_PASSWORD",
         "LIVE_EXCHANGE_API_UID", "LIVE_EXECUTION_EXCHANGE",
-        "LIVE_EXECUTION_CREDENTIAL_BOUND_AT")}
+        "LIVE_EXECUTION_CREDENTIAL_BOUND_AT", "IQ_OPTION_MCP_BEARER_TOKEN",
+        "IQ_OPTION_MCP_LIVE_BEARER_TOKEN")}
 
 
 def _env_live_como_leitura(cfg: dict) -> dict:
@@ -5632,11 +5664,10 @@ async def live_preparacao_execucao(req: Request, _=Depends(auth),
     body = await _json_body(req)
     conta = str(body.get("conta") or "").strip()
     broker_account_id = str(body.get("broker_account_id") or "").strip()
+    confirma_conta_regular_unica = (
+        body.get("confirmo_conta_regular_unica") is True)
     if not conta:
         raise HTTPException(422, "identifique a conta REAL que será preparada")
-    if not broker_account_id:
-        raise HTTPException(
-            422, "informe o identificador real exibido pela corretora")
     if body.get("confirmo_trade") is not True:
         raise HTTPException(
             422, "confirme que esta chave separada possui permissão de trade")
@@ -5646,9 +5677,10 @@ async def live_preparacao_execucao(req: Request, _=Depends(auth),
 
     cfg = load_cfg(request_tenant(req))
     exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
-    if exchange == "iq_option":
+    if not broker_account_id and not (
+            exchange == "iq_option" and confirma_conta_regular_unica):
         raise HTTPException(
-            409, "IQ Option não possui executor LIVE homologado no DZ23")
+            422, "informe o identificador real exibido pela corretora")
     credenciais_ok, faltando = _credenciais_live_prontas(cfg)
     if not credenciais_ok:
         raise HTTPException(
@@ -5679,19 +5711,34 @@ async def live_preparacao_execucao(req: Request, _=Depends(auth),
             409, "a credencial de execução REAL deve ser diferente da chave "
                  "somente leitura")
 
-    identidade_lida = broker_identity_fingerprint(
-        _env_leitura_real(cfg), broker_account_id)
-    if not hmac.compare_digest(
-            identidade_lida,
-            str(prova_leitura.get("broker_identity_fingerprint") or "")):
-        raise HTTPException(
-            409, "o identificador informado não corresponde à conta da prova "
-                 "somente leitura")
-    env_live["LIVE_EXECUTION_ACCOUNT_ID"] = broker_account_id
+    if broker_account_id:
+        identidade_lida = broker_identity_fingerprint(
+            _env_leitura_real(cfg), broker_account_id)
+        if not hmac.compare_digest(
+                identidade_lida,
+                str(prova_leitura.get("broker_identity_fingerprint") or "")):
+            raise HTTPException(
+                409, "o identificador informado não corresponde à conta da "
+                     "prova somente leitura")
+        env_live["LIVE_EXECUTION_ACCOUNT_ID"] = broker_account_id
+    else:
+        env_live["LIVE_EXECUTION_ACCOUNT_ID"] = ""
+        env_live["IQ_OPTION_CONFIRM_UNIQUE_REGULAR_ACCOUNT"] = True
     try:
-        resultado = probe_live_execution_account(env_live)
-    except BrokerSecurityError as exc:
+        if exchange == "iq_option":
+            resultado = await probe_iq_option_live_execution_account_async(
+                env_live)
+        else:
+            resultado = probe_live_execution_account(env_live)
+    except (BrokerSecurityError, IqOptionExecutionPreparationError) as exc:
         raise HTTPException(409, str(exc)) from exc
+
+    if (exchange == "iq_option" and not hmac.compare_digest(
+            str(resultado.get("broker_identity_fingerprint") or ""),
+            str(prova_leitura.get("broker_identity_fingerprint") or ""))):
+        raise HTTPException(
+            409, "a credencial LIVE não corresponde à conta da prova somente "
+                 "leitura")
 
     prova = {
         "schema": _SCHEMA_PREPARACAO_EXECUCAO,
@@ -5704,6 +5751,8 @@ async def live_preparacao_execucao(req: Request, _=Depends(auth),
             "broker_identity_fingerprint"],
         "credential_fingerprint": resultado["credential_fingerprint"],
         "read_methods": list(resultado.get("read_methods") or ()),
+        "trade_tools_verified": list(
+            resultado.get("trade_tools_verified") or ()),
         "trade_habilitado_declarado": True,
         "sem_saque_declarado": True,
         "read_only_credential_fingerprint": prova_leitura[

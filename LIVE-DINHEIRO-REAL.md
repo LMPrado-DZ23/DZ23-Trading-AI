@@ -65,7 +65,7 @@ uv run python scripts/validar_estrategias.py --exchange binance `
 | KuCoin | sim | não há sandbox nativo | passphrase |
 | Mercado Bitcoin | sim | não há sandbox nativo | — |
 | Bitget | sim | não há sandbox nativo | passphrase |
-| IQ Option | 7 MCPs oficiais validados | prova de conta preparada; ainda não executada | token MCP oficial no painel cifrado ou ambiente |
+| IQ Option | 7 MCPs oficiais validados | leitura e preparação passiva da credencial de trade | tokens MCP separados, cifrados pelo painel ou ambiente |
 
 As quatro corretoras sem sandbox ficam disponíveis para leitura pública,
 catálogo de capacidades e preparação da conta. O sistema recusa apresentá-las
@@ -122,6 +122,14 @@ mutáveis, zero desconhecidas, zero ausentes e zero chamáveis pelo caminho de
 metadados. O token ficou cifrado na configuração local. Essa prova fecha o
 gate de permissão mínima do token, mas não substitui a leitura autenticada e a
 confirmação da identidade da conta.
+
+Para a preparação de execução futura, a IQ Option usa outro segredo,
+`IQ_OPTION_MCP_LIVE_BEARER_TOKEN`. Ele deve ser um token oficial distinto, com
+Trading access habilitado e sem permissão de movimentação de fundos. A prova
+valida o catálogo completo do servidor `binary-options` por `tools/list`,
+incluindo `place_trade`, `rollover_position` e `sell_position`, mas nunca chama
+essas ferramentas: a única execução remota é `list_balances(NORMAL)`. O token,
+o `balance_id` e os saldos não são gravados na evidência.
 
 Depois de autorizar a conexão e carregar o token somente no ambiente local, a
 prova reproduzível pode ser gerada sem credencial na linha de comando:
@@ -212,6 +220,12 @@ leitura. Ela possui namespace próprio: `LIVE_EXCHANGE_API_KEY`,
 `LIVE_EXCHANGE_API_UID`, vinculados à corretora por
 `LIVE_EXECUTION_EXCHANGE`. O painel recusa preparar a credencial se sua
 impressão for igual à TESTNET ou à chave somente leitura.
+
+Na IQ Option, esse namespace é `IQ_OPTION_MCP_LIVE_BEARER_TOKEN`, também
+vinculado por `LIVE_EXECUTION_EXCHANGE`. A preparação exige simultaneamente o
+token somente leitura e o token LIVE, recusa reutilizar o mesmo valor e compara
+em memória a identidade da conta regular. Isso certifica a credencial e seu
+escopo; não implementa nem homologa o envio de ordens da IQ Option.
 
 Em **Configuração → Conta REAL — credencial de execução futura**, o
 proprietário salva essa terceira credencial e confirma que ela possui trade,

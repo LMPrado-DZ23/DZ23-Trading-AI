@@ -45,6 +45,13 @@ intervalo `(0, 1]`; ausência e valores inválidos falham fechado, sem sala e
 com motivo visível.
 Nenhuma dessas provas abre o selo LIVE.
 
+A credencial de negociação da IQ Option pode ser preparada em namespace
+separado (`IQ_OPTION_MCP_LIVE_BEARER_TOKEN`). O gate comprova por `tools/list`
+que o token expõe exatamente o contrato oficial de negociação do servidor
+`binary-options` e autentica a mesma conta com `list_balances(NORMAL)`. Nenhuma
+ferramenta mutável é chamada. O executor de ordens continua não homologado e
+`MESA_LIVE_LIBERADA=False` permanece obrigatório neste release.
+
 Em 2026-10-17, a sonda pública foi repetida no HEAD
 `e9a357a211b1f11c9d9ac03fc979546b03521749`: as nove corretoras CCXT
 responderam com ticker e velas, sem credenciais e sem ordens. Essa prova

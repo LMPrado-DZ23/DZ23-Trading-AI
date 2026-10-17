@@ -148,6 +148,18 @@ def test_pilot_limits_require_owner_values_without_financial_defaults():
     assert "Informe todos os limites do piloto" in html
 
 
+def test_iq_option_possui_token_live_separado_e_preparo_sem_ordem():
+    html = (ROOT / "service/static/index.html").read_text(encoding="utf-8")
+    assert 'id="IQ_OPTION_MCP_LIVE_BEARER_TOKEN"' in html
+    assert "IQ_OPTION_MCP_LIVE_BEARER_TOKEN" in html
+    assert "confirmo_conta_regular_unica" in html
+    trecho = html.split("async function brokerPrepararExecucao()", 1)[1]
+    trecho = trecho.split("async function catalogoCarregar()", 1)[0]
+    assert "ainda não possui executor LIVE" not in trecho
+    assert "/v1/live/preparacao-execucao" in trecho
+    assert "confirmo_trade:true" in trecho
+
+
 def test_painel_tem_saida_do_aplicativo():
     # C009: sem console, o usuário só fecharia o app pelo Gerenciador de
     # Tarefas. O painel do dono precisa de um botão que encerra o servidor,
