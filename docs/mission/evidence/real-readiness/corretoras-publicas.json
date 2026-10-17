@@ -1,7 +1,7 @@
 {
   "schema": "dz23-corretoras-publicas-v1",
-  "gerado_em": "2026-10-16T02:09:00.582671+00:00",
-  "revisao_codigo": "bf9970942ac4db1c79b5aa0bff82e2b264c7f15d",
+  "gerado_em": "2026-10-17T07:52:36.741082+00:00",
+  "revisao_codigo": "e9a357a211b1f11c9d9ac03fc979546b03521749-dirty",
   "somente_leitura": true,
   "credenciais_usadas": false,
   "ordens_enviadas": false,
@@ -17,7 +17,7 @@
       "symbol": "BTC/USDT",
       "timeframe": "1h",
       "candles": 3,
-      "latency_ms": 4500,
+      "latency_ms": 4267,
       "read_only": true,
       "credentials_used": false,
       "methods": [
@@ -34,7 +34,7 @@
       "symbol": "BTC/USDT",
       "timeframe": "1h",
       "candles": 3,
-      "latency_ms": 6609,
+      "latency_ms": 7704,
       "read_only": true,
       "credentials_used": false,
       "methods": [
@@ -51,7 +51,7 @@
       "symbol": "BTC/USDT",
       "timeframe": "1h",
       "candles": 3,
-      "latency_ms": 3547,
+      "latency_ms": 3375,
       "read_only": true,
       "credentials_used": false,
       "methods": [
@@ -68,7 +68,7 @@
       "symbol": "BTC/USD",
       "timeframe": "1h",
       "candles": 3,
-      "latency_ms": 1093,
+      "latency_ms": 985,
       "read_only": true,
       "credentials_used": false,
       "methods": [
@@ -85,7 +85,7 @@
       "symbol": "BTC/USDT",
       "timeframe": "1h",
       "candles": 3,
-      "latency_ms": 22767,
+      "latency_ms": 20563,
       "read_only": true,
       "credentials_used": false,
       "methods": [
@@ -102,7 +102,7 @@
       "symbol": "BTC/USD",
       "timeframe": "1h",
       "candles": 3,
-      "latency_ms": 3486,
+      "latency_ms": 3468,
       "read_only": true,
       "credentials_used": false,
       "methods": [
@@ -119,7 +119,7 @@
       "symbol": "BTC/USDT",
       "timeframe": "1h",
       "candles": 3,
-      "latency_ms": 3125,
+      "latency_ms": 2922,
       "read_only": true,
       "credentials_used": false,
       "methods": [
@@ -136,7 +136,7 @@
       "symbol": "BTC/BRL",
       "timeframe": "1h",
       "candles": 3,
-      "latency_ms": 2328,
+      "latency_ms": 2282,
       "read_only": true,
       "credentials_used": false,
       "methods": [
@@ -153,7 +153,7 @@
       "symbol": "BTC/USDT",
       "timeframe": "1h",
       "candles": 3,
-      "latency_ms": 4267,
+      "latency_ms": 4173,
       "read_only": true,
       "credentials_used": false,
       "methods": [

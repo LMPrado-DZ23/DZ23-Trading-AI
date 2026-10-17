@@ -10,13 +10,14 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
 | Gate | Prova exigida | Estado no HEAD da branch |
 |---|---|---|
-| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.691 passaram na última suíte local integral; 46 testes focados passaram após o ajuste final de interface; matriz 3.10–3.13 verde no run `38996159731` do PR #14 |
-| lint | `ruff check .` | verde no run `38996159731` do PR #14 |
-| instalação limpa | job CI dedicado | verde no run `38996159731` do PR #14 |
-| dependências/segredos/licenças/SBOM | jobs CI dedicados | verdes no run `38996159731` do PR #14 |
-| PostgreSQL e ARM64 | jobs CI dedicados | verdes no run `38996159731` do PR #14; ARM64 valida dependências, não homologa host Oracle |
+| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.691 passaram na última suíte local integral; 46 testes focados passaram após o ajuste final de interface; matriz 3.10–3.13 verde no run `38997170800` do PR #14 |
+| lint | `ruff check .` | verde no run `38997170800` do PR #14 |
+| instalação limpa | job CI dedicado | verde no run `38997170800` do PR #14 |
+| dependências/segredos/licenças/SBOM | jobs CI dedicados | verdes no run `38997170800` do PR #14 |
+| PostgreSQL e ARM64 | jobs CI dedicados | verdes no run `38997170800` do PR #14; ARM64 valida dependências, não homologa host Oracle |
+| pacote Windows | build, bundle acceptance/E2E e matriz de instalador | verdes nos runs `39014413744` e `39014415662`; publicação deliberadamente omitida |
 | LIVE fechado | testes + `/v1/operational-readiness` | `MESA_LIVE_LIBERADA=False` |
-| rollback | backup local + restore isolado + prova recente | implementado; ensaio no host ainda externo |
+| rollback local | backup local + restore isolado + prova recente | aprovado em 2026-10-17: 7 itens, 3 bancos SQLite e 4 documentos JSON validados; `envio_de_ordens=false`; PostgreSQL externo continua condicional a `DATABASE_URL` |
 
 Os testes adversariais desse total cobrem a sincronização persistida entre a
 fila da Sala REAL e os estados autorizado/revogado/expirado/suspenso, a recusa
@@ -33,6 +34,12 @@ payout observado foi declarado explicitamente no painel e validado no
 intervalo `(0, 1]`; ausência e valores inválidos falham fechado, sem sala e
 com motivo visível.
 Nenhuma dessas provas abre o selo LIVE.
+
+Em 2026-10-17, a sonda pública foi repetida no HEAD
+`e9a357a211b1f11c9d9ac03fc979546b03521749`: as nove corretoras CCXT
+responderam com ticker e velas, sem credenciais e sem ordens. Essa prova
+confirma somente conectividade de mercado público. Ela não certifica conta,
+saldo, permissões, testnet, reconciliação nem execução.
 
 ## Preflight local isolado
 
@@ -60,6 +67,13 @@ Todos os itens abaixo precisam de evidência nova no SHA implantado:
 8. SHA implantado igual ao SHA aprovado;
 9. preflight `--target preparacao` concluído;
 10. nenhum 5xx novo e nenhuma ordem real enviada.
+
+No host local atual, o item 3 foi concluído por restauração em diretório
+temporário. Os itens 5 e 6 ainda não podem ser certificados como ambiente de
+destino: o serviço observado está em HTTP local e não há Telegram, Discord,
+WhatsApp ou WebPush configurado para comprovar entrega externa. A prova não
+deve ser sintetizada; o verificador exige origem HTTPS, bearer, canal externo
+e janela contínua de pelo menos uma hora.
 
 ## Gate externo por corretora/conta
 
