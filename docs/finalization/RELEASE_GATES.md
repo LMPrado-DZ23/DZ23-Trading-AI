@@ -10,12 +10,13 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
 | Gate | Prova exigida | Estado no HEAD da branch |
 |---|---|---|
-| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.691 passaram na última suíte local integral; 46 testes focados passaram após o ajuste final de interface; matriz 3.10–3.13 verde no run `38997170800` do PR #14 |
-| lint | `ruff check .` | verde no run `38997170800` do PR #14 |
-| instalação limpa | job CI dedicado | verde no run `38997170800` do PR #14 |
-| dependências/segredos/licenças/SBOM | jobs CI dedicados | verdes no run `38997170800` do PR #14 |
-| PostgreSQL e ARM64 | jobs CI dedicados | verdes no run `38997170800` do PR #14; ARM64 valida dependências, não homologa host Oracle |
-| pacote Windows | build, bundle acceptance/E2E e matriz de instalador | verdes nos runs `39014413744` e `39014415662`; publicação deliberadamente omitida |
+| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.691 passaram na última suíte local integral; 161 testes focados do fluxo Escola → Sala REAL passaram; matriz 3.10–3.13 verde no run `39016140316` do PR #14 |
+| lint | `ruff check .` | verde no run `39016140316` do PR #14 |
+| instalação limpa | job CI dedicado | verde no run `39016140316` do PR #14 |
+| dependências/segredos/licenças/SBOM | jobs CI dedicados | verdes no run `39016140316` do PR #14 |
+| PostgreSQL e ARM64 | jobs CI dedicados | verdes no run `39016140316` do PR #14; ARM64 valida dependências, não homologa host Oracle |
+| pacote Windows | build, bundle acceptance/E2E e matriz de instalador | verdes nos runs `39016202897` e `39016204670`; publicação deliberadamente omitida |
+| runtime da automação | Actions oficiais sem Node 20 depreciado | `checkout@v7`, `setup-python@v7`, `setup-uv@v10.3.0`, artifacts v7/v8 e gitleaks v3 validados nos mesmos runs |
 | LIVE fechado | testes + `/v1/operational-readiness` | `MESA_LIVE_LIBERADA=False` |
 | rollback local | backup local + restore isolado + prova recente | aprovado em 2026-10-17: 7 itens, 3 bancos SQLite e 4 documentos JSON validados; `envio_de_ordens=false`; PostgreSQL externo continua condicional a `DATABASE_URL` |
 
