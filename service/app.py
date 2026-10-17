@@ -5523,9 +5523,8 @@ async def live_preparacao_leitura(req: Request, _=Depends(auth),
     if not conta:
         raise HTTPException(422, "identifique a conta REAL que será preparada")
     broker_account_id = str(body.get("broker_account_id") or "").strip()
-    if not broker_account_id:
-        raise HTTPException(
-            422, "informe o identificador real exibido pela corretora")
+    confirma_conta_regular_unica = (
+        body.get("confirmo_conta_regular_unica") is True)
     if body.get("confirmo_sem_trade") is not True:
         raise HTTPException(
             422, "confirme que a chave REAL separada não possui permissão de trade")
@@ -5542,7 +5541,17 @@ async def live_preparacao_leitura(req: Request, _=Depends(auth),
                  "corretora selecionada; escolha a corretora e informe a "
                  "chave e o segredo correspondentes")
     env = _env_leitura_real(cfg)
-    env["REAL_READ_ONLY_ACCOUNT_ID"] = broker_account_id
+    if broker_account_id:
+        env["REAL_READ_ONLY_ACCOUNT_ID"] = broker_account_id
+    elif exchange == "iq_option" and confirma_conta_regular_unica:
+        # O painel oficial da IQ Option não exibe o balance_id. A sonda só
+        # aceita esta alternativa quando NORMAL devolve exatamente uma conta
+        # regular; a identidade continua restrita à memória e vira apenas
+        # fingerprint na prova durável.
+        env["IQ_OPTION_CONFIRM_UNIQUE_REGULAR_ACCOUNT"] = True
+    else:
+        raise HTTPException(
+            422, "informe o identificador real exibido pela corretora")
     try:
         if exchange == "iq_option":
             resultado = await probe_iq_option_read_only_account_async(env)

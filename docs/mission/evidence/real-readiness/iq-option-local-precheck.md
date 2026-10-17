@@ -136,3 +136,10 @@ A prova local foi validada pelo próprio gate de prontidão e vale por 24 horas.
 Ela fecha os itens "Acesso REAL de leitura recente e permissões mínimas" e
 "Identidade da conta REAL confirmada". Não cria credencial de execução, não
 homologa TESTNET da IQ Option e não abre o selo LIVE.
+
+O fluxo do painel passou a renovar essa prova sem exigir que o proprietário
+descubra um `balance_id` que a tela oficial não apresenta. A alternativa exige
+confirmação explícita de conta regular única e falha fechado se a resposta
+contiver zero ou mais de uma conta. O caminho foi revalidado contra o token
+real com identidade confirmada, zero ferramentas mutáveis e nenhum ID bruto
+no retorno.

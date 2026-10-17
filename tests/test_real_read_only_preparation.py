@@ -294,6 +294,68 @@ def test_iq_option_usa_token_isolado_e_prova_mcp_sem_ccxt(
         status, "permissões mínimas")["acao"]
 
 
+def test_iq_option_aceita_confirmacao_explicita_de_conta_regular_unica(
+        tmp_path, monkeypatch):
+    m, c = _app(tmp_path, monkeypatch)
+    token = "token-iq-read-only"
+    assert c.post("/v1/config", headers=H, json={"vars": {
+        "TRADINGAGENTS_EXCHANGE": "iq_option",
+        "IQ_OPTION_MCP_BEARER_TOKEN": token,
+    }}).status_code == 200
+    capturado = {}
+
+    async def provar(env):
+        capturado.update(env)
+        return {
+            "exchange": "iq_option",
+            "authenticated_read": True,
+            "read_methods": ["binary-options:list_balances[NORMAL]"],
+            "provider_mutating_tools_exposed": False,
+            "broker_identity_verified": True,
+            "broker_identity_fingerprint": "b" * 64,
+            "credential_fingerprint": read_only_credential_fingerprint(env),
+        }
+
+    monkeypatch.setattr(m, "probe_iq_option_read_only_account_async", provar)
+    r = c.post("/v1/live/preparacao-leitura", headers=H, json={
+        "conta": "iq-real-principal",
+        "confirmo_conta_regular_unica": True,
+        "confirmo_sem_trade": True,
+        "confirmo_sem_movimentacao": True,
+    })
+
+    assert r.status_code == 200, r.text
+    assert capturado["IQ_OPTION_CONFIRM_UNIQUE_REGULAR_ACCOUNT"] is True
+    assert not capturado.get("REAL_READ_ONLY_ACCOUNT_ID")
+    assert token not in r.text
+    assert r.json()["preparacao"]["broker_identity_verified"] is True
+
+
+def test_iq_option_sem_id_ou_confirmacao_de_conta_unica_falha_antes_da_rede(
+        tmp_path, monkeypatch):
+    m, c = _app(tmp_path, monkeypatch)
+    assert c.post("/v1/config", headers=H, json={"vars": {
+        "TRADINGAGENTS_EXCHANGE": "iq_option",
+        "IQ_OPTION_MCP_BEARER_TOKEN": "token-iq-read-only",
+    }}).status_code == 200
+    chamado = False
+
+    async def nao_chamar(_env):
+        nonlocal chamado
+        chamado = True
+        return {}
+
+    monkeypatch.setattr(m, "probe_iq_option_read_only_account_async", nao_chamar)
+    r = c.post("/v1/live/preparacao-leitura", headers=H, json={
+        "conta": "iq-real-principal",
+        "confirmo_sem_trade": True,
+        "confirmo_sem_movimentacao": True,
+    })
+
+    assert r.status_code == 422
+    assert chamado is False
+
+
 def test_token_iq_nao_pode_ser_vinculado_a_outra_corretora(
         tmp_path, monkeypatch):
     _, c = _app(tmp_path, monkeypatch)

@@ -179,8 +179,10 @@ No painel, em **Configuração → Conta REAL — somente leitura**:
    fundos;
 2. cole a credencial no painel local e salve;
 3. clique em **Comprovar conta REAL somente leitura**;
-4. informe um apelido local e, separadamente, o identificador real exibido
-   pela corretora;
+4. informe um apelido local. Nas corretoras CCXT, informe separadamente o
+   identificador real exibido pela corretora. Na IQ Option, confirme que o
+   token representa uma única conta REAL regular; a prova falha fechado se
+   `list_balances(NORMAL)` devolver zero ou mais de uma conta;
 5. confirme as duas restrições de permissão.
 
 O servidor executa somente consultas autenticadas de saldo, ordens abertas e
@@ -190,6 +192,12 @@ bloqueados. Nenhum saldo, ordem ou identificador privado é devolvido ao painel
 ou salvo. A prova durável contém apenas corretora, rótulo local, horário, nomes
 dos métodos de leitura, hash da credencial e uma impressão HMAC da identidade.
 Trocar qualquer parte da credencial invalida a prova automaticamente.
+
+Na IQ Option, o painel oficial não precisa expor o `balance_id`: mediante a
+confirmação explícita acima, o DZ23 aceita somente uma resposta com exatamente
+uma conta `regular`, usa o identificador apenas em memória para gerar a
+impressão e o descarta. Se aparecer uma segunda conta, a renovação é recusada
+até o proprietário escolher um fluxo de identificação inequívoco.
 
 A prova vale por 24 horas. Depois desse prazo, ou se o relógio registrado for
 inválido, o checklist volta a bloquear a conta e exige uma nova consulta

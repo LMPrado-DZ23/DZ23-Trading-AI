@@ -115,6 +115,13 @@ def test_iq_option_exposes_explicit_payout_only_for_its_school_room():
     assert "classList.toggle('hide',!iq)" in html
 
 
+def test_iq_option_read_only_flow_confirms_unique_regular_account_without_id():
+    html = (ROOT / "service/static/index.html").read_text(encoding="utf-8")
+    assert "confirmo_conta_regular_unica" in html
+    assert "uma única conta REAL regular" in html
+    assert "balance_id da conta regular exibido pela IQ Option" not in html
+
+
 def test_painel_tem_saida_do_aplicativo():
     # C009: sem console, o usuário só fecharia o app pelo Gerenciador de
     # Tarefas. O painel do dono precisa de um botão que encerra o servidor,

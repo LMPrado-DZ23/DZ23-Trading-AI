@@ -153,7 +153,9 @@ async def probe_iq_option_read_only_account_async(
         raise IqOptionReadOnlyError("a prova da IQ Option exige token MCP")
     expected_account_id = str(
         env.get("REAL_READ_ONLY_ACCOUNT_ID") or "").strip()
-    if not expected_account_id:
+    discover_unique_account = (
+        env.get("IQ_OPTION_CONFIRM_UNIQUE_REGULAR_ACCOUNT") is True)
+    if not expected_account_id and not discover_unique_account:
         raise IqOptionReadOnlyError(
             "informe o identificador real exibido pela IQ Option")
 
@@ -193,6 +195,12 @@ async def probe_iq_option_read_only_account_async(
     if not ids:
         raise IqOptionReadOnlyError(
             "nenhuma conta REAL regular foi devolvida pela IQ Option")
+    if discover_unique_account and not expected_account_id:
+        if len(ids) != 1:
+            raise IqOptionReadOnlyError(
+                "a confirmação automática exige exatamente uma conta "
+                "REAL regular")
+        expected_account_id = ids[0]
     if not any(hmac.compare_digest(expected_account_id, item) for item in ids):
         raise IqOptionReadOnlyError(
             "o identificador informado não corresponde à conta autenticada")

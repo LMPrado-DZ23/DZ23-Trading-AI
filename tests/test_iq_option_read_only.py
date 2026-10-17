@@ -71,6 +71,39 @@ def test_prova_chama_apenas_list_balances_normal_e_nao_expoe_dados():
     assert "BRL" not in serializado
 
 
+def test_prova_descobre_conta_quando_proprietario_confirma_unica_regular():
+    async def listar(_endpoint, _token, _arguments):
+        return {"balances": [{
+            "balance_id": 123456789,
+            "type": "regular",
+            "currency": "BRL",
+            "amount": 9876.54,
+        }]}
+
+    resultado = _run(probe_iq_option_read_only_account_async(
+        _env(REAL_READ_ONLY_ACCOUNT_ID="",
+             IQ_OPTION_CONFIRM_UNIQUE_REGULAR_ACCOUNT=True),
+        balance_reader=listar))
+
+    assert resultado["broker_identity_verified"] is True
+    assert ACCOUNT_ID not in repr(resultado)
+    assert "9876.54" not in repr(resultado)
+
+
+def test_prova_recusa_descoberta_quando_ha_mais_de_uma_conta_regular():
+    async def listar(_endpoint, _token, _arguments):
+        return {"balances": [
+            {"balance_id": 123456789, "type": "regular"},
+            {"balance_id": 987654321, "type": "regular"},
+        ]}
+
+    with pytest.raises(IqOptionReadOnlyError, match="exatamente uma conta"):
+        _run(probe_iq_option_read_only_account_async(
+            _env(REAL_READ_ONLY_ACCOUNT_ID="",
+                 IQ_OPTION_CONFIRM_UNIQUE_REGULAR_ACCOUNT=True),
+            balance_reader=listar))
+
+
 def test_prova_recusa_conta_training_e_identidade_diferente():
     async def training(_endpoint, _token, _arguments):
         return {"balances": [{"balance_id": 123456789,
