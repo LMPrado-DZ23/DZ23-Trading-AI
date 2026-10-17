@@ -218,6 +218,11 @@ Exige exatamente um entre `TRAINING`, `PRACTICE` ou `DEMO`, uma única conta e
 tipo de resposta correspondente; enum ausente, ambíguo ou diferente falha
 fechado. Essa etapa é somente leitura e não registra uma homologação: o fill e
 a reconciliação da conta de treino ainda precisam de ato explícito posterior.
+A rota autenticada
+`POST /v1/live/homologacao-iq-option/preparar-conta-treino` expõe essa etapa
+somente quando a IQ Option está selecionada em TESTNET e o proprietário
+confirma a conta de treinamento única. Uma allowlist persiste apenas a prova
+pública; ID, moeda e campos inesperados são descartados.
 
 Depois de autorizar a conexão e carregar o token somente no ambiente local, a
 prova reproduzível pode ser gerada sem credencial na linha de comando:

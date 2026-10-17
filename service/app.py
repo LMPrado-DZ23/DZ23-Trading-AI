@@ -41,6 +41,10 @@ from service.iq_option_read_only import (
     IqOptionReadOnlyError,
     probe_iq_option_read_only_account_async,
 )
+from service.iq_option_training import (
+    IqOptionTrainingAccountError,
+    resolve_iq_option_training_account_async,
+)
 from tradingagents.agency import AgencyTask, build_llm_handler
 from tradingagents.agency.store import AgencyTaskStore
 from tradingagents.agency_runtime import AgencyRuntime
@@ -4912,6 +4916,8 @@ def _fill_de_corretora_externa(d, *, exchange: str,
 
 _CHAVE_HOMOLOGACAO_TESTNET = "homologacao_testnet"
 _SCHEMA_HOMOLOGACAO_TESTNET = "dz23.homologacao-testnet/1"
+_CHAVE_PREPARACAO_IQ_TREINO = "preparacao_iq_option_treino"
+_SCHEMA_PREPARACAO_IQ_TREINO = "dz23.preparacao-iq-treino/1"
 _TOLERANCIA_RELOGIO_TESTNET = timedelta(minutes=5)
 
 
@@ -5803,6 +5809,59 @@ async def live_preparacao_execucao(req: Request, _=Depends(auth),
         "preparacao": _prova_execucao_publica(prova, True),
         "aviso": ("chave LIVE autenticada somente por consultas; nenhuma "
                   "ordem foi enviada e o modo LIVE permanece bloqueado"),
+    }
+
+
+@app.post("/v1/live/homologacao-iq-option/preparar-conta-treino")
+async def preparar_conta_treino_iq_option(
+        req: Request, _=Depends(auth), __=Depends(require_plan)):
+    """Resolve a conta de treino sem executar ferramenta mutavel.
+
+    Esta prova nao satisfaz a homologacao: ela apenas fixa, sem expor o ID,
+    qual saldo de treinamento podera receber um fill explicitamente autorizado
+    e posteriormente reconciliado.
+    """
+    body = await _json_body(req)
+    if body.get("confirmo_conta_treinamento_unica") is not True:
+        raise HTTPException(
+            422, "confirme explicitamente a conta de treinamento unica")
+    tid = request_tenant(req)
+    cfg = load_cfg(tid)
+    if str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower() != "iq_option":
+        raise HTTPException(409, "selecione IQ Option antes desta preparacao")
+    if str(cfg.get("TRADINGAGENTS_BROKER_MODE") or "").strip().lower() != "testnet":
+        raise HTTPException(
+            409, "a conta de treinamento so pode ser preparada em TESTNET")
+    try:
+        account = await resolve_iq_option_training_account_async(
+            _env_live_execution(cfg))
+    except IqOptionTrainingAccountError as exc:
+        raise HTTPException(
+            409, f"conta de treinamento IQ Option recusada: {exc}"[:400]) \
+            from exc
+    public = account.public_proof()
+    allowed_public_fields = (
+        "exchange", "account_kind", "mcp_server", "authenticated_read",
+        "read_methods", "trade_tools_verified", "credential_fingerprint",
+    )
+    proof = {
+        **{key: public[key] for key in allowed_public_fields if key in public},
+        "schema": _SCHEMA_PREPARACAO_IQ_TREINO,
+        "tenant_id": tid,
+        "verificada_em": datetime.now(timezone.utc).isoformat(),
+        "ordem_enviada": False,
+        "homologacao_concluida": False,
+    }
+    esc = _escola_of(req)
+    esc["armazem"].salvar(tid, _CHAVE_PREPARACAO_IQ_TREINO, proof)
+    return {
+        "ok": True,
+        "preparacao": proof,
+        "ordem_enviada": False,
+        "homologacao_concluida": False,
+        "aviso": (
+            "conta de treinamento identificada por leitura; nenhum fill foi "
+            "executado e a homologacao continua pendente"),
     }
 
 
