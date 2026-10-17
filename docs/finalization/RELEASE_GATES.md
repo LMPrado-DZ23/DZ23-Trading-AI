@@ -10,7 +10,7 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
 | Gate | Prova exigida | Estado no HEAD da branch |
 |---|---|---|
-| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.841 passaram, 5 ignorados e 71 subtestes passaram na suíte local integral; 65 testes focados da ativação final, selo, prontidão, resolvedor e runtime IQ passaram; matriz 3.10–3.13 aguardará o push deste HEAD no PR #14 |
+| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.841 passaram, 5 ignorados e 71 subtestes passaram na suíte local integral; 68 testes focados da ativação final, selo, prontidão, resolvedor e runtime IQ passaram; matriz 3.10–3.13 aguardará o push deste HEAD no PR #14 |
 | lint | `ruff check .` | verde local no HEAD e no run `39027792071` do PR #14 |
 | instalação limpa | job CI dedicado | verde no run `39027792071` do PR #14 |
 | dependências/segredos/licenças/SBOM | jobs CI dedicados | verdes no run `39027792071` do PR #14 |
@@ -72,7 +72,9 @@ impressão de identidade. O resolvedor privado entrega ao runtime apenas um
 `balance_id` inteiro positivo, sem expô-lo na prova pública ou no `repr`. A
 fábrica persistente compõe resolvedor, transporte, coordenador, subledger e
 gateway por autorização; selo/frase inválidos bloqueiam antes da rede e o
-restart de uma abertura confirmada não reenvia a ordem.
+restart de uma abertura confirmada não reenvia a ordem. A submissão exige a
+fotografia atual da mesma autorização; revogação, suspensão ou substituição do
+mandato bloqueiam antes de qualquer ferramenta remota.
 Um subledger específico já mantém
 aposta aberta e liquidação por retorno total comprovado, com vitória, perda,
 empate, cancelamento e repetição pós-restart exatamente uma vez. A ativação

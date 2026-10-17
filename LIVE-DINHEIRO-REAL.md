@@ -194,7 +194,10 @@ O módulo `service/iq_option_binary_runtime.py` já monta resolvedor, transporte
 WAL, subledger e gateway como uma unidade persistente vinculada a uma única
 autorização. Selo de código ou frase inválidos bloqueiam antes da leitura da
 conta; identidade divergente bloqueia antes de criar o transporte. Após
-reinício, um pedido já aberto é restaurado sem repetir `place_trade`.
+reinício, um pedido já aberto é restaurado sem repetir `place_trade`. Cada
+submissão futura precisa fornecer uma fotografia atual da mesma autorização;
+revogação, suspensão ou substituição do `authorization_id` falha antes de
+qualquer ferramenta remota.
 
 Esse runtime agora está ligado **somente** à rota final de ativação: depois de
 todos os gates comuns, a rota resolve a conta, valida moeda e identidade e

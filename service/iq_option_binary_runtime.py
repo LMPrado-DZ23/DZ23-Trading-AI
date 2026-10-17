@@ -99,11 +99,21 @@ class IqOptionBinaryRuntime:
             f"authorization={self.authorization.authorization_id!r})"
         )
 
-    def submit_payload(self, payload: dict[str, Any]):
+    def submit_payload(
+            self, payload: dict[str, Any], *,
+            current_authorization: AutorizacaoDePiloto | None = None):
+        if (not isinstance(current_authorization, AutorizacaoDePiloto)
+                or not hmac.compare_digest(
+                    str(current_authorization.authorization_id or ""),
+                    str(self.authorization.authorization_id or ""))
+                or current_authorization.estado
+                is not EstadoDoPiloto.PILOTO_AUTORIZADO):
+            raise IqOptionBinaryRuntimeError(
+                "autorizacao revalidada ausente ou substituida")
         decision = BinaryAgentDecision.from_payload(payload)
         return self.gateway.submit(
             decision,
-            authorization=self.authorization,
+            authorization=current_authorization,
             balance_id=self.account.balance_id,
             account_identity_fingerprint=(
                 self.account.broker_identity_fingerprint),

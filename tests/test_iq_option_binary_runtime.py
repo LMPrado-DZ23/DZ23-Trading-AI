@@ -186,7 +186,8 @@ def test_runtime_composto_persiste_e_executa_so_pelo_gateway_certificado():
         max_order_value="100",
         max_daily_loss="50",
     ))
-    result = runtime.submit_payload(_payload())
+    result = runtime.submit_payload(
+        _payload(), current_authorization=_authorization())
 
     assert result.position_id == "position-1"
     assert [name for name, _ in tools.calls] == ["list_assets", "place_trade"]
@@ -206,12 +207,59 @@ def test_runtime_composto_persiste_e_executa_so_pelo_gateway_certificado():
         max_order_value="100",
         max_daily_loss="50",
     ))
-    replay = restored.submit_payload(_payload())
+    replay = restored.submit_payload(
+        _payload(), current_authorization=_authorization())
 
     assert replay.position_id == "position-1"
     assert tools_after_restart.calls == []
     assert restored.coordinator.ledger.binary_at_risk("position-1") == (
         Decimal("25"))
+
+
+def test_submissao_exige_fotografia_atual_da_autorizacao():
+    tools = FakeTools()
+    runtime = _run(build_iq_option_binary_runtime(
+        env=_env(), tenant_id="tenant-1", authorization=_authorization(),
+        ledger=Ledger(Decimal("1000"), "USD"), store=Store(),
+        live_code_authorized=True,
+        confirmation_phrase=LIVE_CONFIRM_PHRASE,
+        account_resolver=_resolver,
+        transport_factory=lambda **_: tools,
+        now=lambda: NOW,
+        max_order_value="100",
+        max_daily_loss="50",
+    ))
+
+    with pytest.raises(IqOptionBinaryRuntimeError, match="revalidada"):
+        runtime.submit_payload(_payload())
+
+    assert tools.calls == []
+
+
+@pytest.mark.parametrize("current", [
+    _authorization(estado=EstadoDoPiloto.REVOGADO),
+    _authorization(authorization_id="AUT-IQ-2"),
+])
+def test_submissao_recusa_revogacao_ou_mandato_substituido(current):
+    tools = FakeTools()
+    ledger = Ledger(Decimal("1000"), "USD")
+    ledger.reserve(Decimal("25"), ref="risk", reservation_id="risk-1")
+    runtime = _run(build_iq_option_binary_runtime(
+        env=_env(), tenant_id="tenant-1", authorization=_authorization(),
+        ledger=ledger, store=Store(), live_code_authorized=True,
+        confirmation_phrase=LIVE_CONFIRM_PHRASE,
+        account_resolver=_resolver,
+        transport_factory=lambda **_: tools,
+        now=lambda: NOW,
+        max_order_value="100",
+        max_daily_loss="50",
+    ))
+
+    with pytest.raises(IqOptionBinaryRuntimeError, match="revalidada"):
+        runtime.submit_payload(
+            _payload(), current_authorization=current)
+
+    assert tools.calls == []
 
 
 def test_identidade_divergente_falha_antes_de_criar_transporte():
