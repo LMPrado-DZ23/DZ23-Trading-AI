@@ -20,7 +20,7 @@ class TestCustoDoPipeline:
             "a matriz completa deve rodar em main/PR, não a cada push")
 
     def test_dependency_cache_is_enabled_everywhere(self):
-        assert RAW.count("astral-sh/setup-uv@v10") >= 4
+        assert RAW.count("astral-sh/setup-uv@v10.3.0") >= 4
         assert RAW.count("uv sync --locked") >= 4
 
     def test_actions_nao_usam_runtime_node20_depreciado(self):
