@@ -189,3 +189,25 @@ def test_falha_ao_montar_iq_nao_persiste_ativacao_nem_muda_modo(
     assert module._IQ_BINARY_RUNTIMES == {}
     assert saved == {}
     assert store.documents == {}
+
+
+def test_resumo_da_sala_reconhece_runtime_iq_ativo(tmp_path, monkeypatch):
+    module, _client = _app(tmp_path, monkeypatch)
+    module._IQ_BINARY_RUNTIMES["legacy"] = object()
+    monkeypatch.setattr(module, "MESA_LIVE_LIBERADA", True)
+    monkeypatch.setattr(module, "_escola_of", lambda _request: {
+        "central": object(),
+    })
+    monkeypatch.setattr(module, "_supervisor_of", lambda _request:
+                        SimpleNamespace(
+                            vigiar=lambda **_kwargs: None,
+                            encaminhamentos=lambda: [],
+                            relatorio=lambda: [],
+                        ))
+    request = SimpleNamespace(state=SimpleNamespace())
+
+    result = module._resumo_sala_real(request)
+
+    assert result["modo_do_piloto"] == "live (conta real)"
+    assert "mesa LIVE construída" in result["aviso"]
+    assert result["envio_real_habilitado"] is False

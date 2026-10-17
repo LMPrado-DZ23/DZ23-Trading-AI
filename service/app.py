@@ -5557,9 +5557,13 @@ def _resumo_sala_real(request: Request) -> dict:
     desk = _DESKS.get(tid) or {}
     mandato = getattr((desk.get("orchestrator")), "mandate", None)
     live_ativo = bool(
-        str(desk.get("broker_mode") or "").lower() == "live"
-        and getattr(mandato, "live_authorized", False)
-        and MESA_LIVE_LIBERADA)
+        MESA_LIVE_LIBERADA and (
+            tid in _IQ_BINARY_RUNTIMES
+            or (
+                str(desk.get("broker_mode") or "").lower() == "live"
+                and getattr(mandato, "live_authorized", False)
+            )
+        ))
     base = {
         "disponivel": False,
         "modo_do_piloto": ("live (conta real)" if live_ativo
