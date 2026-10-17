@@ -16,6 +16,7 @@ textual reference.
 from __future__ import annotations
 
 import importlib
+import re
 from datetime import datetime, timezone
 
 import pytest
@@ -278,3 +279,39 @@ def test_metrics_requires_auth_and_returns_snapshot(api):
     r = api.get("/metrics", headers=_auth())
     assert r.status_code == 200, r.text
     assert isinstance(r.json(), dict)
+    assert r.json()["schema"] == "dz23.metrics/2"
+    assert any(
+        item["name"] == "http.requests"
+        and item["labels"]["route"] == "/metrics"
+        and item["labels"]["status_class"] == "4xx"
+        for item in r.json()["counter_series"]
+    )
+
+
+def test_http_observability_correlates_without_echoing_unsafe_id(api):
+    safe = "55a95f68-70e7-4c99-98a2-0f2ff9054469"
+    response = api.get("/healthz", headers={"X-Request-ID": safe})
+    assert response.status_code == 200
+    assert response.headers["X-Request-ID"] == safe
+
+    unsafe = "token-like value\nnot-safe"
+    regenerated = api.get("/healthz", headers={"X-Request-ID": unsafe})
+    assert regenerated.status_code == 200
+    assert regenerated.headers["X-Request-ID"] != unsafe
+    assert re.fullmatch(
+        r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
+        regenerated.headers["X-Request-ID"],
+    )
+
+    snapshot = api.get("/metrics", headers=_auth()).json()
+    health_series = [
+        item for item in snapshot["histogram_series"]
+        if item["name"] == "http.request.duration_ms"
+        and item["labels"]["route"] == "/healthz"
+        and item["labels"]["status_class"] == "2xx"
+    ]
+    assert health_series and health_series[0]["count"] >= 2
+    assert health_series[0]["p95_upper_bound"] is not None
+    serialized = str(snapshot)
+    assert safe not in serialized
+    assert "token-like" not in serialized

@@ -24,7 +24,8 @@ Contraprova (controles que precisam passar ANTES e DEPOIS da correção):
   item: a correção troca a evidência, não a fecha para sempre.
 - `pode_operar_real` continua False com TUDO verde: o selo de código
   (MESA_LIVE_LIBERADA=False, ADR-006) segue fechando o caminho.
-- `checklist[0]` continua sendo a frase (consumidor: test_service_leigo.py)
+- `checklist[0]` continua declarando a confirmação no momento da ativação
+  (consumidor: test_service_leigo.py), sem persistir a frase,
   e só o item do selo contém "código" no texto do ITEM (consumidor:
   test_auditoria_fin1_live_desk_seal.py filtra por essa palavra).
 
@@ -51,7 +52,6 @@ CFG_LIVE_COMPLETO = {
     "TRADINGAGENTS_BROKER_MODE": "live",
     "EXCHANGE_API_KEY": "k",
     "EXCHANGE_API_SECRET": "s",
-    "LIVE_TRADING_CONFIRM": "EU AUTORIZO OPERAR COM DINHEIRO REAL",
     "LIVE_MAX_ORDER_VALUE": "50",
     "LIVE_MAX_DAILY_LOSS": "25",
 }
@@ -102,7 +102,9 @@ class TestTetoDeDinheiroHonesto:
             self, tmp_path, monkeypatch, chave, trecho, valor):
         _, c = _app(tmp_path, monkeypatch)
         r = c.post("/v1/config", headers=H, json={"vars": {chave: valor}})
-        assert r.status_code == 200, r.text
+        assert r.status_code == 422, r.text
+        config = c.get("/v1/config", headers=H).json()["config"]
+        assert config[chave]["set"] is False
         item = _item(_status(c), trecho)
         assert item["pronto"] is False, (
             f"{chave}={valor!r} não é teto (a ponte exige Decimal finito > 0) "
@@ -135,13 +137,16 @@ class TestTestnetDeVerdade:
         _com_ordem(m, external_id=external_id)
         assert _item(_status(c), "testnet")["pronto"] is False
 
-    def test_ordem_preenchida_em_corretora_externa_conta(
+    def test_ordem_externa_sem_reconciliacao_duravel_nao_conta(
             self, tmp_path, monkeypatch):
-        """Controle: id opaco de exchange (testnet — a única corretora
-        externa construível com LIVE selado) é evidência verdadeira."""
+        """Um id opaco isolado não prova corretora nem reconciliação.
+
+        A contraprova positiva agora passa pela rota real de reconciliação e
+        fica persistida em ``test_testnet_readiness_proof.py``.
+        """
         m, c = _app(tmp_path, monkeypatch)
         _com_ordem(m, external_id="4380219706")   # id real de exchange
-        assert _item(_status(c), "testnet")["pronto"] is True
+        assert _item(_status(c), "testnet")["pronto"] is False
 
     def test_fill_parcial_nao_conta(self, tmp_path, monkeypatch):
         m, c = _app(tmp_path, monkeypatch)
@@ -169,10 +174,12 @@ class TestPreparacaoExplicita:
         item = _item(_status(c), "identidade")
         assert item["pronto"] is False and item["acao"]
 
-    def test_primeiro_item_continua_sendo_a_frase(self, tmp_path, monkeypatch):
+    def test_primeiro_item_reserva_confirmacao_para_ativacao(
+            self, tmp_path, monkeypatch):
         _, c = _app(tmp_path, monkeypatch)
         d = _status(c)
-        assert "frase" in d["checklist"][0]["item"].lower()
+        assert "momento da ativação" in d["checklist"][0]["item"].lower()
+        assert d["checklist"][0]["pronto"] is True
 
     def test_selo_continua_fechando_mesmo_com_testnet_de_verdade(
             self, tmp_path, monkeypatch):

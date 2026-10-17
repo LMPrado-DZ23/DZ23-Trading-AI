@@ -29,6 +29,7 @@ Contas usadas:
   FEES                   custos de corretagem
   PNL:<agente>           resultado atribuído ao trader
   RESERVED               capital travado por reserva de risco
+  BINARY_OPTION:<id>     aposta binária aberta, ao valor em risco
 """
 from __future__ import annotations
 
@@ -287,6 +288,151 @@ class Ledger:
                 f"({reservado})")
         return self._post("release", [Entry(f"CASH:{self.currency}", amount),
                                       Entry(conta, -amount, "reserva liberada")], ref)
+
+    # -- opções binárias -----------------------------------------------
+    @staticmethod
+    def _valor_finito(value, *, label: str, positivo: bool = False,
+                      nao_negativo: bool = False) -> Decimal:
+        try:
+            parsed = Decimal(str(value))
+        except (ArithmeticError, TypeError, ValueError) as exc:
+            raise LedgerError(f"{label} inválido") from exc
+        if (not parsed.is_finite() or (positivo and parsed <= ZERO)
+                or (nao_negativo and parsed < ZERO)):
+            raise LedgerError(f"{label} inválido")
+        return parsed
+
+    @staticmethod
+    def _binary_account(position_id: str) -> str:
+        target = str(position_id or "").strip()
+        if not target or len(target) > 200 or any(c in target for c in "\r\n"):
+            raise LedgerError("position_id binário inválido")
+        return f"BINARY_OPTION:{target}"
+
+    def binary_at_risk(self, position_id: str = "") -> Decimal:
+        """Capital já aceito pela corretora e ainda sem liquidação."""
+        if position_id:
+            return self.balance(self._binary_account(position_id))
+        return sum((value for account, value in self.balances().items()
+                    if account.startswith("BINARY_OPTION:")), ZERO)
+
+    def binary_open(self, *, position_id: str, stake: Decimal,
+                    reservation_id: str, instrument: str,
+                    agent_id: str) -> Transaction:
+        """Move a aposta confirmada da reserva para o subledger binário.
+
+        O lançamento só acontece depois de existir ``position_id`` oficial.
+        Antes disso, inclusive em timeout ambíguo, o dinheiro permanece na
+        reserva até a reconciliação provar o destino.
+        """
+        account = self._binary_account(position_id)
+        amount = self._valor_finito(stake, label="aposta binária", positivo=True)
+        rid = str(reservation_id or "").strip()
+        symbol = str(instrument or "").strip()
+        owner = str(agent_id or "").strip()
+        if not rid or not symbol or not owner:
+            raise LedgerError(
+                "abertura binária exige reserva, instrumento e agente")
+
+        existing = [tx for tx in self._txs
+                    if tx.kind == "binary_open" and tx.ref == position_id]
+        if existing:
+            tx = existing[0]
+            stored = sum((entry.amount for entry in tx.entries
+                          if entry.account == account), ZERO)
+            reserve_account = self.conta_reserva(rid)
+            same_reserve = any(
+                entry.account == reserve_account and entry.amount == -amount
+                for entry in tx.entries)
+            if (len(existing) == 1 and stored == amount and same_reserve
+                    and tx.instrument == symbol and tx.agent_id == owner):
+                return tx
+            raise LedgerError(
+                "conflito na abertura binária: position_id já possui outro "
+                "conteúdo")
+        if any(tx.settlement_id == position_id for tx in self._txs
+               if tx.kind == "binary_settlement"):
+            raise LedgerError(
+                "conflito na abertura binária: posição já foi liquidada")
+        reserved = self.reserved_cash(rid)
+        if amount > reserved:
+            raise LedgerError(
+                f"aposta binária de {amount} excede a reserva {rid} ({reserved})")
+        memo = f"aposta binária confirmada | posição {position_id}"
+        return self._post(
+            "binary_open",
+            [Entry(account, amount, memo),
+             Entry(self.conta_reserva(rid), -amount, memo)],
+            position_id, instrument=symbol, quantity=amount, agent_id=owner,
+            purpose="BINARY_OPEN")
+
+    def binary_settle(self, *, position_id: str, result: str,
+                      returned_amount: Decimal) -> Transaction:
+        """Liquida exatamente uma aposta pelo RETORNO TOTAL confirmado.
+
+        ``returned_amount`` não é o campo ambíguo ``profit`` do provedor. É o
+        total que voltou ao caixa para esta posição. A camada de integração
+        precisa provar essa semântica antes de chamar o livro.
+        """
+        account = self._binary_account(position_id)
+        outcome = str(result or "").strip().lower()
+        if outcome not in {"win", "loss", "equal", "canceled"}:
+            raise LedgerError("resultado de liquidação binária inválido")
+        returned = self._valor_finito(
+            returned_amount, label="liquidação binária", nao_negativo=True)
+        openings = [tx for tx in self._txs
+                    if tx.kind == "binary_open" and tx.ref == position_id]
+        if len(openings) != 1:
+            raise LedgerError(
+                "liquidação binária exige uma abertura identificada")
+        opening = openings[0]
+        stake = sum((entry.amount for entry in opening.entries
+                     if entry.account == account), ZERO)
+        if stake <= ZERO:
+            raise LedgerError("liquidação binária encontrou abertura inválida")
+
+        purpose = f"BINARY_SETTLEMENT:{outcome.upper()}"
+        existing = [tx for tx in self._txs
+                    if tx.kind == "binary_settlement"
+                    and tx.settlement_id == position_id]
+        if existing:
+            tx = existing[0]
+            stored_return = sum((entry.amount for entry in tx.entries
+                                 if entry.account == f"CASH:{self.currency}"), ZERO)
+            if (len(existing) == 1 and tx.purpose == purpose
+                    and stored_return == returned
+                    and tx.instrument == opening.instrument
+                    and tx.agent_id == opening.agent_id
+                    and tx.quantity == stake):
+                return tx
+            raise LedgerError(
+                "conflito na liquidação binária: position_id já possui outro "
+                "resultado")
+
+        valid = ((outcome == "win" and returned > stake)
+                 or (outcome == "loss" and returned == ZERO)
+                 or (outcome == "equal" and returned == stake)
+                 or (outcome == "canceled" and ZERO <= returned <= stake))
+        if not valid:
+            raise LedgerError(
+                "liquidação binária incompatível com o resultado informado")
+        if self.balance(account) != stake:
+            raise LedgerError(
+                "liquidação binária sem exposição viva correspondente")
+
+        pnl_balance = stake - returned
+        memo = (f"liquidação binária {outcome} | posição {position_id} | "
+                f"retorno total {returned}")
+        entries = [Entry(account, -stake, memo)]
+        if returned:
+            entries.append(Entry(f"CASH:{self.currency}", returned, memo))
+        if pnl_balance:
+            entries.append(Entry(f"PNL:{opening.agent_id}", pnl_balance, memo))
+        return self._post(
+            "binary_settlement", entries, position_id,
+            instrument=opening.instrument, quantity=stake,
+            agent_id=opening.agent_id, purpose=purpose,
+            settlement_id=position_id)
 
     def transferir_reserva_legada(self, amount: Decimal,
                                   reservation_id: str) -> Transaction:
@@ -1079,7 +1225,8 @@ class Ledger:
         """
         total = ZERO
         for conta, saldo in self.balances().items():
-            if conta.startswith("POSITION:"):
+            if (conta.startswith("POSITION:")
+                    or conta.startswith("BINARY_OPTION:")):
                 total += saldo
         return total
 
@@ -1292,10 +1439,12 @@ class Ledger:
                 if acc.startswith("POSITION:") and bal > ZERO}
 
     def equity(self) -> Decimal:
-        """Caixa + reservado + posições ao custo. Não estima preço de mercado."""
-        b = self.balances()
-        return (b.get(f"CASH:{self.currency}", ZERO) + b.get("RESERVED", ZERO)
-                + sum((v for k, v in b.items() if k.startswith("POSITION:")), ZERO))
+        """Alias legado da visão canônica de patrimônio ao custo.
+
+        Delegar evita que novas contas de exposição (reservas identificadas ou
+        opções binárias) desapareçam de uma das duas visões de patrimônio.
+        """
+        return self.portfolio_equity()
 
 
 __all__ = ["Ledger", "Entry", "Transaction", "LedgerError"]

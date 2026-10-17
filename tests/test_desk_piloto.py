@@ -159,6 +159,208 @@ def _entrada_sorteada(t, n=2000):
 
 
 class TestCadeiaObrigatoria:
+    CONTEXTO = {
+        "corretora": "binance", "conta": "paper-1", "mercado": "spot",
+        "modo": "paper", "ativo": "BTC/USDT", "horizonte": "1h",
+    }
+
+    def test_formatura_encaminha_para_sala_real_sem_autorizar(self):
+        sup, _, _ = _supervisor_formado()
+        fila = sup.encaminhar_formado(
+            AGENTE, estrategia="trend_following", contexto=self.CONTEXTO,
+            agora=AGORA)
+        assert fila["estado"] == "aguardando_configuracao_do_proprietario"
+        assert fila["authorization_id"] is None
+        assert sup.de(AGENTE) is None
+        assert "sala REAL" in sup.bloqueios()[AGENTE]
+        with pytest.raises(ValueError, match="não tem pedido"):
+            sup.autorizar(AGENTE, gates=_gates_ok(), agora=AGORA)
+
+    def test_encaminhamento_e_idempotente_persistente_e_consumido(self):
+        arm = ArmazemFake()
+        esc, _ = _escola_formada()
+        sup = SupervisorDePiloto(armazem=arm, escola=esc)
+        primeiro = sup.encaminhar_formado(
+            AGENTE, estrategia="trend_following", contexto=self.CONTEXTO,
+            agora=AGORA)
+        segundo = sup.encaminhar_formado(
+            AGENTE, estrategia="trend_following", contexto=self.CONTEXTO,
+            agora=AGORA + timedelta(minutes=1))
+        assert primeiro["encaminhamento_id"] == segundo["encaminhamento_id"]
+        assert len(sup.encaminhamentos()) == 1
+        sup2 = SupervisorDePiloto(armazem=arm, escola=esc)
+        assert len(sup2.encaminhamentos()) == 1
+        _solicitar(sup2, contexto=self.CONTEXTO)
+        fila = sup2.encaminhamentos()[0]
+        assert fila["estado"] == "configurado_aguardando_autorizacao"
+        assert fila["authorization_id"] == sup2.de(AGENTE).authorization_id
+
+    @pytest.mark.parametrize(
+        "estrategia,versao",
+        [("trend_following", "2"), ("momentum", "1")],
+    )
+    def test_fila_isola_formatura_por_estrategia_e_versao(
+            self, estrategia, versao):
+        class EscolaSempreFormada:
+            @staticmethod
+            def elegivel_para_live(_estrategia, _versao):
+                return True, "formatura válida no contexto"
+
+        sup = SupervisorDePiloto(
+            armazem=ArmazemFake(), escola=EscolaSempreFormada())
+        primeira = sup.encaminhar_formado(
+            AGENTE, estrategia="trend_following", versao="1",
+            contexto=self.CONTEXTO, agora=AGORA)
+
+        nova = sup.encaminhar_formado(
+            AGENTE, estrategia=estrategia, versao=versao,
+            contexto=self.CONTEXTO, agora=AGORA + timedelta(minutes=1))
+
+        assert nova["encaminhamento_id"] != primeira["encaminhamento_id"]
+        assert {(item["estrategia"], item["versao"])
+                for item in sup.encaminhamentos()} == {
+                    ("trend_following", "1"), (estrategia, versao)}
+
+    def test_chave_legada_e_reindexada_sem_duplicar_encaminhamento(self):
+        arm = ArmazemFake()
+        esc, _ = _escola_formada()
+        sup = SupervisorDePiloto(armazem=arm, escola=esc)
+        primeira = sup.encaminhar_formado(
+            AGENTE, estrategia="trend_following", versao="1",
+            contexto=self.CONTEXTO, agora=AGORA)
+        payload = arm.dados[("legacy", SupervisorDePiloto.CHAVE_ARMAZEM)]
+        registro = next(iter(payload["encaminhamentos"].values()))
+        payload["encaminhamentos"] = {"chave-legada": registro}
+
+        recarregado = SupervisorDePiloto(armazem=arm, escola=esc)
+        repetido = recarregado.encaminhar_formado(
+            AGENTE, estrategia="trend_following", versao="1",
+            contexto=self.CONTEXTO, agora=AGORA + timedelta(minutes=1))
+
+        assert repetido["encaminhamento_id"] == primeira["encaminhamento_id"]
+        assert len(recarregado.encaminhamentos()) == 1
+        chaves_salvas = arm.dados[(
+            "legacy", SupervisorDePiloto.CHAVE_ARMAZEM)]["encaminhamentos"]
+        assert "chave-legada" not in chaves_salvas
+
+    def test_autorizacao_de_versao_antiga_nao_e_herdada_por_nova_formatura(
+            self):
+        class EscolaSempreFormada:
+            @staticmethod
+            def elegivel_para_live(_estrategia, _versao):
+                return True, "formatura válida no contexto"
+
+        sup = SupervisorDePiloto(
+            armazem=ArmazemFake(), escola=EscolaSempreFormada())
+        antiga = _solicitar(sup, contexto=self.CONTEXTO, versao="1")
+        sup.autorizar(AGENTE, gates=_gates_ok(), agora=AGORA)
+
+        nova = sup.encaminhar_formado(
+            AGENTE, estrategia="trend_following", versao="2",
+            contexto=self.CONTEXTO, agora=AGORA + timedelta(minutes=1))
+
+        assert nova["authorization_id"] is None
+        assert nova["estado"] == "aguardando_configuracao_do_proprietario"
+        assert antiga.authorization_id != nova["authorization_id"]
+
+    def test_encaminhamento_tardio_nao_regride_piloto_ja_autorizado(self):
+        sup, _, _ = _supervisor_formado()
+        _solicitar(sup, contexto=self.CONTEXTO)
+        autorizado = sup.autorizar(AGENTE, gates=_gates_ok(), agora=AGORA)
+
+        fila = sup.encaminhar_formado(
+            AGENTE, estrategia="trend_following", contexto=self.CONTEXTO,
+            agora=AGORA + timedelta(minutes=1))
+
+        assert fila["authorization_id"] == autorizado.authorization_id
+        assert fila["estado"] == "piloto_autorizado"
+        assert AGENTE not in sup.bloqueios(agora=AGORA + timedelta(minutes=2))
+
+    def test_fila_existente_acompanha_autorizacao_e_revogacao_persistidas(self):
+        """A Sala REAL precisa refletir a cadeia comum, não só a tardia."""
+        sup, esc, _ = _supervisor_formado()
+        fila = sup.encaminhar_formado(
+            AGENTE, estrategia="trend_following", contexto=self.CONTEXTO,
+            agora=AGORA)
+        _solicitar(sup, contexto=self.CONTEXTO, agora=AGORA)
+
+        autorizado = sup.autorizar(
+            AGENTE, gates=_gates_ok(), agora=AGORA + timedelta(minutes=1))
+
+        fila_autorizada = sup.encaminhamentos()[0]
+        assert fila_autorizada["encaminhamento_id"] == fila["encaminhamento_id"]
+        assert fila_autorizada["authorization_id"] == autorizado.authorization_id
+        assert fila_autorizada["estado"] == "piloto_autorizado"
+        assert fila_autorizada["atualizada_em"] == (
+            AGORA + timedelta(minutes=1)).isoformat()
+        recarregado = SupervisorDePiloto(
+            armazem=sup.armazem, escola=esc).encaminhamentos()[0]
+        assert recarregado["estado"] == "piloto_autorizado"
+
+        sup.revogar(
+            AGENTE, motivo="decisão do proprietário",
+            agora=AGORA + timedelta(minutes=2))
+
+        fila_revogada = sup.encaminhamentos()[0]
+        assert fila_revogada["estado"] == "revogado"
+        assert fila_revogada["atualizada_em"] == (
+            AGORA + timedelta(minutes=2)).isoformat()
+
+    def test_fila_existente_acompanha_expiracao_e_suspensao(self):
+        sup, _, _ = _supervisor_formado()
+        sup.encaminhar_formado(
+            AGENTE, estrategia="trend_following", contexto=self.CONTEXTO,
+            agora=AGORA)
+        _solicitar(sup, contexto=self.CONTEXTO, agora=AGORA, prazo_dias=1)
+        sup.autorizar(AGENTE, gates=_gates_ok(), agora=AGORA)
+
+        sup.vigiar(agora=AGORA + timedelta(days=1))
+
+        assert sup.de(AGENTE).estado is EstadoDoPiloto.EXPIRADO
+        assert sup.encaminhamentos()[0]["estado"] == "expirado"
+
+        outro, escola, formado_em = _supervisor_formado()
+        outro.encaminhar_formado(
+            AGENTE, estrategia="trend_following", contexto=self.CONTEXTO,
+            agora=AGORA)
+        _solicitar(outro, contexto=self.CONTEXTO, agora=AGORA)
+        outro.autorizar(AGENTE, gates=_gates_ok(), agora=AGORA)
+        _revogar_escola(escola, "trend_following", formado_em)
+
+        outro.vigiar(agora=AGORA + timedelta(minutes=1))
+
+        assert outro.de(AGENTE).estado is EstadoDoPiloto.SUSPENSO
+        assert outro.encaminhamentos()[0]["estado"] == "suspenso"
+
+    def test_formatura_revogada_retira_fila_ainda_sem_limites(self):
+        sup, escola, formado_em = _supervisor_formado()
+        sup.encaminhar_formado(
+            AGENTE, estrategia="trend_following", contexto=self.CONTEXTO,
+            agora=AGORA)
+        _revogar_escola(escola, "trend_following", formado_em)
+
+        notas = sup.vigiar(agora=AGORA + timedelta(minutes=1))
+
+        fila = sup.encaminhamentos()[0]
+        assert fila["estado"] == "elegibilidade_retirada"
+        assert "escola" in fila["motivo_elegibilidade"]
+        assert any("fila REAL RETIRADA" in nota for nota in notas)
+        assert "elegibilidade retirada" in sup.bloqueios()[AGENTE]
+
+    def test_formatura_revogada_suspende_pedido_antes_da_autorizacao(self):
+        sup, escola, formado_em = _supervisor_formado()
+        sup.encaminhar_formado(
+            AGENTE, estrategia="trend_following", contexto=self.CONTEXTO,
+            agora=AGORA)
+        _solicitar(sup, contexto=self.CONTEXTO, agora=AGORA)
+        _revogar_escola(escola, "trend_following", formado_em)
+
+        notas = sup.vigiar(agora=AGORA + timedelta(minutes=1))
+
+        assert sup.de(AGENTE).estado is EstadoDoPiloto.SUSPENSO
+        assert sup.encaminhamentos()[0]["estado"] == "suspenso"
+        assert any("SUSPENSO" in nota for nota in notas)
+
     def test_sem_formatura_solicitar_recusa(self):
         esc = EscolaDeTraders(armazem=ArmazemFake())
         sup = SupervisorDePiloto(armazem=ArmazemFake(), escola=esc)
@@ -203,6 +405,20 @@ class TestCadeiaObrigatoria:
             _solicitar(sup, prazo_dias=0)
         assert sup.de(AGENTE) is None
 
+    @pytest.mark.parametrize(
+        "campo,valor",
+        [("capital_maximo", Decimal("NaN")),
+         ("perda_diaria_maxima", Decimal("Infinity")),
+         ("perda_total_maxima", Decimal("-Infinity"))],
+    )
+    def test_limites_nao_finitos_recusados_no_supervisor(self, campo, valor):
+        sup, _, _ = _supervisor_formado()
+
+        with pytest.raises(ValueError, match="finitos"):
+            _solicitar(sup, **{campo: valor})
+
+        assert sup.de(AGENTE) is None
+
     def test_autorizar_sem_pedido_recusa(self):
         sup, _, _ = _supervisor_formado()
         with pytest.raises(ValueError, match="não tem pedido"):
@@ -219,6 +435,35 @@ class TestCadeiaObrigatoria:
                           gates=[{"gate": "risco", "ok": True, "detalhe": ""}],
                           agora=AGORA)
         assert sup.de(AGENTE).estado is EstadoDoPiloto.AGUARDANDO_AUTORIZACAO
+
+    def test_autorizar_revalida_formatura_no_ultimo_instante(self):
+        sup, esc, t2 = _supervisor_formado()
+        _solicitar(sup)
+        _revogar_escola(esc, "trend_following", t2)
+        with pytest.raises(ValueError, match="elegibilidade retirada"):
+            sup.autorizar(AGENTE, gates=_gates_ok(), agora=AGORA)
+        assert sup.de(AGENTE).estado is EstadoDoPiloto.AGUARDANDO_AUTORIZACAO
+
+    def test_live_bloqueia_todo_agente_sem_autorizacao_explicita(self):
+        sup, _, _ = _supervisor_formado()
+        assert "outro-agente" not in sup.bloqueios(
+            agentes_esperados=["outro-agente"])
+        bloqueios = sup.bloqueios(
+            exigir_autorizacao=True,
+            agentes_esperados=[AGENTE, "outro-agente"])
+        assert set(bloqueios) == {AGENTE, "outro-agente"}
+        assert all("LIVE exige piloto" in motivo
+                   for motivo in bloqueios.values())
+
+    def test_live_libera_somente_o_piloto_autorizado(self):
+        sup, _, _ = _supervisor_formado()
+        _solicitar(sup)
+        sup.autorizar(AGENTE, gates=_gates_ok(), agora=AGORA)
+        bloqueios = sup.bloqueios(
+            exigir_autorizacao=True,
+            agentes_esperados=[AGENTE, "outro-agente"], agora=AGORA)
+        assert AGENTE not in bloqueios
+        assert "outro-agente" in bloqueios
 
     def test_cadeia_completa_autoriza(self):
         sup, _, _ = _supervisor_formado()
@@ -280,6 +525,50 @@ class TestLimitesEVigia:
                           perda_hoje={AGENTE: Decimal("49.99")},
                           perda_total={AGENTE: Decimal("199.99")})
         assert b == {}
+
+    @pytest.mark.parametrize(
+        "campo,valor",
+        [("capital_em_uso", Decimal("NaN")),
+         ("capital_em_uso", Decimal("Infinity")),
+         ("capital_em_uso", Decimal("-Infinity")),
+         ("perda_hoje", Decimal("NaN")),
+         ("perda_hoje", Decimal("Infinity")),
+         ("perda_hoje", Decimal("-Infinity")),
+         ("perda_total", Decimal("NaN")),
+         ("perda_total", Decimal("Infinity")),
+         ("perda_total", Decimal("-Infinity")),
+         ("capital_em_uso", "telemetria-corrompida"),
+         ("capital_em_uso", Decimal("-1")),
+         ("perda_hoje", Decimal("-0.01")),
+         ("perda_total", Decimal("-0.01"))],
+    )
+    def test_metrica_de_risco_invalida_bloqueia_sem_quebrar_o_vigia(
+            self, campo, valor):
+        sup, _, _ = self._autorizado()
+
+        bloqueios = sup.bloqueios(
+            agora=AGORA, **{campo: {AGENTE: valor}})
+
+        assert "métrica de risco" in bloqueios[AGENTE]
+        assert sup.de(AGENTE).estado is EstadoDoPiloto.PILOTO_AUTORIZADO
+
+    @pytest.mark.parametrize(
+        "alteracoes",
+        [{"capital_maximo": "NaN"},
+         {"capital_maximo": "0"},
+         {"perda_diaria_maxima": "-1"},
+         {"perda_total_maxima": "0"},
+         {"perda_diaria_maxima": "300", "perda_total_maxima": "200"}],
+    )
+    def test_limite_persistido_invalido_suspende_piloto_fail_closed(
+            self, alteracoes):
+        sup, _, _ = self._autorizado()
+        sup._autorizacoes[AGENTE].update(alteracoes)
+
+        bloqueios = sup.bloqueios(agora=AGORA)
+
+        assert "limites persistidos inválidos" in bloqueios[AGENTE]
+        assert sup.de(AGENTE).estado is EstadoDoPiloto.SUSPENSO
 
     def test_prazo_vencido_expira(self):
         sup, _, _ = self._autorizado(prazo_dias=1)

@@ -1,0 +1,37 @@
+schema: dz23.alert-policy/1
+source:
+  health: /healthz
+  readiness: /readyz
+  metrics: /metrics
+  metrics_auth: bearer_from_secret_store
+evaluation:
+  interval_seconds: 30
+  note: counter rates and histogram windows are deltas between collector snapshots
+rules:
+  - id: DZ23ApiUnavailable
+    severity: page
+    for: 2m
+    condition: health_http_status != 200
+    runbook: docs/runbooks/api-unavailable.md
+  - id: DZ23HttpErrorBudgetBurn
+    severity: page
+    window: 5m
+    minimum_requests: 20
+    condition: rate(http.requests{status_class="5xx"}) / rate(http.requests) > 0.01
+    runbook: docs/runbooks/http-error-budget.md
+  - id: DZ23HttpLatencyHigh
+    severity: ticket
+    window: 5m
+    minimum_requests: 20
+    condition: p95(http.request.duration_ms) > 2000
+    runbook: docs/runbooks/http-latency.md
+  - id: DZ23SafetyBlocked
+    severity: page
+    for: 1m
+    condition: readiness.kill_switch == true
+    runbook: docs/runbooks/safety-blocked.md
+  - id: DZ23TelemetrySeriesDropped
+    severity: ticket
+    for: 5m
+    condition: delta(telemetry.series_dropped) > 0
+    runbook: docs/runbooks/telemetry-series-dropped.md

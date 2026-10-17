@@ -6,10 +6,39 @@ Data: 2026-10-12
 A plataforma pessoal não ficará restrita a seis corretoras. `service/personal_exchange_discovery.py` descobre dinamicamente os IDs expostos pela versão **instalada** da CCXT, sem presumir um número fixo de exchanges ou que todas as funções existam. A listagem publicada pela CCXT indicava 103 corretoras de cripto e 9 mercados de previsão no dia da consulta; o conjunto disponível no runtime depende do pacote efetivamente instalado.
 
 ## Status real desta fatia
-- Implementado: descoberta local dos IDs da CCXT e seleção declarativa para **futura homologação**. Nenhuma credencial, requisição à exchange ou envio de ordem é realizado pelo catálogo.
-- Implementado: testes unitários de deduplicação, nomes inválidos, seleção e impossibilidade de habilitar execução pelo catálogo.
-- **Ainda pendente**: integrar catálogo à API e ao painel, matriz de capacidades (readTicker/ohlcv/orderBook/balances/orders), verificação pública sem credenciais, API autenticada para paper/testnet em cada exchange, restrições geográficas, taxa/rate limits, telemetria, CI e E2E.
-- IQ Option permanece **fora de CCXT**, como sala experimental separada.
+- Implementado: catálogo explícito de nove corretoras CCXT e uma sala separada
+  para a IQ Option, integrado à API e ao painel. O catálogo nunca instancia
+  credenciais nem habilita LIVE.
+- Implementado: prova pública e sem credenciais de ticker + OHLCV nas nove
+  corretoras CCXT. A evidência versionada
+  `docs/mission/evidence/real-readiness/corretoras-publicas.json` registra
+  `9/9 PUBLIC_READ_OK`, `credenciais_usadas=false` e
+  `ordens_enviadas=false`.
+- Implementado: matriz de capacidades e credenciais mínimas por corretora,
+  separando TESTNET nativo de leitura/preparação interna. Uma corretora sem
+  sandbox nativo não é anunciada como TESTNET operacional.
+- Implementado: prova autenticada somente leitura por conta REAL, sem
+  persistir saldo, ordens ou identificador privado, e prova TESTNET vinculada
+  à corretora, fingerprint da credencial e instante do vínculo.
+- Implementado: testes unitários, adversariais, integração, CI e E2E para
+  catálogo, probes públicos, preparação REAL e bloqueio de LIVE.
+- IQ Option permanece **fora de CCXT**, como sala separada. Os sete handshakes
+  oficiais e seus contratos foram validados em 2026-10-16. A sonda passiva
+  executa apenas `initialize` e `tools/list`. Um módulo isolado prepara a prova
+  de conta com uma única chamada literal `list_balances({types: NORMAL})`,
+  revalida o contrato e recusa qualquer ferramenta mutável antes de chamar,
+  então descarta saldo, moeda e ID bruto. Esse
+  módulo não contém nomes nem caminhos de ferramentas mutáveis. A primeira
+  consulta autenticada de conta ainda depende da identificação da conta pelo
+  proprietário; portanto o estado é **preparado**, não homologado. O
+  PolicyLayer continua sem registro publicado para os sete identificadores
+  (`unknown`). Nenhuma dessas provas habilita ordens. Em 2026-10-17, o token
+  `DZ23 Read Only` foi criado no painel oficial com `Read access` ligado e os
+  nove controles de `Trading access` desligados. O catálogo remoto confirmou
+  60 ferramentas de leitura, zero mutáveis, zero desconhecidas e zero
+  ausentes nos sete endpoints. O gate de permissão mínima do token está
+  satisfeito; resta a prova de conta com `list_balances(NORMAL)` e comparação
+  da identidade sem persistir o ID bruto.
 - Operações LIVE continuam bloqueadas. Listar uma corretora **não** significa que sua integração foi testada ou liberada para ordens.
 
 ## Política para muitas exchanges
@@ -22,4 +51,10 @@ A plataforma pessoal não ficará restrita a seis corretoras. `service/personal_
 7. Integrar monitoramento de falhas: manutenção, erro de assinatura, mercado proibido, stream stale, saldo divergente, reconciliação, latência e circuit breaker.
 
 ## Evidência
-Commits desta branch contêm `service/personal_exchange_discovery.py` e `tests/test_personal_exchange_discovery.py`. Os testes ainda exigem execução no CI/ambiente autorizado; o arquivo não constitui comprovante de testes aprovados.
+Commits desta branch contêm `service/personal_exchange_discovery.py` e
+`tests/test_personal_exchange_discovery.py`. A descoberta, o catálogo, os
+probes públicos e os gates de corretora estão cobertos pela suíte local e pela
+CI do PR #14. A evidência de rede pública está em
+`docs/mission/evidence/real-readiness/corretoras-publicas.json`. Provas de
+conta autenticada e TESTNET continuam externas e não podem ser inferidas dos
+testes automatizados.

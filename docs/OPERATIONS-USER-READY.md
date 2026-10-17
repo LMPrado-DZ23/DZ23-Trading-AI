@@ -17,21 +17,82 @@ MT5_MODE=DEMO
 
 ## Instalação local
 
-```bash
-git clone https://github.com/LMPrado-DZ23/tradingagents-dz23.git
-cd tradingagents-dz23
-git checkout feat/dz23-trading-agency
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -e ".[dev]"
-cp .env.agency.example .env
-mkdir -p data
-export DATA_DIR="$PWD/data"
-export ACCESS_PASSWORD='defina-uma-senha-forte-fora-do-codigo'
-uvicorn service.app:app --host 127.0.0.1 --port 8000
+```powershell
+git clone https://github.com/LMPrado-DZ23/DZ23-Trading-AI.git
+Set-Location DZ23-Trading-AI
+git checkout main
+uv sync --extra desk --extra dev
+Copy-Item .env.agency.example .env
+New-Item -ItemType Directory -Force data | Out-Null
+$env:DATA_DIR = (Resolve-Path data).Path
+$env:ACCESS_PASSWORD = Read-Host 'Defina a senha forte do dono'
+uv run uvicorn service.app:app --host 127.0.0.1 --port 8000
 ```
 
+Enquanto o PR #14 ainda não tiver sido integrado, a reprodução exata do
+release candidate deve usar a branch `feat/real-room-auto-handoff` e conferir
+o SHA registrado em `docs/finalization/RELEASE_GATES.md`. Não use uma branch
+antiga de outro repositório como fonte de instalação.
+
 O endpoint `/healthz` verifica se o processo está vivo. O endpoint `/readyz` verifica se o modo operacional não está bloqueado pelo KillSwitch e se o Paper Adapter está disponível. A API protegida exige Bearer Token igual ao valor de `ACCESS_PASSWORD`.
+
+## Assinatura do instalador Windows
+
+Builds de branch podem gerar artefatos de teste sem certificado, sempre
+marcados por `SIGNING_STATUS.txt` como `UNSIGNED_TEST_ARTIFACT`. Uma tag de
+release `v*` falha fechada antes de publicar se o certificado Authenticode
+não estiver configurado.
+
+O proprietário deve adquirir um certificado confiável de assinatura de
+código com chave privada exportável em PFX e cadastrar, pela interface segura
+do GitHub, estes dois secrets do repositório:
+
+- `WINDOWS_SIGNING_CERTIFICATE_BASE64`: conteúdo Base64 do PFX;
+- `WINDOWS_SIGNING_CERTIFICATE_PASSWORD`: senha do PFX.
+
+Nunca coloque o PFX, Base64 ou senha em commit, issue, PR, log ou chat. Para
+carregar o certificado a partir de uma estação Windows confiável, o Base64
+pode ser enviado diretamente ao `gh` sem arquivo intermediário versionado:
+
+```powershell
+[Convert]::ToBase64String(
+  [IO.File]::ReadAllBytes('C:\caminho-local-seguro\certificado.pfx')
+) | gh secret set WINDOWS_SIGNING_CERTIFICATE_BASE64
+gh secret set WINDOWS_SIGNING_CERTIFICATE_PASSWORD
+```
+
+O segundo comando solicita o valor de forma interativa. No runner hospedado,
+o workflow importa o PFX no store efêmero, assina e verifica o executável e o
+instalador com SHA-256 e timestamp RFC 3161, e remove certificado e PFX mesmo
+se uma etapa posterior falhar. O Release só pode ser publicado depois do
+aceite E2E do mesmo bundle. Antes de distribuir, confirme
+`SIGNING_STATUS.txt=SIGNED`, `Get-AuthenticodeSignature` com estado `Valid` e
+os hashes de `SHA256SUMS.txt`. Certificado expirado, revogado, sem chave
+privada ou com configuração parcial deve bloquear o release.
+
+O endpoint autenticado `/v1/operational-readiness` é a fonte canônica por
+instalação para a preparação de dinheiro real. Ele consolida o checklist sem
+modificar estado e sempre declara se o envio real está habilitado. O preflight
+local pode ser repetido e salvo sem colocar o token na linha de comando:
+
+```bash
+export ACCESS_PASSWORD='carregue-o pelo mecanismo seguro do host'
+python3 scripts/real_readiness_check.py \
+  --base-url http://127.0.0.1:8000 \
+  --target preparacao \
+  --output ./data/evidence/real-readiness.json
+unset ACCESS_PASSWORD
+```
+
+Saída `preparado_sem_live` significa somente que os pré-requisitos anteriores
+ao selo foram comprovados. Não autoriza LIVE. `--target live` permanece
+bloqueado até uma futura liberação de código auditada e confirmação do dono no
+momento da ação.
+
+O gate operacional também exige uma janela contínua RED e entrega de alerta
+externo. Execute `scripts/verify_observability_window.py` conforme
+`docs/OBSERVABILITY.md`; URL, bearer e canal são lidos exclusivamente do
+ambiente, e a prova sanitizada expira em 24 horas.
 
 ## Fluxo recomendado
 
@@ -61,20 +122,52 @@ curl -X POST http://127.0.0.1:8000/v1/execution/kill-switch \
 
 ## Backup e restore
 
-O backup inclui apenas os arquivos operacionais permitidos e **não inclui `config.json` nem chaves de API**:
+O backup local inclui configuração, credenciais armazenadas, identidade do
+proprietário, bancos locais, Escola, Sala REAL, pilotos, provas, journals,
+kill switch, estados PAPER/SHADOW e checkpoints. Por isso o pacote é criado
+com permissão restrita e deve ser tratado como segredo:
 
 ```bash
-python3 scripts/backup_data.py backup ./data ./backups/dz23-$(date -u +%Y%m%dT%H%M%SZ).tar.gz
+python3 scripts/backup_data.py backup ./data ./data/backups/dz23-$(date -u +%Y%m%dT%H%M%SZ).tar.gz
+python3 scripts/backup_data.py inspect ./data/backups/dz23-ARQUIVO.tar.gz
 ```
 
-Para restaurar, pare o serviço, preserve a pasta atual, restaure e verifique o healthcheck:
+Para restaurar, pare o serviço, preserve a pasta atual e restaure primeiro em
+um diretório vazio:
 
 ```bash
-python3 scripts/backup_data.py restore ./backups/arquivo.tar.gz ./data
-python3 -m pytest -q
+python3 scripts/backup_data.py restore ./data-restaurado ./data/backups/arquivo.tar.gz
+python3 scripts/verify_local_restore.py \
+  --data-dir ./data --archive ./data/backups/arquivo.tar.gz
 ```
 
-O arquivo de backup deve ser armazenado de forma protegida. Ele pode conter histórico operacional e configurações; não o publique nem o envie para repositórios públicos.
+Suba uma instância isolada sobre `./data-restaurado` e confira healthchecks,
+login, Escola, pilotos, journals e reconciliação antes de trocar o volume. O
+manifesto e os hashes são verificados antes da primeira escrita; membros
+extras, links, caminhos inseguros e pacotes adulterados são recusados.
+
+Se `DATABASE_URL` estiver ativo, o estado persistido no PostgreSQL **não**
+está dentro do arquivo local: gere e teste separadamente o backup lógico pelo
+provedor do banco. Um backup só conta como gate depois de um restore provado.
+
+Use um banco vazio e descartável, diferente da origem, e mantenha os DSNs
+somente no ambiente:
+
+```bash
+export DATABASE_URL='postgresql://...origem...'
+export POSTGRES_RESTORE_DATABASE_URL='postgresql://...banco-vazio...'
+python3 scripts/verify_postgres_restore.py --data-dir ./data
+```
+
+O destino ocupado, a origem em mudança, qualquer divergência de conteúdo ou
+um dump adulterado falham fechados. O script nunca limpa o destino nem envia
+ordens.
+
+O ensaio automatizado restaura em diretório temporário e valida também a
+estrutura interna dos bancos SQLite e dos documentos JSON/JSONL. A prova local
+vale por 30 dias e fica vinculada ao hash do backup presente em
+`DATA_DIR/backups`; não contém conteúdo de credencial e declara explicitamente
+que nenhuma ordem foi enviada. Ela aparece em `/v1/operational-readiness`.
 
 ## Promoção de estratégia
 

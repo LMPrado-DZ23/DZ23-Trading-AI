@@ -1,6 +1,6 @@
 import tarfile
 
-from scripts.backup_data import backup, restore
+from scripts.backup_data import backup, main, restore
 
 
 def test_backup_and_restore_round_trip(tmp_path):
@@ -27,3 +27,14 @@ def test_restore_rejects_unsafe_member(tmp_path):
         pass
     else:
         raise AssertionError("backup inseguro deveria ser rejeitado")
+
+
+def test_cli_reports_refusal_without_traceback(tmp_path, capsys):
+    missing = tmp_path / "missing.tar.gz"
+
+    code = main(["inspect", str(missing)])
+
+    captured = capsys.readouterr()
+    assert code == 2
+    assert "backup recusado:" in captured.err
+    assert "Traceback" not in captured.err

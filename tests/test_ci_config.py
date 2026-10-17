@@ -20,8 +20,15 @@ class TestCustoDoPipeline:
             "a matriz completa deve rodar em main/PR, não a cada push")
 
     def test_dependency_cache_is_enabled_everywhere(self):
-        assert RAW.count("astral-sh/setup-uv@v5") >= 4
+        assert RAW.count("astral-sh/setup-uv@v10.3.0") >= 4
         assert RAW.count("uv sync --locked") >= 4
+
+    def test_actions_nao_usam_runtime_node20_depreciado(self):
+        assert "actions/checkout@v4" not in RAW
+        assert "actions/setup-python@v5" not in RAW
+        assert "actions/upload-artifact@v4" not in RAW
+        assert "astral-sh/setup-uv@v5" not in RAW
+        assert "gitleaks/gitleaks-action@v2" not in RAW
 
     def test_documentation_changes_do_not_burn_minutes(self):
         ignorados = CI["on"]["push"]["paths-ignore"]
@@ -29,6 +36,14 @@ class TestCustoDoPipeline:
 
     def test_runs_are_cancelled_when_superseded(self):
         assert CI["concurrency"]["cancel-in-progress"] is True
+
+    def test_push_e_pr_da_mesma_branch_compartilham_o_grupo(self):
+        grupo = CI["concurrency"]["group"]
+        assert "github.head_ref" in grupo and "github.ref_name" in grupo
+        assert "github.event.pull_request.head.repo.full_name" in grupo
+        assert "github.repository" in grupo
+        assert "github.ref }}" not in grupo, (
+            "github.ref separa push e pull_request e duplica o pipeline")
 
     def test_working_branch_is_covered(self):
         branches = CI["on"]["push"]["branches"]

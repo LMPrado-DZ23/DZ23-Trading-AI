@@ -11,7 +11,12 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # Push da branch e atualização do PR precisam disputar o MESMO grupo.
+  # `github.ref` difere entre eles (`refs/heads/...` x `refs/pull/...`) e
+  # fazia o pipeline inteiro rodar duas vezes para o mesmo SHA.
+  # O repositório de origem distingue branches homônimas de forks diferentes,
+  # sem separar push e PR quando ambos pertencem ao próprio repositório.
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -23,11 +28,11 @@ jobs:
       matrix:
         python-version: ${{ (github.event_name == 'pull_request' || github.ref == 'refs/heads/main') && fromJSON('["3.10","3.11","3.12","3.13"]') || fromJSON('["3.12"]') }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           version: "latest"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install locked project with dev extras
@@ -44,8 +49,8 @@ jobs:
     name: clean-install smoke
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -61,11 +66,11 @@ jobs:
     name: ruff (strict, full repo)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           version: "latest"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install locked dev tools
@@ -79,11 +84,11 @@ jobs:
     name: dependency audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           version: "latest"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install locked project and audit tool
@@ -97,19 +102,19 @@ jobs:
     name: secrets, licenças e SBOM
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # gitleaks varre o histórico do diff/PR
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           version: "latest"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install locked project
         run: uv sync --locked --extra desk
       - name: Secret scan (gitleaks)
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: License inventory — recusar copyleft forte (GPL/AGPL/SSPL/EUPL)
@@ -128,7 +133,7 @@ jobs:
           format: spdx-json
           output-file: dz23-sbom.spdx.json
       - name: Publicar SBOM como artefato
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sbom-spdx
           path: dz23-sbom.spdx.json
@@ -138,11 +143,11 @@ jobs:
     name: public smoke checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           version: "latest"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install locked project
@@ -174,11 +179,11 @@ jobs:
           --health-timeout 5s
           --health-retries 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
         with:
           version: "latest"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install locked project with dev extras
@@ -187,13 +192,45 @@ jobs:
         env:
           DATABASE_URL: postgresql://dz23:dz23-ci@127.0.0.1:5432/dz23_ci
         run: uv run pytest tests/test_modo_da_mesa.py -q
+      - name: Backup lógico e restore real em banco vazio
+        env:
+          DATABASE_URL: postgresql://dz23:dz23-ci@127.0.0.1:5432/dz23_ci
+          POSTGRES_RESTORE_DATABASE_URL: postgresql://dz23:dz23-ci@127.0.0.1:5432/dz23_restore_ci
+          DATA_DIR: ${{ runner.temp }}/dz23-postgres-proof
+        run: |
+          if ! command -v pg_dump >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+          uv run python - <<'PY'
+          import os
+          from pathlib import Path
+          import psycopg
+          from tradingagents.desk.storage import ArmazemDeEstado
+          from tradingagents.job_store import JobStore
+
+          dsn = os.environ["DATABASE_URL"]
+          JobStore(Path(os.environ["DATA_DIR"]) / "unused.db", dsn)
+          ArmazemDeEstado(dsn, Path(os.environ["DATA_DIR"]) / "desks")
+          with psycopg.connect(dsn, autocommit=True) as connection:
+              connection.execute("CREATE DATABASE dz23_restore_ci")
+          PY
+          uv run python scripts/verify_postgres_restore.py --data-dir "$DATA_DIR"
+          uv run python - <<'PY'
+          import os
+          from tradingagents.desk.postgres_recovery import validate_postgres_restore_proof
+
+          result = validate_postgres_restore_proof(
+              os.environ["DATA_DIR"], os.environ["DATABASE_URL"])
+          assert result["valida"] is True, result
+          PY
 
   arm64-deps:
     name: ARM64 build (dependências aarch64 — NÃO é homologação Oracle)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - name: Build linux/arm64 — valida que a árvore de dependências instala em aarch64

@@ -9,8 +9,8 @@ O que estes testes provam, em ordem de importância:
    (nem em outro ativo ou horizonte); a prova de um contexto não alimenta o
    outro, por construção.
 3. HOMOLOGAÇÃO — sala só existe para corretora com adaptador registrado;
-   IQ Option é laboratório: modo paper, métricas próprias e jamais
-   elegível a operação real.
+   as nove corretoras CCXT entram com capacidades honestas e a IQ Option
+   continua laboratório PAPER, embora possa chegar à preparação bloqueada.
 4. LIVE — esta camada nem cria sala LIVE: autorização real continua
    exclusiva do proprietário pelo fluxo de piloto.
 """
@@ -26,11 +26,13 @@ from tradingagents.desk.costs import custo_de_operar
 from tradingagents.desk.escola import EstadoDaEscola
 from tradingagents.desk.learning import Desfecho
 from tradingagents.desk.ledger import Ledger
+from tradingagents.desk.piloto import SupervisorDePiloto
 from tradingagents.desk.salas import (
     AdaptadorDeCorretora,
     ContextoDaSala,
     ContextoDeCertificacao,
     EscolaCentral,
+    EscolaDoPiloto,
     RegistroDeSalas,
     SalaError,
     adaptador_de,
@@ -111,14 +113,29 @@ def _formar(central, sala, *, estrategia=ESTRATEGIA, ativo=ATIVO,
 class TestAdaptadoresEHomologacao:
     def test_corretoras_padrao_estao_homologadas(self):
         nomes = {c["nome"] for c in corretoras_homologadas()}
-        assert {"binance", "bybit", "okx", "iq_option"} <= nomes
+        assert nomes == {
+            "binance", "bybit", "okx", "coinbase", "gateio", "kraken",
+            "kucoin", "mercadobitcoin", "bitget", "iq_option",
+        }
         lab = {c["nome"]: c for c in corretoras_homologadas()}["iq_option"]
         assert lab["laboratorio"] is True
+        assert lab["preparacao_real"] is True
         assert lab["mercados"] == ["opcoes_binarias"]
 
     def test_registrar_sem_substituir_recusa_duplicata(self):
         with pytest.raises(SalaError, match="já homologada"):
             registrar_adaptador(AdaptadorDeCorretora("binance", ("spot",)))
+
+    @pytest.mark.parametrize("corretora", [
+        "binance", "bybit", "okx", "coinbase", "gateio", "kraken",
+        "kucoin", "mercadobitcoin", "bitget",
+    ])
+    def test_todas_as_corretoras_ccxt_abrem_sala_paper_spot(self, corretora):
+        sala = RegistroDeSalas(armazem=ArmazemFake()).abrir_sala(
+            _ctx(corretora=corretora, conta=f"paper-{corretora}"))
+        assert sala.contexto.corretora == corretora
+        assert sala.contexto.modo == "paper"
+        assert sala.resumo()["laboratorio"] is False
 
     def test_extensao_por_adaptador_novo(self):
         registrar_adaptador(AdaptadorDeCorretora("corretora_teste_x",
@@ -156,6 +173,13 @@ class TestAdaptadoresEHomologacao:
                                 mercado="opcoes_binarias"))
         with pytest.raises(SalaError, match="payout"):
             reg.abrir_sala(_ctx(payout="0.80"))
+
+    @pytest.mark.parametrize("payout", ["NaN", "Infinity", "1.01"])
+    def test_binaria_recusa_payout_nao_finito_ou_acima_de_um(self, payout):
+        reg = RegistroDeSalas(armazem=ArmazemFake())
+        with pytest.raises(SalaError, match="payout"):
+            reg.abrir_sala(_ctx(corretora="iq_option", conta="lab-1",
+                                mercado="opcoes_binarias", payout=payout))
 
     def test_laboratorio_so_opera_em_paper(self):
         reg = RegistroDeSalas(armazem=ArmazemFake())
@@ -339,7 +363,8 @@ class TestCertificacaoPorContexto:
         assert linha["estado"] == "formada"
         assert "proprietário" in rel["aviso"]
 
-    def test_laboratorio_forma_mas_nunca_e_elegivel(self):
+    def test_iq_option_formada_entra_no_fluxo_de_preparacao_sem_liberar_live(
+            self):
         armazem = ArmazemFake()
         central = EscolaCentral(armazem=armazem)
         sala_lab = RegistroDeSalas(armazem=armazem).abrir_sala(
@@ -352,9 +377,22 @@ class TestCertificacaoPorContexto:
         elegivel, motivo = central.elegivel_para_live(
             ESTRATEGIA, "1",
             contexto=_certificado(corretora="iq_option",
-                                  mercado="opcoes_binarias"))
-        assert elegivel is False
-        assert "laboratório" in motivo
+                                  conta="lab-1",
+                                  mercado="opcoes_binarias",
+                                  payout="0.85"))
+        assert elegivel is True, motivo
+        assert "formad" in motivo.lower()
+        assert adaptador_de("iq_option").laboratorio is True
+        contexto = _certificado(
+            corretora="iq_option", conta="lab-1",
+            mercado="opcoes_binarias", payout="0.85")
+        fila = SupervisorDePiloto(
+            armazem=armazem,
+            escola=EscolaDoPiloto(central, contexto)).encaminhar_formado(
+                "trader-iq", estrategia=ESTRATEGIA, contexto=contexto.como_dict())
+        assert fila["estado"] == "aguardando_configuracao_do_proprietario"
+        assert fila["corretora"] == "iq_option"
+        assert fila["authorization_id"] is None
 
     def test_evidencia_da_sala_de_outra_corretora_nao_e_vista(self):
         armazem = ArmazemFake()

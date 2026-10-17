@@ -114,13 +114,13 @@ def test_aceite_td5_01_inicio_assistente_conectar_modo_play(page, mesa_url, senh
     page.screenshot(path=str(evidence_dir / "td5-01-inicio.png"))
 
     # §1 da missão de auditoria funcional: capacidades visíveis no Simples
-    # com estado honesto (4 estados exatos) e acesso de UM CLIQUE — telas
+    # com estados honestos e acesso de UM CLIQUE — telas
     # ocultas abrem ligando o Avançado; nada escondido por acidente.
     caps = page.locator("#capacidadesLista")
     expect(caps).to_contain_text("disponível", timeout=15000)
     expect(caps).to_contain_text("configuração necessária")
     expect(caps).to_contain_text("bloqueado por segurança")
-    expect(caps).to_contain_text("ainda não implementado")
+    expect(caps).to_contain_text("Leitura REAL preparada, execução bloqueada")
     page.locator("#capacidadesLista").scroll_into_view_if_needed()
     page.screenshot(path=str(evidence_dir / "td5-01-capacidades.png"))
     page.locator('[data-abrir="mesa"]').first.click()

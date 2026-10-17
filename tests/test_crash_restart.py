@@ -28,6 +28,8 @@ def mandato():
 
 class CorretoraQueAceita:
     mode = "testnet"
+    testnet_exchange = "binance"
+    testnet_credential_fingerprint = "a" * 64
     preco = Decimal("100")
 
     def __init__(self):
@@ -218,6 +220,21 @@ class TestCrashDepoisDeEnviarComRespostaAmbigua:
 
 
 class TestCrashDepoisDoFill:
+    def test_origem_testnet_da_ordem_sobrevive_ao_restart(self):
+        _, risco, _, coord = sistema()
+        coord.submit(intencao(risco))
+
+        doc = coord.snapshot_estado()
+        ordem_doc = doc["ordens"][0]
+        assert ordem_doc["testnet_exchange"] == "binance"
+        assert ordem_doc["testnet_credential_fingerprint"] == "a" * 64
+
+        _, _, _, coord2 = sistema()
+        coord2.restaurar_estado(doc)
+        restaurada = next(iter(coord2.orders.values()))
+        assert restaurada.testnet_exchange == "binance"
+        assert restaurada.testnet_credential_fingerprint == "a" * 64
+
     def test_position_and_cash_survive_a_restart(self):
         m, risco, livro, coord = sistema()
         coord.submit(intencao(risco))

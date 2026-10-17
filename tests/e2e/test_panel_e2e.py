@@ -413,13 +413,13 @@ def test_modo_simples_assistente_conectar_modo_play(page, live_server, owner_pas
     expect(page.locator("#iniMesaEstado")).to_contain_text("PARADA", timeout=15000)
 
     # §1 da missão de auditoria funcional: o Simples mostra as capacidades
-    # com estado honesto (4 estados) e acesso de UM CLIQUE a todas as telas —
+    # com estados honestos e acesso de UM CLIQUE a todas as telas —
     # telas ocultas no Simples abrem ligando o Avançado, nada escondido.
     caps = page.locator("#capacidadesLista")
     expect(caps).to_contain_text("disponível", timeout=15000)
     expect(caps).to_contain_text("configuração necessária")
     expect(caps).to_contain_text("bloqueado por segurança")
-    expect(caps).to_contain_text("ainda não implementado")
+    expect(caps).to_contain_text("Leitura REAL preparada, execução bloqueada")
     page.locator("#capacidadesLista").scroll_into_view_if_needed()
     page.screenshot(path=str(evidence_dir / "09b-inicio-capacidades.png"))
     page.locator('[data-abrir="mesa"]').first.click()
@@ -453,7 +453,8 @@ def test_fm3_corretora_catalogo_capacidades_e_preparo_real(page, live_server, ow
     page.get_by_role("button", name=re.compile("Ver preparação")).click()
     prep = page.locator("#preparoReal")
     expect(prep).to_contain_text("BLOQUEADO", timeout=15000)
-    expect(prep).to_contain_text("Frase de autorização digitada")
+    expect(prep).to_contain_text(
+        "Confirmação LIVE reservada para o momento da ativação")
     expect(prep).to_contain_text("Liberação de código para operar dinheiro real")
     expect(prep).to_contain_text("Indisponível neste lançamento")
     expect(prep).to_contain_text("NÃO ativa nada")
@@ -465,10 +466,10 @@ def test_fm3_corretora_catalogo_capacidades_e_preparo_real(page, live_server, ow
     expect(page.locator("#pageTitle")).to_have_text("Configuração")
     page.get_by_role("button", name=re.compile("Catálogo e capacidades")).click()
     cat = page.locator("#brokerCatalogo")
-    expect(cat).to_contain_text("Salas fixas", timeout=15000)
+    expect(cat).to_contain_text("Corretoras DZ23", timeout=15000)
     expect(cat).to_contain_text("Binance")
-    expect(cat).to_contain_text("planejada, não validada")
-    expect(cat).to_contain_text("desligada")
+    expect(cat).to_contain_text("disponível para dados e TESTNET")
+    expect(cat).to_contain_text("LIVE pelo painel: bloqueada")
     page.screenshot(path=str(evidence_dir / "09d-fm3-catalogo.png"))
 
     # Capacidades do primeiro adaptador instalado: anúncio local, não teste
