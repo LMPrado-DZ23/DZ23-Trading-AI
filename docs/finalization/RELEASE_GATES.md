@@ -10,7 +10,7 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
 | Gate | Prova exigida | Estado no HEAD da branch |
 |---|---|---|
-| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.776 passaram na última suíte local integral; 86 testes focados da integração IQ Option passaram; matriz 3.10–3.13 aguardará o push deste HEAD no PR #14 |
+| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.789 passaram na última suíte local integral; 160 testes focados de IQ Option, ledger e recovery passaram; matriz 3.10–3.13 aguardará o push deste HEAD no PR #14 |
 | lint | `ruff check .` | verde local no HEAD e no run `39027792071` do PR #14 |
 | instalação limpa | job CI dedicado | verde no run `39027792071` do PR #14 |
 | dependências/segredos/licenças/SBOM | jobs CI dedicados | verdes no run `39027792071` do PR #14 |
@@ -60,13 +60,16 @@ oferecido são obrigatórios; a reconciliação por `position_id` preserva
 exige autorização de código, frase exata, limites e WAL; PREPARED/UNKNOWN nunca
 é reenviado, inclusive após restart. O transporte fixa quatro ferramentas no
 servidor oficial `binary-options` e revalida catálogo/schema antes de cada
-chamada. Ele ainda não está ligado ao coordenador dos agentes. Um subledger específico já mantém
+chamada. Um coordenador composto já persiste intenção, executor e lançamentos
+e recupera exatamente uma vez os crashes entre ACK, `binary_open` e gravação
+final, sem reenviar `place_trade`. Ele ainda não está ligado ao coordenador dos
+agentes. Um subledger específico já mantém
 aposta aberta e liquidação por retorno total comprovado, com vitória, perda,
-empate, cancelamento e repetição pós-restart exatamente uma vez. Ele permanece
-desconectado do executor. Faltam a composição executor↔subledger, o contrato de
-direção/vencimento dos agentes, a resolução operacional do caso ambíguo sem
-`position_id` e a homologação na conta de treinamento; adaptar o livro spot por
-aparência continua expressamente proibido.
+empate, cancelamento e repetição pós-restart exatamente uma vez. Faltam o
+contrato de direção/vencimento dos agentes, a fonte operacional homologada que
+produz a prova de extrato do retorno total, a resolução operacional do caso
+ambíguo sem `position_id` e a homologação na conta de treinamento; adaptar o
+livro spot por aparência continua expressamente proibido.
 
 Em 2026-10-17, a sonda pública foi repetida no HEAD
 `e9a357a211b1f11c9d9ac03fc979546b03521749`: as nove corretoras CCXT

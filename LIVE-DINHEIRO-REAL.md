@@ -159,11 +159,23 @@ Uma abertura confirmada move o valor da reserva identificada para
 exposição pelo **retorno total comprovado**, atribuem o resultado ao agente e
 são idempotentes após reinício. O campo remoto `profit` não é usado como se sua
 semântica fosse conhecida: a integração futura precisa provar quanto voltou ao
-caixa. Esse subledger ainda não está conectado ao coordenador binário nem ao
-fluxo dos agentes. Faltam a composição durável executor↔subledger, a resolução
-operacional de intenções ambíguas sem `position_id`, a geração de
-vencimento/direção pelo contrato da estratégia e a homologação em conta de
-treinamento antes de qualquer proposta de ligação LIVE.
+caixa. O coordenador binário agora persiste intenção, executor e lançamentos
+num documento composto: um crash depois do ACK e antes de `binary_open`, ou
+depois de `binary_open` e antes da gravação final, é recuperado localmente e
+exatamente uma vez, sem repetir `place_trade`. Timeout sem `position_id` mantém
+o valor reservado e continua bloqueado.
+
+Resultado `win`, `loss`, `equal` ou `canceled` fica em
+`SETTLEMENT_PENDING`; o livro só baixa a exposição quando recebe uma prova
+identificada de extrato da conta (`iq_option_account_statement`) com o retorno
+total e referência externa. Repetir a mesma prova após restart é idempotente;
+prova de outra posição, resultado ou fonte falha fechado.
+
+Esse coordenador ainda não está ligado ao fluxo dos agentes. Faltam a resolução
+operacional de intenções ambíguas sem `position_id`, a fonte operacional
+homologada que produz essa prova de extrato, a geração de vencimento/direção
+pelo contrato da estratégia e a homologação em conta de treinamento antes de
+qualquer proposta de ligação LIVE.
 
 Depois de autorizar a conexão e carregar o token somente no ambiente local, a
 prova reproduzível pode ser gerada sem credencial na linha de comando:
