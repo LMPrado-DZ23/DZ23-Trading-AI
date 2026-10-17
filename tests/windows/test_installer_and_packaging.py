@@ -122,6 +122,19 @@ class TestWindowsInstallerAndWorkflow:
         assert "actions/upload-artifact@v7" in raw
         assert "actions/download-artifact@v8" in raw
 
+        # Release oficial nunca pode publicar artefato sem assinatura. O PFX
+        # vem exclusivamente do cofre, entra no store efêmero do runner e é
+        # removido mesmo se uma etapa posterior falhar.
+        assert "WINDOWS_SIGNING_CERTIFICATE_BASE64" in raw
+        assert "WINDOWS_SIGNING_CERTIFICATE_PASSWORD" in raw
+        assert 'refs/tags/v*' in raw
+        assert "Release oficial exige certificado Authenticode" in raw
+        assert "Import-PfxCertificate" in raw
+        assert "signtool.FullName sign" in raw
+        assert "signtool.FullName verify" in raw
+        assert "Remove ephemeral signing material" in raw
+        assert "SIGNING_STATUS.txt" in raw
+
         build_steps = data["jobs"]["build"]["steps"]
         step_names = [s.get("name", "") for s in build_steps]
 
@@ -136,9 +149,10 @@ class TestWindowsInstallerAndWorkflow:
         assert "/DAppVersion=" in runs or "-DAppVersion=" in runs
 
         # Build de branch sobe artefato para inspeção; Release só em tag v*
-        # (publicação exige gatilho humano explícito).
+        # e somente depois do aceite E2E do mesmo artefato.
         publish = data["jobs"]["publish-release"]
         assert "refs/tags/v" in publish["if"]
+        assert set(publish["needs"]) == {"build", "aceite-bundle"}
         release_step = next(s for s in publish["steps"] if "Create GitHub Release" in s.get("name", ""))
         files_spec = release_step["with"]["files"]
         assert "dist/DZ23-Trading-AI-Setup-v" in files_spec and ".exe" in files_spec
