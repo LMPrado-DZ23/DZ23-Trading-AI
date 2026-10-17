@@ -3,18 +3,30 @@
 ## Decisões
 - Produto privado single-user: **não** vender, não oferecer a clientes, não habilitar cadastros públicos, multitenancy, billing, PIX, planos, convites ou perfis de terceiros.
 - Preservar dados e código legado até migração validada, para evitar regressões/destruição. Não retirar proteção/autorização de sessão do proprietário.
-- Salas isoladas: Binance (ccxt binance), OKX (ccxt okx), Mercado Bitcoin (ccxt mercado), Kraken (ccxt kraken), Coinbase (ccxt coinbase), IQ Option (laboratório experimental próprio; API ainda não homologada).
+- Salas isoladas para nove corretoras CCXT: Binance, Bybit, OKX, Coinbase
+  Exchange, Gate.io, Kraken, KuCoin, Mercado Bitcoin e Bitget. A IQ Option
+  permanece em sala experimental separada, por integração MCP oficial.
 - Separar dados de ordens, posições, saldo, fees, métricas e riscos por exchange/mercado/modo.
 - Operar em PAPER/SHADOW/TESTNET inicialmente. Sem ordem real e sem alavancagem na primeira fase.
 - R$ 5.000 é um orçamento FUTURO hipotético para LIVE, **não** uma autorização para movimentar conta.
 
 ## Estado de implementação
-- `service/personal_exchange_catalog.py` registra as 6 salas em catálogo seguro **sem fazer conexão real**.
-- `.env.personal.example` é exemplo de configuração **não aplicado automaticamente** até auditar a leitura de configurações do serviço.
-- Sala IQ Option permanece em escopo, mas exige fonte de dados e conformidade técnica comprovadas, sem prometer preço idêntico a mercados spot.
-- `LIVE_TRADING=false`, `REAL_MONEY_EXECUTION=false`, `SIGNUP_ENABLED=false` devem ser defaults efetivos validados com testes de integração, antes de deploy pessoal.
-- PR #3 `correcao-auditoria` e problemas F3–F6/K1–K6/A1–A2 precisam ser conciliados, com CI e testes financeiros antes de LIVE.
-- Próxima implementação: conectar catálogo à UI/API e criar adaptadores testados de leitura de mercado e paper para cada corretora; só depois preparar autenticação privada do proprietário e eventual LIVE.
+- `service/personal_exchange_catalog.py` registra as nove salas CCXT e a sala
+  IQ Option; o catálogo está conectado à API e ao painel sem habilitar LIVE.
+- As nove corretoras CCXT possuem salas PAPER isoladas e prova real de ticker
+  + OHLCV públicos. A prova de 2026-10-17 registra 9/9, sem credenciais e sem
+  ordens. Isso não substitui autenticação da conta.
+- Binance, Bybit, OKX, Coinbase Exchange e Gate.io anunciam TESTNET nativo no
+  catálogo. Fill e reconciliação TESTNET continuam pendentes das credenciais
+  próprias de sandbox do proprietário.
+- A IQ Option usa sete endpoints MCP oficiais com contrato passivo validado.
+  A primeira leitura autenticada ainda exige token novo estritamente read-only;
+  portanto está preparada, mas não homologada por conta.
+- `LIVE_TRADING=false`, `REAL_MONEY_EXECUTION=false` e
+  `MESA_LIVE_LIBERADA=False` permanecem efetivos e cobertos por testes.
+- O fluxo Escola → Sala REAL bloqueada está implementado. Formação apenas
+  encaminha o agente; liberação futura continua vinculada a estratégia,
+  versão, corretora, conta, provas vigentes e confirmação do proprietário.
 
 ## Critérios de aceite
 - Não há signup nem SaaS exposto em rotas/frontend/docs finais.

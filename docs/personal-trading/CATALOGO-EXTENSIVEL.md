@@ -49,4 +49,10 @@ A plataforma pessoal não ficará restrita a seis corretoras. `service/personal_
 7. Integrar monitoramento de falhas: manutenção, erro de assinatura, mercado proibido, stream stale, saldo divergente, reconciliação, latência e circuit breaker.
 
 ## Evidência
-Commits desta branch contêm `service/personal_exchange_discovery.py` e `tests/test_personal_exchange_discovery.py`. Os testes ainda exigem execução no CI/ambiente autorizado; o arquivo não constitui comprovante de testes aprovados.
+Commits desta branch contêm `service/personal_exchange_discovery.py` e
+`tests/test_personal_exchange_discovery.py`. A descoberta, o catálogo, os
+probes públicos e os gates de corretora estão cobertos pela suíte local e pela
+CI do PR #14. A evidência de rede pública está em
+`docs/mission/evidence/real-readiness/corretoras-publicas.json`. Provas de
+conta autenticada e TESTNET continuam externas e não podem ser inferidas dos
+testes automatizados.
