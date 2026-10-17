@@ -10,13 +10,13 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
 | Gate | Prova exigida | Estado no HEAD da branch |
 |---|---|---|
-| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.691 passaram na última suíte local integral; 161 testes focados do fluxo Escola → Sala REAL passaram; matriz 3.10–3.13 verde no run `39018936226`, HEAD `86a93e7`, do PR #14 |
-| lint | `ruff check .` | verde no run `39018936226` do PR #14 |
-| instalação limpa | job CI dedicado | verde no run `39018936226` do PR #14 |
-| dependências/segredos/licenças/SBOM | jobs CI dedicados | verdes no run `39018936226` do PR #14 |
-| PostgreSQL e ARM64 | jobs CI dedicados | verdes no run `39018936226` do PR #14; ARM64 valida dependências, não homologa host Oracle |
-| pacote Windows | build, bundle acceptance/E2E e matriz de instalador | build e 21/21 E2E verdes no run `39018287082`, commit `1e61c9e`; matriz completa verde no run `39016204670`, commit `0e9a117`; commits posteriores alteram somente documentação; publicação deliberadamente omitida |
-| runtime da automação | Actions oficiais sem Node 20 depreciado | `checkout@v7`, `setup-python@v7`, `setup-uv@v10.3.0`, artifacts v7/v8 e gitleaks v3 validados nos runs `39018936226` e `39018287082` |
+| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.691 passaram na última suíte local integral; 161 testes focados do fluxo Escola → Sala REAL passaram; matriz 3.10–3.13 verde no run `39020198634`, commit `b7b0965`, do PR #14 |
+| lint | `ruff check .` | verde no run `39020198634` do PR #14 |
+| instalação limpa | job CI dedicado | verde no run `39020198634` do PR #14 |
+| dependências/segredos/licenças/SBOM | jobs CI dedicados | verdes no run `39020198634` do PR #14 |
+| PostgreSQL e ARM64 | jobs CI dedicados | verdes no run `39020198634` do PR #14; ARM64 valida dependências, não homologa host Oracle |
+| pacote Windows | build, bundle acceptance/E2E e matriz de instalador | build e 21/21 E2E verdes no run `39020200939`; matriz completa com zero falhas no run `39020202822`; ambos no commit `b7b0965`; publicação deliberadamente omitida |
+| runtime da automação | Actions oficiais sem Node 20 depreciado | `checkout@v7`, `setup-python@v7`, `setup-uv@v10.3.0`, artifacts v7/v8 e gitleaks v3 validados nos runs `39020198634` e `39020200939` |
 | assinatura Windows | PFX somente no cofre, assinatura/verificação e limpeza efêmera | caminho implementado; build de branch provado como `UNSIGNED_TEST_ARTIFACT`; certificado confiável continua externo e tag `v*` falha fechada sem ele |
 | LIVE fechado | testes + `/v1/operational-readiness` | `MESA_LIVE_LIBERADA=False` |
 | rollback local | backup local + restore isolado + prova recente | aprovado em 2026-10-17: 7 itens, 3 bancos SQLite e 4 documentos JSON validados; `envio_de_ordens=false`; PostgreSQL externo continua condicional a `DATABASE_URL` |
