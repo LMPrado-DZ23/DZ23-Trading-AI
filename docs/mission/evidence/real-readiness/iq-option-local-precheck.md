@@ -89,3 +89,28 @@ validação.
 - nenhuma ferramenta remota executável pelo DZ23;
 - nenhuma ordem, saque, transferência ou consulta de saldo;
 - `MESA_LIVE_LIBERADA=False` permanece inalterado.
+
+## Token estritamente read-only criado e comprovado
+
+Em 2026-10-17, após confirmação explícita no momento da ação, foi criado no
+painel oficial o token `DZ23 Read Only` com `Read access` ligado e bloqueado
+pelo provedor e todos os nove controles de `Trading access` desligados. A
+lista passou de dois para três tokens ativos; os dois tokens existentes não
+foram alterados nem excluídos. O prazo padrão de um ano foi preservado.
+
+O token foi armazenado cifrado na configuração local do DZ23 e a sonda
+passiva foi executada no HEAD
+`99025cb45dc08aa984194e1b17d2cd735900ec17`. Resultado sanitizado:
+
+- `PASS`, 7/7 endpoints em `MCP_METADATA_CONNECTED`;
+- 60 ferramentas somente leitura, zero mutáveis;
+- zero ferramentas desconhecidas, ausentes ou chamáveis;
+- `metadata_only=true`, `tool_execution_enabled=false`;
+- `orders_enabled=false` e `ordens_enviadas=false`.
+
+Essa prova substitui o diagnóstico do token antigo com 32 ferramentas
+mutáveis e fecha o gate de permissão mínima do token. Ela não executou
+`list_balances`, não leu saldo e não confirmou a identidade da conta. A
+próxima prova externa permanece a chamada literal
+`list_balances({types: NORMAL})`, depois de o proprietário indicar a conta e
+o `balance_id` regular a comparar somente em memória.

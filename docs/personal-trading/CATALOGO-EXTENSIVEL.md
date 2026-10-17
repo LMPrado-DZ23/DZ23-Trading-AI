@@ -29,14 +29,16 @@ A plataforma pessoal não ficará restrita a seis corretoras. `service/personal_
   revalida o contrato e recusa qualquer ferramenta mutável antes de chamar,
   então descarta saldo, moeda e ID bruto. Esse
   módulo não contém nomes nem caminhos de ferramentas mutáveis. A primeira
-  consulta autenticada de conta ainda depende da confirmação do proprietário;
-  portanto o estado é **preparado**, não homologado. O PolicyLayer continua
-  sem registro publicado para os sete identificadores (`unknown`). Nenhuma
-  dessas provas habilita ordens. O painel oficial oferece `Read access` sempre
-  ligado e controles separados de `Trading access`; o token DZ23 existente
-  anuncia ferramentas mutáveis. O gate permanece fechado até um token criado
-  com todos os acessos de negociação desligados produzir o catálogo remoto
-  estritamente read-only.
+  consulta autenticada de conta ainda depende da identificação da conta pelo
+  proprietário; portanto o estado é **preparado**, não homologado. O
+  PolicyLayer continua sem registro publicado para os sete identificadores
+  (`unknown`). Nenhuma dessas provas habilita ordens. Em 2026-10-17, o token
+  `DZ23 Read Only` foi criado no painel oficial com `Read access` ligado e os
+  nove controles de `Trading access` desligados. O catálogo remoto confirmou
+  60 ferramentas de leitura, zero mutáveis, zero desconhecidas e zero
+  ausentes nos sete endpoints. O gate de permissão mínima do token está
+  satisfeito; resta a prova de conta com `list_balances(NORMAL)` e comparação
+  da identidade sem persistir o ID bruto.
 - Operações LIVE continuam bloqueadas. Listar uma corretora **não** significa que sua integração foi testada ou liberada para ordens.
 
 ## Política para muitas exchanges

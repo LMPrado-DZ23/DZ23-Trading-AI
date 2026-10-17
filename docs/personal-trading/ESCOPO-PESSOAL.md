@@ -20,8 +20,11 @@
   catálogo. Fill e reconciliação TESTNET continuam pendentes das credenciais
   próprias de sandbox do proprietário.
 - A IQ Option usa sete endpoints MCP oficiais com contrato passivo validado.
-  A primeira leitura autenticada ainda exige token novo estritamente read-only;
-  portanto está preparada, mas não homologada por conta.
+  O token `DZ23 Read Only` foi criado e comprovado estritamente read-only em
+  2026-10-17 (7/7 endpoints, 60 ferramentas de leitura, zero mutáveis). A
+  primeira leitura autenticada e a confirmação da identidade ainda dependem
+  da conta escolhida pelo proprietário; portanto está preparada, mas não
+  homologada por conta.
 - `LIVE_TRADING=false`, `REAL_MONEY_EXECUTION=false` e
   `MESA_LIVE_LIBERADA=False` permanecem efetivos e cobertos por testes.
 - O fluxo Escola → Sala REAL bloqueada está implementado. Formação apenas

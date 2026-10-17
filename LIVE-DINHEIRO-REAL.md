@@ -114,11 +114,14 @@ de execução.
 
 O painel oficial da IQ Option foi verificado em 2026-10-16: `Read access` é
 sempre habilitado e os acessos de negociação de Options e Margin Products são
-selecionáveis. O token DZ23 existente anuncia 32 ferramentas mutáveis e, por
-isso, continua recusado. A correção operacional é criar ou reemitir um token
-com **Read access ligado e todos os Trading access desligados**. O DZ23 exige
-que `tools/list` confirme exatamente esse catálogo somente leitura antes de
-consultar a conta; declaração manual não sobrepõe a evidência técnica.
+selecionáveis. Em 2026-10-17, o proprietário autorizou e criou o token
+`DZ23 Read Only` com **Read access ligado e todos os Trading access
+desligados**, preservando os dois tokens anteriores. A sonda passiva no HEAD
+`99025cb` confirmou os sete endpoints, 60 ferramentas somente leitura, zero
+mutáveis, zero desconhecidas, zero ausentes e zero chamáveis pelo caminho de
+metadados. O token ficou cifrado na configuração local. Essa prova fecha o
+gate de permissão mínima do token, mas não substitui a leitura autenticada e a
+confirmação da identidade da conta.
 
 Depois de autorizar a conexão e carregar o token somente no ambiente local, a
 prova reproduzível pode ser gerada sem credencial na linha de comando:
@@ -134,9 +137,11 @@ O comando retorna sucesso apenas quando os sete endpoints completam o
 handshake e `tools/list`, com zero ferramenta chamável. A evidência omite
 token, mensagens remotas e metadados das ferramentas; qualquer contradição,
 credencial ausente, handshake parcial ou drift do contrato esperado falha
-fechado. O contrato atual reconhece 60 ferramentas somente leitura e bloqueia
-32 mutáveis; nenhuma delas é chamável nesse caminho. O comando não executa
-ferramentas MCP e não envia ordens.
+fechado. O contrato aceita tanto o catálogo antigo misto — 60 ferramentas de
+leitura e 32 mutáveis, todas bloqueadas — quanto o catálogo estritamente
+read-only. O token `DZ23 Read Only` produziu somente o segundo: 60 de leitura e
+zero mutáveis. Nenhuma ferramenta foi chamada nessa prova e nenhuma ordem foi
+enviada.
 
 As credenciais de execução também ficam vinculadas à corretora escolhida.
 Trocar o seletor não reaproveita chave, segredo ou passphrase de outro

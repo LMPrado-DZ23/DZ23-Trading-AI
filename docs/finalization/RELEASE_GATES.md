@@ -83,13 +83,13 @@ e janela contínua de pelo menos uma hora.
 - fill TESTNET reconciliado, quando a corretora oferece sandbox compatível;
 - PAPER prolongado por agente/estratégia/conta;
 - limites do piloto e tetos globais compatíveis;
-- IQ Option com os sete handshakes passivos comprovados (7/7 em 2026-10-16),
-  contrato exato pinado e prova `list_balances(NORMAL)` preparada; a primeira
-  leitura autenticada da conta ainda é uma prova externa pendente,
-  sem ferramenta mutável ou ordem chamada; o painel oficial confirma que é
-  possível criar token com `Read access` e todos os `Trading access`
-  desligados, mas o token DZ23 atual anuncia ferramentas mutáveis e não
-  satisfaz esse gate;
+- IQ Option com os sete handshakes passivos comprovados novamente em
+  2026-10-17 no HEAD `99025cb`: o token `DZ23 Read Only` anunciou 60
+  ferramentas somente leitura, zero mutáveis, zero desconhecidas, zero
+  ausentes e zero chamáveis; `Read access` ficou ligado e todos os nove
+  controles de `Trading access` desligados. A primeira chamada autenticada
+  `list_balances(NORMAL)` e a confirmação da identidade da conta continuam
+  como prova externa pendente; nenhuma ferramenta ou ordem foi chamada;
 - divergências e provas expiradas ausentes.
 
 ## Ações que continuam exigindo o proprietário no momento da ação
