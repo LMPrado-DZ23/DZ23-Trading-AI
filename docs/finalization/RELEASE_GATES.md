@@ -17,6 +17,7 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 | PostgreSQL e ARM64 | jobs CI dedicados | verdes no run `39016140316` do PR #14; ARM64 valida dependências, não homologa host Oracle |
 | pacote Windows | build, bundle acceptance/E2E e matriz de instalador | verdes nos runs `39016202897` e `39016204670`; publicação deliberadamente omitida |
 | runtime da automação | Actions oficiais sem Node 20 depreciado | `checkout@v7`, `setup-python@v7`, `setup-uv@v10.3.0`, artifacts v7/v8 e gitleaks v3 validados nos mesmos runs |
+| assinatura Windows | PFX somente no cofre, assinatura/verificação e limpeza efêmera | caminho implementado; build de branch provado como `UNSIGNED_TEST_ARTIFACT`; certificado confiável continua externo e tag `v*` falha fechada sem ele |
 | LIVE fechado | testes + `/v1/operational-readiness` | `MESA_LIVE_LIBERADA=False` |
 | rollback local | backup local + restore isolado + prova recente | aprovado em 2026-10-17: 7 itens, 3 bancos SQLite e 4 documentos JSON validados; `envio_de_ordens=false`; PostgreSQL externo continua condicional a `DATABASE_URL` |
 

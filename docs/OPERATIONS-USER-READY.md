@@ -33,6 +33,40 @@ uvicorn service.app:app --host 127.0.0.1 --port 8000
 
 O endpoint `/healthz` verifica se o processo está vivo. O endpoint `/readyz` verifica se o modo operacional não está bloqueado pelo KillSwitch e se o Paper Adapter está disponível. A API protegida exige Bearer Token igual ao valor de `ACCESS_PASSWORD`.
 
+## Assinatura do instalador Windows
+
+Builds de branch podem gerar artefatos de teste sem certificado, sempre
+marcados por `SIGNING_STATUS.txt` como `UNSIGNED_TEST_ARTIFACT`. Uma tag de
+release `v*` falha fechada antes de publicar se o certificado Authenticode
+não estiver configurado.
+
+O proprietário deve adquirir um certificado confiável de assinatura de
+código com chave privada exportável em PFX e cadastrar, pela interface segura
+do GitHub, estes dois secrets do repositório:
+
+- `WINDOWS_SIGNING_CERTIFICATE_BASE64`: conteúdo Base64 do PFX;
+- `WINDOWS_SIGNING_CERTIFICATE_PASSWORD`: senha do PFX.
+
+Nunca coloque o PFX, Base64 ou senha em commit, issue, PR, log ou chat. Para
+carregar o certificado a partir de uma estação Windows confiável, o Base64
+pode ser enviado diretamente ao `gh` sem arquivo intermediário versionado:
+
+```powershell
+[Convert]::ToBase64String(
+  [IO.File]::ReadAllBytes('C:\caminho-local-seguro\certificado.pfx')
+) | gh secret set WINDOWS_SIGNING_CERTIFICATE_BASE64
+gh secret set WINDOWS_SIGNING_CERTIFICATE_PASSWORD
+```
+
+O segundo comando solicita o valor de forma interativa. No runner hospedado,
+o workflow importa o PFX no store efêmero, assina e verifica o executável e o
+instalador com SHA-256 e timestamp RFC 3161, e remove certificado e PFX mesmo
+se uma etapa posterior falhar. O Release só pode ser publicado depois do
+aceite E2E do mesmo bundle. Antes de distribuir, confirme
+`SIGNING_STATUS.txt=SIGNED`, `Get-AuthenticodeSignature` com estado `Valid` e
+os hashes de `SHA256SUMS.txt`. Certificado expirado, revogado, sem chave
+privada ou com configuração parcial deve bloquear o release.
+
 O endpoint autenticado `/v1/operational-readiness` é a fonte canônica por
 instalação para a preparação de dinheiro real. Ele consolida o checklist sem
 modificar estado e sempre declara se o envio real está habilitado. O preflight
