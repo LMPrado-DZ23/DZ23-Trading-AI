@@ -153,8 +153,9 @@ def test_rotacao_de_qualquer_credencial_invalida_prova_testnet(
     m._DESKS["legacy"] = {
         "coordinator": _Coordenador(), "broker_mode": "testnet"}
     assert c.post("/v1/desk/reconciliar", headers=H).status_code == 200
-    assert _item(c.get("/v1/live/status", headers=H).json(),
-                 "testnet")["pronto"] is True
+    antes = c.get("/v1/live/status", headers=H).json()
+    assert _item(antes, "testnet")["pronto"] is True, (
+        antes["homologacao_testnet"])
 
     assert c.post("/v1/config", headers=H,
                   json={"vars": {campo: novo}}).status_code == 200

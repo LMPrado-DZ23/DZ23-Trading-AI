@@ -316,6 +316,17 @@ deve operar a própria conta, com as próprias chaves.
    fechado: mesmo com os itens 1–4 verdes, a mesa recusa arrancar em LIVE e
    diz o motivo. Ele só abre por decisão do dono em código auditado.
 
+Os limites financeiros ficam em **Configuração → Limites globais para
+piloto REAL**. O painel não sugere valores: o proprietário informa exposição
+global, teto por ordem e perda máxima diária. O servidor recusa a gravação
+inteira se qualquer valor for vazio, zero, negativo, não numérico, infinito
+ou `NaN`, e também recusa teto por ordem maior que a exposição global. Salvar
+esses limites não autoriza piloto, não muda o modo da mesa e não abre LIVE.
+
+Da mesma forma, a configuração do piloto formado não possui valores
+preenchidos automaticamente. Capital, perdas e prazo precisam ser digitados
+pelo proprietário antes do pedido de autorização.
+
 O painel mostra esse checklist em **Mesa de Agentes → "Dinheiro real: posso?"**
 com a ação exata de cada item que falta.
 

@@ -10,11 +10,11 @@ deve citar ambiente, SHA e horário e ser refeita no host de destino.
 
 | Gate | Prova exigida | Estado no HEAD da branch |
 |---|---|---|
-| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.691 passaram na última suíte local integral; 161 testes focados do fluxo Escola → Sala REAL passaram; matriz 3.10–3.13 verde no run `39020198634`, commit `b7b0965`, do PR #14 |
-| lint | `ruff check .` | verde no run `39020198634` do PR #14 |
-| instalação limpa | job CI dedicado | verde no run `39020198634` do PR #14 |
-| dependências/segredos/licenças/SBOM | jobs CI dedicados | verdes no run `39020198634` do PR #14 |
-| PostgreSQL e ARM64 | jobs CI dedicados | verdes no run `39020198634` do PR #14; ARM64 valida dependências, não homologa host Oracle |
+| suíte Python | matriz CI 3.10–3.13 e suíte local | 3.708 passaram na última suíte local integral; 87 testes focados dos controles REAL passaram; matriz 3.10–3.13 verde no run `39027792071`, commit `4938b20`, do PR #14 |
+| lint | `ruff check .` | verde local no HEAD e no run `39027792071` do PR #14 |
+| instalação limpa | job CI dedicado | verde no run `39027792071` do PR #14 |
+| dependências/segredos/licenças/SBOM | jobs CI dedicados | verdes no run `39027792071` do PR #14 |
+| PostgreSQL e ARM64 | jobs CI dedicados | verdes no run `39027792071` do PR #14; ARM64 valida dependências, não homologa host Oracle |
 | pacote Windows | build, bundle acceptance/E2E e matriz de instalador | build e 21/21 E2E verdes no run `39020200939`; matriz completa com zero falhas no run `39020202822`; ambos no commit `b7b0965`; publicação deliberadamente omitida |
 | runtime da automação | Actions oficiais sem Node 20 depreciado | `checkout@v7`, `setup-python@v7`, `setup-uv@v10.3.0`, artifacts v7/v8 e gitleaks v3 validados nos runs `39020198634` e `39020200939` |
 | assinatura Windows | PFX somente no cofre, assinatura/verificação e limpeza efêmera | caminho implementado; build de branch provado como `UNSIGNED_TEST_ARTIFACT`; certificado confiável continua externo e tag `v*` falha fechada sem ele |
@@ -27,6 +27,10 @@ de limites financeiros `NaN`/infinitos, o bloqueio fail-closed de telemetria
 de risco inválida, não finita ou negativa e a contenção transitória do replace
 atômico no Windows. A identidade do encaminhamento também isola estratégia e
 versão, com migração idempotente das chaves persistidas pelo formato anterior.
+Os limites globais exigidos pela prontidão agora podem ser informados no
+painel sem valor sugerido; a API recusa a gravação inteira para zero,
+negativos, texto, infinito, `NaN` ou teto por ordem acima da exposição. Os
+limites individuais do piloto também não recebem defaults financeiros.
 As nove corretoras CCXT do catálogo abrem salas PAPER spot isoladas na Escola.
 A IQ Option permanece laboratório PAPER, mas uma estratégia formada pode
 entrar na fila bloqueada da Sala REAL graças à integração MCP oficial; isso

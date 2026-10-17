@@ -102,7 +102,9 @@ class TestTetoDeDinheiroHonesto:
             self, tmp_path, monkeypatch, chave, trecho, valor):
         _, c = _app(tmp_path, monkeypatch)
         r = c.post("/v1/config", headers=H, json={"vars": {chave: valor}})
-        assert r.status_code == 200, r.text
+        assert r.status_code == 422, r.text
+        config = c.get("/v1/config", headers=H).json()["config"]
+        assert config[chave]["set"] is False
         item = _item(_status(c), trecho)
         assert item["pronto"] is False, (
             f"{chave}={valor!r} não é teto (a ponte exige Decimal finito > 0) "

@@ -122,6 +122,32 @@ def test_iq_option_read_only_flow_confirms_unique_regular_account_without_id():
     assert "balance_id da conta regular exibido pela IQ Option" not in html
 
 
+def test_config_exposes_required_live_risk_limits_without_suggested_values():
+    html = (ROOT / "service/static/index.html").read_text(encoding="utf-8")
+    for key in (
+        "TRADINGAGENTS_DESK_TETO_EXPOSICAO",
+        "LIVE_MAX_ORDER_VALUE",
+        "LIVE_MAX_DAILY_LOSS",
+    ):
+        assert f'id="{key}"' in html
+        assert f"'{key}'" in html, f"{key} fora de CFG_KEYS"
+    assert 'id="LIVE_MAX_ORDER_VALUE" value=' not in html
+    assert 'id="LIVE_MAX_DAILY_LOSS" value=' not in html
+    assert 'id="TRADINGAGENTS_DESK_TETO_EXPOSICAO" value=' not in html
+
+
+def test_pilot_limits_require_owner_values_without_financial_defaults():
+    html = (ROOT / "service/static/index.html").read_text(encoding="utf-8")
+    for default in (
+        "Capital máximo do piloto (não libera LIVE):','100'",
+        "Perda máxima diária:','10'",
+        "Perda máxima total:','30'",
+        "Prazo em dias (1 a 365):','30'",
+    ):
+        assert default not in html
+    assert "Informe todos os limites do piloto" in html
+
+
 def test_painel_tem_saida_do_aplicativo():
     # C009: sem console, o usuário só fecharia o app pelo Gerenciador de
     # Tarefas. O painel do dono precisa de um botão que encerra o servidor,

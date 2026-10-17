@@ -3,6 +3,8 @@
 import importlib
 import json
 
+import pytest
+
 H = {"Authorization": "Bearer s3nh4"}
 
 
@@ -16,6 +18,66 @@ def _app(tmp_path, monkeypatch):
     m._DESKS.clear()
     from fastapi.testclient import TestClient
     return m, TestClient(m.app)
+
+
+@pytest.mark.parametrize("key,value", [
+    ("TRADINGAGENTS_DESK_TETO_EXPOSICAO", "0"),
+    ("TRADINGAGENTS_DESK_TETO_EXPOSICAO", "NaN"),
+    ("LIVE_MAX_ORDER_VALUE", "-1"),
+    ("LIVE_MAX_ORDER_VALUE", "Infinity"),
+    ("LIVE_MAX_DAILY_LOSS", "0"),
+    ("LIVE_MAX_DAILY_LOSS", "não-numérico"),
+])
+def test_config_recusa_limite_financeiro_nao_positivo_ou_nao_finito(
+        tmp_path, monkeypatch, key, value):
+    _, client = _app(tmp_path, monkeypatch)
+
+    response = client.post("/v1/config", headers=H, json={"vars": {
+        key: value,
+        "TRADINGAGENTS_OUTPUT_LANGUAGE": "English",
+    }})
+
+    assert response.status_code == 422
+    config = client.get("/v1/config", headers=H).json()["config"]
+    assert config[key]["set"] is False
+    assert config["TRADINGAGENTS_OUTPUT_LANGUAGE"]["set"] is False
+
+
+def test_config_salva_limites_financeiros_validos_sem_ativar_live(
+        tmp_path, monkeypatch):
+    m, client = _app(tmp_path, monkeypatch)
+    limites = {
+        "TRADINGAGENTS_DESK_TETO_EXPOSICAO": "250",
+        "LIVE_MAX_ORDER_VALUE": "25",
+        "LIVE_MAX_DAILY_LOSS": "10",
+    }
+
+    response = client.post(
+        "/v1/config", headers=H, json={"vars": limites})
+
+    assert response.status_code == 200, response.text
+    config = client.get("/v1/config", headers=H).json()["config"]
+    assert {key: config[key]["value"] for key in limites} == limites
+    assert m.MESA_LIVE_LIBERADA is False
+    status = client.get("/v1/live/status", headers=H).json()
+    assert status["pode_operar_real"] is False
+
+
+def test_config_recusa_teto_por_ordem_acima_da_exposicao_global(
+        tmp_path, monkeypatch):
+    _, client = _app(tmp_path, monkeypatch)
+
+    response = client.post("/v1/config", headers=H, json={"vars": {
+        "TRADINGAGENTS_DESK_TETO_EXPOSICAO": "10",
+        "LIVE_MAX_ORDER_VALUE": "11",
+        "LIVE_MAX_DAILY_LOSS": "2",
+    }})
+
+    assert response.status_code == 422
+    assert "não pode exceder" in response.json()["detail"]
+    config = client.get("/v1/config", headers=H).json()["config"]
+    assert config["TRADINGAGENTS_DESK_TETO_EXPOSICAO"]["set"] is False
+    assert config["LIVE_MAX_ORDER_VALUE"]["set"] is False
 
 
 def test_status_separa_pendencias_por_responsabilidade(tmp_path, monkeypatch):

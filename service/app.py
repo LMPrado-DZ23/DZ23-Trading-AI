@@ -1276,6 +1276,36 @@ async def set_cfg(req: Request, _=Depends(auth)):
                 or payout_decimal <= 0 or payout_decimal > 1):
             raise HTTPException(
                 422, "payout da escola IQ Option precisa estar entre 0 e 1")
+    limites_financeiros = {
+        "TRADINGAGENTS_DESK_TETO_EXPOSICAO": "teto global de exposição",
+        "LIVE_MAX_ORDER_VALUE": "teto por ordem",
+        "LIVE_MAX_DAILY_LOSS": "perda máxima diária",
+    }
+    for chave, rotulo in limites_financeiros.items():
+        if chave not in vars_recebidas:
+            continue
+        valor = vars_recebidas.get(chave)
+        if not isinstance(valor, str) or not valor.strip():
+            raise HTTPException(422, f"{rotulo} precisa ser informado")
+        try:
+            numero = Decimal(valor.strip())
+        except InvalidOperation as exc:
+            raise HTTPException(
+                422, f"{rotulo} precisa ser numérico") from exc
+        if not numero.is_finite() or numero <= 0:
+            raise HTTPException(
+                422, f"{rotulo} precisa ser finito e maior que zero")
+    exposicao = vars_recebidas.get(
+        "TRADINGAGENTS_DESK_TETO_EXPOSICAO",
+        cfg.get("TRADINGAGENTS_DESK_TETO_EXPOSICAO"))
+    teto_ordem = vars_recebidas.get(
+        "LIVE_MAX_ORDER_VALUE", cfg.get("LIVE_MAX_ORDER_VALUE"))
+    exposicao_decimal = _decimal_positivo(exposicao)
+    ordem_decimal = _decimal_positivo(teto_ordem)
+    if (exposicao_decimal is not None and ordem_decimal is not None
+            and ordem_decimal > exposicao_decimal):
+        raise HTTPException(
+            422, "teto por ordem não pode exceder o teto global de exposição")
     vinculos_gerenciados = {
         "EXCHANGE_CREDENTIAL_EXCHANGE", "EXCHANGE_CREDENTIAL_BOUND_AT",
         "LIVE_EXECUTION_EXCHANGE", "LIVE_EXECUTION_CREDENTIAL_BOUND_AT",
