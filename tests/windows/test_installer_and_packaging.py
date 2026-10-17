@@ -114,7 +114,13 @@ class TestWindowsInstallerAndWorkflow:
     def test_github_release_workflow_has_inno_setup_and_artifacts(self):
         wf_path = ROOT / ".github" / "workflows" / "windows-release.yml"
         assert wf_path.exists(), "windows-release.yml não encontrado"
-        data = yaml.safe_load(wf_path.read_text(encoding="utf-8"))
+        raw = wf_path.read_text(encoding="utf-8")
+        data = yaml.safe_load(raw)
+
+        assert "actions/checkout@v7" in raw
+        assert "actions/setup-python@v7" in raw
+        assert "actions/upload-artifact@v7" in raw
+        assert "actions/download-artifact@v8" in raw
 
         build_steps = data["jobs"]["build"]["steps"]
         step_names = [s.get("name", "") for s in build_steps]
@@ -142,7 +148,11 @@ class TestWindowsInstallerAndWorkflow:
     def test_workflow_da_matriz_do_instalador_existe_e_roda_a_matriz(self):
         wf_path = ROOT / ".github" / "workflows" / "installer-matrix.yml"
         assert wf_path.exists(), "installer-matrix.yml não encontrado"
-        data = yaml.safe_load(wf_path.read_text(encoding="utf-8"))
+        raw = wf_path.read_text(encoding="utf-8")
+        data = yaml.safe_load(raw)
+        assert "actions/checkout@v7" in raw
+        assert "actions/setup-python@v7" in raw
+        assert "actions/upload-artifact@v7" in raw
         job = data["jobs"]["matriz"]
         runs = "\n".join(str(s.get("run", "")) for s in job["steps"])
         assert "matriz_instalador_win.py" in runs

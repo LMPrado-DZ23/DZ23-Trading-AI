@@ -20,8 +20,15 @@ class TestCustoDoPipeline:
             "a matriz completa deve rodar em main/PR, não a cada push")
 
     def test_dependency_cache_is_enabled_everywhere(self):
-        assert RAW.count("astral-sh/setup-uv@v5") >= 4
+        assert RAW.count("astral-sh/setup-uv@v10") >= 4
         assert RAW.count("uv sync --locked") >= 4
+
+    def test_actions_nao_usam_runtime_node20_depreciado(self):
+        assert "actions/checkout@v4" not in RAW
+        assert "actions/setup-python@v5" not in RAW
+        assert "actions/upload-artifact@v4" not in RAW
+        assert "astral-sh/setup-uv@v5" not in RAW
+        assert "gitleaks/gitleaks-action@v2" not in RAW
 
     def test_documentation_changes_do_not_burn_minutes(self):
         ignorados = CI["on"]["push"]["paths-ignore"]
