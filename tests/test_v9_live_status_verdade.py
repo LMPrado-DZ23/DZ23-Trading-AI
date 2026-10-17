@@ -24,7 +24,8 @@ Contraprova (controles que precisam passar ANTES e DEPOIS da correção):
   item: a correção troca a evidência, não a fecha para sempre.
 - `pode_operar_real` continua False com TUDO verde: o selo de código
   (MESA_LIVE_LIBERADA=False, ADR-006) segue fechando o caminho.
-- `checklist[0]` continua sendo a frase (consumidor: test_service_leigo.py)
+- `checklist[0]` continua declarando a confirmação no momento da ativação
+  (consumidor: test_service_leigo.py), sem persistir a frase,
   e só o item do selo contém "código" no texto do ITEM (consumidor:
   test_auditoria_fin1_live_desk_seal.py filtra por essa palavra).
 
@@ -51,7 +52,6 @@ CFG_LIVE_COMPLETO = {
     "TRADINGAGENTS_BROKER_MODE": "live",
     "EXCHANGE_API_KEY": "k",
     "EXCHANGE_API_SECRET": "s",
-    "LIVE_TRADING_CONFIRM": "EU AUTORIZO OPERAR COM DINHEIRO REAL",
     "LIVE_MAX_ORDER_VALUE": "50",
     "LIVE_MAX_DAILY_LOSS": "25",
 }
@@ -172,10 +172,12 @@ class TestPreparacaoExplicita:
         item = _item(_status(c), "identidade")
         assert item["pronto"] is False and item["acao"]
 
-    def test_primeiro_item_continua_sendo_a_frase(self, tmp_path, monkeypatch):
+    def test_primeiro_item_reserva_confirmacao_para_ativacao(
+            self, tmp_path, monkeypatch):
         _, c = _app(tmp_path, monkeypatch)
         d = _status(c)
-        assert "frase" in d["checklist"][0]["item"].lower()
+        assert "momento da ativação" in d["checklist"][0]["item"].lower()
+        assert d["checklist"][0]["pronto"] is True
 
     def test_selo_continua_fechando_mesmo_com_testnet_de_verdade(
             self, tmp_path, monkeypatch):

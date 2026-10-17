@@ -169,7 +169,13 @@ class TestPontaAPontaNoServico:
 
     def test_mesa_recusa_arrancar_em_live_mesmo_com_cfg_completa(self, tmp_path, monkeypatch):
         m, c = self._app(tmp_path, monkeypatch)
-        r = c.post("/v1/config", headers=H, json={"vars": CFG_LIVE_COMPLETO})
+        cfg_sem_consentimento = {
+            k: v for k, v in CFG_LIVE_COMPLETO.items()
+            if k != "LIVE_TRADING_CONFIRM"
+        }
+        r = c.post(
+            "/v1/config", headers=H,
+            json={"vars": cfg_sem_consentimento})
         assert r.status_code == 200, r.text
         # o boot da mesa RECUSA — e a recusa é verbosa, não um 500 mudo
         r = c.get("/v1/desk/status", headers=H)
@@ -215,6 +221,7 @@ class TestPontaAPontaNoServico:
 
         mesa = {"broker_mode": "live",
                 "scheduler": SimpleNamespace(running=False)}
+        boot = {}
         monkeypatch.setattr(m, "MESA_LIVE_LIBERADA", True)
         monkeypatch.setattr(m, "load_cfg", lambda _tid: dict(cfg))
         monkeypatch.setattr(m, "_live_status_payload", lambda _req: {
@@ -238,8 +245,11 @@ class TestPontaAPontaNoServico:
             }, True))
         monkeypatch.setattr(
             m, "_prova_real_serve_piloto", lambda *_args: True)
-        monkeypatch.setattr(
-            m, "_desk_boot", lambda *_args, **_kwargs: mesa)
+        def fake_boot(*_args, **kwargs):
+            boot.update(kwargs)
+            return mesa
+
+        monkeypatch.setattr(m, "_desk_boot", fake_boot)
         monkeypatch.setattr(
             m, "save_cfg", lambda value, tenant: salvos.__setitem__(
                 (tenant, "config"), value))
@@ -254,6 +264,8 @@ class TestPontaAPontaNoServico:
         assert r.json()["reconciliacao_obrigatoria"] is True
         assert salvos[("legacy", "config")][
             "TRADINGAGENTS_BROKER_MODE"] == "live"
+        assert "LIVE_TRADING_CONFIRM" not in salvos[("legacy", "config")]
+        assert "LIVE_TRADING_CONFIRM" not in boot["cfg_override"]
         registro = salvos[("legacy", m._CHAVE_ATIVACAO_LIVE)]
         assert registro["agent_id"] == "trader-momentum"
         assert registro["conta"] == "principal"

@@ -230,7 +230,6 @@ ALLOWED_KEYS = [
     "TRADINGAGENTS_DESK_PAYOUT",
     "TRADINGAGENTS_DESK_CONTROLE", "TRADINGAGENTS_DESK_TETO_EXPOSICAO",
     "LIVE_MAX_ORDER_VALUE", "LIVE_MAX_DAILY_LOSS",
-    "LIVE_TRADING_CONFIRM",
     "ALERTA_TELEGRAM_TOKEN", "ALERTA_TELEGRAM_CHAT", "ALERTA_WEBHOOK_URL",
     "ALERTA_TELEGRAM_WEBHOOK_SECRET", "ALERTA_DISCORD_WEBHOOK",
     "ALERTA_WHATSAPP_TOKEN", "ALERTA_WHATSAPP_PHONE", "ALERTA_WHATSAPP_DESTINO",
@@ -261,7 +260,6 @@ SEGREDOS_DECLARADOS = {
     # Chave privada VAPID e assinaturas push (endpoint carrega capacidade):
     # passam pela cifragem em repouso do SEC-1 como qualquer segredo.
     "ALERTA_VAPID_PRIVADA", "PUSH_ASSINATURAS",
-    "LIVE_TRADING_CONFIRM",
 }
 # Rede de segurança: qualquer chave futura com cara de credencial também
 # entra, mesmo que alguém esqueça de declará-la.
@@ -822,8 +820,24 @@ def load_cfg(tenant_id: str = "legacy") -> dict:
         with contextlib.suppress(ValueError):
             do_disco = json.loads(path.read_text())
             if isinstance(do_disco, dict):
+                # Consentimento LIVE é um ato, não configuração. Versões
+                # anteriores aceitavam a frase persistida; ela deixa de ser
+                # carregada imediatamente e será removida no próximo save.
+                confirmacao_legada = do_disco.pop(
+                    "LIVE_TRADING_CONFIRM", None)
+                if confirmacao_legada is not None:
+                    try:
+                        # Ainda são os bytes/configurações vindos do disco;
+                        # os demais segredos permanecem cifrados nesta cópia.
+                        escrever_json_atomico(path, do_disco)
+                        os.chmod(path, 0o600)
+                    except Exception as exc:
+                        LOGGER.warning(
+                            "remoção da confirmação LIVE legada falhou (%s): %s",
+                            tenant_id, type(exc).__name__)
                 _segredos_do_disco(do_disco, tenant_id, path)
                 cfg.update(do_disco)
+    cfg.pop("LIVE_TRADING_CONFIRM", None)
     return cfg
 
 
@@ -933,6 +947,9 @@ def save_cfg(cfg: dict, tenant_id: str = "legacy"):
     # de novo, nunca tratar um token ilegível como ausente. Falha de cifragem
     # (com verificação de ida-e-volta) ABORTA o save: nada é gravado em claro.
     para_disco = dict(cfg)
+    # A frase é deliberadamente efêmera: nunca conceder autorização LIVE por
+    # arquivo, variável herdada ou restauração de backup.
+    para_disco.pop("LIVE_TRADING_CONFIRM", None)
     for chave in SECRETish:
         valor = para_disco.get(chave)
         if (isinstance(valor, str) and valor
@@ -1241,6 +1258,10 @@ async def set_cfg(req: Request, _=Depends(auth)):
     fingerprint_live_anterior = live_execution_credential_fingerprint(cfg)
     saved, changed = [], []
     vars_recebidas = body.get("vars") or {}
+    if "LIVE_TRADING_CONFIRM" in vars_recebidas:
+        raise HTTPException(
+            422, "a confirmação LIVE não é configuração persistente; "
+                 "digite a frase somente no momento da ativação")
     payout_recebido = vars_recebidas.get("TRADINGAGENTS_DESK_PAYOUT")
     if payout_recebido is not None:
         if not isinstance(payout_recebido, str) or not payout_recebido.strip():
@@ -1641,13 +1662,45 @@ def iq_option_mcp_health(request: Request, _=Depends(auth)):
 @app.get("/v1/broker/status")
 def broker_status(request: Request, _=Depends(auth)):
     """Valida a configuração de corretora SEM enviar ordem nenhuma."""
-    cfg = load_cfg(request_tenant(request))
-    credenciais_ok, faltando = _credenciais_execucao_prontas(cfg)
+    tenant_id = request_tenant(request)
+    cfg = load_cfg(tenant_id)
+    modo = str(
+        cfg.get("TRADINGAGENTS_BROKER_MODE") or "testnet").strip().lower()
+    if modo == "live":
+        if not MESA_LIVE_LIBERADA:
+            return {
+                "ready": False,
+                "erro": "LIVE bloqueado pelo selo de código da mesa",
+            }
+        credenciais_ok, faltando = _credenciais_live_prontas(cfg)
+        if not credenciais_ok:
+            return {"ready": False,
+                    "erro": "credencial LIVE incompatível ou incompleta: "
+                             + ", ".join(faltando)}
+        try:
+            ativacao = _validar_ativacao_live_salva(
+                _escola_of(request)["armazem"], tenant_id, cfg)
+        except Exception as exc:
+            return {
+                "ready": False,
+                "erro": "ativação LIVE indisponível: "
+                         f"{type(exc).__name__}",
+            }
+        if ativacao.get("valida") is not True:
+            return {
+                "ready": False,
+                "erro": "LIVE exige ativação explícita e vigente para a conta",
+            }
+        cfg_broker = _cfg_para_broker_live(
+            cfg, confirmation_verified=True)
+    else:
+        credenciais_ok, faltando = _credenciais_execucao_prontas(cfg)
+        cfg_broker = cfg
     if not credenciais_ok:
         return {"ready": False,
                 "erro": "credencial incompatível ou incompleta: "
                          + ", ".join(faltando)}
-    env = {k: cfg.get(k, "") for k in
+    env = {k: cfg_broker.get(k, "") for k in
            ("TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
             "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET",
             "EXCHANGE_API_PASSWORD", "EXCHANGE_API_UID",
@@ -3033,7 +3086,11 @@ def _desk_boot(tenant_id: str, *, cfg_override: dict | None = None,
         data_dir = DATA / "desks" / tenant_id
     # A autorização de LIVE é de CÓDIGO + ato explícito vinculado à conta.
     # Salvar TRADINGAGENTS_BROKER_MODE=live jamais basta (FIN-1/ADR-006).
-    broker_cfg = _cfg_para_broker_live(cfg) if mandate.mode is Mode.LIVE else cfg
+    broker_cfg = (
+        _cfg_para_broker_live(
+            cfg, confirmation_verified=mandate.live_authorized)
+        if mandate.mode is Mode.LIVE else cfg
+    )
     broker, broker_mode = build_desk_broker(
         broker_cfg, final_state={}, journal_path=str(data_dir / "broker.jsonl"),
         paper_price=Decimal("100"), live_authorized=mandate.live_authorized)
@@ -4807,13 +4864,20 @@ def _env_live_como_leitura(cfg: dict) -> dict:
     return live_execution_as_read_only_env(_env_live_execution(cfg))
 
 
-def _cfg_para_broker_live(cfg: dict) -> dict:
+def _cfg_para_broker_live(
+        cfg: dict, *, confirmation_verified: bool = False) -> dict:
     """Materializa a chave LIVE só na construção do broker LIVE.
 
     O documento persistido mantém as chaves TESTNET e LIVE separadas. Esta
     projeção em memória é a única ponte para o contrato legado do CCXTBridge.
     """
     saida = dict(cfg)
+    # Mesmo um valor legado presente em memória não vale como consentimento.
+    # Só o chamador que acabou de validar a ativação vinculada pode projetar
+    # a frase para o contrato legado do CCXTBridge.
+    saida.pop("LIVE_TRADING_CONFIRM", None)
+    if confirmation_verified:
+        saida["LIVE_TRADING_CONFIRM"] = LIVE_CONFIRM_PHRASE
     saida.update({
         "EXCHANGE_API_KEY": cfg.get("LIVE_EXCHANGE_API_KEY", ""),
         "EXCHANGE_API_SECRET": cfg.get("LIVE_EXCHANGE_API_SECRET", ""),
@@ -5644,11 +5708,12 @@ def _live_status_payload(request: Request) -> dict:
     recuperacao_local = _recuperacao_local_para_prontidao()
     recuperacao_postgres = _recuperacao_postgres_para_prontidao()
     observabilidade = _observabilidade_para_prontidao()
-    frase_ok = (cfg.get("LIVE_TRADING_CONFIRM") or "").strip() == LIVE_CONFIRM_PHRASE
     checklist = [
-        {"item": "Frase de autorização digitada", "pronto": frase_ok,
+        {"item": "Confirmação LIVE reservada para o momento da ativação",
+         "pronto": True,
          "categoria": "acao_do_proprietario",
-         "acao": f"Digite exatamente: {LIVE_CONFIRM_PHRASE}"},
+         "acao": ("A frase não é armazenada. Digite-a somente ao liberar o "
+                  "agente específico para a conta confirmada")},
         {"item": "Chaves da corretora configuradas",
          "pronto": credenciais_execucao_ok,
          "categoria": "acao_do_proprietario",
@@ -5864,6 +5929,7 @@ async def live_ativar_mesa(agent_id: str, req: Request, _=Depends(auth),
         "valida": True,
     }
     cfg_live = {**cfg, "TRADINGAGENTS_BROKER_MODE": "live"}
+    cfg_live.pop("LIVE_TRADING_CONFIRM", None)
     try:
         nova = _desk_boot(tid, cfg_override=cfg_live,
                           live_activation=ativacao)

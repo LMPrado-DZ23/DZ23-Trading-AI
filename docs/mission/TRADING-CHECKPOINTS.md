@@ -1025,3 +1025,21 @@ Quatro achados examinados diretamente no commit `4b83e16` e tratados um a um —
   executor hermético encontrou um diretório temporário externo já removido;
   a repetição isolada passou (`1 passed`). CI do PR permanece a autoridade
   final para o ambiente limpo.
+
+## Checkpoint — consentimento LIVE somente no momento da ação (PR #14)
+
+- `LIVE_TRADING_CONFIRM` deixou de ser chave configurável e persistente.
+- Tentativas de salvá-la em `/v1/config` são recusadas; instalações antigas
+  removem a chave legada atomicamente antes de usar a configuração.
+- A frase exata entra apenas na projeção em memória do broker depois da
+  validação da ativação vinculada a agente e conta; a configuração salva e o
+  registro de ativação não contêm a frase.
+- `/v1/broker/status` diferencia TESTNET de LIVE e, no modo LIVE, exige selo,
+  credencial `LIVE_*` e ativação persistida revalidada antes de reportar pronto.
+- A mutação que invertia a recusa em `/v1/config` foi detectada pelo teste
+  adversarial. `MESA_LIVE_LIBERADA=False` permanece inalterado e nenhuma ordem
+  ou consulta autenticada externa foi executada.
+- Validação local final: bateria financeira/painel `280 passed`; E2E focal
+  `1 passed, 13 deselected`; suíte integral `3690 passed, 5 skipped,
+  71 subtests passed`; `ruff check .`, `compileall` e `git diff --check`
+  concluíram sem erro.

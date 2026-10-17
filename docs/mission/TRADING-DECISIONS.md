@@ -52,3 +52,10 @@ Critérios: (1) API oficial documentada para ordens; (2) cobertura dos mercados 
 - Alternativas descartadas: confiar só nos quatro freios da ponte (deixam `create_order` alcançável por configuração salva); degradar LIVE→paper silenciosamente (mentiria o estado real); remover o modo LIVE do código (apagaria o caminho auditável e os testes de freio que o exercitam — a ponte direta continua construível nos testes com `live_authorized=True`).
 - Consequências: LIVE continua bloqueado por política (ADR-002) e os quatro freios do dono seguem valendo por cima do selo. Abrir o selo no futuro exige mudança de código revisada + decisão registrada + autorização explícita por agente/conta. Reinício revalida credencial, prova e piloto e volta a exigir reconciliação. IQ Option continua sem executor LIVE homologado. `POST /v1/live/desativar` volta a TESTNET, para o agendador e revoga o mandato global sem apagar evidências.
 
+## ADR-007 — Consentimento LIVE é ato efêmero, não configuração
+
+- Decisão: `LIVE_TRADING_CONFIRM` não pertence mais ao contrato persistente de `/v1/config`. A frase exata é validada no pedido autenticado de ativação ou liberação da parada; só depois de o registro vinculado a tenant, agente, conta, credencial e piloto ser validado ela é projetada em memória para o contrato interno do `CCXTBridge`.
+- Motivação: uma frase salva em configuração ou herdada do ambiente transforma uma confirmação no momento da ação em consentimento durável e reproduzível por backup. Isso contradiz o papel de última confirmação humana e amplia o impacto de configuração antiga ou restaurada.
+- Migração: `load_cfg` ignora e remove atomicamente a chave legada do arquivo antes de decifrar os demais segredos; `save_cfg` também a elimina, e `/v1/config` recusa tentativas novas com 422.
+- Consequências: a preparação pode chegar a `aguardando_liberacao_de_codigo` sem consentimento pré-gravado; a rota final continua exigindo a frase exata. O diagnóstico do broker LIVE usa a credencial `LIVE_*` somente quando selo e ativação persistida revalidada estão vigentes. Nenhuma dessas mudanças abre `MESA_LIVE_LIBERADA` ou envia ordem.
+

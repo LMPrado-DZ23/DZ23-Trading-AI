@@ -282,9 +282,12 @@ regulada no Brasil — o software não muda a sua obrigação legal. Cada client
 deve operar a própria conta, com as próprias chaves.
 
 ## As cinco fechaduras
-1. **Frase exata** em `LIVE_TRADING_CONFIRM`:
+1. **Frase exata no pedido de ativação**:
    `EU AUTORIZO OPERAR COM DINHEIRO REAL`
-   Qualquer variação (minúscula, sem acento, parecida) **não** liga.
+   Qualquer variação (minúscula, sem acento, parecida) **não** liga. A frase
+   não é aceita por `/v1/config`, não é salva no arquivo de configuração e só
+   é projetada em memória para o broker depois que a ativação vinculada ao
+   agente e à conta foi validada.
 2. **Teto por ordem** (`LIVE_MAX_ORDER_VALUE`): valor máximo de UMA ordem.
    Sem ele a ponte recusa nascer — um erro de cálculo viraria ordem do
    tamanho da conta.

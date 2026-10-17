@@ -68,7 +68,9 @@ Todos os itens abaixo precisam de evidência nova no SHA implantado:
 
 Merge definitivo, deploy de produção, DNS, migração destrutiva, rotação de
 credencial crítica, ativação LIVE e qualquer ordem/dinheiro real. Preparar o
-software não concede essa autorização.
+software não concede essa autorização. A frase de confirmação não é aceita em
+`/v1/config`, não é persistida nem restaurada por backup; ela é validada apenas
+no pedido final vinculado ao agente e à conta.
 
 ## Condição de liberação futura
 

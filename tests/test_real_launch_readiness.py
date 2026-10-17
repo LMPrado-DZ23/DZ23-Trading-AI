@@ -1,6 +1,7 @@
 """Relato canônico da preparação para dinheiro real, sem ativar LIVE."""
 
 import importlib
+import json
 
 H = {"Authorization": "Bearer s3nh4"}
 
@@ -65,7 +66,6 @@ def test_preparacao_completa_e_alcancavel_sem_trocar_testnet_para_live(
     cfg = {
         "TRADINGAGENTS_EXCHANGE": "binance",
         "TRADINGAGENTS_BROKER_MODE": "testnet",
-        "LIVE_TRADING_CONFIRM": m.LIVE_CONFIRM_PHRASE,
         "LIVE_MAX_ORDER_VALUE": "25",
         "LIVE_MAX_DAILY_LOSS": "10",
     }
@@ -131,6 +131,107 @@ def test_preparacao_completa_e_alcancavel_sem_trocar_testnet_para_live(
     ]
     assert cfg["TRADINGAGENTS_BROKER_MODE"] == "testnet"
     assert m.MESA_LIVE_LIBERADA is False
+
+
+def test_confirmacao_live_nao_pode_ser_persistida_em_configuracao(
+        tmp_path, monkeypatch):
+    m, client = _app(tmp_path, monkeypatch)
+
+    response = client.post(
+        "/v1/config", headers=H,
+        json={"vars": {"LIVE_TRADING_CONFIRM": m.LIVE_CONFIRM_PHRASE}},
+    )
+
+    assert response.status_code == 422
+    assert "momento da ativação" in str(response.json()["detail"])
+    assert "LIVE_TRADING_CONFIRM" not in m.load_cfg("legacy")
+
+
+def test_load_remove_confirmacao_legada_do_arquivo(
+        tmp_path, monkeypatch):
+    m, _ = _app(tmp_path, monkeypatch)
+    path = m.tenant_cfg_path("legacy")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({
+        "TRADINGAGENTS_EXCHANGE": "binance",
+        "LIVE_TRADING_CONFIRM": m.LIVE_CONFIRM_PHRASE,
+    }), encoding="utf-8")
+
+    cfg = m.load_cfg("legacy")
+    persisted = json.loads(path.read_text(encoding="utf-8"))
+
+    assert cfg["TRADINGAGENTS_EXCHANGE"] == "binance"
+    assert "LIVE_TRADING_CONFIRM" not in cfg
+    assert "LIVE_TRADING_CONFIRM" not in persisted
+
+
+def test_broker_live_recebe_confirmacao_apenas_na_projecao_em_memoria(
+        tmp_path, monkeypatch):
+    m, _ = _app(tmp_path, monkeypatch)
+    cfg = {
+        "TRADINGAGENTS_EXCHANGE": "binance",
+        "LIVE_EXCHANGE_API_KEY": "live-key",
+        "LIVE_EXCHANGE_API_SECRET": "live-secret",
+        "LIVE_EXECUTION_EXCHANGE": "binance",
+        "LIVE_TRADING_CONFIRM": "consentimento-antigo-persistido",
+    }
+
+    projected = m._cfg_para_broker_live(
+        cfg, confirmation_verified=True)
+
+    assert projected["LIVE_TRADING_CONFIRM"] == m.LIVE_CONFIRM_PHRASE
+    assert cfg["LIVE_TRADING_CONFIRM"] == "consentimento-antigo-persistido"
+    assert m._cfg_para_broker_live(
+        cfg, confirmation_verified=False).get("LIVE_TRADING_CONFIRM") is None
+
+
+def test_broker_status_live_usa_ativacao_validada_e_credencial_live(
+        tmp_path, monkeypatch):
+    m, client = _app(tmp_path, monkeypatch)
+    cfg = {
+        "TRADINGAGENTS_DESK_BROKER": "ccxt",
+        "TRADINGAGENTS_EXCHANGE": "binance",
+        "TRADINGAGENTS_BROKER_MODE": "live",
+        "LIVE_EXCHANGE_API_KEY": "live-key",
+        "LIVE_EXCHANGE_API_SECRET": "live-secret",
+        "LIVE_EXECUTION_EXCHANGE": "binance",
+        "LIVE_MAX_ORDER_VALUE": "25",
+        "LIVE_MAX_DAILY_LOSS": "10",
+    }
+    monkeypatch.setattr(m, "MESA_LIVE_LIBERADA", True)
+    monkeypatch.setattr(m, "load_cfg", lambda _tenant: dict(cfg))
+    monkeypatch.setattr(
+        m, "_validar_ativacao_live_salva",
+        lambda _armazem, _tenant, _cfg: {"valida": True},
+    )
+    monkeypatch.setattr(
+        m, "_escola_of", lambda _request: {"armazem": object()})
+
+    response = client.get("/v1/broker/status", headers=H)
+
+    assert response.status_code == 200
+    assert response.json()["ready"] is True
+    assert response.json()["mode"] == "live"
+
+
+def test_broker_status_live_recusa_sem_selo_mesmo_com_cfg_legada(
+        tmp_path, monkeypatch):
+    m, client = _app(tmp_path, monkeypatch)
+    cfg = {
+        "TRADINGAGENTS_EXCHANGE": "binance",
+        "TRADINGAGENTS_BROKER_MODE": "live",
+        "LIVE_EXCHANGE_API_KEY": "live-key",
+        "LIVE_EXCHANGE_API_SECRET": "live-secret",
+        "LIVE_EXECUTION_EXCHANGE": "binance",
+        "LIVE_TRADING_CONFIRM": m.LIVE_CONFIRM_PHRASE,
+    }
+    monkeypatch.setattr(m, "load_cfg", lambda _tenant: dict(cfg))
+
+    response = client.get("/v1/broker/status", headers=H)
+
+    assert response.status_code == 200
+    assert response.json()["ready"] is False
+    assert "selo" in response.json()["erro"].lower()
 
 
 def test_resumo_puro_distingue_preparado_de_liberado(tmp_path, monkeypatch):

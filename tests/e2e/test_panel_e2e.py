@@ -453,7 +453,8 @@ def test_fm3_corretora_catalogo_capacidades_e_preparo_real(page, live_server, ow
     page.get_by_role("button", name=re.compile("Ver preparação")).click()
     prep = page.locator("#preparoReal")
     expect(prep).to_contain_text("BLOQUEADO", timeout=15000)
-    expect(prep).to_contain_text("Frase de autorização digitada")
+    expect(prep).to_contain_text(
+        "Confirmação LIVE reservada para o momento da ativação")
     expect(prep).to_contain_text("Liberação de código para operar dinheiro real")
     expect(prep).to_contain_text("Indisponível neste lançamento")
     expect(prep).to_contain_text("NÃO ativa nada")
