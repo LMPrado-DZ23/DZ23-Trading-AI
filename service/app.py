@@ -701,6 +701,13 @@ def _segredos_do_disco(do_disco: dict, tenant_id: str, path: Path) -> None:
     for chave in SECRETish:
         valor = do_disco.get(chave)
         if not segredos_em_repouso.e_cifrado(valor):
+            # Valor em texto claro (legível) — inclusive um segredo RE-COLADO no
+            # POSIX, onde cifrar() devolve o valor como está. NÃO é ilegível:
+            # limpa qualquer marca antiga do registro, senão um blob DPAPI
+            # anterior deixaria a chave eternamente "ilegível" mesmo após o
+            # dono re-colar um valor bom (bug cross-platform: recuperação por
+            # re-colar falhava fora do Windows).
+            registry.pop(chave, None)
             continue
         try:
             do_disco[chave] = segredos_em_repouso.decifrar(valor)
