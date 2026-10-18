@@ -7,6 +7,24 @@ BLOCKED_BY_ARCHITECTURE.
 
 ---
 
+## Pós-auditoria SEC-1 — recuperação cross-platform de segredo
+
+- **PR:** #15, `fix/sec1-registro-ilegiveis-crossplatform`.
+- **SHA auditado:** `7a29da5c403b004471294cd1f8bd6d6e9d282716`.
+- **Causa-raiz:** a marca de segredo ilegível de um blob DPAPI antigo persistia
+  depois que o dono re-colava um valor legível no POSIX; o painel continuava a
+  informar falha apesar da recuperação válida.
+- **Correção:** o carregamento limpa somente a marca local para o campo que
+  voltou a ser legível. O valor não é exposto, não é apagado e não cria caminho
+  de execução LIVE.
+- **Prova:** teste de regressão SEC-1 e run de CI
+  [`39120039334`](https://github.com/LMPrado-DZ23/DZ23-Trading-AI/actions/runs/39120039334)
+  com conclusão `success` na matriz completa. Registro mecanicamente conferido
+  por `docs/finalization/CI-EVIDENCE.json`.
+- **Estado:** PASS na PR; integração em `main` pendente de revisão/merge humano.
+
+---
+
 ## C000 — Inventário do repositório, baseline e preparação do CI
 
 - **Data UTC:** 2026-10-12T00:00:00Z

@@ -2,6 +2,20 @@
 
 > Documento de retomada. Se a sessão cair, comece por aqui.
 
+## Pós-auditoria independente — SEC-1
+
+- **PR #15:** `fix/sec1-registro-ilegiveis-crossplatform`, SHA
+  `7a29da5c403b004471294cd1f8bd6d6e9d282716`.
+- **Causa corrigida:** após um blob DPAPI ilegível, re-colar uma credencial
+  válida em POSIX agora remove somente a marca local de ilegibilidade; o valor
+  permanece protegido/mascarado e nunca é registrado em log.
+- **CI comprovada:** run
+  [`39120039334`](https://github.com/LMPrado-DZ23/DZ23-Trading-AI/actions/runs/39120039334)
+  terminou `success` em toda a matriz (Python 3.10–3.13, segurança,
+  dependências, Postgres e ARM64). Ver `CI-EVIDENCE.json`.
+- **Estado de integração:** a PR ainda está aberta; isto não declara `main`
+  verde nem autoriza merge automático.
+
 ## Onde estamos
 
 | | |
