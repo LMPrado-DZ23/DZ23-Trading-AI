@@ -4,7 +4,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from tradingagents.desk.traders import TrendTrader, default_desk
-from tradingagents.desk.validation import ResultadoValidacao, validar
+from tradingagents.desk.validation import Operacao, ResultadoValidacao, validar
 
 
 def tendencia_forte(n=300):
@@ -73,6 +73,22 @@ class TestVeredito:
         if 0 < r.total < 20:
             assert any("amostra pequena" in x for x in v["ressalvas"])
             assert v["aprovada"] is False
+
+    def test_positive_small_sample_does_not_blame_costs(self):
+        """A reprovação por amostra insuficiente não pode falsear a causa."""
+        r = ResultadoValidacao("x", "BTC/USDT", "binance")
+        r.operacoes = [
+            Operacao(0, 1, Decimal("100"), Decimal("112"),
+                     Decimal("0.12"), Decimal("0.08"), "alvo"),
+            Operacao(2, 3, Decimal("100"), Decimal("111"),
+                     Decimal("0.11"), Decimal("0.07"), "alvo"),
+        ]
+
+        v = r.veredito()
+
+        assert v["aprovada"] is False
+        assert "amostra pequena" in v["resumo"]
+        assert "custos comeram" not in v["resumo"]
 
     def test_report_always_warns_about_the_past(self):
         r = validar(TrendTrader("t", ("BTC/USDT",)), tendencia_forte(300), "BTC/USDT")

@@ -105,8 +105,12 @@ class ResultadoValidacao:
                 f"{self.total} operações"
                 if aprovada else
                 f"REPROVADA: {self.retorno_liquido_total:+.2%} líquidos em "
-                f"{self.total} operações — os custos "
-                f"({self.custo_total:.2%}) comeram o resultado"),
+                f"{self.total} operações — amostra pequena: são necessárias "
+                "ao menos 20 operações"
+                if self.total < 20 else
+                f"REPROVADA: {self.retorno_liquido_total:+.2%} líquidos em "
+                f"{self.total} operações — resultado líquido não positivo "
+                f"após custos ({self.custo_total:.2%})"),
             "aviso": "teste sobre o passado; não prevê o futuro",
         }
 
