@@ -191,6 +191,15 @@ class TestCapacidadesVisiveisNoModoSimples:
         assert "MCP oficial em validação passiva" not in capacidades
         assert "Sem token novo validado" not in capacidades
 
+    def test_inicio_nao_sugere_binance_quando_configuracao_e_incompativel(
+            self):
+        html = _html()
+        inicio = _trecho(html, "async function inicioLoad()",
+                          "async function capacidadesLoad()")
+        assert 'value="">Selecione uma corretora TESTNET' in html
+        assert "const exchangeSalva=val('TRADINGAGENTS_EXCHANGE')" in inicio
+        assert "?exchangeSalva:''" in inicio
+
     def test_abrir_troca_para_avancado_quando_a_tela_esta_oculta(self):
         html = _html()
         trecho = _trecho(html, "function abrirPagina(", tam=400)
