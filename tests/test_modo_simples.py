@@ -180,6 +180,14 @@ class TestCapacidadesVisiveisNoModoSimples:
             "A prova de conta usa somente list_balances NORMAL"
             in capacidades
         )
+        assert (
+            "A prova recusa o token se tools/list anunciar qualquer "
+            "ferramenta mutável" in capacidades
+        )
+        assert (
+            "Como o token ainda anuncia ferramentas mutáveis no provedor"
+            not in capacidades
+        )
         assert "MCP oficial em validação passiva" not in capacidades
         assert "Sem token novo validado" not in capacidades
 

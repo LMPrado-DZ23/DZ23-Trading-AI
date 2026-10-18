@@ -253,7 +253,7 @@ const itens=[
 ['Alertas externos (Telegram/Discord/WhatsApp/e-mail)',extCab[0],extCab[1],extCab[2],'config'],
 ['Aplicativo no celular e push',pushCab[0],pushCab[1],pushCab[2],'config'],
 ['Dinheiro real (LIVE)','bad','bloqueado por segurança','Servidor: '+(opReal.estado||'—')+(opReal.motivo?(' — '+opReal.motivo):'')+'. Só destrava com homologação e autorização explícita do proprietário.','mesa'],
-['IQ Option','ok','Leitura REAL preparada, execução bloqueada','Sete endpoints oficiais validados. A prova de conta usa somente list_balances NORMAL, sem expor saldo ou ID. Como o token ainda anuncia ferramentas mutáveis no provedor, permissões mínimas permanecem bloqueadas.',null],
+['IQ Option','ok','Leitura REAL preparada, execução bloqueada','Sete endpoints oficiais validados. A prova de conta usa somente list_balances NORMAL, sem expor saldo ou ID. A prova recusa o token se tools/list anunciar qualquer ferramenta mutável; uma credencial de execução futura é separada e permanece bloqueada.',null],
 ];
 alvo.innerHTML=itens.map(x=>cap(x[0],x[1],x[2],x[3],x[4])).join('');
 }
