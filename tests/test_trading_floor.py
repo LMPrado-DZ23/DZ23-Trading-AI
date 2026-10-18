@@ -33,3 +33,25 @@ class TestCena:
 
     def test_credits_the_visual_inspiration(self):
         assert "Claw3D" in FLOOR and "openclaw-office" in FLOOR
+
+    def test_server_fields_are_escaped_and_task_approval_is_not_inline_js(self):
+        """Dados de tarefas e eventos podem vir de agentes/integrações.
+
+        O Floor usa ``innerHTML`` para a composição visual, portanto valores
+        do read model precisam atravessar o escapador e o identificador da
+        tarefa não pode virar código JavaScript dentro de um atributo.
+        """
+        assert "function escapeHtml(" in FLOOR
+        assert "onclick=\"approveTask('" not in FLOOR
+        assert 'data-task-id="${escapeHtml(t.task_id)}"' in FLOOR
+        assert "addEventListener('click'" in FLOOR
+        for campo in (
+            "escapeHtml(t.kind)",
+            "escapeHtml(t.agent_id)",
+            "escapeHtml(t.status)",
+            "escapeHtml(String(d.desk_id",
+            "escapeHtml(id)",
+            "escapeHtml(e.event_type)",
+            "escapeHtml(e.event?.aggregate_id)",
+        ):
+            assert campo in FLOOR, f"campo do servidor sem escape: {campo}"
