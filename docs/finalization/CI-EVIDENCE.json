@@ -1,4 +1,9 @@
 {
   "schema": "dz23.ci-evidence/1",
-  "claims": []
+  "claims": [
+    {
+      "run_id": 39120039334,
+      "head_sha": "7a29da5c403b004471294cd1f8bd6d6e9d282716"
+    }
+  ]
 }

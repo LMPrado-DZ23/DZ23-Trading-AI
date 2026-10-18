@@ -1,5 +1,14 @@
 # RELEASE_GATES — DZ23 Trading
 
+## Atualização pós-auditoria SEC-1
+
+O PR #15 passou integralmente no run
+[`39120039334`](https://github.com/LMPrado-DZ23/DZ23-Trading-AI/actions/runs/39120039334)
+para o SHA `7a29da5c403b004471294cd1f8bd6d6e9d282716`. Esta é evidência da
+correção em revisão, registrada em `CI-EVIDENCE.json`; **não** é uma declaração
+de que `main` já contém o patch. Merge, deploy e LIVE continuam fora deste
+gate e exigem decisão humana separada.
+
 > Frase oficial até a auditoria externa: **"Release candidate para
 > PAPER/SHADOW/TESTNET, aguardando auditoria independente."** Nunca "pronto
 > para LIVE".

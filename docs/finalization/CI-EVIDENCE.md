@@ -14,5 +14,10 @@ substituem a evidência do estado presente. Para registrar uma nova conclusão:
 3. execute `python scripts/verify_ci_evidence.py --repository OWNER/REPO`;
 4. só então atualize `STATUS.md`, `RELEASE_GATES.md` e os checkpoints.
 
-No momento, não há alegação nova: o run do PR #15 ainda precisa terminar antes
-de ser usado como evidência documental.
+## Evidência vigente
+
+O PR #15 (correção SEC-1 cross-platform) foi executado no run
+[`39120039334`](https://github.com/LMPrado-DZ23/DZ23-Trading-AI/actions/runs/39120039334),
+para o SHA `7a29da5c403b004471294cd1f8bd6d6e9d282716`, com conclusão `success`.
+Isso comprova a PR, não uma integração em `main`: o merge continua dependendo
+da decisão humana e de revisão normal.
