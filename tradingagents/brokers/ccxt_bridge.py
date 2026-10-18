@@ -20,6 +20,7 @@ Regras (decisão do Prado, dono do sistema):
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import time
@@ -46,6 +47,212 @@ EXCHANGE_ALIASES = {
 LIVE_CONFIRM_PHRASE = "EU AUTORIZO OPERAR COM DINHEIRO REAL"
 
 
+def read_only_credential_fingerprint(env: dict) -> str:
+    """Identifica a credencial REAL sem persistir ou expor seu valor.
+
+    A prova de leitura fica automaticamente obsoleta quando qualquer parte
+    da credencial ou a corretora muda. O digest nunca é usado para autenticar.
+    """
+    exchange = (env.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    if exchange == "iq_option":
+        partes = [exchange, env.get("IQ_OPTION_MCP_BEARER_TOKEN") or ""]
+    else:
+        partes = [
+            exchange,
+            env.get("REAL_READ_ONLY_API_KEY") or "",
+            env.get("REAL_READ_ONLY_API_SECRET") or "",
+            env.get("REAL_READ_ONLY_API_PASSWORD") or "",
+            env.get("REAL_READ_ONLY_API_UID") or "",
+        ]
+    return hashlib.sha256("\0".join(partes).encode()).hexdigest()
+
+
+def _broker_identity_fingerprint(env: dict, account_id: str) -> str:
+    """Vincula a identidade devolvida pela corretora sem persistir o ID."""
+    chave = bytes.fromhex(read_only_credential_fingerprint(env))
+    mensagem = (str(env.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+                + "\0" + account_id.strip()).encode()
+    return hmac.new(chave, mensagem, hashlib.sha256).hexdigest()
+
+
+def testnet_credential_fingerprint(env: dict) -> str:
+    """Identifica a credencial usada na homologação TESTNET sem guardá-la.
+
+    A impressão é evidência de qual conjunto de credenciais produziu a prova;
+    ela não é reutilizada para autenticação e não habilita qualquer envio.
+    """
+    partes = [
+        (env.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower(),
+        env.get("EXCHANGE_API_KEY") or "",
+        env.get("EXCHANGE_API_SECRET") or "",
+        env.get("EXCHANGE_API_PASSWORD") or "",
+        env.get("EXCHANGE_API_UID") or "",
+    ]
+    return hashlib.sha256("\0".join(partes).encode()).hexdigest()
+
+
+def live_execution_credential_fingerprint(env: dict) -> str:
+    """Identifica apenas a credencial de execução REAL, sem expô-la.
+
+    A credencial LIVE tem namespace próprio: ela não pode herdar a chave da
+    homologação TESTNET nem a chave somente leitura usada para certificar a
+    identidade da conta.
+    """
+    exchange = (env.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    if exchange == "iq_option":
+        partes = [
+            exchange,
+            env.get("IQ_OPTION_MCP_LIVE_BEARER_TOKEN") or "",
+            env.get("IQ_OPTION_MCP_LIVE_SERVER") or "binary-options",
+        ]
+        return hashlib.sha256("\0".join(partes).encode()).hexdigest()
+    partes = [
+        exchange,
+        env.get("LIVE_EXCHANGE_API_KEY") or "",
+        env.get("LIVE_EXCHANGE_API_SECRET") or "",
+        env.get("LIVE_EXCHANGE_API_PASSWORD") or "",
+        env.get("LIVE_EXCHANGE_API_UID") or "",
+    ]
+    return hashlib.sha256("\0".join(partes).encode()).hexdigest()
+
+
+def live_execution_as_read_only_env(env: dict) -> dict:
+    """Mapeia a credencial LIVE para a sonda que não possui método de ordem."""
+    return {
+        "TRADINGAGENTS_EXCHANGE": env.get("TRADINGAGENTS_EXCHANGE") or "",
+        "REAL_READ_ONLY_API_KEY": env.get("LIVE_EXCHANGE_API_KEY") or "",
+        "REAL_READ_ONLY_API_SECRET": env.get("LIVE_EXCHANGE_API_SECRET") or "",
+        "REAL_READ_ONLY_API_PASSWORD": (
+            env.get("LIVE_EXCHANGE_API_PASSWORD") or ""),
+        "REAL_READ_ONLY_API_UID": env.get("LIVE_EXCHANGE_API_UID") or "",
+        "REAL_READ_ONLY_ACCOUNT_ID": (
+            env.get("LIVE_EXECUTION_ACCOUNT_ID") or ""),
+    }
+
+
+def broker_identity_fingerprint(env: dict, account_id: str) -> str:
+    """API pública para vincular uma prova à identidade sem guardar o ID."""
+    return _broker_identity_fingerprint(env, account_id)
+
+
+def probe_live_execution_account(env: dict) -> dict:
+    """Autentica a chave LIVE usando exclusivamente operações de leitura.
+
+    A função reutiliza a sonda isolada que nunca constrói ``CCXTBridge``.
+    Portanto, mesmo uma chave com permissão de trade não alcança
+    ``create_order`` durante a preparação.
+    """
+    leitura = live_execution_as_read_only_env(env)
+    resultado = probe_read_only_account(leitura)
+    resultado["credential_fingerprint"] = (
+        live_execution_credential_fingerprint(env))
+    return resultado
+
+
+def probe_read_only_account(env: dict) -> dict:
+    """Prova autenticação REAL usando exclusivamente métodos de leitura.
+
+    Esta função deliberadamente não constrói ``CCXTBridge`` e não devolve o
+    cliente CCXT: assim a credencial de observação nunca alcança
+    ``submit_order``. Nenhum saldo, ordem, id de conta ou segredo é retornado.
+    A ausência de permissão de trade/saque não é inferível por uma leitura
+    genérica CCXT; ela permanece uma declaração explícita do proprietário.
+    """
+    exchange_name = (env.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    if exchange_name not in EXCHANGE_ALIASES:
+        raise BrokerSecurityError(
+            f"exchange {exchange_name!r} fora da linha DZ23 "
+            f"({', '.join(sorted(EXCHANGE_ALIASES))}).")
+    api_key = env.get("REAL_READ_ONLY_API_KEY") or ""
+    api_secret = env.get("REAL_READ_ONLY_API_SECRET") or ""
+    password = env.get("REAL_READ_ONLY_API_PASSWORD") or ""
+    uid = env.get("REAL_READ_ONLY_API_UID") or ""
+    expected_account_id = str(
+        env.get("REAL_READ_ONLY_ACCOUNT_ID") or "").strip()
+    if not expected_account_id:
+        raise BrokerSecurityError(
+            "informe o identificador real exibido pela corretora")
+    if not api_key or not api_secret:
+        raise BrokerSecurityError(
+            "a prova REAL somente leitura exige chave e segredo próprios")
+
+    import ccxt
+    ccxt_id = EXCHANGE_ALIASES[exchange_name]
+    if not hasattr(ccxt, ccxt_id):
+        raise BrokerSecurityError(
+            f"ccxt instalado não possui {ccxt_id!r}; atualizar dependência.")
+    exchange = getattr(ccxt, ccxt_id)({
+        "apiKey": api_key, "secret": api_secret,
+        "password": password, "uid": uid, "enableRateLimit": True,
+        "options": {
+            "warnOnFetchOpenOrdersWithoutSymbol": False,
+            "fetchOpenOrders": {"warnWithoutSymbol": False},
+        },
+    })
+    requisitos = getattr(exchange, "requiredCredentials", {}) or {}
+    valores = {"apiKey": api_key, "secret": api_secret,
+               "password": password, "uid": uid}
+    faltando = [nome for nome, valor in valores.items()
+                if requisitos.get(nome) is True and not valor]
+    if faltando:
+        raise BrokerSecurityError(
+            f"{exchange_name} exige credenciais adicionais: "
+            + ", ".join(faltando) + ".")
+
+    chamadas = []
+    account_ids: list[str] = []
+    try:
+        if not hasattr(exchange, "fetch_balance"):
+            raise BrokerSecurityError(
+                f"{exchange_name} não oferece consulta autenticada de saldo")
+        exchange.fetch_balance()
+        chamadas.append("fetch_balance")
+        capacidades = getattr(exchange, "has", {}) or {}
+        if capacidades.get("fetchOpenOrders") and hasattr(
+                exchange, "fetch_open_orders"):
+            exchange.fetch_open_orders()
+            chamadas.append("fetch_open_orders")
+        if capacidades.get("fetchAccounts") and hasattr(
+                exchange, "fetch_accounts"):
+            accounts = exchange.fetch_accounts()
+            chamadas.append("fetch_accounts")
+            if isinstance(accounts, list):
+                account_ids = [
+                    str(account.get("id") or "").strip()
+                    for account in accounts if isinstance(account, dict)
+                    and str(account.get("id") or "").strip()
+                ]
+    except BrokerSecurityError:
+        raise
+    except Exception as exc:
+        raise BrokerSecurityError(
+            "consulta autenticada somente leitura recusada "
+            f"({type(exc).__name__})") from exc
+    finally:
+        fechar = getattr(exchange, "close", None)
+        if callable(fechar):
+            fechar()
+    if not account_ids:
+        raise BrokerSecurityError(
+            "a corretora não devolveu uma identidade de conta verificável; "
+            "a leitura foi autenticada, mas o gate de identidade permanece "
+            "bloqueado")
+    if not any(hmac.compare_digest(expected_account_id, item)
+               for item in account_ids):
+        raise BrokerSecurityError(
+            "o identificador informado não corresponde à conta autenticada")
+    return {
+        "exchange": exchange_name,
+        "ccxt_id": ccxt_id,
+        "authenticated_read": True,
+        "read_methods": chamadas,
+        "broker_identity_verified": True,
+        "broker_identity_fingerprint": _broker_identity_fingerprint(
+            env, expected_account_id),
+        "credential_fingerprint": read_only_credential_fingerprint(env),
+    }
+
+
 def _decimal_env(env, chave: str, padrao: str) -> Decimal:
     try:
         return Decimal(str(env.get(chave) or padrao))
@@ -64,6 +271,9 @@ class CCXTBridge:
         mode = (env.get("TRADINGAGENTS_BROKER_MODE") or "").strip().lower()
         self.api_key = env.get("EXCHANGE_API_KEY") or ""
         self.api_secret = env.get("EXCHANGE_API_SECRET") or ""
+        self.api_password = env.get("EXCHANGE_API_PASSWORD") or ""
+        self.api_uid = env.get("EXCHANGE_API_UID") or ""
+        self.credential_fingerprint = testnet_credential_fingerprint(env)
         self.journal_path = Path(journal_path or env.get(
             "TRADINGAGENTS_BROKER_JOURNAL", "/data/broker-journal.jsonl"))
 
@@ -112,6 +322,7 @@ class CCXTBridge:
                 f"ccxt instalado não possui {ccxt_id!r}; atualizar dependência.")
         self._ex = getattr(ccxt, ccxt_id)({
             "apiKey": self.api_key, "secret": self.api_secret,
+            "password": self.api_password, "uid": self.api_uid,
             "enableRateLimit": True,
         })
         if self.mode == "testnet":
@@ -119,9 +330,21 @@ class CCXTBridge:
                 raise BrokerSecurityError(
                     f"{self.exchange_name} não expõe testnet no CCXT. Em "
                     "testnet use binance, bybit, okx, gateio ou coinbase; "
-                    "para as demais, o modo live (com a frase de autorização) "
-                    "é o único caminho — nunca degrado silenciosamente.")
+                    "para as demais, use apenas dados públicos enquanto "
+                    "LIVE estiver bloqueado — nunca degrado silenciosamente.")
             self._ex.set_sandbox_mode(True)
+        requisitos = getattr(self._ex, "requiredCredentials", {}) or {}
+        faltando = []
+        for nome, valor in (("apiKey", self.api_key),
+                            ("secret", self.api_secret),
+                            ("password", self.api_password),
+                            ("uid", self.api_uid)):
+            if requisitos.get(nome) is True and not valor:
+                faltando.append(nome)
+        if faltando:
+            raise BrokerSecurityError(
+                f"{self.exchange_name} exige credenciais adicionais: "
+                + ", ".join(faltando) + ".")
 
     # ------------------------------------------------------------------
     @staticmethod

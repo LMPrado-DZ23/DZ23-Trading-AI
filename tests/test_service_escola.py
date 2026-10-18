@@ -5,7 +5,10 @@ com o motivo do fluxo de piloto; certificação não atravessa contexto; o
 controle aleatório entra só por opção explícita do dono.
 """
 import importlib
+import json
 from decimal import Decimal
+
+import pytest
 
 
 def _load_app(tmp_path, monkeypatch, **env):
@@ -57,6 +60,39 @@ class TestRotasRegistradas:
         assert c.get("/v1/escola/maestro").status_code == 401
         assert c.get("/v1/escola/pilotos").status_code == 401
         assert c.post("/v1/escola/salas", json={}).status_code == 401
+
+    def test_pilotos_roda_vigia_antes_de_serializar_estado(
+            self, tmp_path, monkeypatch):
+        c, m = _client(tmp_path, monkeypatch)
+
+        class SupervisorMudando:
+            estado = "piloto_autorizado"
+
+            @classmethod
+            def vigiar(cls, **_kwargs):
+                cls.estado = "suspenso"
+                return ["trader-momentum: piloto SUSPENSO"]
+
+            @classmethod
+            def relatorio(cls):
+                return [{"agent_id": "trader-momentum",
+                         "estado": cls.estado}]
+
+            @classmethod
+            def encaminhamentos(cls):
+                return [{"agent_id": "trader-momentum",
+                         "estado": cls.estado}]
+
+        monkeypatch.setattr(
+            m, "_supervisor_of", lambda _request: SupervisorMudando())
+
+        resposta = c.get("/v1/escola/pilotos", headers=H)
+
+        assert resposta.status_code == 200
+        body = resposta.json()
+        assert body["vigia"] == ["trader-momentum: piloto SUSPENSO"]
+        assert body["autorizacoes"][0]["estado"] == "suspenso"
+        assert body["encaminhamentos"][0]["estado"] == "suspenso"
 
 
 class TestEscolaCentralEBandeja:
@@ -181,14 +217,15 @@ class TestCertificacaoEPilotos:
         assert d["elegivel"] is False and d["estado"] == "coletando"
         assert "nenhuma evidência" in d["motivo"]
 
-    def test_laboratorio_jamais_elegivel(self, tmp_path, monkeypatch):
+    def test_iq_option_sem_evidencia_ainda_nao_e_elegivel(
+            self, tmp_path, monkeypatch):
         c, _ = _client(tmp_path, monkeypatch)
         d = c.get("/v1/escola/certificacao", headers=H,
                   params={"estrategia": "trend_following",
                           "corretora": "iq_option",
                           "mercado": "opcoes_binarias",
                           "ativo": "EUR/USD"}).json()
-        assert d["elegivel"] is False and "laboratório" in d["motivo"]
+        assert d["elegivel"] is False and "nenhuma evidência" in d["motivo"]
 
     def test_pilotos_vazio_e_cadeia_guardada(self, tmp_path, monkeypatch):
         c, _ = _client(tmp_path, monkeypatch)
@@ -231,6 +268,60 @@ class TestControleOptIn:
         st = c.get("/v1/desk/status", headers=H).json()
         ids = [a["id"] for a in st["agents"]]
         assert len(ids) == 11 and "trader-controle" in ids
+
+
+class TestBootDaMesaIQOption:
+    def test_abre_sala_binaria_paper_com_payout_explicito(
+            self, tmp_path, monkeypatch):
+        c, m = _client(
+            tmp_path, monkeypatch,
+            TRADINGAGENTS_EXCHANGE="iq_option",
+            TRADINGAGENTS_DESK_PAYOUT="0.85",
+            TRADINGAGENTS_DESK_INSTRUMENTS="EUR/USD",
+        )
+
+        resposta = c.get("/v1/desk/status", headers=H)
+
+        assert resposta.status_code == 200, resposta.text
+        escola = resposta.json()["escola"]
+        assert escola["motivo"] == ""
+        assert escola["sala"]["chave"] == (
+            "iq_option|paper-legacy|opcoes_binarias|paper")
+        assert escola["sala"]["contexto"]["payout"] == "0.85"
+        assert m._DESKS["legacy"]["broker_mode"] == "paper"
+        assert m._DESKS["legacy"]["orchestrator"].mandate.live_authorized is False
+        assert m.MESA_LIVE_LIBERADA is False
+
+    def test_sem_payout_falha_fechado_e_expoe_motivo(
+            self, tmp_path, monkeypatch):
+        c, m = _client(
+            tmp_path, monkeypatch,
+            TRADINGAGENTS_EXCHANGE="iq_option",
+            TRADINGAGENTS_DESK_INSTRUMENTS="EUR/USD",
+        )
+
+        resposta = c.get("/v1/desk/status", headers=H)
+
+        assert resposta.status_code == 200, resposta.text
+        escola = resposta.json()["escola"]
+        assert escola["sala"] is None
+        assert "payout" in escola["motivo"]
+        assert m._DESKS["legacy"]["broker_mode"] == "paper"
+        assert m.MESA_LIVE_LIBERADA is False
+
+    @pytest.mark.parametrize("valor", ["0", "-0.1", "1.01", "NaN", "Infinity"])
+    def test_config_recusa_payout_invalido_sem_persistir(
+            self, tmp_path, monkeypatch, valor):
+        c, _ = _client(tmp_path, monkeypatch)
+
+        resposta = c.post("/v1/config", headers=H, json={"vars": {
+            "TRADINGAGENTS_DESK_PAYOUT": valor,
+        }})
+
+        assert resposta.status_code == 422
+        assert "payout" in resposta.json()["detail"].lower()
+        publico = c.get("/v1/config", headers=H).json()["config"]
+        assert publico["TRADINGAGENTS_DESK_PAYOUT"]["set"] is False
 
 
 def _fechar_posicao(m, instrumento):
@@ -339,6 +430,31 @@ class TestMesaEscolaE2E:
         av = r.json()["avaliacao"]
         assert av["estado"] == "formada" and av["aprovada"] is True
         assert av["amostras"] >= 500
+        fila = r.json()["sala_real"]
+        assert fila["agent_id"] == "trader-momentum"
+        assert fila["estado"] == "aguardando_configuracao_do_proprietario"
+        pilotos = c.get("/v1/escola/pilotos", headers=H).json()
+        assert pilotos["autorizacoes"] == []
+        assert len(pilotos["encaminhamentos"]) == 1
+        assert c.post("/v1/escola/pilotos/trader-momentum/autorizar",
+                      headers=H).status_code == 409
+
+        # Reavaliar uma formatura já registrada é idempotente: não cria
+        # outra fila e não aproxima o agente da autorização.
+        r2 = c.post("/v1/escola/avaliar", headers=H, json={
+            "chave": self.CHAVE, "estrategia": "momentum",
+            "ativo": "BTC/USDT"})
+        assert r2.status_code == 200
+        assert r2.json()["sala_real"]["encaminhamento_id"] == \
+            fila["encaminhamento_id"]
+        assert len(c.get("/v1/escola/pilotos", headers=H).json()[
+            "encaminhamentos"]) == 1
+
+        # Ao sair da escola o trader para: a fila não concede capital.
+        ciclo = c.post("/v1/desk/cycle", headers=H).json()
+        assert len(ciclo["ordens"]) == 1
+        assert any("trader-momentum" in a and "sala REAL" in a
+                   for a in ciclo["abstencoes"])
 
         bin_ = c.get("/v1/escola/certificacao", headers=H, params={
             "estrategia": "momentum", "corretora": "binance",
@@ -365,6 +481,52 @@ class TestMesaEscolaE2E:
             "estrategia": "momentum", "ativo": "BTC/USDT"}).status_code == 404
         assert c.post("/v1/escola/avaliar", headers=H, json={
             "chave": self.CHAVE}).status_code == 422
+
+    def test_ciclo_detecta_formatura_e_encaminha_sem_rota_manual(
+            self, tmp_path, monkeypatch):
+        """A fila nasce no ciclo; abrir a tela ou chamar /avaliar não é requisito."""
+        c, m = _client(tmp_path, monkeypatch)
+        assert c.get("/v1/desk/status", headers=H).status_code == 200
+        self._semear_formada(m, estrategia="momentum", ativo="BTC/USDT")
+        antes = c.get("/v1/escola/pilotos", headers=H).json()
+        assert antes["encaminhamentos"] == []
+
+        ciclo = c.post("/v1/desk/cycle", headers=H)
+
+        assert ciclo.status_code == 200, ciclo.text
+        avaliacao = next(x for x in ciclo.json()["escola"]
+                         if x["estrategia"] == "momentum")
+        assert avaliacao["estado"] == "formada"
+        assert avaliacao["sala_real"]["estado"] == \
+            "aguardando_configuracao_do_proprietario"
+        depois = c.get("/v1/escola/pilotos", headers=H).json()
+        assert [x["agent_id"] for x in depois["encaminhamentos"]] == [
+            "trader-momentum"]
+        assert depois["autorizacoes"] == []
+        status = c.get("/v1/desk/status", headers=H).json()
+        assert status["escola"]["avaliacoes_automaticas"]
+
+    def test_formado_e_encaminhado_mesmo_apos_reinicio_da_mesa(
+            self, tmp_path, monkeypatch):
+        """A fila REAL vem do estado durável, não do cache `_DESKS`."""
+        c, m = _client(tmp_path, monkeypatch)
+        assert c.get("/v1/desk/status", headers=H).status_code == 200
+        self._semear_formada(m, estrategia="momentum", ativo="BTC/USDT")
+        m._DESKS.clear()  # simula reinício antes da avaliação/encaminhamento
+
+        resposta = c.post("/v1/escola/avaliar", headers=H, json={
+            "chave": self.CHAVE, "estrategia": "momentum",
+            "ativo": "BTC/USDT"})
+
+        assert resposta.status_code == 200, resposta.text
+        fila = resposta.json()["sala_real"]
+        assert fila["agent_id"] == "trader-momentum"
+        assert fila["estado"] == "aguardando_configuracao_do_proprietario"
+        assert m._DESKS == {}  # encaminhar não inicializa broker/scheduler
+        persistido = c.get("/v1/escola/pilotos", headers=H).json()
+        assert [item["encaminhamento_id"] for item in
+                persistido["encaminhamentos"]] == [
+                    fila["encaminhamento_id"]]
 
     def test_piloto_aguardando_corta_entrada_no_ciclo(self, tmp_path,
                                                       monkeypatch):
@@ -418,3 +580,151 @@ class TestMesaEscolaE2E:
         assert any("trader-momentum" in a
                    and "Maestro/piloto" in a for a in ciclo3["abstencoes"]), \
             ciclo3["abstencoes"]
+
+    @pytest.mark.parametrize(
+        "campo,valor",
+        [("capital_maximo", "NaN"),
+         ("perda_diaria_maxima", "Infinity"),
+         ("perda_total_maxima", "-Infinity")],
+    )
+    def test_pedido_recusa_limite_nao_finito_sem_erro_interno(
+            self, tmp_path, monkeypatch, campo, valor):
+        c, m = _client(tmp_path, monkeypatch)
+        assert c.get("/v1/desk/status", headers=H).status_code == 200
+        self._semear_formada(m, estrategia="momentum", ativo="BTC/USDT")
+        pedido = {
+            "agent_id": "trader-momentum", "estrategia": "momentum",
+            "versao": "1", "corretora": "binance",
+            "conta": "paper-legacy", "ativo": "BTC/USDT",
+            "horizonte": "1h", "capital_maximo": "100",
+            "perda_diaria_maxima": "10", "perda_total_maxima": "30",
+            "prazo_dias": 30,
+        }
+        pedido[campo] = valor
+
+        resposta = c.post(
+            "/v1/escola/pilotos/solicitar", headers=H, json=pedido)
+
+        assert resposta.status_code == 422
+        assert "finito" in resposta.json()["detail"]
+
+    def test_formado_vincula_conta_real_so_com_prova_read_only(
+            self, tmp_path, monkeypatch):
+        c, m = _client(tmp_path, monkeypatch)
+        assert c.get("/v1/desk/status", headers=H).status_code == 200
+        self._semear_formada(m, estrategia="momentum", ativo="BTC/USDT")
+        origem = {
+            "corretora": "binance", "conta": "paper-legacy",
+            "mercado": "spot", "modo": "paper", "ativo": "BTC/USDT",
+            "horizonte": "1h", "payout": None,
+        }
+        pedido = {
+            "agent_id": "trader-momentum", "estrategia": "momentum",
+            "versao": "1", "corretora": "binance",
+            "conta": "real-principal", "contexto_certificacao": origem,
+            "capital_maximo": "100", "perda_diaria_maxima": "10",
+            "perda_total_maxima": "30", "prazo_dias": 30,
+        }
+        sem_prova = c.post("/v1/escola/pilotos/solicitar", headers=H,
+                           json=pedido)
+        assert sem_prova.status_code == 409
+        assert "prova autenticada" in sem_prova.json()["detail"]
+        mesmo_rotulo = {**pedido, "conta": "paper-legacy", "conta_real": True}
+        sem_prova_mesmo_rotulo = c.post(
+            "/v1/escola/pilotos/solicitar", headers=H, json=mesmo_rotulo)
+        assert sem_prova_mesmo_rotulo.status_code == 409
+        assert "prova autenticada" in sem_prova_mesmo_rotulo.json()["detail"]
+
+        cfg = {
+            "TRADINGAGENTS_EXCHANGE": "binance",
+            "REAL_READ_ONLY_EXCHANGE": "binance",
+            "REAL_READ_ONLY_API_KEY": "read-key",
+            "REAL_READ_ONLY_API_SECRET": "read-secret",
+        }
+        assert c.post("/v1/config", headers=H,
+                      json={"vars": cfg}).status_code == 200
+        monkeypatch.setattr(m, "probe_read_only_account", lambda env: {
+            "exchange": "binance", "authenticated_read": True,
+            "read_methods": ["fetch_balance"],
+            "broker_identity_verified": True,
+            "broker_identity_fingerprint": "b" * 64,
+            "credential_fingerprint":
+                m.read_only_credential_fingerprint(env),
+        })
+        prova = c.post("/v1/live/preparacao-leitura", headers=H, json={
+            "conta": "real-principal", "broker_account_id": "account-42",
+            "confirmo_sem_trade": True,
+            "confirmo_sem_movimentacao": True})
+        assert prova.status_code == 200, prova.text
+
+        resposta = c.post("/v1/escola/pilotos/solicitar", headers=H,
+                          json=pedido)
+        assert resposta.status_code == 200, resposta.text
+        aut = resposta.json()["autorizacao"]
+        assert aut["conta"] == "real-principal"
+        assert aut["conta_real"] is True
+        assert "broker_identity_fingerprint" not in aut
+        rel = c.get("/v1/escola/pilotos", headers=H).json()["autorizacoes"][0]
+        assert rel["conta"] == "real-principal"
+        assert rel["conta_real"] is True
+        assert "broker_identity_fingerprint" not in rel
+        assert rel["contexto_certificacao"]["conta"] == "paper-legacy"
+        assert rel["contexto_certificacao"]["modo"] == "paper"
+
+        # Trocar a identidade da corretora mantendo o mesmo apelido não pode
+        # redirecionar um pedido existente para outra conta.
+        caminho = next(tmp_path.rglob("preparacao_real_leitura.json"))
+        prova_trocada = json.loads(caminho.read_text(encoding="utf-8"))
+        prova_trocada["broker_identity_fingerprint"] = "c" * 64
+        caminho.write_text(json.dumps(prova_trocada), encoding="utf-8")
+        redirecionada = c.post(
+            "/v1/escola/pilotos/trader-momentum/autorizar", headers=H)
+        assert redirecionada.status_code == 409
+        assert "mesma corretora e conta REAL" in redirecionada.json()["detail"]
+        assert c.post("/v1/live/preparacao-leitura", headers=H, json={
+            "conta": "real-principal", "broker_account_id": "account-42",
+            "confirmo_sem_trade": True,
+            "confirmo_sem_movimentacao": True}).status_code == 200
+
+        # A prova é revalidada no CLIQUE de autorização, não só no pedido.
+        # Rotacionar a chave entre as duas etapas mantém o piloto aguardando.
+        assert c.post("/v1/config", headers=H, json={"vars": {
+            "REAL_READ_ONLY_API_KEY": "rotated-key"}}).status_code == 200
+        bloqueada = c.post(
+            "/v1/escola/pilotos/trader-momentum/autorizar", headers=H)
+        assert bloqueada.status_code == 409
+        assert "prova autenticada" in bloqueada.json()["detail"]
+        rel = c.get("/v1/escola/pilotos", headers=H).json()["autorizacoes"][0]
+        assert rel["estado"] == "aguardando_autorizacao"
+
+        assert c.post("/v1/config", headers=H, json={"vars": {
+            "REAL_READ_ONLY_API_KEY": "read-key"}}).status_code == 200
+        assert c.post("/v1/live/preparacao-leitura", headers=H, json={
+            "conta": "real-principal", "broker_account_id": "account-42",
+            "confirmo_sem_trade": True,
+            "confirmo_sem_movimentacao": True}).status_code == 200
+        monkeypatch.setattr(m, "_gates_do_ambiente", lambda *_args: [
+            {"gate": nome, "ok": True, "detalhe": "teste isolado"}
+            for nome in ("segurança", "integração", "risco", "execução")])
+        autorizada = c.post(
+            "/v1/escola/pilotos/trader-momentum/autorizar", headers=H)
+        assert autorizada.status_code == 200, autorizada.text
+        assert autorizada.json()["autorizacao"]["estado"] == (
+            "piloto_autorizado")
+
+    def test_conta_real_nao_transfere_certificacao_entre_corretoras(
+            self, tmp_path, monkeypatch):
+        c, m = _client(tmp_path, monkeypatch)
+        assert c.get("/v1/desk/status", headers=H).status_code == 200
+        self._semear_formada(m, estrategia="momentum", ativo="BTC/USDT")
+        r = c.post("/v1/escola/pilotos/solicitar", headers=H, json={
+            "agent_id": "trader-momentum", "estrategia": "momentum",
+            "corretora": "okx", "conta": "real-okx",
+            "contexto_certificacao": {
+                "corretora": "binance", "conta": "paper-legacy",
+                "mercado": "spot", "modo": "paper", "ativo": "BTC/USDT",
+                "horizonte": "1h"},
+            "capital_maximo": "100", "perda_diaria_maxima": "10",
+            "perda_total_maxima": "30", "prazo_dias": 30})
+        assert r.status_code == 409
+        assert "mesma corretora" in r.json()["detail"]

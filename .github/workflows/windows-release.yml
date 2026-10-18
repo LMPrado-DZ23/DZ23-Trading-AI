@@ -15,9 +15,9 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install uv
@@ -34,11 +34,75 @@ jobs:
           "versao=$v" >> $env:GITHUB_OUTPUT
       - name: Build Executable Bundle
         run: uv run --with pyinstaller python -m desktop.packaging.build_exe
+      - name: Prepare Authenticode certificate in ephemeral store
+        id: code_signing
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_BASE64 }}
+          WINDOWS_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          $temCertificado = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERTIFICATE_BASE64)
+          $temSenha = -not [string]::IsNullOrWhiteSpace($env:WINDOWS_SIGNING_CERTIFICATE_PASSWORD)
+          if (-not $temCertificado -and -not $temSenha) {
+            if ($env:GITHUB_REF -like "refs/tags/v*") {
+              throw "Release oficial exige certificado Authenticode no cofre do GitHub"
+            }
+            "available=false" >> $env:GITHUB_OUTPUT
+            "status=UNSIGNED_TEST_ARTIFACT" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+          if ($temCertificado -xor $temSenha) {
+            throw "Configuração Authenticode incompleta: certificado e senha devem existir juntos"
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP "dz23-code-signing.pfx"
+          try {
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_SIGNING_CERTIFICATE_BASE64))
+            $senha = ConvertTo-SecureString $env:WINDOWS_SIGNING_CERTIFICATE_PASSWORD -AsPlainText -Force
+            $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $senha -Exportable:$false
+            if (-not $cert -or -not $cert.HasPrivateKey) {
+              throw "Certificado Authenticode não contém chave privada utilizável"
+            }
+            "available=true" >> $env:GITHUB_OUTPUT
+            "status=SIGNED" >> $env:GITHUB_OUTPUT
+            "thumbprint=$($cert.Thumbprint)" >> $env:GITHUB_OUTPUT
+            "pfx_path=$pfx" >> $env:GITHUB_OUTPUT
+          } catch {
+            if ($cert) {
+              Remove-Item -LiteralPath "Cert:\CurrentUser\My\$($cert.Thumbprint)" -Force -ErrorAction SilentlyContinue
+            }
+            Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
+            throw
+          }
+      - name: Sign packaged application executable
+        if: steps.code_signing.outputs.available == 'true'
+        shell: pwsh
+        run: |
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Filter signtool.exe -Recurse |
+            Where-Object FullName -Match '\\x64\\' | Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signtool) { throw "signtool.exe x64 não encontrado" }
+          $arquivo = "dist\DZ23-Trading-AI\DZ23-Trading-AI.exe"
+          & $signtool.FullName sign /sha1 "${{ steps.code_signing.outputs.thumbprint }}" /s My /fd SHA256 /tr "http://timestamp.digicert.com" /td SHA256 $arquivo
+          if ($LASTEXITCODE -ne 0) { throw "assinatura do aplicativo falhou" }
+          & $signtool.FullName verify /pa /all $arquivo
+          if ($LASTEXITCODE -ne 0) { throw "verificação Authenticode do aplicativo falhou" }
       - name: Compile Inno Setup Installer
         shell: pwsh
         run: |
           $v = "${{ steps.versao.outputs.versao }}"
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$v" desktop/installer/setup.iss
+      - name: Sign installer
+        if: steps.code_signing.outputs.available == 'true'
+        shell: pwsh
+        run: |
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Filter signtool.exe -Recurse |
+            Where-Object FullName -Match '\\x64\\' | Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signtool) { throw "signtool.exe x64 não encontrado" }
+          $v = "${{ steps.versao.outputs.versao }}"
+          $arquivo = "dist\DZ23-Trading-AI-Setup-v$v.exe"
+          & $signtool.FullName sign /sha1 "${{ steps.code_signing.outputs.thumbprint }}" /s My /fd SHA256 /tr "http://timestamp.digicert.com" /td SHA256 $arquivo
+          if ($LASTEXITCODE -ne 0) { throw "assinatura do instalador falhou" }
+          & $signtool.FullName verify /pa /all $arquivo
+          if ($LASTEXITCODE -ne 0) { throw "verificação Authenticode do instalador falhou" }
       - name: Zip Release Bundle and Calculate Hashes
         shell: pwsh
         run: |
@@ -49,14 +113,22 @@ jobs:
           }
           # Grava com finais de linha LF: `sha256sum -c` no Linux/macOS falha com CRLF.
           [System.IO.File]::WriteAllText("dist/SHA256SUMS.txt", ($linhas -join "`n"), [System.Text.UTF8Encoding]::new($false))
+          [System.IO.File]::WriteAllText("dist/SIGNING_STATUS.txt", "${{ steps.code_signing.outputs.status }}`n", [System.Text.UTF8Encoding]::new($false))
+      - name: Remove ephemeral signing material
+        if: always() && steps.code_signing.outputs.available == 'true'
+        shell: pwsh
+        run: |
+          Remove-Item -LiteralPath "Cert:\CurrentUser\My\${{ steps.code_signing.outputs.thumbprint }}" -Force -ErrorAction SilentlyContinue
+          Remove-Item -LiteralPath "${{ steps.code_signing.outputs.pfx_path }}" -Force -ErrorAction SilentlyContinue
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dz23-windows-x64
           path: |
             dist/DZ23-Trading-AI-Setup-v*.exe
             dist/DZ23-Trading-AI-windows-x64.zip
             dist/SHA256SUMS.txt
+            dist/SIGNING_STATUS.txt
           if-no-files-found: error
 
   aceite-bundle:
@@ -67,9 +139,9 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install uv
@@ -79,7 +151,7 @@ jobs:
       - name: Install Playwright no venv do projeto
         run: uv pip install --python .venv/Scripts/python.exe playwright
       - name: Download artifact do bundle
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: dz23-windows-x64
           path: artefato
@@ -97,7 +169,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "aceite no bundle falhou (exit $LASTEXITCODE)" }
       - name: Upload evidências do aceite no bundle
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: aceite-td5-bundle-evidencias
           path: docs/mission/evidence/v8-td5-exe/
@@ -106,12 +178,12 @@ jobs:
   publish-release:
     # Publicação de Release só em tag explícita (aprovação humana = criar a tag).
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, aceite-bundle]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: dz23-windows-x64
           path: dist
@@ -122,5 +194,6 @@ jobs:
             dist/DZ23-Trading-AI-Setup-v*.exe
             dist/DZ23-Trading-AI-windows-x64.zip
             dist/SHA256SUMS.txt
+            dist/SIGNING_STATUS.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

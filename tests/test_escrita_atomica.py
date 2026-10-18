@@ -18,6 +18,7 @@ Estes testes não dependem de sorte: forçam a concorrência.
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -92,6 +93,27 @@ class TestEscritaAtomica:
         with ThreadPoolExecutor(max_workers=8) as pool:
             list(pool.map(gravar, range(200)))
         assert not erros, f"escrita concorrente falhou: {erros[:3]}"
+
+    def test_replace_tolera_bloqueio_transitorio_maior_que_dez_tentativas(
+            self, tmp_path, monkeypatch):
+        """Antivírus/leitor no Windows pode segurar o destino por > 45 ms."""
+        alvo = tmp_path / "estado.json"
+        original = os.replace
+        chamadas = [0]
+
+        def replace_transitorio(origem, destino):
+            chamadas[0] += 1
+            if chamadas[0] <= 12:
+                raise PermissionError(5, "Acesso negado transitório")
+            return original(origem, destino)
+
+        monkeypatch.setattr("tradingagents.desk.storage.os.replace",
+                            replace_transitorio)
+
+        escrever_json_atomico(alvo, {"ok": True})
+
+        assert chamadas[0] == 13
+        assert json.loads(alvo.read_text(encoding="utf-8")) == {"ok": True}
 
     def test_file_is_always_complete_and_valid(self, tmp_path):
         """Nunca deve existir um JSON pela metade — nem durante a escrita."""

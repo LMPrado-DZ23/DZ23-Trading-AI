@@ -29,6 +29,13 @@ from pathlib import Path
 # lock. Com `Lock` simples isso travaria a própria thread.
 _WRITE_LOCK = threading.RLock()
 
+# No Windows, leitores e antivírus podem negar temporariamente o replace do
+# destino. Dez tentativas cobriam só ~45 ms e já falharam sob a suíte completa.
+# Um prazo continua finito (falha alta se a negação persistir), mas tolera a
+# contenção transitória sem abandonar o JSON já sincronizado no temporário.
+_PRAZO_REPLACE_S = 1.0
+_PASSO_REPLACE_S = 0.005
+
 # Caracteres legítimos numa CHAVE lógica que o NTFS proíbe num NOME de
 # arquivo (`|` dava EINVAL no mkstemp; `:` e `/` também não passam). O `%`
 # entra no conjunto porque é o próprio marcador de escape — sem ele a
@@ -90,14 +97,15 @@ def escrever_json_atomico(caminho: Path, documento: dict) -> None:
                 fh.flush()
                 os.fsync(fh.fileno())
 
-            for attempt in range(10):
+            prazo_replace = time.monotonic() + _PRAZO_REPLACE_S
+            while True:
                 try:
                     os.replace(tmp, caminho)
                     break
                 except PermissionError:
-                    if attempt == 9:
+                    if time.monotonic() >= prazo_replace:
                         raise
-                    time.sleep(0.005)
+                    time.sleep(_PASSO_REPLACE_S)
         except BaseException:
             # temporário órfão não pode ficar entulhando o volume
             with contextlib.suppress(OSError):

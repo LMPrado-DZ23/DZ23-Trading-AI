@@ -58,11 +58,69 @@ python3 scripts/load_test.py --base-url http://127.0.0.1:8080 --requests 100 --w
 
 Não exponha o PostgreSQL (nem o próprio serviço) publicamente. Coloque o serviço atrás de TLS/reverse proxy, configure backup dos volumes e mantenha os secrets fora do Git.
 
+Antes de promover qualquer ambiente, prove o restore em um diretório isolado:
+
+```bash
+python3 scripts/backup_data.py backup /data /data/backups/dz23-pre-deploy.tar.gz
+python3 scripts/backup_data.py inspect /data/backups/dz23-pre-deploy.tar.gz
+python3 scripts/backup_data.py restore /data-restaurado /data/backups/dz23-pre-deploy.tar.gz
+python3 scripts/verify_local_restore.py \
+  --data-dir /data --archive /data/backups/dz23-pre-deploy.tar.gz
+```
+
+O pacote local contém segredos e todo o estado permitido do volume, inclusive
+Escola/Sala REAL/pilotos; proteja-o como credencial. Estado em PostgreSQL
+externo exige backup lógico e restore separados. Consulte
+[docs/mission/ROLLBACK.md](docs/mission/ROLLBACK.md).
+
+Quando `DATABASE_URL` estiver ativo, prepare um segundo banco PostgreSQL
+**vazio e descartável**, distinto da origem. As credenciais ficam somente no
+ambiente; nunca as coloque nos argumentos do comando:
+
+```bash
+export DATABASE_URL='postgresql://...origem...'
+export POSTGRES_RESTORE_DATABASE_URL='postgresql://...banco-vazio...'
+python3 scripts/verify_postgres_restore.py --data-dir /data
+```
+
+O utilitário usa `pg_dump`/`pg_restore`, recusa destino ocupado ou igual à
+origem, não executa `DROP`/`--clean`, compara esquema e conteúdo das tabelas
+DZ23 e grava `/data/postgres-restore-proof.json`. A prova não contém DSN,
+senha ou linhas do banco; vale por 30 dias e é invalidada se o dump for
+removido, alterado ou pertencer a outra origem. O banco restaurado não é
+apagado automaticamente: preserve-o para inspeção ou descarte-o pelo processo
+controlado do provedor.
+
+O último comando restaura novamente em área temporária, valida hashes,
+SQLite/JSON/JSONL e grava `/data/local-restore-proof.json`. A prova vale por
+30 dias, permanece vinculada ao hash do arquivo ensaiado e entra no preflight
+REAL; mover, apagar ou alterar o backup fecha o gate automaticamente.
+
 Para um proxy Caddy de referência, consulte [ops/Caddyfile.example](ops/Caddyfile.example). O domínio, DNS, portas 80/443, certificado e política de backup devem ser configurados pelo operador do ambiente.
 
-## 5. Healthchecks
+## 5. Healthchecks e preflight REAL
 
 O endpoint público `/healthz` confirma que o processo está vivo. O endpoint `/readyz` informa se o serviço está pronto ou bloqueado pelo KillSwitch. `/metrics` exige autenticação.
+
+`/v1/operational-readiness` exige a autenticação do proprietário e consolida,
+por instalação, a prova somente leitura da conta, Escola/Sala REAL, piloto,
+risco, TESTNET, reconciliação, parada de emergência e selo de código. A rota é
+somente leitura: consultá-la não altera configuração nem envia ordem.
+
+Com o serviço iniciado e o token disponível apenas no ambiente, execute:
+
+```bash
+python3 scripts/real_readiness_check.py \
+  --base-url http://127.0.0.1:8080 \
+  --target preparacao \
+  --output ./data/evidence/real-readiness.json
+```
+
+O alvo `preparacao` só passa quando todos os pré-requisitos externos e
+operacionais estão comprovados, mas o selo e o envio LIVE continuam
+desabilitados. `--target live` é reservado para a futura cerimônia explícita
+de liberação e falha enquanto qualquer fechadura permanecer fechada. O token
+nunca é aceito como argumento: por padrão, o script lê `ACCESS_PASSWORD`.
 
 ## 6. Primeiro uso
 

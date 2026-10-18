@@ -7,6 +7,7 @@ langchain-google-genai>=4.0.0
 langchain-openai>=0.3.23
 langgraph>=0.4.8
 langgraph-checkpoint-sqlite>=2.0.0
+mcp<3,>=2
 pandas>=2.3.0
 parsel>=1.10.0
 python-dotenv>=1.0.0

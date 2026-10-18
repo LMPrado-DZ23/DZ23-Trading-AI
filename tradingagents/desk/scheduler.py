@@ -56,6 +56,7 @@ class DeskScheduler:
     def __init__(self, orchestrator, coordinator, *, snapshot_provider,
                  price_provider, state_path: str | Path, on_cycle=None,
                  armazem=None, tenant_id: str = "legacy",
+                 state_key: str = "mesa", livro_key: str = "livro",
                  interval_seconds: int = 300, max_snapshot_age_minutes: int = 15,
                  guarda_operacao=None):
         self.orchestrator = orchestrator
@@ -65,6 +66,8 @@ class DeskScheduler:
         self.state_path = Path(state_path)
         self.armazem = armazem
         self.tenant_id = tenant_id
+        self.state_key = state_key
+        self.livro_key = livro_key
         self.interval = interval_seconds
         self.max_age = timedelta(minutes=max_snapshot_age_minutes)
         self.on_cycle = on_cycle       # o painel escuta aqui
@@ -78,7 +81,7 @@ class DeskScheduler:
     # -- persistência --------------------------------------------------
     def _load(self) -> SchedulerState:
         if self.armazem is not None:
-            doc = self.armazem.carregar(self.tenant_id, "mesa")
+            doc = self.armazem.carregar(self.tenant_id, self.state_key)
             if doc is not None:
                 return SchedulerState(**{k: v for k, v in doc.items()
                                          if k in SchedulerState.__annotations__})
@@ -91,12 +94,13 @@ class DeskScheduler:
         self.state.pending_reconciliation = [
             r.order_id for r in self.coordinator.pending_reconciliation()]
         if self.armazem is not None:
-            self.armazem.salvar(self.tenant_id, "mesa", dict(self.state.__dict__))
+            self.armazem.salvar(
+                self.tenant_id, self.state_key, dict(self.state.__dict__))
             # Livro de GESTÃO durável (M3/M4): política, topo, parcial e
             # quantidade por posição sobrevivem ao reinício. Falha aqui não
             # derruba o ciclo — o financeiro (OMS) já foi persistido.
             with contextlib.suppress(Exception):
-                self.armazem.salvar(self.tenant_id, "livro",
+                self.armazem.salvar(self.tenant_id, self.livro_key,
                                     self.orchestrator.livro_doc())
             return
         from .storage import escrever_json_atomico

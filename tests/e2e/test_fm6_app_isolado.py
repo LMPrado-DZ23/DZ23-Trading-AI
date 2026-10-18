@@ -146,8 +146,8 @@ def test_fm6_01_modo_avancado_todas_as_paginas(page, mesa_url, senha, evidence_d
 
 # ------------------------------------------------------------------- item 02
 def test_fm6_02_corretoras_catalogo_capacidades_reconciliacao(page, mesa_url, senha, evidence_dir):
-    # §11 "Corretoras" + §3: catálogo local sem credenciais/rede, capacidades
-    # anunciadas como NÃO verificadas, execução pelo painel desligada e
+    # §11 "Corretoras" + §3: catálogo local sem credenciais/rede, linha DZ23
+    # separada dos adaptadores genéricos, execução LIVE desligada e
     # reconciliação pelo portão real — nada aqui ativa dinheiro real.
     entrar_como_dono(page, mesa_url, senha)
     modo_avancado(page)
@@ -157,11 +157,11 @@ def test_fm6_02_corretoras_catalogo_capacidades_reconciliacao(page, mesa_url, se
 
     page.get_by_role("button", name=re.compile("Catálogo e capacidades")).click()
     cat = page.locator("#brokerCatalogo")
-    expect(cat).to_contain_text("Salas fixas", timeout=15000)
+    expect(cat).to_contain_text("Corretoras DZ23", timeout=15000)
     expect(cat).to_contain_text("Binance")
-    expect(cat).to_contain_text("planejada, não validada")
-    expect(cat).to_contain_text("Adaptador CCXT instalado nesta máquina")
-    expect(cat).to_contain_text("Execução de ordens pelo painel: desligada")
+    expect(cat).to_contain_text("disponível para dados e TESTNET")
+    expect(cat).to_contain_text("Todos os adaptadores CCXT instalados nesta máquina")
+    expect(cat).to_contain_text("LIVE pelo painel: bloqueada")
 
     cat.locator("button", has_text="Capacidades").first.click()
     det = page.locator("#brokerDetalhe")
@@ -184,6 +184,39 @@ def test_fm6_02_corretoras_catalogo_capacidades_reconciliacao(page, mesa_url, se
     expect(det).to_contain_text(re.compile(r"portão: (LIBERADO|FECHADO)"))
     expect(det).to_contain_text("ordens conferidas")
     page.screenshot(path=str(evidence_dir / "fm6-02-corretoras.png"))
+
+
+def test_fm6_02b_iq_option_exibe_so_credencial_mcp_e_live_bloqueado(
+        page, mesa_url, senha, evidence_dir):
+    """A configuração IQ não deve induzir o dono a colar chaves CCXT."""
+    entrar_como_dono(page, mesa_url, senha)
+    modo_avancado(page)
+    ir_para(page, "config")
+
+    page.select_option("#TRADINGAGENTS_EXCHANGE", "iq_option")
+
+    expect(page.locator("#IQ_OPTION_MCP_BEARER_TOKEN")).to_be_visible()
+    expect(page.locator("#TRADINGAGENTS_DESK_PAYOUT")).to_be_visible()
+    expect(page.locator("#EXCHANGE_API_KEY")).not_to_be_visible()
+    expect(page.get_by_role("button", name="Validar configuração")).not_to_be_visible()
+    expect(page.locator("#REAL_READ_ONLY_API_KEY")).not_to_be_visible()
+    expect(page.locator("#REAL_READ_ONLY_API_SECRET")).not_to_be_visible()
+    expect(page.locator("#page-config")).to_contain_text(
+        "IQ Option usa MCP separado")
+    expect(page.locator("#page-config")).to_contain_text(
+        "execução continua bloqueada")
+    expect(page.locator("#page-config")).to_contain_text(
+        "Read access ligado e todos os Trading access desligados")
+
+    page.select_option("#TRADINGAGENTS_EXCHANGE", "binance")
+
+    expect(page.locator("#REAL_READ_ONLY_API_KEY")).to_be_visible()
+    expect(page.locator("#REAL_READ_ONLY_API_SECRET")).to_be_visible()
+    expect(page.locator("#EXCHANGE_API_KEY")).to_be_visible()
+    expect(page.get_by_role("button", name="Validar configuração")).to_be_visible()
+    expect(page.locator("#IQ_OPTION_MCP_BEARER_TOKEN")).not_to_be_visible()
+    expect(page.locator("#TRADINGAGENTS_DESK_PAYOUT")).not_to_be_visible()
+    page.screenshot(path=str(evidence_dir / "fm6-02b-iq-option.png"))
 
 
 # ------------------------------------------------------------------- item 03

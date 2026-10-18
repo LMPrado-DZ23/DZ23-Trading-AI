@@ -999,3 +999,47 @@ Quatro achados examinados diretamente no commit `4b83e16` e tratados um a um —
 6. **Conteúdo verificado quadro a quadro:** portão (badges "PAPER MODE"/"EXECUÇÃO GOVERNADA"/"DINHEIRO REAL BLOQUEADO") → senha mascarada → Início → Modo Avançado → Mesa (Painel Global do Maestro: "Traders: 10 · homologados 3 · experimentais 7", "LIVE BLOQUEADO", posições, exposição) → ciclo PAPER real pelo botão "Rodar um ciclo" (toast honesto: "20 propostas, nenhuma operação: critérios não atendidos") → Ordens (2 preenchidas com trilha UTC) → Posições (2 com stop/alvo/líquido) → Ciclos.
 7. **CI do push `e7b6688` VERDE (evidência da publicação):** Release Build `38659167372` (`build` ✓; `aceite-bundle` **17/17 em 39,7 s** — `coletados=17` → `TOTAL: 0 falha(s)`/`HARNESS_EXIT=0`; `publish-release` skipped) e Matriz do Instalador `38659167183` (`TOTAL: 0 falha(s)`/`HARNESS_EXIT=0`, concluída 2026-10-15T00:27Z).
 8. **Publicação (decidida pelo dono, executada nesta rodada):** merge **fast-forward** `fix/instalador-atualizacoes-windows` → `main` (FF verificado: `80e99fb` ancestral do tip `e7b6688`), push de `main`, **descrição do repo atualizada** via `gh repo edit` (remove "multi-tenant"; novo texto: single-owner, 10 traders + Maestro, risco determinístico, PAPER/SHADOW homologado no Windows, LIVE bloqueado fail-closed, sem SaaS/cobrança) e verificação do README da home renderizando o GIF. **SEM tag/Release** — a publicação de Release segue aguardando autorização explícita do dono (G8/item 5). **Correção V9 (2026-10-15, achado V9-DOC-01):** o texto da descrição citado acima ("PAPER/SHADOW homologado no Windows") estava **ampliado** — a evidência do bundle Windows homologa **PAPER**; **SHADOW não possui homologação real declarada** e **DEMO não foi validado neste repositório**. A descrição do repositório no GitHub foi corrigida no mesmo dia para "PAPER homologado no bundle Windows; SHADOW não homologado; DEMO não validado; LIVE bloqueado fail-closed". O registro original é **preservado** (proveniência); nenhum status de SHADOW/DEMO é elevado.
+
+## 2026-10-16 — caminho auditável Escola → Sala REAL → ativação futura
+
+1. `_desk_boot` deixou de criar sempre um mandato PAPER: PAPER e TESTNET agora recebem o modo econômico correto; LIVE só recebe `Mode.LIVE` + `live_authorized=True` mediante selo de código e ativação explícita vinculada a inquilino, corretora, conta e autorização de piloto.
+2. A futura rota `POST /v1/live/ativar/{agent_id}` exige frase no momento da ação, conta exata e checklist operacional sem pendências fora do selo. Ela permanece bloqueada nesta entrega porque `MESA_LIVE_LIBERADA=False`.
+3. O estado financeiro LIVE (OMS, livro gerencial, scheduler e journal) é isolado por hash de corretora+conta. Toda ativação ou reinício LIVE arma o portão de reconciliação; ciclo manual e PLAY reavaliam `/v1/live/status` antes de executar.
+4. `POST /v1/live/desativar` para o scheduler, revoga o mandato persistido e retorna a TESTNET. IQ Option segue sem executor LIVE homologado; sua escola PAPER e leitura autenticada não viram capacidade de ordem.
+5. Prova adversarial focada: selo fechado não é contornável pela rota; configuração LIVE isolada não basta; mandato LIVE exige ativação vinculada; TESTNET usa `Mode.TESTNET`; boot LIVE nasce sem scheduler e com reconciliação armada; a rota futura persiste agente/conta sem persistir a frase e responde `envio_real_habilitado=False`.
+6. Verificação local hermética: bateria afetada `124 passed`; suíte ampla `3638 passed, 41 skipped, 2 deselected, 20 warnings, 71 subtests` em 357,92 s. Os dois deselects são incompatibilidades deliberadas do harness sem rede/sem Registro (`test_construction_when_extra_installed`, que tenta credencial AWS, e `test_identidade_registrada_no_windows`, que grava no Registro); não pertencem ao caminho financeiro alterado. Ruff e `git diff --check` limpos. Nenhuma ordem, credencial externa ou produção foi usada.
+# Checkpoint — credencial de execução REAL isolada (PR #14)
+
+- A credencial futura de execução REAL usa `LIVE_EXCHANGE_API_*`; não reutiliza
+  `EXCHANGE_API_*` (TESTNET) nem `REAL_READ_ONLY_*` (certificação da conta).
+- A prova LIVE chama somente métodos de leitura, exige a mesma identidade já
+  comprovada pela chave read-only, persiste apenas fingerprints e expira em 24h.
+- Rotação, troca de corretora, prova read-only inválida ou identidade divergente
+  invalida a ativação inclusive no reinício.
+- A construção futura do broker LIVE recebe a credencial `LIVE_*` apenas em
+  memória. TESTNET permanece vinculada à credencial que produziu seu fill.
+- `MESA_LIVE_LIBERADA=False` permanece inalterado; nenhuma ordem real, merge,
+  deploy, tag ou release foi realizado neste checkpoint.
+- Validação local: baterias focadas `111 passed` e painel `151 passed`; suíte
+  ampla `3682 passed, 5 skipped, 20 warnings, 71 subtests`. Um teste do
+  executor hermético encontrou um diretório temporário externo já removido;
+  a repetição isolada passou (`1 passed`). CI do PR permanece a autoridade
+  final para o ambiente limpo.
+
+## Checkpoint — consentimento LIVE somente no momento da ação (PR #14)
+
+- `LIVE_TRADING_CONFIRM` deixou de ser chave configurável e persistente.
+- Tentativas de salvá-la em `/v1/config` são recusadas; instalações antigas
+  removem a chave legada atomicamente antes de usar a configuração.
+- A frase exata entra apenas na projeção em memória do broker depois da
+  validação da ativação vinculada a agente e conta; a configuração salva e o
+  registro de ativação não contêm a frase.
+- `/v1/broker/status` diferencia TESTNET de LIVE e, no modo LIVE, exige selo,
+  credencial `LIVE_*` e ativação persistida revalidada antes de reportar pronto.
+- A mutação que invertia a recusa em `/v1/config` foi detectada pelo teste
+  adversarial. `MESA_LIVE_LIBERADA=False` permanece inalterado e nenhuma ordem
+  ou consulta autenticada externa foi executada.
+- Validação local final: bateria financeira/painel `280 passed`; E2E focal
+  `1 passed, 13 deselected`; suíte integral `3690 passed, 5 skipped,
+  71 subtests passed`; `ruff check .`, `compileall` e `git diff --check`
+  concluíram sem erro.

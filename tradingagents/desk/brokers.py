@@ -88,6 +88,10 @@ class CCXTDeskBroker:
         self.bridge = CCXTBridge(env=env, journal_path=journal_path)
         self.final_state = final_state
         self.mode = self.bridge.mode
+        self.testnet_exchange = (
+            self.bridge.exchange_name if self.mode == "testnet" else "")
+        self.testnet_credential_fingerprint = (
+            self.bridge.credential_fingerprint if self.mode == "testnet" else "")
         self.submitted: dict[str, dict] = {}
 
     # ------------------------------------------------ consultas canônicas
@@ -379,6 +383,15 @@ def build_desk_broker(cfg: dict, *, final_state: dict, journal_path: str | None 
     from .execution import PaperBroker
     if (cfg.get("TRADINGAGENTS_DESK_BROKER") or "paper").strip().lower() != "ccxt":
         return PaperBroker(paper_price), "paper"
+    exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    vinculo = str(
+        cfg.get("EXCHANGE_CREDENTIAL_EXCHANGE") or "").strip().lower()
+    if not exchange or vinculo != exchange:
+        from tradingagents.brokers.ccxt_bridge import BrokerSecurityError
+        raise BrokerSecurityError(
+            "credencial de execução não está vinculada à corretora "
+            "selecionada; informe nova chave e novo segredo para esta "
+            "corretora antes de iniciar a mesa")
     modo_pedido = (cfg.get("TRADINGAGENTS_BROKER_MODE") or "").strip().lower()
     if modo_pedido == "live" and not live_authorized:
         from tradingagents.brokers.ccxt_bridge import BrokerSecurityError
@@ -388,7 +401,10 @@ def build_desk_broker(cfg: dict, *, final_state: dict, journal_path: str | None 
             "autorização. Mantenha TRADINGAGENTS_BROKER_MODE=testnet.")
     env = {k: cfg.get(k, "") for k in
            ("TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
-            "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET", "LIVE_TRADING_CONFIRM",
+            "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET",
+            "EXCHANGE_API_PASSWORD", "EXCHANGE_API_UID",
+            "EXCHANGE_CREDENTIAL_BOUND_AT",
+            "LIVE_TRADING_CONFIRM",
             "LIVE_MAX_ORDER_VALUE", "LIVE_MAX_DAILY_LOSS")}
     broker = CCXTDeskBroker(env, final_state=final_state, journal_path=journal_path)
     return broker, broker.mode

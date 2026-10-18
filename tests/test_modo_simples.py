@@ -170,6 +170,36 @@ class TestCapacidadesVisiveisNoModoSimples:
             assert estado in pagina, (
                 f"estado {estado!r} não apresentado na tela")
 
+    def test_iq_option_mostra_metadata_validada_sem_prometer_conta_ou_ordem(
+            self):
+        capacidades = _trecho(
+            _html(), "async function capacidadesLoad(",
+            "async function preparoRealLoad(")
+        assert "Leitura REAL preparada, execução bloqueada" in capacidades
+        assert (
+            "A prova de conta usa somente list_balances NORMAL"
+            in capacidades
+        )
+        assert (
+            "A prova recusa o token se tools/list anunciar qualquer "
+            "ferramenta mutável" in capacidades
+        )
+        assert (
+            "Como o token ainda anuncia ferramentas mutáveis no provedor"
+            not in capacidades
+        )
+        assert "MCP oficial em validação passiva" not in capacidades
+        assert "Sem token novo validado" not in capacidades
+
+    def test_inicio_nao_sugere_binance_quando_configuracao_e_incompativel(
+            self):
+        html = _html()
+        inicio = _trecho(html, "async function inicioLoad()",
+                          "async function capacidadesLoad()")
+        assert 'value="">Selecione uma corretora TESTNET' in html
+        assert "const exchangeSalva=val('TRADINGAGENTS_EXCHANGE')" in inicio
+        assert "?exchangeSalva:''" in inicio
+
     def test_abrir_troca_para_avancado_quando_a_tela_esta_oculta(self):
         html = _html()
         trecho = _trecho(html, "function abrirPagina(", tam=400)

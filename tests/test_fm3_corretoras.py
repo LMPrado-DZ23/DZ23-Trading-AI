@@ -6,9 +6,9 @@ O que estes contratos pinam:
   credenciais e sem rede), o detalhe da validação (`/v1/broker/status`) e a
   reconciliação (`/v1/desk/reconciliar`); rotação = trocar (colar e salvar)
   ou remover a chave salva.
-- §4: a preparação para REAL é VISÍVEL e verificável (checklist de 6 itens
-  de `/v1/live/status`) — e continua BLOQUEADA: nenhuma tela ativa LIVE,
-  nenhum caminho de saque/transferência existe no painel.
+- §4: a preparação para REAL é VISÍVEL e verificável pelo checklist de
+  `/v1/live/status`. A ação final só aparece quando o servidor declara que
+  todos os gates estão prontos; não há atalho de saque/transferência.
 """
 from __future__ import annotations
 
@@ -25,6 +25,8 @@ ROOT = Path(__file__).resolve().parents[1]
 HTML = ROOT / "service" / "static" / "index.html"
 
 CAP_ROTA = "/v1/personal/exchanges/{exchange_id}/capabilities"
+HEALTH_ROTA = "/v1/personal/exchanges/{exchange_id}/public-health"
+IQ_MCP_ROTA = "/v1/personal/exchanges/iq_option/mcp-health"
 
 
 def _html() -> str:
@@ -75,6 +77,20 @@ class TestRotaCapacidades:
             personal_exchange_capabilities("nao_existe")
         assert e.value.status_code == 404
 
+    def test_sonda_publica_get_only_e_autenticada(self):
+        rotas = [r for r in app.routes
+                 if isinstance(r, APIRoute) and r.path == HEALTH_ROTA]
+        assert len(rotas) == 1
+        assert rotas[0].methods == {"GET"}
+        assert any(d.call is auth for d in rotas[0].dependant.dependencies)
+
+    def test_sonda_iq_mcp_get_only_e_autenticada(self):
+        rotas = [r for r in app.routes
+                 if isinstance(r, APIRoute) and r.path == IQ_MCP_ROTA]
+        assert len(rotas) == 1
+        assert rotas[0].methods == {"GET"}
+        assert any(d.call is auth for d in rotas[0].dependant.dependencies)
+
 
 # ------------------------------------------------------------------ painel
 
@@ -86,6 +102,12 @@ class TestTelaCorretora:
         assert 'onclick="catalogoCarregar()"' in html
         assert 'onclick="brokerReconciliar()"' in html
         assert 'onclick="brokerTest()"' in html
+
+    def test_carregamento_assincrono_nao_desfaz_escolha_do_usuario(self):
+        html = _html()
+        t = _funcao(html, "async function loadConfig(")
+        assert "valoresAntes" in t
+        assert "el.value===valoresAntes[k]" in t
 
     def test_rotacao_remover_chaves_salvas(self):
         html = _html()
@@ -99,12 +121,15 @@ class TestTelaCorretora:
         html = _html()
         t = _funcao(html, "async function catalogoCarregar(")
         assert "'/v1/personal/exchanges'" in t
-        assert "PLANNED_NOT_VALIDATED" in t, (
-            "estado real do catálogo precisa aparecer como é")
+        for estado in ("AVAILABLE_TESTNET", "AVAILABLE_READ_ONLY",
+                       "OFFICIAL_MCP_READ_ONLY_PREPARED"):
+            assert estado in t, "estado real do catálogo precisa aparecer como é"
         assert "execution_enabled" in t, (
             "o painel precisa mostrar que execução está desligada")
         assert "escapeHtml" in t, "dados do servidor entram escapados (AUD rodada-8)"
         assert "sem credenciais" in t and "sem rede" in t
+        assert "x.read_only_enabled&&x.integration==='ccxt'" in t, (
+            "leitura pública CCXT não pode ser anunciada para a sala MCP")
 
     def test_capacidades_por_corretora_com_aviso_honesto(self):
         html = _html()
@@ -113,6 +138,27 @@ class TestTelaCorretora:
             "capacidades vêm da rota real, montada com o id da corretora")
         assert "UNVERIFIED" in t, "capacidade anunciada ≠ corretora testada"
         assert "verified" in t and "live_enabled" in t
+
+    def test_leitura_publica_tem_acao_e_nao_usa_credenciais(self):
+        html = _html()
+        catalogo = _funcao(html, "async function catalogoCarregar(")
+        sonda = _funcao(html, "async function saudePublicaCorretora(")
+        assert "saudePublicaCorretora" in catalogo
+        assert "'/public-health'" in sonda
+        assert "nenhuma credencial usada" in sonda
+        assert "ordem enviada" in sonda
+
+    def test_iq_option_tem_sonda_mcp_passiva(self):
+        html = _html()
+        catalogo = _funcao(html, "async function catalogoCarregar(")
+        sonda = _funcao(html, "async function saudeMcpIqOption(")
+        assert "saudeMcpIqOption" in catalogo
+        assert "'/v1/personal/exchanges/iq_option/mcp-health'" in sonda
+        assert "nenhuma ferramenta chamada" in sonda
+        assert "nenhuma ordem enviada" in sonda
+        assert "read_only_scope" in sonda
+        assert "escopo somente leitura confirmado" in sonda
+        assert "token permite negociação" in sonda
 
     def test_reconciliacao_usa_a_rota_real(self):
         html = _html()
@@ -140,6 +186,7 @@ class TestPreparacaoReal:
         t = _funcao(html, "async function preparoRealLoad(")
         assert "'/v1/live/status'" in t
         assert "checklist" in t and "pendencias" in t
+        assert "expira_em" in t and "aviso" in t
         assert "BLOQUEADO" in t, "o estado real (bloqueado) precisa estar visível"
         assert "escapeHtml" in t
 
@@ -149,6 +196,64 @@ class TestPreparacaoReal:
         assert "method:'POST'" not in t and 'method:"POST"' not in t, (
             "ver preparação é leitura pura — nada é enviado ao servidor")
         assert "live/parada-emergencia" not in t
+
+    def test_configuracao_do_piloto_marca_destino_como_conta_real(self):
+        html = _html()
+        t = _funcao(html, "async function pilotoConfigurar(")
+        assert "conta_real:true" in t
+        assert "prova.valida" in t
+
+    def test_prova_salva_corretora_e_nao_reusa_chave_em_outro_provedor(self):
+        html = _html()
+        t = _funcao(html, "async function brokerPrepararLeitura(")
+        assert "TRADINGAGENTS_EXCHANGE:exchange" in t
+        assert "REAL_READ_ONLY_EXCHANGE" in t
+        assert "exchange!==realReadOnlyExchange" in t
+        assert "(!chave||!segredo)" in t
+
+    def test_piloto_exibe_conta_limites_e_validade_antes_da_decisao(self):
+        html = _html()
+        t = _funcao(html, "async function escolaCentral(")
+        for campo in ("conta_real", "capital_maximo", "perda_diaria_maxima",
+                      "perda_total_maxima", "prazo_dias", "valido_ate"):
+            assert campo in t, f"o proprietário precisa revisar {campo} no painel"
+        assert "window._pilotosConfigurados" in t
+
+    def test_autorizacao_confirma_limites_e_permanece_paper(self):
+        html = _html()
+        t = _funcao(html, "async function pilotoAutorizar(")
+        assert "window._pilotosConfigurados" in t
+        for campo in ("capital_maximo", "perda_diaria_maxima",
+                      "perda_total_maxima", "prazo_dias"):
+            assert campo in t
+        assert "confirm(resumo)" in t
+        assert "'/autorizar'" in t
+        assert "method:'POST'" in t
+        assert "continua PAPER" in t and "LIVE permanece bloqueado" in t
+
+    def test_revogacao_exige_motivo_e_usa_rota_dedicada(self):
+        html = _html()
+        t = _funcao(html, "async function pilotoRevogar(")
+        assert "window._pilotosConfigurados" in t
+        assert "prompt(" in t and "motivo.trim()" in t
+        assert "'/revogar'" in t
+        assert "JSON.stringify({motivo:motivo.trim()})" in t
+        assert "method:'POST'" in t
+
+    def test_liberacao_final_so_aparece_quando_servidor_autoriza(self):
+        html = _html()
+        status = _funcao(html, "async function liveStatus(")
+        ativar = _funcao(html, "async function liveAtivar(")
+        assert "nunca um botão de tela" not in html
+        assert "somente aparece após todos os gates do servidor" in html
+        assert "ativacao_final" in status and "disponivel" in status
+        assert "liveAtivar" in status
+        assert "'/v1/live/ativar/'" in ativar
+        assert "prompt(" in ativar and "confirm(" in ativar
+        assert "EU AUTORIZO OPERAR COM DINHEIRO REAL" in ativar
+        assert "JSON.stringify({frase,conta})" in ativar
+        for persistencia in ("localStorage", "sessionStorage", "/v1/config"):
+            assert persistencia not in ativar
 
 
 class TestTravasDoPainel:
@@ -161,7 +266,7 @@ class TestTravasDoPainel:
             assert proibido not in html.lower(), (
                 f"{proibido!r} não pode existir no painel (missão §3)")
 
-    def test_live_nunca_habilitado_pelo_painel(self):
+    def test_live_nao_e_configuracao_selecionavel(self):
         html = _html()
         assert "MESA_LIVE_LIBERADA" not in html, (
             "o painel não fala de liberação de código — é trava de código, "

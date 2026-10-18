@@ -114,7 +114,26 @@ class TestWindowsInstallerAndWorkflow:
     def test_github_release_workflow_has_inno_setup_and_artifacts(self):
         wf_path = ROOT / ".github" / "workflows" / "windows-release.yml"
         assert wf_path.exists(), "windows-release.yml não encontrado"
-        data = yaml.safe_load(wf_path.read_text(encoding="utf-8"))
+        raw = wf_path.read_text(encoding="utf-8")
+        data = yaml.safe_load(raw)
+
+        assert "actions/checkout@v7" in raw
+        assert "actions/setup-python@v7" in raw
+        assert "actions/upload-artifact@v7" in raw
+        assert "actions/download-artifact@v8" in raw
+
+        # Release oficial nunca pode publicar artefato sem assinatura. O PFX
+        # vem exclusivamente do cofre, entra no store efêmero do runner e é
+        # removido mesmo se uma etapa posterior falhar.
+        assert "WINDOWS_SIGNING_CERTIFICATE_BASE64" in raw
+        assert "WINDOWS_SIGNING_CERTIFICATE_PASSWORD" in raw
+        assert 'refs/tags/v*' in raw
+        assert "Release oficial exige certificado Authenticode" in raw
+        assert "Import-PfxCertificate" in raw
+        assert "signtool.FullName sign" in raw
+        assert "signtool.FullName verify" in raw
+        assert "Remove ephemeral signing material" in raw
+        assert "SIGNING_STATUS.txt" in raw
 
         build_steps = data["jobs"]["build"]["steps"]
         step_names = [s.get("name", "") for s in build_steps]
@@ -130,9 +149,10 @@ class TestWindowsInstallerAndWorkflow:
         assert "/DAppVersion=" in runs or "-DAppVersion=" in runs
 
         # Build de branch sobe artefato para inspeção; Release só em tag v*
-        # (publicação exige gatilho humano explícito).
+        # e somente depois do aceite E2E do mesmo artefato.
         publish = data["jobs"]["publish-release"]
         assert "refs/tags/v" in publish["if"]
+        assert set(publish["needs"]) == {"build", "aceite-bundle"}
         release_step = next(s for s in publish["steps"] if "Create GitHub Release" in s.get("name", ""))
         files_spec = release_step["with"]["files"]
         assert "dist/DZ23-Trading-AI-Setup-v" in files_spec and ".exe" in files_spec
@@ -142,7 +162,11 @@ class TestWindowsInstallerAndWorkflow:
     def test_workflow_da_matriz_do_instalador_existe_e_roda_a_matriz(self):
         wf_path = ROOT / ".github" / "workflows" / "installer-matrix.yml"
         assert wf_path.exists(), "installer-matrix.yml não encontrado"
-        data = yaml.safe_load(wf_path.read_text(encoding="utf-8"))
+        raw = wf_path.read_text(encoding="utf-8")
+        data = yaml.safe_load(raw)
+        assert "actions/checkout@v7" in raw
+        assert "actions/setup-python@v7" in raw
+        assert "actions/upload-artifact@v7" in raw
         job = data["jobs"]["matriz"]
         runs = "\n".join(str(s.get("run", "")) for s in job["steps"])
         assert "matriz_instalador_win.py" in runs

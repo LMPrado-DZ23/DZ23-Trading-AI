@@ -6,6 +6,7 @@ cada job — sem redeploy, sem tocar em env no Coolify. Segredos nunca voltam
 inteiros ao navegador (exibição mascarada)."""
 import asyncio
 import contextlib
+import hashlib
 import hmac
 import ipaddress
 import json
@@ -28,10 +29,42 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from service.api import segredos_em_repouso
 from service.api.ia_uso import RegistroDeUso
 from service.api.owner_credentials import CredenciaisDoDono, erro_de_senha
+from service.iq_option_binary_runtime import (
+    IqOptionBinaryRuntimeError,
+    build_iq_option_binary_runtime,
+)
+from service.iq_option_execution import (
+    IqOptionExecutionPreparationError,
+    probe_iq_option_live_execution_account_async,
+)
+from service.iq_option_read_only import (
+    IqOptionReadOnlyError,
+    probe_iq_option_read_only_account_async,
+)
+from service.iq_option_training import (
+    IqOptionTrainingAccountError,
+    resolve_iq_option_training_account_async,
+)
+from service.iq_option_training_homologation import (
+    IQ_OPTION_TRAINING_PROOF_KEY,
+    IQ_OPTION_TRAINING_PROOF_SCHEMA,
+    IqOptionTrainingHomologationError,
+    build_iq_option_training_homologation_runtime,
+)
 from tradingagents.agency import AgencyTask, build_llm_handler
 from tradingagents.agency.store import AgencyTaskStore
 from tradingagents.agency_runtime import AgencyRuntime
-from tradingagents.brokers.ccxt_bridge import BrokerSecurityError
+from tradingagents.brokers.ccxt_bridge import (
+    BrokerSecurityError,
+    broker_identity_fingerprint,
+    live_execution_as_read_only_env,
+    live_execution_credential_fingerprint,
+    probe_live_execution_account,
+    probe_read_only_account,
+    read_only_credential_fingerprint,
+    testnet_credential_fingerprint,
+)
+from tradingagents.brokers.iq_option_binary import TRAINING_CONFIRM_PHRASE
 from tradingagents.desk.models import AgentStage
 from tradingagents.desk.modo import EstadoDaMesa, ModoBloqueado
 from tradingagents.desk.storage import escrever_json_atomico
@@ -201,12 +234,21 @@ ALLOWED_KEYS = [
     "OPENROUTER_API_KEY", "OPENAI_COMPATIBLE_API_KEY",
     "FRED_API_KEY", "ALPHA_VANTAGE_API_KEY",
     "TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
-    "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET",
+    "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET", "EXCHANGE_API_PASSWORD",
+    "EXCHANGE_API_UID", "EXCHANGE_CREDENTIAL_EXCHANGE",
+    "EXCHANGE_CREDENTIAL_BOUND_AT",
+    "LIVE_EXCHANGE_API_KEY", "LIVE_EXCHANGE_API_SECRET",
+    "LIVE_EXCHANGE_API_PASSWORD", "LIVE_EXCHANGE_API_UID",
+    "LIVE_EXECUTION_EXCHANGE", "LIVE_EXECUTION_CREDENTIAL_BOUND_AT",
+    "REAL_READ_ONLY_API_KEY", "REAL_READ_ONLY_API_SECRET",
+    "REAL_READ_ONLY_API_PASSWORD", "REAL_READ_ONLY_API_UID",
+    "REAL_READ_ONLY_EXCHANGE",
+    "IQ_OPTION_MCP_BEARER_TOKEN", "IQ_OPTION_MCP_LIVE_BEARER_TOKEN",
     "TRADINGAGENTS_DESK_FEED", "TRADINGAGENTS_DESK_BROKER",
     "TRADINGAGENTS_DESK_INSTRUMENTS", "TRADINGAGENTS_DESK_CAPITAL",
+    "TRADINGAGENTS_DESK_PAYOUT",
     "TRADINGAGENTS_DESK_CONTROLE", "TRADINGAGENTS_DESK_TETO_EXPOSICAO",
     "LIVE_MAX_ORDER_VALUE", "LIVE_MAX_DAILY_LOSS",
-    "LIVE_TRADING_CONFIRM",
     "ALERTA_TELEGRAM_TOKEN", "ALERTA_TELEGRAM_CHAT", "ALERTA_WEBHOOK_URL",
     "ALERTA_TELEGRAM_WEBHOOK_SECRET", "ALERTA_DISCORD_WEBHOOK",
     "ALERTA_WHATSAPP_TOKEN", "ALERTA_WHATSAPP_PHONE", "ALERTA_WHATSAPP_DESTINO",
@@ -224,14 +266,19 @@ SEGREDOS_DECLARADOS = {
     "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY", "GOOGLE_API_KEY",
     "GROQ_API_KEY", "MISTRAL_API_KEY", "OPENROUTER_API_KEY",
     "OPENAI_COMPATIBLE_API_KEY", "FRED_API_KEY", "ALPHA_VANTAGE_API_KEY",
-    "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET",
+    "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET", "EXCHANGE_API_PASSWORD",
+    "EXCHANGE_API_UID",
+    "LIVE_EXCHANGE_API_KEY", "LIVE_EXCHANGE_API_SECRET",
+    "LIVE_EXCHANGE_API_PASSWORD", "LIVE_EXCHANGE_API_UID",
+    "REAL_READ_ONLY_API_KEY", "REAL_READ_ONLY_API_SECRET",
+    "REAL_READ_ONLY_API_PASSWORD", "REAL_READ_ONLY_API_UID",
+    "IQ_OPTION_MCP_BEARER_TOKEN", "IQ_OPTION_MCP_LIVE_BEARER_TOKEN",
     "ALERTA_TELEGRAM_TOKEN", "ALERTA_TELEGRAM_CHAT", "ALERTA_WEBHOOK_URL",
     "ALERTA_TELEGRAM_WEBHOOK_SECRET", "ALERTA_DISCORD_WEBHOOK",
     "ALERTA_WHATSAPP_TOKEN", "EMAIL_SMTP_PASS",
     # Chave privada VAPID e assinaturas push (endpoint carrega capacidade):
     # passam pela cifragem em repouso do SEC-1 como qualquer segredo.
     "ALERTA_VAPID_PRIVADA", "PUSH_ASSINATURAS",
-    "LIVE_TRADING_CONFIRM",
 }
 # Rede de segurança: qualquer chave futura com cara de credencial também
 # entra, mesmo que alguém esqueça de declará-la.
@@ -259,6 +306,64 @@ _DESK_EFFECTIVE_DEFAULTS = {
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 bearer = HTTPBearer(auto_error=False)
+
+_REQUEST_ID = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-"
+    r"[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+)
+
+
+def _request_id(request: Request) -> str:
+    """Aceita só UUID canônico; nunca ecoa texto livre ou token disfarçado."""
+    supplied = request.headers.get("X-Request-ID", "")
+    return supplied if _REQUEST_ID.fullmatch(supplied) else str(uuid.uuid4())
+
+
+def _route_label(request: Request) -> str:
+    """Template de rota de baixa cardinalidade, nunca o caminho fornecido."""
+    route = request.scope.get("route")
+    template = getattr(route, "path", None)
+    if isinstance(template, str) and template.isascii() and 1 <= len(template) <= 128:
+        return template
+    return "unmatched"
+
+
+@app.middleware("http")
+async def observabilidade_http(request: Request, call_next):
+    request_id = _request_id(request)
+    request.state.request_id = request_id
+    started = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        response.headers["X-Request-ID"] = request_id
+        return response
+    finally:
+        duration_ms = (time.perf_counter() - started) * 1000
+        labels = {
+            "method": request.method[:16] if request.method.isascii() else "OTHER",
+            "route": _route_label(request),
+            "status_class": f"{status_code // 100}xx",
+        }
+        METRICS.inc("http.requests", labels=labels)
+        METRICS.observe("http.request.duration_ms", duration_ms, labels=labels)
+        # JSON de uma linha facilita correlação sem registrar query, headers,
+        # corpo, IP, conta, ativo financeiro ou qualquer credencial.
+        LOGGER.info(
+            json.dumps(
+                {
+                    "event": "http_request_completed",
+                    "request_id": request_id,
+                    "method": labels["method"],
+                    "route": labels["route"],
+                    "status": status_code,
+                    "duration_ms": round(duration_ms, 3),
+                },
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+        )
 
 # ── GATE G2 — BLOQUEIO INCONDICIONAL DA SUPERFÍCIE SaaS ─────────────────────
 # Prefixos de rota que NÃO existem num aplicativo pessoal de dono único. O
@@ -734,8 +839,24 @@ def load_cfg(tenant_id: str = "legacy") -> dict:
         with contextlib.suppress(ValueError):
             do_disco = json.loads(path.read_text())
             if isinstance(do_disco, dict):
+                # Consentimento LIVE é um ato, não configuração. Versões
+                # anteriores aceitavam a frase persistida; ela deixa de ser
+                # carregada imediatamente e será removida no próximo save.
+                confirmacao_legada = do_disco.pop(
+                    "LIVE_TRADING_CONFIRM", None)
+                if confirmacao_legada is not None:
+                    try:
+                        # Ainda são os bytes/configurações vindos do disco;
+                        # os demais segredos permanecem cifrados nesta cópia.
+                        escrever_json_atomico(path, do_disco)
+                        os.chmod(path, 0o600)
+                    except Exception as exc:
+                        LOGGER.warning(
+                            "remoção da confirmação LIVE legada falhou (%s): %s",
+                            tenant_id, type(exc).__name__)
                 _segredos_do_disco(do_disco, tenant_id, path)
                 cfg.update(do_disco)
+    cfg.pop("LIVE_TRADING_CONFIRM", None)
     return cfg
 
 
@@ -845,6 +966,9 @@ def save_cfg(cfg: dict, tenant_id: str = "legacy"):
     # de novo, nunca tratar um token ilegível como ausente. Falha de cifragem
     # (com verificação de ida-e-volta) ABORTA o save: nada é gravado em claro.
     para_disco = dict(cfg)
+    # A frase é deliberadamente efêmera: nunca conceder autorização LIVE por
+    # arquivo, variável herdada ou restauração de backup.
+    para_disco.pop("LIVE_TRADING_CONFIRM", None)
     for chave in SECRETish:
         valor = para_disco.get(chave)
         if (isinstance(valor, str) and valor
@@ -1016,7 +1140,7 @@ def readyz():
 
 @app.get("/metrics")
 def metrics(_=Depends(auth)):
-    return METRICS.snapshot()
+    return METRICS.snapshot(detailed=True)
 
 @app.get("/")
 def index():
@@ -1145,9 +1269,69 @@ async def set_cfg(req: Request, _=Depends(auth)):
     body = await _json_body(req)
     tenant_id = request_tenant(req)
     cfg = load_cfg(tenant_id)
+    fingerprint_execucao_anterior = testnet_credential_fingerprint({
+        k: cfg.get(k, "") for k in (
+            "TRADINGAGENTS_EXCHANGE", "EXCHANGE_API_KEY",
+            "EXCHANGE_API_SECRET", "EXCHANGE_API_PASSWORD",
+            "EXCHANGE_API_UID")})
+    fingerprint_live_anterior = live_execution_credential_fingerprint(cfg)
     saved, changed = [], []
-    for k, v in (body.get("vars") or {}).items():
-        if k in ALLOWED_KEYS and isinstance(v, str) and v.strip():
+    vars_recebidas = body.get("vars") or {}
+    if "LIVE_TRADING_CONFIRM" in vars_recebidas:
+        raise HTTPException(
+            422, "a confirmação LIVE não é configuração persistente; "
+                 "digite a frase somente no momento da ativação")
+    payout_recebido = vars_recebidas.get("TRADINGAGENTS_DESK_PAYOUT")
+    if payout_recebido is not None:
+        if not isinstance(payout_recebido, str) or not payout_recebido.strip():
+            raise HTTPException(
+                422, "payout da escola IQ Option precisa ser informado")
+        try:
+            payout_decimal = Decimal(payout_recebido.strip())
+        except InvalidOperation as exc:
+            raise HTTPException(
+                422, "payout da escola IQ Option precisa ser numérico") from exc
+        if (not payout_decimal.is_finite()
+                or payout_decimal <= 0 or payout_decimal > 1):
+            raise HTTPException(
+                422, "payout da escola IQ Option precisa estar entre 0 e 1")
+    limites_financeiros = {
+        "TRADINGAGENTS_DESK_TETO_EXPOSICAO": "teto global de exposição",
+        "LIVE_MAX_ORDER_VALUE": "teto por ordem",
+        "LIVE_MAX_DAILY_LOSS": "perda máxima diária",
+    }
+    for chave, rotulo in limites_financeiros.items():
+        if chave not in vars_recebidas:
+            continue
+        valor = vars_recebidas.get(chave)
+        if not isinstance(valor, str) or not valor.strip():
+            raise HTTPException(422, f"{rotulo} precisa ser informado")
+        try:
+            numero = Decimal(valor.strip())
+        except InvalidOperation as exc:
+            raise HTTPException(
+                422, f"{rotulo} precisa ser numérico") from exc
+        if not numero.is_finite() or numero <= 0:
+            raise HTTPException(
+                422, f"{rotulo} precisa ser finito e maior que zero")
+    exposicao = vars_recebidas.get(
+        "TRADINGAGENTS_DESK_TETO_EXPOSICAO",
+        cfg.get("TRADINGAGENTS_DESK_TETO_EXPOSICAO"))
+    teto_ordem = vars_recebidas.get(
+        "LIVE_MAX_ORDER_VALUE", cfg.get("LIVE_MAX_ORDER_VALUE"))
+    exposicao_decimal = _decimal_positivo(exposicao)
+    ordem_decimal = _decimal_positivo(teto_ordem)
+    if (exposicao_decimal is not None and ordem_decimal is not None
+            and ordem_decimal > exposicao_decimal):
+        raise HTTPException(
+            422, "teto por ordem não pode exceder o teto global de exposição")
+    vinculos_gerenciados = {
+        "EXCHANGE_CREDENTIAL_EXCHANGE", "EXCHANGE_CREDENTIAL_BOUND_AT",
+        "LIVE_EXECUTION_EXCHANGE", "LIVE_EXECUTION_CREDENTIAL_BOUND_AT",
+        "REAL_READ_ONLY_EXCHANGE"}
+    for k, v in vars_recebidas.items():
+        if (k in ALLOWED_KEYS and k not in vinculos_gerenciados
+                and isinstance(v, str) and v.strip()):
             novo = v.strip()
             saved.append(k)
             atual = str(cfg.get(k) or "").strip()
@@ -1159,6 +1343,77 @@ async def set_cfg(req: Request, _=Depends(auth)):
             if atual != novo:
                 changed.append(k)
             cfg[k] = novo
+    # Uma credencial de execução nunca pode migrar silenciosamente para outra
+    # corretora. O vínculo só é (re)feito quando chave E segredo novos chegam
+    # juntos na mesma ação; trocar apenas o seletor deixa o checklist fechado.
+    chave_nova = str(vars_recebidas.get("EXCHANGE_API_KEY") or "").strip()
+    segredo_novo = str(vars_recebidas.get("EXCHANGE_API_SECRET") or "").strip()
+    if chave_nova and segredo_novo:
+        exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+        if exchange:
+            anterior = str(
+                cfg.get("EXCHANGE_CREDENTIAL_EXCHANGE") or "").strip().lower()
+            cfg["EXCHANGE_CREDENTIAL_EXCHANGE"] = exchange
+            if "EXCHANGE_CREDENTIAL_EXCHANGE" not in saved:
+                saved.append("EXCHANGE_CREDENTIAL_EXCHANGE")
+            if anterior != exchange:
+                changed.append("EXCHANGE_CREDENTIAL_EXCHANGE")
+    chave_live_nova = str(
+        vars_recebidas.get("LIVE_EXCHANGE_API_KEY") or "").strip()
+    segredo_live_novo = str(
+        vars_recebidas.get("LIVE_EXCHANGE_API_SECRET") or "").strip()
+    if chave_live_nova and segredo_live_novo:
+        exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+        if exchange:
+            anterior = str(
+                cfg.get("LIVE_EXECUTION_EXCHANGE") or "").strip().lower()
+            cfg["LIVE_EXECUTION_EXCHANGE"] = exchange
+            if "LIVE_EXECUTION_EXCHANGE" not in saved:
+                saved.append("LIVE_EXECUTION_EXCHANGE")
+            if anterior != exchange:
+                changed.append("LIVE_EXECUTION_EXCHANGE")
+    chave_leitura = str(
+        vars_recebidas.get("REAL_READ_ONLY_API_KEY") or "").strip()
+    segredo_leitura = str(
+        vars_recebidas.get("REAL_READ_ONLY_API_SECRET") or "").strip()
+    if chave_leitura and segredo_leitura:
+        exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+        if exchange:
+            anterior = str(
+                cfg.get("REAL_READ_ONLY_EXCHANGE") or "").strip().lower()
+            cfg["REAL_READ_ONLY_EXCHANGE"] = exchange
+            if "REAL_READ_ONLY_EXCHANGE" not in saved:
+                saved.append("REAL_READ_ONLY_EXCHANGE")
+            if anterior != exchange:
+                changed.append("REAL_READ_ONLY_EXCHANGE")
+    token_iq = str(
+        vars_recebidas.get("IQ_OPTION_MCP_BEARER_TOKEN") or "").strip()
+    if token_iq:
+        exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+        if exchange != "iq_option":
+            raise HTTPException(
+                409, "o token MCP só pode ser vinculado à IQ Option")
+        anterior = str(
+            cfg.get("REAL_READ_ONLY_EXCHANGE") or "").strip().lower()
+        cfg["REAL_READ_ONLY_EXCHANGE"] = exchange
+        if "REAL_READ_ONLY_EXCHANGE" not in saved:
+            saved.append("REAL_READ_ONLY_EXCHANGE")
+        if anterior != exchange:
+            changed.append("REAL_READ_ONLY_EXCHANGE")
+    token_live_iq = str(
+        vars_recebidas.get("IQ_OPTION_MCP_LIVE_BEARER_TOKEN") or "").strip()
+    if token_live_iq:
+        exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+        if exchange != "iq_option":
+            raise HTTPException(
+                409, "o token MCP LIVE só pode ser vinculado à IQ Option")
+        anterior = str(
+            cfg.get("LIVE_EXECUTION_EXCHANGE") or "").strip().lower()
+        cfg["LIVE_EXECUTION_EXCHANGE"] = exchange
+        if "LIVE_EXECUTION_EXCHANGE" not in saved:
+            saved.append("LIVE_EXECUTION_EXCHANGE")
+        if anterior != exchange:
+            changed.append("LIVE_EXECUTION_EXCHANGE")
     # V8 §6: remover credencial/valor passou a ser possível. Antes o painel
     # só sabia SALVAR campo não-vazio — uma chave errada ficava presa para
     # sempre. A remoção tira do arquivo; se o ambiente do sistema ainda
@@ -1169,6 +1424,48 @@ async def set_cfg(req: Request, _=Depends(auth)):
         if str(cfg.get(k) or "").strip():
             changed.append(k)
         cfg.pop(k, None)
+    exchange_execucao = str(
+        cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    credencial_execucao_completa = bool(
+        str(cfg.get("EXCHANGE_API_KEY") or "").strip()
+        and str(cfg.get("EXCHANGE_API_SECRET") or "").strip()
+        and str(cfg.get("EXCHANGE_CREDENTIAL_EXCHANGE") or "").strip().lower()
+        == exchange_execucao)
+    fingerprint_execucao_atual = testnet_credential_fingerprint({
+        k: cfg.get(k, "") for k in (
+            "TRADINGAGENTS_EXCHANGE", "EXCHANGE_API_KEY",
+            "EXCHANGE_API_SECRET", "EXCHANGE_API_PASSWORD",
+            "EXCHANGE_API_UID")})
+    if credencial_execucao_completa:
+        if (fingerprint_execucao_atual != fingerprint_execucao_anterior
+                or not _horario_testnet_valido(
+                    cfg.get("EXCHANGE_CREDENTIAL_BOUND_AT"))):
+            cfg["EXCHANGE_CREDENTIAL_BOUND_AT"] = (
+                datetime.now(timezone.utc).isoformat())
+            saved.append("EXCHANGE_CREDENTIAL_BOUND_AT")
+            changed.append("EXCHANGE_CREDENTIAL_BOUND_AT")
+    elif cfg.pop("EXCHANGE_CREDENTIAL_BOUND_AT", None) is not None:
+        changed.append("EXCHANGE_CREDENTIAL_BOUND_AT")
+    credencial_live_completa = bool(
+        (exchange_execucao == "iq_option"
+         and str(cfg.get("IQ_OPTION_MCP_LIVE_BEARER_TOKEN") or "").strip())
+        or (str(cfg.get("LIVE_EXCHANGE_API_KEY") or "").strip()
+            and str(cfg.get("LIVE_EXCHANGE_API_SECRET") or "").strip()))
+    credencial_live_completa = bool(
+        credencial_live_completa
+        and str(cfg.get("LIVE_EXECUTION_EXCHANGE") or "").strip().lower()
+        == exchange_execucao)
+    fingerprint_live_atual = live_execution_credential_fingerprint(cfg)
+    if credencial_live_completa:
+        if (fingerprint_live_atual != fingerprint_live_anterior
+                or not _horario_testnet_valido(
+                    cfg.get("LIVE_EXECUTION_CREDENTIAL_BOUND_AT"))):
+            cfg["LIVE_EXECUTION_CREDENTIAL_BOUND_AT"] = (
+                datetime.now(timezone.utc).isoformat())
+            saved.append("LIVE_EXECUTION_CREDENTIAL_BOUND_AT")
+            changed.append("LIVE_EXECUTION_CREDENTIAL_BOUND_AT")
+    elif cfg.pop("LIVE_EXECUTION_CREDENTIAL_BOUND_AT", None) is not None:
+        changed.append("LIVE_EXECUTION_CREDENTIAL_BOUND_AT")
     if not saved and not pedidos:
         raise HTTPException(400, "nada para salvar")
     save_cfg(cfg, tenant_id)
@@ -1410,13 +1707,71 @@ def personal_exchange_capabilities(exchange_id: str, _=Depends(auth)):
             close()
 
 
+@app.get("/v1/personal/exchanges/{exchange_id}/public-health")
+def personal_exchange_public_health(exchange_id: str, _=Depends(auth)):
+    """Prova conectividade pública com ticker+velas, sem usar credenciais."""
+    from service.personal_exchange_health import probe_public_exchange
+    try:
+        return probe_public_exchange(exchange_id)
+    except KeyError as exc:
+        raise HTTPException(404, "corretora fora da linha DZ23") from exc
+
+
+@app.get("/v1/personal/exchanges/iq_option/mcp-health")
+def iq_option_mcp_health(request: Request, _=Depends(auth)):
+    """Handshake+tools/list nos sete MCPs; nunca chama ferramenta remota."""
+    from service.iq_option_mcp import probe_iq_option_mcp
+    cfg = load_cfg(request_tenant(request))
+    return probe_iq_option_mcp(
+        token=str(cfg.get("IQ_OPTION_MCP_BEARER_TOKEN") or ""))
+
+
 @app.get("/v1/broker/status")
 def broker_status(request: Request, _=Depends(auth)):
     """Valida a configuração de corretora SEM enviar ordem nenhuma."""
-    cfg = load_cfg(request_tenant(request))
-    env = {k: cfg.get(k, "") for k in
+    tenant_id = request_tenant(request)
+    cfg = load_cfg(tenant_id)
+    modo = str(
+        cfg.get("TRADINGAGENTS_BROKER_MODE") or "testnet").strip().lower()
+    if modo == "live":
+        if not MESA_LIVE_LIBERADA:
+            return {
+                "ready": False,
+                "erro": "LIVE bloqueado pelo selo de código da mesa",
+            }
+        credenciais_ok, faltando = _credenciais_live_prontas(cfg)
+        if not credenciais_ok:
+            return {"ready": False,
+                    "erro": "credencial LIVE incompatível ou incompleta: "
+                             + ", ".join(faltando)}
+        try:
+            ativacao = _validar_ativacao_live_salva(
+                _escola_of(request)["armazem"], tenant_id, cfg)
+        except Exception as exc:
+            return {
+                "ready": False,
+                "erro": "ativação LIVE indisponível: "
+                         f"{type(exc).__name__}",
+            }
+        if ativacao.get("valida") is not True:
+            return {
+                "ready": False,
+                "erro": "LIVE exige ativação explícita e vigente para a conta",
+            }
+        cfg_broker = _cfg_para_broker_live(
+            cfg, confirmation_verified=True)
+    else:
+        credenciais_ok, faltando = _credenciais_execucao_prontas(cfg)
+        cfg_broker = cfg
+    if not credenciais_ok:
+        return {"ready": False,
+                "erro": "credencial incompatível ou incompleta: "
+                         + ", ".join(faltando)}
+    env = {k: cfg_broker.get(k, "") for k in
            ("TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
-            "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET", "LIVE_TRADING_CONFIRM",
+            "EXCHANGE_API_KEY", "EXCHANGE_API_SECRET",
+            "EXCHANGE_API_PASSWORD", "EXCHANGE_API_UID",
+            "LIVE_TRADING_CONFIRM",
             "LIVE_MAX_ORDER_VALUE", "LIVE_MAX_DAILY_LOSS")}
     try:
         from tradingagents.brokers.ccxt_bridge import CCXTBridge
@@ -2067,9 +2422,9 @@ def status_operacao():
     porque a rota é pública. O estado real de um inquilino depende de kill
     switch, reconciliação, incidentes de risco, consistência de capital,
     capacidade da corretora, mandato, autorização e frescor do SAFE; isso
-    vive em /v1/operational-readiness, autenticado e por inquilino, ainda
-    não implementado. Responder aqui o que é de lá vazaria estado de cliente
-    para quem nem fez login.
+    vive em /v1/operational-readiness, autenticado e por inquilino.
+    Responder aqui o que é de lá vazaria estado de cliente para quem nem fez
+    login.
     """
     ambiente = {
         "PAPER": {"habilitado": True,
@@ -2093,7 +2448,7 @@ def status_operacao():
     return {
         "escopo": "PLATAFORMA",
         "nao_e": ("prova de prontidão operacional (operational readiness); "
-                  "o estado por inquilino virá autenticado em "
+                  "consulte o estado por inquilino, autenticado, em "
                   "/v1/operational-readiness"),
         # PAPER é POLÍTICA ATUAL, não detecção: enquanto só ele estiver
         # autorizado, o valor é fixo de propósito. Quando o modo passar a
@@ -2171,6 +2526,7 @@ def oauth_callback(provider: str, code: str = "", state: str = ""):
 # agentes, carteira, ordens ou ciclos de outro — isolamento é requisito do
 # produto, não detalhe. Modo PAPER; esta superfície não liga capital real.
 _DESKS: dict[str, dict] = {}
+_IQ_BINARY_RUNTIMES: dict[str, object] = {}
 
 # Centro Inteligente de Alertas ⑤: fila durável por inquilino. Só o
 # despachante grava; o teste injeta transportes por aqui para nunca tocar
@@ -2521,7 +2877,191 @@ def _revisor_de_ia(tenant_id: str, cfg: dict):
     return revisar
 
 
-def _desk_boot(tenant_id: str) -> dict:
+def _avaliar_escola_da_mesa(desk: dict, tenant_id: str, *,
+                            agora: datetime | None = None) -> list[dict]:
+    """Avalia evidência fechada da sala e encaminha formados.
+
+    É chamada pelo callback persistido de cada ciclo. Assim, a Escola não
+    depende de uma consulta manual do painel para avançar. Formar continua
+    significando apenas entrar na fila bloqueada da Sala REAL: nenhum limite,
+    autorização, broker ou ordem é criado aqui.
+    """
+    from tradingagents.desk.escola import EstadoDaEscola
+    from tradingagents.desk.piloto import SupervisorDePiloto
+    from tradingagents.desk.salas import (
+        ContextoDeCertificacao,
+        EscolaCentral,
+        EscolaDoPiloto,
+    )
+
+    sala = desk.get("sala")
+    armazem = desk.get("armazem")
+    orchestrator = desk.get("orchestrator")
+    if sala is None or armazem is None or orchestrator is None:
+        return []
+    desfechos = list(getattr(sala, "desfechos", ()) or ())
+    alunos = sorted({
+        (str(d.estrategia), str(d.versao or "1"), str(d.instrumento),
+         str(d.horizonte or "1h"))
+        for d in desfechos
+        if d.estrategia and d.instrumento
+    })
+    if not alunos:
+        return []
+
+    central = EscolaCentral(armazem=armazem, tenant_id=tenant_id)
+    resultados = []
+    for estrategia, versao, ativo, horizonte in alunos:
+        av = central.avaliar(
+            sala=sala, estrategia=estrategia, versao=versao,
+            ativo=ativo, horizonte=horizonte, agora=agora)
+        encaminhamento = None
+        if av.estado is EstadoDaEscola.FORMADA:
+            candidatos = [
+                t for t in orchestrator.traders
+                if t.strategy == estrategia
+                and str(t.spec.version) == versao
+            ]
+            if len(candidatos) == 1:
+                contexto = ContextoDeCertificacao(
+                    corretora=sala.contexto.corretora,
+                    conta=sala.contexto.conta,
+                    mercado=sala.contexto.mercado,
+                    modo=sala.contexto.modo,
+                    ativo=ativo, horizonte=horizonte,
+                    payout=sala.contexto.payout)
+                supervisor = SupervisorDePiloto(
+                    armazem, tenant_id=tenant_id,
+                    escola=EscolaDoPiloto(central, contexto))
+                encaminhamento = supervisor.encaminhar_formado(
+                    candidatos[0].spec.agent_id,
+                    estrategia=estrategia, versao=versao,
+                    contexto=contexto.como_dict(), agora=agora)
+            else:
+                encaminhamento = {
+                    "estado": "nao_encaminhado",
+                    "motivo": ("estratégia sem agente único na mesa; nada "
+                               "foi liberado automaticamente"),
+                }
+        resultados.append({
+            "estrategia": estrategia, "versao": versao,
+            "ativo": ativo, "horizonte": horizonte,
+            "estado": av.estado.value, "motivo": av.motivo,
+            "amostras": av.amostras,
+            "sala_real": encaminhamento,
+        })
+    return resultados
+
+
+_SCHEMA_ATIVACAO_LIVE = "dz23.ativacao-live/1"
+_CHAVE_ATIVACAO_LIVE = "ativacao_live"
+
+
+def _validar_ativacao_live_salva(armazem, tenant_id: str, cfg: dict) -> dict:
+    """Revalida o mandato persistido; reinício nunca amplia autorização."""
+    from tradingagents.desk.piloto import (
+        EstadoDoPiloto,
+        SupervisorDePiloto,
+    )
+    from tradingagents.desk.salas import EscolaCentral
+
+    registro = armazem.carregar(tenant_id, _CHAVE_ATIVACAO_LIVE)
+    if not isinstance(registro, dict):
+        return {}
+    registro = dict(registro)
+    registro["valida"] = False
+    if (registro.get("schema") != _SCHEMA_ATIVACAO_LIVE
+            or registro.get("tenant_id") != tenant_id):
+        return registro
+    exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    if str(registro.get("exchange") or "").strip().lower() != exchange:
+        return registro
+    if not hmac.compare_digest(
+            str(registro.get("execution_credential_fingerprint") or ""),
+            live_execution_credential_fingerprint(
+                _env_live_execution(cfg))):
+        return registro
+    prova, prova_valida = _prova_leitura_real_armazem(
+        armazem, tenant_id, cfg)
+    prova_execucao, prova_execucao_valida = _prova_execucao_live_armazem(
+        armazem, tenant_id, cfg)
+    if not (prova_execucao_valida and prova_execucao
+            and str(prova_execucao.get("conta") or "").strip()
+            == str(registro.get("conta") or "").strip()):
+        return registro
+    supervisor = SupervisorDePiloto(armazem, tenant_id=tenant_id)
+    try:
+        supervisor.vigiar(
+            central=EscolaCentral(armazem=armazem, tenant_id=tenant_id))
+    except Exception:
+        return registro
+    piloto = supervisor.de(str(registro.get("agent_id") or ""))
+    if not piloto or piloto.estado is not EstadoDoPiloto.PILOTO_AUTORIZADO:
+        return registro
+    if (piloto.authorization_id != registro.get("authorization_id")
+            or piloto.conta != registro.get("conta")
+            or not _prova_real_serve_piloto(prova, prova_valida, piloto)):
+        return registro
+    teto_ordem = _decimal_positivo(cfg.get("LIVE_MAX_ORDER_VALUE"))
+    teto_diario = _decimal_positivo(cfg.get("LIVE_MAX_DAILY_LOSS"))
+    if (teto_ordem is None or teto_diario is None
+            or teto_ordem > piloto.capital_maximo
+            or teto_diario > piloto.perda_diaria_maxima):
+        return registro
+    registro["valida"] = True
+    return registro
+
+
+def _construir_mandato_da_mesa(
+        tenant_id: str, cfg: dict, universe: tuple[str, ...], capital: Decimal,
+        *, ativacao_live: dict | None = None):
+    """Constrói o mandato no mesmo modo econômico da corretora.
+
+    Configuração nunca concede LIVE. O modo real exige simultaneamente o
+    selo auditado de código e um registro produzido pelo ato explícito do
+    proprietário, já vinculado a inquilino, corretora, conta e piloto.
+    """
+    from tradingagents.desk.models import DeskMandate, Mode
+
+    broker_kind = str(
+        cfg.get("TRADINGAGENTS_DESK_BROKER") or "paper").strip().lower()
+    broker_mode = str(
+        cfg.get("TRADINGAGENTS_BROKER_MODE") or "testnet").strip().lower()
+    if broker_kind != "ccxt":
+        mode, account, live_authorized = Mode.PAPER, f"paper-{tenant_id}", False
+    elif broker_mode == "testnet":
+        mode, account, live_authorized = (
+            Mode.TESTNET, f"testnet-{tenant_id}", False)
+    elif broker_mode == "live":
+        if not MESA_LIVE_LIBERADA:
+            raise BrokerSecurityError(
+                "LIVE bloqueado pelo selo de código MESA_LIVE_LIBERADA=False")
+        ativacao = ativacao_live if isinstance(ativacao_live, dict) else {}
+        if not (ativacao.get("valida") is True
+                and ativacao.get("schema") == _SCHEMA_ATIVACAO_LIVE
+                and ativacao.get("tenant_id") == tenant_id
+                and str(ativacao.get("exchange") or "").strip().lower()
+                == str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+                and str(ativacao.get("conta") or "").strip()
+                and str(ativacao.get("agent_id") or "").strip()
+                and str(ativacao.get("authorization_id") or "").strip()):
+            raise BrokerSecurityError(
+                "LIVE exige ativação explícita, vigente e vinculada à conta "
+                "e ao piloto autorizado")
+        mode = Mode.LIVE
+        account = str(ativacao["conta"]).strip()
+        live_authorized = True
+    else:
+        raise BrokerSecurityError(
+            "TRADINGAGENTS_BROKER_MODE deve ser testnet ou live")
+    return DeskMandate(
+        mandate_id=f"desk-{tenant_id}", owner=tenant_id, account=account,
+        mode=mode, instruments=universe, capital=capital,
+        live_authorized=live_authorized)
+
+
+def _desk_boot(tenant_id: str, *, cfg_override: dict | None = None,
+               live_activation: dict | None = None) -> dict:
     from decimal import Decimal
 
     from tradingagents.desk.brokers import build_desk_broker
@@ -2529,7 +3069,6 @@ def _desk_boot(tenant_id: str) -> dict:
     from tradingagents.desk.ledger import Ledger
     from tradingagents.desk.models import (
         AgentStage,
-        DeskMandate,
         MarketSnapshot,
         Mode,
         utcnow as _now,
@@ -2539,13 +3078,10 @@ def _desk_boot(tenant_id: str) -> dict:
     from tradingagents.desk.scheduler import DeskScheduler
     from tradingagents.desk.traders import default_desk
 
-    cfg = load_cfg(tenant_id)
+    cfg = dict(cfg_override) if cfg_override is not None else load_cfg(tenant_id)
     raw = cfg.get("TRADINGAGENTS_DESK_INSTRUMENTS") or "BTC/USDT,ETH/USDT"
     universe = tuple(i.strip().upper() for i in raw.split(",") if i.strip())
     capital = Decimal(str(cfg.get("TRADINGAGENTS_DESK_CAPITAL") or "1000"))
-    mandate = DeskMandate(mandate_id=f"desk-{tenant_id}", owner=tenant_id,
-                          account=f"paper-{tenant_id}", mode=Mode.PAPER,
-                          instruments=universe, capital=capital)
     from tradingagents.desk.learning import MemoriaDeDesempenho
     from tradingagents.desk.modo import ModoDaMesa, PosseDeExecucao
     from tradingagents.desk.storage import ArmazemDeEstado
@@ -2553,6 +3089,15 @@ def _desk_boot(tenant_id: str) -> dict:
     # o histórico dos agentes sobrevive à troca de máquina.
     armazem = ArmazemDeEstado(os.environ.get("DATABASE_URL"),
                               diretorio=DATA / "desks")
+    if (str(cfg.get("TRADINGAGENTS_DESK_BROKER") or "paper").strip().lower()
+            == "ccxt"
+            and str(cfg.get("TRADINGAGENTS_BROKER_MODE") or "").strip().lower()
+            == "live"
+            and live_activation is None):
+        live_activation = _validar_ativacao_live_salva(
+            armazem, tenant_id, cfg)
+    mandate = _construir_mandato_da_mesa(
+        tenant_id, cfg, universe, capital, ativacao_live=live_activation)
     memoria = MemoriaDeDesempenho(DATA / "desks" / tenant_id / "aprendizado.json",
                                   armazem=armazem, tenant_id=tenant_id)
     # Evolução autônoma (E5): diário auditável por trader + experimentos
@@ -2597,14 +3142,25 @@ def _desk_boot(tenant_id: str) -> dict:
 
     risk = RiskEngine(mandate)
     ledger = Ledger(opening_cash=mandate.capital)
-    data_dir = DATA / "desks" / tenant_id
-    # A autorização de LIVE é de CÓDIGO, não de configuração. O mandato
-    # desta mesa é PAPER (acima) e `live_authorized` só se torna verdadeiro
-    # por construção explícita em código auditado — salvar
-    # TRADINGAGENTS_BROKER_MODE=live no painel NÃO basta para a mesa.
-    # (Achado FIN-1 da auditoria independente.)
+    if mandate.mode is Mode.LIVE:
+        escopo_financeiro = hashlib.sha256(
+            f"{exchange_cfg}\0{mandate.account}".encode()).hexdigest()[:16]
+        chave_oms = f"oms_live_{escopo_financeiro}"
+        chave_livro = f"livro_live_{escopo_financeiro}"
+        chave_mesa = f"mesa_live_{escopo_financeiro}"
+        data_dir = DATA / "desks" / tenant_id / f"live-{escopo_financeiro}"
+    else:
+        chave_oms, chave_livro, chave_mesa = "oms", "livro", "mesa"
+        data_dir = DATA / "desks" / tenant_id
+    # A autorização de LIVE é de CÓDIGO + ato explícito vinculado à conta.
+    # Salvar TRADINGAGENTS_BROKER_MODE=live jamais basta (FIN-1/ADR-006).
+    broker_cfg = (
+        _cfg_para_broker_live(
+            cfg, confirmation_verified=mandate.live_authorized)
+        if mandate.mode is Mode.LIVE else cfg
+    )
     broker, broker_mode = build_desk_broker(
-        cfg, final_state={}, journal_path=str(data_dir / "broker.jsonl"),
+        broker_cfg, final_state={}, journal_path=str(data_dir / "broker.jsonl"),
         paper_price=Decimal("100"), live_authorized=mandate.live_authorized)
     coord = ExecutionCoordinator(mandate, ledger, risk,
                                  worker_id=f"worker-{tenant_id}", broker=broker)
@@ -2683,10 +3239,16 @@ def _desk_boot(tenant_id: str) -> dict:
     sala_motivo = ""
     if broker_mode in ("paper", "testnet"):
         try:
+            mercado_sala = (
+                "opcoes_binarias" if exchange_cfg == "iq_option" else "spot")
+            payout_sala = (
+                cfg.get("TRADINGAGENTS_DESK_PAYOUT")
+                if exchange_cfg == "iq_option" else None)
             sala_da_mesa = RegistroDeSalas(
                 armazem=armazem, tenant_id=tenant_id).abrir_sala(
                 ContextoDaSala(corretora=exchange_cfg, conta=mandate.account,
-                               mercado="spot", modo=broker_mode))
+                               mercado=mercado_sala, modo=broker_mode,
+                               payout=payout_sala))
         except Exception as exc:
             sala_motivo = f"sala não registrada ({type(exc).__name__}: {exc})"[:200]
     else:
@@ -2703,7 +3265,16 @@ def _desk_boot(tenant_id: str) -> dict:
         try:
             sup = SupervisorDePiloto(armazem, tenant_id=tenant_id)
             viva = EscolaCentral(armazem=armazem, tenant_id=tenant_id)
-            bloqueados = sup.bloqueios(central=viva)
+            agentes_esperados = tuple(t.spec.agent_id for t in traders)
+            bloqueados = sup.bloqueios(
+                central=viva, exigir_autorizacao=(broker_mode == "live"),
+                agentes_esperados=agentes_esperados)
+            if broker_mode == "live":
+                cfg_vivo = load_cfg(tenant_id)
+                prova, prova_valida = _prova_leitura_real_armazem(
+                    armazem, tenant_id, cfg_vivo)
+                bloqueados.update(_bloqueios_de_conta_real(
+                    sup, prova, prova_valida))
             # Evolução (E5): trader suspenso por deterioração bloqueia novas
             # entradas — o motivo do piloto vence quando os dois apontam.
             evo_viva = EvolucaoAutonoma(armazem=armazem, tenant_id=tenant_id)
@@ -2753,13 +3324,18 @@ def _desk_boot(tenant_id: str) -> dict:
 
     # Estado financeiro anterior: restaurar e EXIGIR reconciliação antes de
     # qualquer exposição nova (UNKNOWN => BLOCK).
-    recuperacao = coord.restaurar_estado(armazem.carregar(tenant_id, "oms"))
+    recuperacao = coord.restaurar_estado(
+        armazem.carregar(tenant_id, chave_oms))
+    if mandate.mode is Mode.LIVE:
+        coord.exigir_reconciliacao(
+            "mesa LIVE iniciada ou reiniciada: reconcilie conta, ordens, "
+            "posições e caixa antes de qualquer entrada")
 
     # Diário de gestão (políticas, trailing, parciais): sem restaurar, a
     # posição sobreviveria ao reinício mas o GERENTE de saída morreria com o
     # processo. A verdade financeira continua sendo o diário (ledger vence).
     restauracao_livro = orch.restaurar_livro(
-        armazem.carregar(tenant_id, "livro"), ledger=coord.ledger)
+        armazem.carregar(tenant_id, chave_livro), ledger=coord.ledger)
 
     # Centro Inteligente de Alertas ⑤: a fila durável é carregada agora; o
     # que ficou pendente no processo anterior volta a ser tentado (ciclo ou
@@ -2783,13 +3359,16 @@ def _desk_boot(tenant_id: str) -> dict:
             "feed_kind": feed_kind, "broker_mode": broker_mode,
             "modo": modo, "posse": posse, "sala": sala_da_mesa,
             "sala_motivo": sala_motivo, "avisos_vigia": _avisos_vigia,
+            "escola_avaliacoes": [],
             "scheduler": None, "estagios_antes": estagios_antes,
             "persistir_estagios": _persistir_estagios,
             "ia_modelo": cfg.get("TRADINGAGENTS_LLM_PROVIDER") or "",
-            "manual": copiloto, "snaps_fn": snaps_fn}
+            "manual": copiloto, "snaps_fn": snaps_fn,
+            "chave_oms": chave_oms, "chave_livro": chave_livro,
+            "chave_mesa": chave_mesa}
 
     def _gravar_oms():
-        armazem.salvar(tenant_id, "oms", coord.snapshot_estado())
+        armazem.salvar(tenant_id, chave_oms, coord.snapshot_estado())
 
     # WAL do OMS (FIN-08): gravação SÍNCRONA ligada ao coordenador. Aqui a
     # falha LEVANTA de propósito — o coordenador recusa a ordem que a
@@ -2805,6 +3384,19 @@ def _desk_boot(tenant_id: str) -> dict:
 
     def _record(out):
         _persistir_oms()
+        # Escola automática: operações FECHADAS do ciclo alimentam a régua
+        # contextual e um formando entra imediatamente na Sala REAL bloqueada.
+        # Falha da Escola é observável, mas nunca derruba nem libera a mesa.
+        try:
+            avaliacoes = _avaliar_escola_da_mesa(desk, tenant_id)
+            desk["escola_avaliacoes"] = avaliacoes
+            out["escola"] = avaliacoes
+        except Exception as exc:
+            aviso = ("avaliação automática da Escola falhou: "
+                     f"{type(exc).__name__}: {exc}")[:240]
+            _avisos_vigia.append(aviso)
+            del _avisos_vigia[:-10]
+            out["escola_erro"] = aviso
         # A cada ciclo, avalia e ENTREGA alertas pela fila durável — é o que
         # acorda o dono sem ele precisar abrir o painel. A entrega tem
         # dedupe, backoff e rate limit; falha não derruba o ciclo.
@@ -2859,6 +3451,7 @@ def _desk_boot(tenant_id: str) -> dict:
         orch, coord, snapshot_provider=snaps_fn, price_provider=prices_fn,
         state_path=data_dir / "state.json", on_cycle=_record,
         armazem=armazem, tenant_id=tenant_id,
+        state_key=chave_mesa, livro_key=chave_livro,
         interval_seconds=int(os.environ.get("DESK_INTERVAL_SECONDS", "300")),
         guarda_operacao=_guarda_operacao)
     return desk
@@ -2939,6 +3532,7 @@ def _desk_of(request: Request) -> dict:
 
 def _desk_reset(tenant_id: str) -> None:
     """Configuração mudou: parada controlada e reconstrução no próximo uso."""
+    _IQ_BINARY_RUNTIMES.pop(tenant_id, None)
     desk = _DESKS.pop(tenant_id, None)
     if desk and desk.get("scheduler") and desk["scheduler"].running:
         desk["scheduler"].stop()
@@ -3067,6 +3661,7 @@ def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
         "decisao": _decisao_da_mesa(d),
         "escola": {"sala": (d["sala"].resumo() if d.get("sala") else None),
                    "motivo": d.get("sala_motivo", ""),
+                   "avaliacoes_automaticas": d.get("escola_avaliacoes", []),
                    "avisos_vigia": d.get("avisos_vigia", [])[-5:]},
         "durabilidade": d["armazem"].estado() if d.get("armazem") else {},
         "fonte": {"dados": d["feed_kind"], "corretora": d["broker_mode"],
@@ -3075,6 +3670,20 @@ def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
                             "dados de FIXTURE — provam a mesa, não o mercado")},
         "ciclos": d["cycles"][-10:],
     }
+
+
+def _exigir_prontidao_live(request: Request, d: dict) -> None:
+    """Revalida o preflight imediatamente antes de ligar/enviar em LIVE."""
+    if str(d.get("broker_mode") or "").lower() != "live":
+        return
+    prontidao = _live_status_payload(request)
+    if prontidao.get("pode_operar_real") is not True:
+        raise HTTPException(409, {
+            "erro": "mesa LIVE preparada, mas envio permanece bloqueado",
+            "pendencias": [i.get("item") for i in (
+                prontidao.get("checklist") or ()) if not i.get("pronto")],
+            "acao": "resolva as pendências e reconcilie antes de ligar",
+        })
 
 
 @app.post("/v1/desk/cycle")
@@ -3087,16 +3696,19 @@ def desk_cycle(request: Request, _=Depends(auth), __=Depends(require_plan)):
         return {"ok": True, "modo": "observador",
                 "resumo": out.get("resumo", ""),
                 "propostas": out.get("propostas", []),
+                "escola": [],
                 "ordens": [],       # explícito: nada foi enviado
                 "encerradas": [],   # explícito: nenhuma saída executada
                 "descartados": out.get("descartados", []),
                 "vetos": out.get("vetos", []), "abstencoes": out.get("abstencoes", []),
                 "erros": out.get("erros", [])}
+    _exigir_prontidao_live(request, d)
     _guarda_do_pedido(d)
     out = d["scheduler"].run_once()
     return {"ok": True, "resumo": out.get("resumo", ""),
             "ordens": out.get("ordens", []),
             "encerradas": out.get("encerradas", []),
+            "escola": out.get("escola", []),
             "descartados": out.get("descartados", []),
             "vetos": out.get("vetos", []), "abstencoes": out.get("abstencoes", []),
             "erros": out.get("erros", [])}
@@ -3110,6 +3722,7 @@ def desk_scheduler(action: str, request: Request, _=Depends(auth), __=Depends(re
     d = _desk_of(request)
     sched = d["scheduler"]
     if action == "start":
+        _exigir_prontidao_live(request, d)
         _guarda_do_pedido(d)
         recuperacao = sched.recover()
         return {"ok": True, "iniciado": sched.start(), "recuperacao": recuperacao,
@@ -3626,7 +4239,13 @@ async def escola_avaliar(req: Request, _=Depends(auth),
     """Avalia uma estratégia NO CONTEXTO de uma sala: acumula amostras,
     candidata e forma. É o único caminho pelo qual a escola avança — e
     avançar aqui significa elegibilidade, nunca autorização de operar."""
-    from tradingagents.desk.salas import SalaError
+    from tradingagents.desk.escola import EstadoDaEscola
+    from tradingagents.desk.piloto import SupervisorDePiloto
+    from tradingagents.desk.salas import (
+        ContextoDeCertificacao,
+        EscolaDoPiloto,
+        SalaError,
+    )
     body = await _json_body(req)
     esc = _escola_of(req)
     sala = _sala_por_chave(esc, str(body.get("chave") or ""))
@@ -3641,6 +4260,52 @@ async def escola_avaliar(req: Request, _=Depends(auth),
             horizonte=str(body.get("horizonte") or "1h"))
     except SalaError as exc:
         raise HTTPException(422, str(exc)) from exc
+    encaminhamento = None
+    if av.estado is EstadoDaEscola.FORMADA:
+        d = _DESKS.get(request_tenant(req))
+        candidatos = [] if d is None else [
+            t for t in d["orchestrator"].traders
+            if t.strategy == estrategia and str(t.spec.version) == av.versao]
+        # A fila da Sala REAL não pode depender do cache do processo. Após
+        # reinício, a Escola e suas provas continuam no armazém, enquanto
+        # `_DESKS` nasce vazio. Reconstruímos somente o catálogo determinístico
+        # de agentes padrão (sem iniciar scheduler, broker ou ordem) para que a
+        # formatura ainda encontre o agente correto e seja encaminhada.
+        if not candidatos:
+            from tradingagents.desk.traders import default_desk
+            cfg = load_cfg(request_tenant(req))
+            incluir_controle = str(
+                cfg.get("TRADINGAGENTS_DESK_CONTROLE") or ""
+            ).strip().lower() in ("1", "true", "yes", "sim")
+            candidatos = [
+                t for t in default_desk(
+                    (ativo,), exchange=sala.contexto.corretora,
+                    incluir_controle=incluir_controle)
+                if t.strategy == estrategia
+                and str(t.spec.version) == av.versao
+            ]
+        if len(candidatos) == 1:
+            contexto = ContextoDeCertificacao(
+                corretora=sala.contexto.corretora,
+                conta=sala.contexto.conta,
+                mercado=sala.contexto.mercado,
+                modo=sala.contexto.modo,
+                ativo=ativo,
+                horizonte=str(body.get("horizonte") or "1h"),
+                payout=sala.contexto.payout)
+            sup = SupervisorDePiloto(
+                esc["armazem"], tenant_id=esc["tenant_id"],
+                escola=EscolaDoPiloto(esc["central"], contexto))
+            encaminhamento = sup.encaminhar_formado(
+                candidatos[0].spec.agent_id,
+                estrategia=estrategia, versao=av.versao,
+                contexto=contexto.como_dict())
+        else:
+            encaminhamento = {
+                "estado": "nao_encaminhado",
+                "motivo": ("estratégia sem agente único na mesa; nada foi "
+                           "liberado automaticamente"),
+            }
     return {"ok": True, "avaliacao": {
         "chave": av.chave, "estrategia": av.estrategia, "versao": av.versao,
         "estado": av.estado.value, "motivo": av.motivo,
@@ -3648,6 +4313,7 @@ async def escola_avaliar(req: Request, _=Depends(auth),
         "media": str(av.media), "ic_inferior": str(av.ic_inferior),
         "ic_superior": str(av.ic_superior), "aprovada": av.aprovada,
         "atualizada_em": av.atualizada_em},
+        "sala_real": encaminhamento,
         "aviso": ("formação habilita apenas o PROCESSO de autorização; "
                   "negociação real continua exclusiva do proprietário")}
 
@@ -3798,9 +4464,14 @@ def escola_pilotos(request: Request, _=Depends(auth)):
     from tradingagents.desk.piloto import GATES_ESPERADOS, MODO_DO_PILOTO
     esc = _escola_of(request)
     sup = _supervisor_of(request)
+    # O painel deve refletir o estado revalidado NESTA mesma resposta. Montar
+    # os relatórios antes do vigia deixava expiração/revogação visível somente
+    # na chamada seguinte, embora a execução já permanecesse fail-closed.
+    notas_vigia = sup.vigiar(central=esc["central"])
     return {"modo": MODO_DO_PILOTO, "gates_esperados": list(GATES_ESPERADOS),
             "autorizacoes": sup.relatorio(),
-            "vigia": sup.vigiar(central=esc["central"]),
+            "encaminhamentos": sup.encaminhamentos(),
+            "vigia": notas_vigia,
             "aviso": ("a formação não habilita negociação real; autorizar "
                       "piloto é ato exclusivo do proprietário")}
 
@@ -3826,9 +4497,12 @@ async def escola_piloto_solicitar(req: Request, _=Depends(auth),
         if valor in (None, ""):
             raise HTTPException(422, f"{campo} é obrigatório para o pedido")
         try:
-            return D(str(valor))
+            numero = D(str(valor))
         except Exception as exc:
             raise HTTPException(422, f"{campo} precisa ser numérico") from exc
+        if not numero.is_finite():
+            raise HTTPException(422, f"{campo} precisa ser finito")
+        return numero
 
     try:
         prazo = int(body.get("prazo_dias") or 0)
@@ -3836,16 +4510,44 @@ async def escola_piloto_solicitar(req: Request, _=Depends(auth),
         raise HTTPException(422, "prazo_dias precisa ser um número inteiro") from exc
     esc = _escola_of(req)
     try:
-        contexto = ContextoDeCertificacao(
-            corretora=str(body.get("corretora") or ""),
-            conta=str(body.get("conta") or ""),
-            mercado=str(body.get("mercado") or "spot"),
-            modo=str(body.get("modo") or MODO_PAPER),
-            ativo=str(body.get("ativo") or ""),
-            horizonte=str(body.get("horizonte") or "1h"),
-            payout=body.get("payout") or None)
+        contexto_doc = body.get("contexto_certificacao")
+        if isinstance(contexto_doc, dict) and contexto_doc:
+            contexto = ContextoDeCertificacao.de_dict(contexto_doc)
+        else:
+            contexto = ContextoDeCertificacao(
+                corretora=str(body.get("corretora") or ""),
+                conta=str(body.get("conta") or ""),
+                mercado=str(body.get("mercado") or "spot"),
+                modo=str(body.get("modo") or MODO_PAPER),
+                ativo=str(body.get("ativo") or ""),
+                horizonte=str(body.get("horizonte") or "1h"),
+                payout=body.get("payout") or None)
     except SalaError as exc:
         raise HTTPException(422, str(exc)) from exc
+    corretora_alvo = str(body.get("corretora") or "").strip().lower()
+    conta_alvo = str(body.get("conta") or "").strip()
+    if not corretora_alvo or not conta_alvo:
+        raise HTTPException(422, "corretora e conta de destino são obrigatórias")
+    if corretora_alvo != contexto.corretora:
+        raise HTTPException(
+            409, "a conta REAL deve usar a mesma corretora do contexto que "
+                 "certificou a estratégia")
+    conta_real = (body.get("conta_real") is True
+                  or conta_alvo != contexto.conta)
+    broker_identity_fingerprint = ""
+    if conta_real:
+        cfg = load_cfg(request_tenant(req))
+        prova, valida = _prova_leitura_real(req, cfg)
+        if not (valida and prova
+                and prova.get("authenticated_read")
+                and str(prova.get("exchange") or "").strip().lower()
+                == corretora_alvo
+                and str(prova.get("conta") or "").strip() == conta_alvo):
+            raise HTTPException(
+                409, "a conta REAL de destino precisa de prova autenticada "
+                     "somente leitura válida antes de receber o piloto")
+        broker_identity_fingerprint = str(
+            prova.get("broker_identity_fingerprint") or "")
     sup = SupervisorDePiloto(
         esc["armazem"], tenant_id=esc["tenant_id"],
         escola=EscolaDoPiloto(esc["central"], contexto))
@@ -3854,15 +4556,16 @@ async def escola_piloto_solicitar(req: Request, _=Depends(auth),
             str(body.get("agent_id") or ""),
             estrategia=str(body.get("estrategia") or ""),
             versao=str(body.get("versao") or "1"),
-            corretora=str(body.get("corretora") or ""),
-            conta=str(body.get("conta") or ""),
+            corretora=corretora_alvo,
+            conta=conta_alvo,
             capital_maximo=_decimal("capital_maximo"),
             perda_diaria_maxima=_decimal("perda_diaria_maxima"),
             perda_total_maxima=_decimal("perda_total_maxima"),
             prazo_dias=prazo,
             condicoes_de_suspensao=tuple(body.get("condicoes_de_suspensao")
                                          or ()),
-            contexto=contexto.como_dict())
+            contexto=contexto.como_dict(), conta_real=conta_real,
+            broker_identity_fingerprint=broker_identity_fingerprint)
     except (ValueError, SalaError) as exc:
         raise HTTPException(409, str(exc)) from exc
     return {"ok": True, "autorizacao": aut.como_dict()}
@@ -3889,11 +4592,21 @@ def escola_piloto_autorizar(agent_id: str, request: Request,
     """Ato EXPLÍCITO do proprietário. Os gates são medidos no estado real
     da mesa; qualquer reprovação devolve o motivo exato."""
     d = _desk_of(request)
+    esc = _escola_of(request)
     sup = _supervisor_of(request)
+    pedido = sup.de(agent_id)
+    if pedido is not None and pedido.conta_real:
+        cfg = load_cfg(request_tenant(request))
+        prova, valida = _prova_leitura_real(request, cfg)
+        if not _prova_real_serve_piloto(prova, valida, pedido):
+            raise HTTPException(
+                409, "a autorização exige prova autenticada somente leitura "
+                     "válida e recente para a mesma corretora e conta REAL")
     try:
         aut = sup.autorizar(agent_id,
                             gates=_gates_do_ambiente(request_tenant(request),
-                                                     d))
+                                                     d),
+                            central=esc["central"])
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
     return {"ok": True, "autorizacao": aut.como_dict(),
@@ -3952,6 +4665,8 @@ def onboarding(request: Request, _=Depends(auth)):
         tem_analise = bool(JOB_STORE.list(request_tenant(request), limit=1))
     except Exception:
         tem_analise = False
+    corretora_treino_pronta, corretora_treino_faltando = (
+        _credenciais_execucao_prontas(cfg))
     desk = _DESKS.get(request_tenant(request))
     itens = [
         {"passo": "Escolher a IA e colar a chave", "pronto": tem_ia,
@@ -3962,8 +4677,10 @@ def onboarding(request: Request, _=Depends(auth)):
         {"passo": "Fazer a primeira análise", "pronto": tem_analise,
          "acao": "Em Análises: ativo (ex.: BTC/USDT) + data e iniciar"},
         {"passo": "Corretora de treino",
-         "pronto": bool(cfg.get("EXCHANGE_API_KEY") and cfg.get("EXCHANGE_API_SECRET")),
-         "acao": "Chave grátis em testnet.binance.vision"},
+         "pronto": corretora_treino_pronta,
+         "acao": ("Credenciais completas da corretora de treino"
+                  if corretora_treino_pronta else
+                  "Informe: " + ", ".join(corretora_treino_faltando))},
         {"passo": "Ligar a mesa de agentes",
          "pronto": bool(desk and desk["scheduler"] and desk["scheduler"].running),
          "acao": "Em Mesa de Agentes: Ligar mesa autônoma"},
@@ -4082,7 +4799,81 @@ def _teto_positivo(cfg: dict, chave: str) -> bool:
     return valor.is_finite() and valor > 0
 
 
-def _fill_de_corretora_externa(d) -> bool:
+def _credenciais_execucao_prontas(cfg: dict) -> tuple[bool, list[str]]:
+    """Valida os campos exigidos pela corretora sem iniciar conexão.
+
+    Chave+segredo não bastam nas corretoras que usam passphrase. O checklist
+    deve falhar antes da construção do CCXT, com a pendência exata, em vez de
+    apresentar um falso verde que só seria descoberto ao iniciar a mesa.
+    """
+    from service.personal_exchange_catalog import (
+        required_execution_credentials,
+    )
+
+    exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    try:
+        exigidos = required_execution_credentials(exchange)
+    except KeyError:
+        return False, ["corretora suportada"]
+    if not exigidos:
+        return False, ["adaptador de execução homologado"]
+    vinculo = str(
+        cfg.get("EXCHANGE_CREDENTIAL_EXCHANGE") or "").strip().lower()
+    if vinculo != exchange:
+        return False, ["nova chave e novo segredo desta corretora"]
+    rotulos = {
+        "EXCHANGE_API_KEY": "chave",
+        "EXCHANGE_API_SECRET": "segredo",
+        "EXCHANGE_API_PASSWORD": "passphrase",
+    }
+    faltando = [rotulos[campo] for campo in exigidos
+                if not str(cfg.get(campo) or "").strip()]
+    return not faltando, faltando
+
+
+def _credenciais_live_prontas(cfg: dict) -> tuple[bool, list[str]]:
+    """Valida a chave REAL sem confundi-la com a chave TESTNET homologada."""
+    from service.personal_exchange_catalog import (
+        required_execution_credentials,
+    )
+
+    exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    if exchange == "iq_option":
+        vinculo = str(
+            cfg.get("LIVE_EXECUTION_EXCHANGE") or "").strip().lower()
+        faltando = []
+        if vinculo != exchange:
+            faltando.append("token MCP LIVE vinculado à IQ Option")
+        if not str(cfg.get("IQ_OPTION_MCP_LIVE_BEARER_TOKEN") or "").strip():
+            faltando.append("token MCP LIVE")
+        return not faltando, faltando
+    try:
+        exigidos = required_execution_credentials(exchange)
+    except KeyError:
+        return False, ["corretora suportada"]
+    if not exigidos:
+        return False, ["executor LIVE homologado"]
+    vinculo = str(
+        cfg.get("LIVE_EXECUTION_EXCHANGE") or "").strip().lower()
+    if vinculo != exchange:
+        return False, ["nova chave LIVE e novo segredo desta corretora"]
+    mapa = {
+        "EXCHANGE_API_KEY": ("LIVE_EXCHANGE_API_KEY", "chave LIVE"),
+        "EXCHANGE_API_SECRET": ("LIVE_EXCHANGE_API_SECRET", "segredo LIVE"),
+        "EXCHANGE_API_PASSWORD": (
+            "LIVE_EXCHANGE_API_PASSWORD", "passphrase LIVE"),
+    }
+    faltando = []
+    for campo in exigidos:
+        chave, rotulo = mapa[campo]
+        if not str(cfg.get(chave) or "").strip():
+            faltando.append(rotulo)
+    return not faltando, faltando
+
+
+def _fill_de_corretora_externa(d, *, exchange: str,
+                               credential_fingerprint: str,
+                               credential_bound_at: str):
     """Ordem PREENCHIDA com id de exchange de verdade.
 
     O simulador local grava id `paper-*` (PaperBroker); o id do
@@ -4092,65 +4883,1480 @@ def _fill_de_corretora_externa(d) -> bool:
     de "já operou em testnet". Registro sem id, id do simulador ou estado
     desconhecido NÃO conta."""
     if not d:
-        return False
+        return None
+    try:
+        vinculado_em = datetime.fromisoformat(
+            str(credential_bound_at or "").replace("Z", "+00:00"))
+        if vinculado_em.tzinfo is None:
+            return None
+        vinculado_em = vinculado_em.astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        return None
     for r in d["coordinator"].orders.values():
         if r.state.value != "filled":
             continue
         externo = str(getattr(r, "external_id", "") or "")
-        if externo and not externo.startswith("paper-"):
-            return True
-    return False
+        if not externo or externo.startswith("paper-"):
+            continue
+        origem_exchange = str(
+            getattr(r, "testnet_exchange", "") or "").strip().lower()
+        origem_fingerprint = str(
+            getattr(r, "testnet_credential_fingerprint", "") or "")
+        if (origem_exchange != exchange
+                or not _fingerprint_sha256_valido(origem_fingerprint)
+                or not hmac.compare_digest(
+                    origem_fingerprint, credential_fingerprint)):
+            continue
+        terminal = str(getattr(r, "terminal_em", "") or "")
+        if not _horario_testnet_valido(terminal):
+            continue
+        try:
+            terminal_em = datetime.fromisoformat(
+                terminal.replace("Z", "+00:00")).astimezone(timezone.utc)
+        except (TypeError, ValueError):
+            continue
+        if terminal_em <= vinculado_em:
+            continue
+        return r
+    return None
 
 
-@app.get("/v1/live/status")
-def live_status(request: Request, _=Depends(auth)):
+_CHAVE_HOMOLOGACAO_TESTNET = "homologacao_testnet"
+_SCHEMA_HOMOLOGACAO_TESTNET = "dz23.homologacao-testnet/1"
+_CHAVE_PREPARACAO_IQ_TREINO = "preparacao_iq_option_treino"
+_SCHEMA_PREPARACAO_IQ_TREINO = "dz23.preparacao-iq-treino/1"
+_TOLERANCIA_RELOGIO_TESTNET = timedelta(minutes=5)
+
+
+def _env_testnet(cfg: dict) -> dict:
+    return {k: cfg.get(k, "") for k in (
+        "TRADINGAGENTS_EXCHANGE", "EXCHANGE_API_KEY",
+        "EXCHANGE_API_SECRET", "EXCHANGE_API_PASSWORD", "EXCHANGE_API_UID")}
+
+
+def _env_live_execution(cfg: dict) -> dict:
+    """Credencial REAL de execução em namespace isolado da TESTNET/leitura."""
+    return {k: cfg.get(k, "") for k in (
+        "TRADINGAGENTS_EXCHANGE", "TRADINGAGENTS_BROKER_MODE",
+        "LIVE_EXCHANGE_API_KEY",
+        "LIVE_EXCHANGE_API_SECRET", "LIVE_EXCHANGE_API_PASSWORD",
+        "LIVE_EXCHANGE_API_UID", "LIVE_EXECUTION_EXCHANGE",
+        "LIVE_EXECUTION_CREDENTIAL_BOUND_AT", "IQ_OPTION_MCP_BEARER_TOKEN",
+        "IQ_OPTION_MCP_LIVE_BEARER_TOKEN")}
+
+
+async def _build_iq_binary_runtime(
+        *, cfg: dict, tenant_id: str, authorization, store,
+        confirmation_phrase: str):
+    """Compõe a sala binária sem submeter decisão ou ordem à corretora."""
+    env = _env_live_execution(cfg)
+    # A preparação pública nunca persiste o identificador bruto da conta. O
+    # runtime pode descobri-lo somente quando a credencial enxerga exatamente
+    # uma conta regular, mantendo o valor dentro da fronteira de execução.
+    env["LIVE_EXECUTION_ACCOUNT_ID"] = ""
+    env["IQ_OPTION_CONFIRM_UNIQUE_REGULAR_ACCOUNT"] = True
+    return await build_iq_option_binary_runtime(
+        env=env,
+        tenant_id=tenant_id,
+        authorization=authorization,
+        ledger=None,
+        opening_cash=cfg.get("TRADINGAGENTS_DESK_CAPITAL"),
+        store=store,
+        live_code_authorized=MESA_LIVE_LIBERADA,
+        confirmation_phrase=confirmation_phrase,
+        max_order_value=cfg.get("LIVE_MAX_ORDER_VALUE"),
+        max_daily_loss=cfg.get("LIVE_MAX_DAILY_LOSS"),
+    )
+
+
+def _env_live_como_leitura(cfg: dict) -> dict:
+    """Visão da chave LIVE para a sonda que não possui caminho de ordem."""
+    return live_execution_as_read_only_env(_env_live_execution(cfg))
+
+
+def _cfg_para_broker_live(
+        cfg: dict, *, confirmation_verified: bool = False) -> dict:
+    """Materializa a chave LIVE só na construção do broker LIVE.
+
+    O documento persistido mantém as chaves TESTNET e LIVE separadas. Esta
+    projeção em memória é a única ponte para o contrato legado do CCXTBridge.
+    """
+    saida = dict(cfg)
+    # Mesmo um valor legado presente em memória não vale como consentimento.
+    # Só o chamador que acabou de validar a ativação vinculada pode projetar
+    # a frase para o contrato legado do CCXTBridge.
+    saida.pop("LIVE_TRADING_CONFIRM", None)
+    if confirmation_verified:
+        saida["LIVE_TRADING_CONFIRM"] = LIVE_CONFIRM_PHRASE
+    saida.update({
+        "EXCHANGE_API_KEY": cfg.get("LIVE_EXCHANGE_API_KEY", ""),
+        "EXCHANGE_API_SECRET": cfg.get("LIVE_EXCHANGE_API_SECRET", ""),
+        "EXCHANGE_API_PASSWORD": cfg.get("LIVE_EXCHANGE_API_PASSWORD", ""),
+        "EXCHANGE_API_UID": cfg.get("LIVE_EXCHANGE_API_UID", ""),
+        "EXCHANGE_CREDENTIAL_EXCHANGE": cfg.get(
+            "LIVE_EXECUTION_EXCHANGE", ""),
+        "EXCHANGE_CREDENTIAL_BOUND_AT": cfg.get(
+            "LIVE_EXECUTION_CREDENTIAL_BOUND_AT", ""),
+    })
+    return saida
+
+
+def _horario_testnet_valido(valor, agora: datetime | None = None) -> bool:
+    """Aceita prova histórica, mas nunca horário inválido ou no futuro."""
+    try:
+        instante = datetime.fromisoformat(
+            str(valor or "").replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return False
+    if instante.tzinfo is None:
+        return False
+    atual = (agora or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    return instante.astimezone(timezone.utc) <= (
+        atual + _TOLERANCIA_RELOGIO_TESTNET)
+
+
+def _fingerprint_sha256_valido(valor) -> bool:
+    return bool(re.fullmatch(r"[0-9a-f]{64}", str(valor or "")))
+
+
+def _prova_testnet(request: Request, cfg: dict) -> tuple[dict, bool]:
+    """Lê a homologação durável da corretora atualmente selecionada."""
+    exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    esc = _escola_of(request)
+    if exchange == "iq_option":
+        prova = esc["armazem"].carregar(
+            esc["tenant_id"], IQ_OPTION_TRAINING_PROOF_KEY)
+        fingerprint_atual = live_execution_credential_fingerprint(
+            _env_live_execution(cfg))
+        schema_esperado = IQ_OPTION_TRAINING_PROOF_SCHEMA
+        modo_esperado = "training"
+    else:
+        provas = esc["armazem"].carregar(
+            esc["tenant_id"], _CHAVE_HOMOLOGACAO_TESTNET)
+        if not isinstance(provas, dict):
+            provas = {}
+        prova = provas.get(exchange)
+        fingerprint_atual = testnet_credential_fingerprint(_env_testnet(cfg))
+        schema_esperado = _SCHEMA_HOMOLOGACAO_TESTNET
+        modo_esperado = "testnet"
+    credencial_compativel = bool(
+        isinstance(prova, dict)
+        and _fingerprint_sha256_valido(prova.get("credential_fingerprint"))
+        and hmac.compare_digest(
+            str(prova["credential_fingerprint"]), fingerprint_atual))
+    horario_valido = bool(
+        isinstance(prova, dict)
+        and _horario_testnet_valido(prova.get("verified_at")))
+    ordem_identificada = bool(
+        isinstance(prova, dict)
+        and _fingerprint_sha256_valido(
+            prova.get("external_order_fingerprint")))
+    valida = bool(
+        isinstance(prova, dict)
+        and prova.get("schema") == schema_esperado
+        and str(prova.get("exchange") or "").strip().lower() == exchange
+        and str(prova.get("mode") or "").strip().lower() == modo_esperado
+        and prova.get("filled_external_order") is True
+        and prova.get("reconciled") is True
+        and credencial_compativel
+        and horario_valido
+        and ordem_identificada)
+    if not isinstance(prova, dict):
+        return ({"valida": False,
+                 "motivo": f"sem prova TESTNET reconciliada para {exchange}"},
+                False)
+    if valida:
+        motivo = "ordem TESTNET preenchida e reconciliada na mesma corretora"
+    elif not credencial_compativel:
+        motivo = ("credenciais TESTNET foram alteradas; repita um fill e a "
+                  "reconciliação nesta corretora")
+    elif not horario_valido:
+        motivo = "prova TESTNET com horário inválido; refaça a homologação"
+    elif not ordem_identificada:
+        motivo = "prova TESTNET sem identidade de ordem verificável"
+    else:
+        motivo = "prova TESTNET inválida ou incompatível"
+    return ({
+        "valida": valida,
+        "exchange": prova.get("exchange"),
+        "verified_at": prova.get("verified_at"),
+        "mode": modo_esperado,
+        "filled_external_order": bool(prova.get("filled_external_order")),
+        "reconciled": bool(prova.get("reconciled")),
+        "motivo": motivo,
+    }, valida)
+
+
+def _registrar_prova_testnet(request: Request, d: dict,
+                             resultado: dict) -> dict | None:
+    """Persiste prova somente após fill externo e reconciliação segura.
+
+    A prova é vinculada à corretora; ids de ordem e credenciais entram apenas
+    como SHA-256 e nunca voltam pela API. Trocar a configuração para LIVE pode
+    destruir a mesa em memória sem apagar a homologação já concluída.
+    """
+    if resultado.get("seguro") is not True:
+        return None
+    cfg = load_cfg(request_tenant(request))
+    exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    if (str(d.get("broker_mode") or "").lower() != "testnet"
+            or str(cfg.get("TRADINGAGENTS_BROKER_MODE") or "").lower()
+            != "testnet"):
+        return None
+    coord = d.get("coordinator")
+    broker = getattr(coord, "broker", None)
+    bridge = getattr(broker, "bridge", None)
+    if (getattr(bridge, "mode", None) != "testnet"
+            or getattr(bridge, "exchange_name", None) != exchange):
+        return None
+    fingerprint_atual = testnet_credential_fingerprint(_env_testnet(cfg))
+    fill = _fill_de_corretora_externa(
+        d, exchange=exchange,
+        credential_fingerprint=fingerprint_atual,
+        credential_bound_at=str(
+            cfg.get("EXCHANGE_CREDENTIAL_BOUND_AT") or ""))
+    if fill is None:
+        return None
+    external_id = str(getattr(fill, "external_id", "") or "")
+    agora = datetime.now(timezone.utc).isoformat()
+    prova = {
+        "schema": _SCHEMA_HOMOLOGACAO_TESTNET,
+        "exchange": exchange,
+        "mode": "testnet",
+        "filled_external_order": True,
+        "reconciled": True,
+        "verified_at": agora,
+        "credential_fingerprint": fingerprint_atual,
+        "external_order_fingerprint": hashlib.sha256(
+            f"{exchange}\0{external_id}".encode()).hexdigest(),
+    }
+    esc = _escola_of(request)
+    provas = esc["armazem"].carregar(
+        esc["tenant_id"], _CHAVE_HOMOLOGACAO_TESTNET)
+    if not isinstance(provas, dict):
+        provas = {}
+    provas[exchange] = prova
+    esc["armazem"].salvar(
+        esc["tenant_id"], _CHAVE_HOMOLOGACAO_TESTNET, provas)
+    return {
+        "valida": True, "exchange": exchange, "mode": "testnet",
+        "filled_external_order": True, "reconciled": True,
+        "verified_at": agora,
+    }
+
+
+_CHAVE_PREPARACAO_REAL = "preparacao_real_leitura"
+_SCHEMA_PREPARACAO_REAL = "dz23.preparacao-real-leitura/2"
+_CHAVE_PREPARACAO_EXECUCAO = "preparacao_real_execucao"
+_SCHEMA_PREPARACAO_EXECUCAO = "dz23.preparacao-real-execucao/1"
+_VALIDADE_PREPARACAO_REAL = timedelta(hours=24)
+_TOLERANCIA_RELOGIO_PREPARACAO_REAL = timedelta(minutes=5)
+
+
+def _env_leitura_real(cfg: dict) -> dict:
+    return {k: cfg.get(k, "") for k in (
+        "TRADINGAGENTS_EXCHANGE", "REAL_READ_ONLY_API_KEY",
+        "REAL_READ_ONLY_API_SECRET", "REAL_READ_ONLY_API_PASSWORD",
+        "REAL_READ_ONLY_API_UID", "REAL_READ_ONLY_EXCHANGE",
+        "IQ_OPTION_MCP_BEARER_TOKEN")}
+
+
+def _prova_leitura_real_recente(prova: dict, agora: datetime | None = None) -> bool:
+    """Acesso privado precisa ser comprovado de novo a cada 24 horas.
+
+    Timestamp ausente, sem fuso, inválido ou muito no futuro é recusado. Isso
+    impede que uma prova antiga ou editada sobreviva indefinidamente só porque
+    a impressão da credencial continua igual.
+    """
+    try:
+        verificada = datetime.fromisoformat(
+            str(prova.get("verificada_em") or "").replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return False
+    if verificada.tzinfo is None:
+        return False
+    atual = agora or datetime.now(timezone.utc)
+    verificada = verificada.astimezone(timezone.utc)
+    atual = atual.astimezone(timezone.utc)
+    idade = atual - verificada
+    return (-_TOLERANCIA_RELOGIO_PREPARACAO_REAL <= idade
+            <= _VALIDADE_PREPARACAO_REAL)
+
+
+def _prova_leitura_real_armazem(armazem, tenant_id: str,
+                                cfg: dict) -> tuple[dict | None, bool]:
+    """Carrega a prova e informa se ela ainda pertence à credencial atual."""
+    prova = armazem.carregar(tenant_id, _CHAVE_PREPARACAO_REAL)
+    if not isinstance(prova, dict):
+        return None, False
+    atual = read_only_credential_fingerprint(_env_leitura_real(cfg))
+    valida = bool(
+        prova.get("schema") == _SCHEMA_PREPARACAO_REAL
+        and prova.get("credential_fingerprint")
+        and prova.get("broker_identity_verified") is True
+        and _fingerprint_sha256_valido(
+            prova.get("broker_identity_fingerprint"))
+        and hmac.compare_digest(str(prova["credential_fingerprint"]), atual)
+        and prova.get("exchange") == (
+            cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+        and _prova_leitura_real_recente(prova)
+    )
+    return prova, valida
+
+
+def _prova_leitura_real(request: Request, cfg: dict) -> tuple[dict | None, bool]:
+    esc = _escola_of(request)
+    return _prova_leitura_real_armazem(
+        esc["armazem"], esc["tenant_id"], cfg)
+
+
+def _prova_execucao_live_documento(
+        prova: dict | None, cfg: dict,
+        prova_leitura: dict | None, leitura_valida: bool
+        ) -> tuple[dict | None, bool]:
+    """Valida a prova LIVE contra as credenciais e a leitura atuais."""
+    if not isinstance(prova, dict):
+        return None, False
+    exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    atual = live_execution_credential_fingerprint(_env_live_execution(cfg))
+    leitura_fingerprint = str(
+        (prova_leitura or {}).get("credential_fingerprint") or "")
+    leitura_identidade = str(
+        (prova_leitura or {}).get("broker_identity_fingerprint") or "")
+    valida = bool(
+        prova.get("schema") == _SCHEMA_PREPARACAO_EXECUCAO
+        and prova.get("exchange") == exchange
+        and str(prova.get("conta") or "").strip()
+        and prova.get("authenticated_read") is True
+        and prova.get("broker_identity_verified") is True
+        and prova.get("trade_habilitado_declarado") is True
+        and prova.get("sem_saque_declarado") is True
+        and _fingerprint_sha256_valido(
+            prova.get("broker_identity_fingerprint"))
+        and _fingerprint_sha256_valido(
+            prova.get("credential_fingerprint"))
+        and hmac.compare_digest(
+            str(prova.get("credential_fingerprint") or ""), atual)
+        and str(cfg.get("LIVE_EXECUTION_EXCHANGE") or "").strip().lower()
+        == exchange
+        and _prova_leitura_real_recente(prova)
+        and leitura_valida and prova_leitura
+        and hmac.compare_digest(
+            str(prova.get("read_only_credential_fingerprint") or ""),
+            leitura_fingerprint)
+        and hmac.compare_digest(
+            str(prova.get("read_only_broker_identity_fingerprint") or ""),
+            leitura_identidade)
+        and str(prova.get("conta") or "").strip()
+        == str(prova_leitura.get("conta") or "").strip()
+    )
+    return prova, valida
+
+
+def _prova_execucao_live_armazem(
+        armazem, tenant_id: str, cfg: dict) -> tuple[dict | None, bool]:
+    prova = armazem.carregar(tenant_id, _CHAVE_PREPARACAO_EXECUCAO)
+    leitura, leitura_valida = _prova_leitura_real_armazem(
+        armazem, tenant_id, cfg)
+    return _prova_execucao_live_documento(
+        prova, cfg, leitura, leitura_valida)
+
+
+def _prova_execucao_live(request: Request,
+                         cfg: dict) -> tuple[dict | None, bool]:
+    esc = _escola_of(request)
+    prova = esc["armazem"].carregar(
+        esc["tenant_id"], _CHAVE_PREPARACAO_EXECUCAO)
+    leitura, leitura_valida = _prova_leitura_real(request, cfg)
+    return _prova_execucao_live_documento(
+        prova, cfg, leitura, leitura_valida)
+
+
+def _prova_real_serve_piloto(prova: dict | None, valida: bool, piloto) -> bool:
+    """Confirma conta, corretora e restrições no instante de usar a prova."""
+    return bool(
+        valida and prova
+        and prova.get("authenticated_read") is True
+        and prova.get("broker_identity_verified") is True
+        and prova.get("sem_trade_declarado") is True
+        and prova.get("sem_saque_declarado") is True
+        and prova.get("provider_mutating_tools_exposed") is not True
+        and str(prova.get("exchange") or "").strip().lower()
+        == str(getattr(piloto, "corretora", "") or "").strip().lower()
+        and str(prova.get("conta") or "").strip()
+        == str(getattr(piloto, "conta", "") or "").strip()
+        and hmac.compare_digest(
+            str(prova.get("broker_identity_fingerprint") or ""),
+            str(getattr(piloto, "broker_identity_fingerprint", "") or ""))
+    )
+
+
+def _bloqueios_de_conta_real(supervisor, prova: dict | None,
+                             valida: bool) -> dict[str, str]:
+    """Bloqueios adicionais do vigia LIVE, calculados por piloto."""
+    bloqueios = {}
+    for piloto in supervisor.autorizacoes():
+        estado = getattr(getattr(piloto, "estado", None), "value", "")
+        if estado != "piloto_autorizado":
+            continue
+        if not getattr(piloto, "conta_real", False):
+            bloqueios[piloto.agent_id] = (
+                "piloto sem vínculo explícito com conta REAL")
+        elif not _prova_real_serve_piloto(prova, valida, piloto):
+            bloqueios[piloto.agent_id] = (
+                "prova somente leitura da conta REAL ausente, "
+                "expirada ou incompatível")
+    return bloqueios
+
+
+def _prova_publica(prova: dict | None, valida: bool) -> dict:
+    if not prova:
+        return {"registrada": False, "valida": False}
+    recente = _prova_leitura_real_recente(prova)
+    expira_em = ""
+    try:
+        verificada = datetime.fromisoformat(
+            str(prova.get("verificada_em") or "").replace("Z", "+00:00"))
+        if verificada.tzinfo is not None:
+            expira_em = (verificada.astimezone(timezone.utc)
+                         + _VALIDADE_PREPARACAO_REAL).isoformat()
+    except (TypeError, ValueError):
+        pass
+    if valida:
+        aviso = "prova válida para a credencial atualmente salva"
+    elif not recente:
+        aviso = "prova expirada ou com horário inválido; refaça a comprovação"
+    else:
+        aviso = "prova obsoleta: corretora ou credencial foi alterada"
+    return {
+        "registrada": True,
+        "valida": valida,
+        "exchange": prova.get("exchange", ""),
+        "conta": prova.get("conta", ""),
+        "verificada_em": prova.get("verificada_em", ""),
+        "expira_em": expira_em,
+        "authenticated_read": bool(prova.get("authenticated_read")),
+        "broker_identity_verified": bool(
+            prova.get("broker_identity_verified")),
+        "read_methods": list(prova.get("read_methods") or ()),
+        "provider_mutating_tools_exposed": bool(
+            prova.get("provider_mutating_tools_exposed")),
+        "sem_trade_declarado": bool(prova.get("sem_trade_declarado")),
+        "sem_saque_declarado": bool(prova.get("sem_saque_declarado")),
+        "aviso": aviso,
+    }
+
+
+def _prova_execucao_publica(prova: dict | None, valida: bool) -> dict:
+    """Resumo sem segredos, IDs de conta ou fingerprints internos."""
+    if not prova:
+        return {"registrada": False, "valida": False}
+    resumo = _prova_publica(prova, valida)
+    resumo.pop("provider_mutating_tools_exposed", None)
+    resumo.pop("sem_trade_declarado", None)
+    resumo["trade_habilitado_declarado"] = bool(
+        prova.get("trade_habilitado_declarado"))
+    resumo["aviso"] = (
+        "credencial LIVE autenticada por leitura e vinculada à conta atual"
+        if valida else
+        "prova LIVE expirada, obsoleta ou incompatível; refaça a comprovação"
+    )
+    return resumo
+
+
+def _decimal_positivo(valor) -> Decimal | None:
+    """Converte um limite financeiro sem aceitar infinito/NaN/zero."""
+    try:
+        numero = Decimal(str(valor or ""))
+    except (InvalidOperation, ValueError):
+        return None
+    return numero if numero.is_finite() and numero > 0 else None
+
+
+def _certificacoes_real(request: Request, cfg: dict,
+                        prova: dict | None, prova_valida: bool) -> list[dict]:
+    """Revalida estratégia, conta e risco para a preparação REAL.
+
+    A consulta é fail-closed: uma autorização antiga só aparece pronta se a
+    Escola ainda a sustenta e se os limites globais cabem dentro dos limites
+    explicitamente concedidos ao piloto. Isto continua sendo preparação; não
+    muda mandato, modo da mesa nem capacidade de enviar ordens.
+    """
+    if not (prova_valida and prova and prova.get("authenticated_read")
+            and prova.get("broker_identity_verified") is True
+            and _fingerprint_sha256_valido(
+                prova.get("broker_identity_fingerprint"))
+            and prova.get("sem_trade_declarado")
+            and prova.get("sem_saque_declarado")
+            and prova.get("provider_mutating_tools_exposed") is not True):
+        return []
+    try:
+        esc = _escola_of(request)
+        sup = _supervisor_of(request)
+        sup.vigiar(central=esc["central"])
+        relatorio = sup.relatorio()
+        identidades_fn = getattr(sup, "identidades_de_conta", None)
+        identidades = (identidades_fn() if callable(identidades_fn) else {
+            str(p.get("authorization_id") or ""): str(
+                p.get("broker_identity_fingerprint") or "")
+            for p in relatorio
+        })
+    except Exception:
+        return []
+    exchange = (cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    conta = str(prova.get("conta") or "").strip()
+    teto_ordem = _decimal_positivo(cfg.get("LIVE_MAX_ORDER_VALUE"))
+    teto_diario = _decimal_positivo(cfg.get("LIVE_MAX_DAILY_LOSS"))
+    saida = []
+    for piloto in relatorio:
+        if piloto.get("estado") != "piloto_autorizado":
+            continue
+        if piloto.get("conta_real") is not True:
+            continue
+        if str(piloto.get("corretora") or "").strip().lower() != exchange:
+            continue
+        if str(piloto.get("conta") or "").strip() != conta:
+            continue
+        if not hmac.compare_digest(
+                str(identidades.get(str(
+                    piloto.get("authorization_id") or "")) or ""),
+                str(prova.get("broker_identity_fingerprint") or "")):
+            continue
+        capital = _decimal_positivo(piloto.get("capital_maximo"))
+        perda_dia = _decimal_positivo(piloto.get("perda_diaria_maxima"))
+        perda_total = _decimal_positivo(piloto.get("perda_total_maxima"))
+        motivos = []
+        if not all((capital, perda_dia, perda_total)):
+            motivos.append("limites do piloto ausentes ou inválidos")
+        elif perda_dia > perda_total:
+            motivos.append("perda diária do piloto excede a perda total")
+        if teto_ordem is None or (capital is not None and teto_ordem > capital):
+            motivos.append("teto global por ordem não cabe no capital do piloto")
+        if teto_diario is None or (
+                perda_dia is not None and teto_diario > perda_dia):
+            motivos.append("perda diária global excede o limite do piloto")
+        saida.append({
+            "agent_id": piloto.get("agent_id"),
+            "authorization_id": piloto.get("authorization_id"),
+            "estrategia": piloto.get("estrategia"),
+            "versao": piloto.get("versao"),
+            "corretora": piloto.get("corretora"),
+            "conta": piloto.get("conta"),
+            "contexto_certificacao": dict(
+                piloto.get("contexto_certificacao") or {}),
+            "valido_ate": piloto.get("valido_ate"),
+            "risco_compativel": not motivos,
+            "pendencias_risco": motivos,
+        })
+    return saida
+
+
+def _reconciliacao_para_prontidao(tenant_id: str) -> dict:
+    """Obtém a reconciliação sem transformar estado desconhecido em pronto."""
+    try:
+        relatorio = _relatorio_de_reconciliacao(tenant_id)
+    except Exception as exc:
+        return {"seguro": False,
+                "pendencias": ["reconciliação indisponível ("
+                                f"{type(exc).__name__})"]}
+    if not isinstance(relatorio, dict):
+        return {"seguro": False,
+                "pendencias": ["relatório de reconciliação inválido"]}
+    return {"seguro": bool(relatorio.get("seguro")),
+            "pendencias": list(relatorio.get("pendencias") or ())}
+
+
+def _parada_desarmada_para_prontidao(tenant_id: str) -> bool:
+    """Falha ao ler o kill switch significa bloqueio, nunca permissão."""
+    try:
+        return not _parada(tenant_id).bloqueia
+    except Exception:
+        return False
+
+
+def _recuperacao_local_para_prontidao() -> dict:
+    """Prova de restore é lida sem restaurar ou alterar o serviço ativo."""
+    try:
+        from tradingagents.desk.recovery import validate_local_restore_proof
+        return validate_local_restore_proof(DATA)
+    except Exception as exc:
+        return {
+            "valida": False,
+            "verificado_em": "",
+            "cobre_postgresql_externo": False,
+            "motivo": f"prova de recuperação indisponível ({type(exc).__name__})",
+        }
+
+
+def _recuperacao_postgres_para_prontidao() -> dict:
+    """Exige restore lógico somente quando há PostgreSQL configurado."""
+    from tradingagents.desk.postgres_recovery import (
+        not_required_status,
+        validate_postgres_restore_proof,
+    )
+
+    database_url = (DATABASE_URL or os.environ.get("DATABASE_URL") or "").strip()
+    if not database_url:
+        return not_required_status()
+    try:
+        return validate_postgres_restore_proof(DATA, database_url)
+    except Exception as exc:
+        return {
+            "necessaria": True,
+            "valida": False,
+            "verificado_em": "",
+            "cobre_postgresql_externo": True,
+            "motivo": f"prova PostgreSQL indisponível ({type(exc).__name__})",
+        }
+
+
+def _observabilidade_para_prontidao() -> dict:
+    """Valida evidência temporal; uma consulta isolada nunca aprova o gate."""
+    try:
+        from tradingagents.desk.operational_observability import (
+            validate_observability_proof,
+        )
+        return validate_observability_proof(
+            DATA,
+            expected_instance_id=METRICS.snapshot(detailed=True)[
+                "process_instance_id"
+            ],
+        )
+    except Exception as exc:
+        return {
+            "valida": False,
+            "verificado_em": "",
+            "idade_maxima_horas": 24,
+            "motivo": f"prova de observabilidade indisponível ({type(exc).__name__})",
+        }
+
+
+_CATEGORIAS_LIBERACAO_REAL = (
+    "acao_do_proprietario",
+    "prova_externa",
+    "controle_operacional",
+    "liberacao_de_codigo",
+)
+
+
+def _estado_de_liberacao_real(checklist: list[dict]) -> dict:
+    """Agrupa bloqueios sem confundir preparação com autorização LIVE."""
+    bloqueios = {categoria: [] for categoria in _CATEGORIAS_LIBERACAO_REAL}
+    for item in checklist:
+        if item.get("pronto"):
+            continue
+        categoria = str(item.get("categoria") or "controle_operacional")
+        if categoria not in bloqueios:
+            categoria = "controle_operacional"
+        bloqueios[categoria].append(str(item.get("item") or "item sem nome"))
+    sem_selo = any(
+        bloqueios[categoria]
+        for categoria in _CATEGORIAS_LIBERACAO_REAL
+        if categoria != "liberacao_de_codigo")
+    if sem_selo:
+        estado = "preparacao_pendente"
+    elif bloqueios["liberacao_de_codigo"]:
+        estado = "aguardando_liberacao_de_codigo"
+    else:
+        estado = "liberado"
+    return {
+        "schema": "dz23.liberacao-real/1",
+        "estado": estado,
+        "pre_requisitos_sem_selo_concluidos": not sem_selo,
+        "exige_confirmacao_no_momento_da_acao": True,
+        "quantidade_por_categoria": {
+            categoria: len(itens) for categoria, itens in bloqueios.items()},
+        "bloqueios_por_categoria": bloqueios,
+    }
+
+
+def _resumo_sala_real(request: Request) -> dict:
+    """Retrato sem segredos da fila Escola -> Sala REAL.
+
+    A consulta nunca concede mandato. Mesmo uma autorização de piloto opera
+    no modo simulado enquanto o selo LIVE permanece fechado.
+    """
+    from tradingagents.desk.piloto import MODO_DO_PILOTO
+
+    tid = request_tenant(request)
+    desk = _DESKS.get(tid) or {}
+    mandato = getattr((desk.get("orchestrator")), "mandate", None)
+    live_ativo = bool(
+        MESA_LIVE_LIBERADA and (
+            tid in _IQ_BINARY_RUNTIMES
+            or (
+                str(desk.get("broker_mode") or "").lower() == "live"
+                and getattr(mandato, "live_authorized", False)
+            )
+        ))
+    base = {
+        "disponivel": False,
+        "modo_do_piloto": ("live (conta real)" if live_ativo
+                            else MODO_DO_PILOTO),
+        # Construir o adaptador não equivale a liberar envio: o status pai
+        # só marca isso após reconciliação e checklist completo.
+        "envio_real_habilitado": False,
+        "encaminhamentos_total": 0,
+        "autorizacoes_total": 0,
+        "estados_encaminhamento": {},
+        "estados_autorizacao": {},
+    }
+    try:
+        esc = _escola_of(request)
+        supervisor = _supervisor_of(request)
+        supervisor.vigiar(central=esc["central"])
+        encaminhamentos = supervisor.encaminhamentos()
+        autorizacoes = supervisor.relatorio()
+    except Exception:
+        return {**base, "aviso": (
+            "estado da sala REAL indisponível; prontidão permanece bloqueada")}
+
+    def _contar(registros: list[dict]) -> dict[str, int]:
+        contagem: dict[str, int] = {}
+        for registro in registros:
+            estado = str(registro.get("estado") or "desconhecido")
+            contagem[estado] = contagem.get(estado, 0) + 1
+        return contagem
+
+    return {
+        **base,
+        "disponivel": True,
+        "encaminhamentos_total": len(encaminhamentos),
+        "autorizacoes_total": len(autorizacoes),
+        "estados_encaminhamento": _contar(encaminhamentos),
+        "estados_autorizacao": _contar(autorizacoes),
+        "aviso": (
+            "mesa LIVE construída; cada agente continua sujeito à sua "
+            "autorização, limites, vigia e reconciliação"
+            if live_ativo else
+            "formatura apenas encaminha; limites e autorização explícita "
+            "do proprietário continuam obrigatórios"),
+    }
+
+
+@app.post("/v1/live/preparacao-leitura")
+async def live_preparacao_leitura(req: Request, _=Depends(auth),
+                                  __=Depends(require_plan)):
+    """Comprova acesso autenticado REAL sem executar ação de escrita.
+
+    A declaração de que a chave não possui trade/saque é do proprietário;
+    a prova técnica confirma somente que a chave separada consegue ler. O
+    cliente CCXT usado aqui nunca alcança o caminho de envio de ordens.
+    """
+    body = await _json_body(req)
+    conta = str(body.get("conta") or "").strip()
+    if not conta:
+        raise HTTPException(422, "identifique a conta REAL que será preparada")
+    broker_account_id = str(body.get("broker_account_id") or "").strip()
+    confirma_conta_regular_unica = (
+        body.get("confirmo_conta_regular_unica") is True)
+    if body.get("confirmo_sem_trade") is not True:
+        raise HTTPException(
+            422, "confirme que a chave REAL separada não possui permissão de trade")
+    if body.get("confirmo_sem_movimentacao") is not True:
+        raise HTTPException(
+            422, "confirme que a chave REAL separada não possui permissão de saque")
+    cfg = load_cfg(request_tenant(req))
+    exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    exchange_da_credencial = str(
+        cfg.get("REAL_READ_ONLY_EXCHANGE") or "").strip().lower()
+    if not exchange_da_credencial or exchange_da_credencial != exchange:
+        raise HTTPException(
+            409, "a credencial somente leitura não está vinculada à "
+                 "corretora selecionada; escolha a corretora e informe a "
+                 "chave e o segredo correspondentes")
+    env = _env_leitura_real(cfg)
+    if broker_account_id:
+        env["REAL_READ_ONLY_ACCOUNT_ID"] = broker_account_id
+    elif exchange == "iq_option" and confirma_conta_regular_unica:
+        # O painel oficial da IQ Option não exibe o balance_id. A sonda só
+        # aceita esta alternativa quando NORMAL devolve exatamente uma conta
+        # regular; a identidade continua restrita à memória e vira apenas
+        # fingerprint na prova durável.
+        env["IQ_OPTION_CONFIRM_UNIQUE_REGULAR_ACCOUNT"] = True
+    else:
+        raise HTTPException(
+            422, "informe o identificador real exibido pela corretora")
+    try:
+        if exchange == "iq_option":
+            resultado = await probe_iq_option_read_only_account_async(env)
+        else:
+            resultado = probe_read_only_account(env)
+    except (BrokerSecurityError, IqOptionReadOnlyError) as exc:
+        raise HTTPException(409, str(exc)) from exc
+    agora = datetime.now(timezone.utc).isoformat()
+    prova = {
+        "schema": _SCHEMA_PREPARACAO_REAL,
+        "exchange": resultado["exchange"],
+        "conta": conta,
+        "authenticated_read": bool(resultado["authenticated_read"]),
+        "broker_identity_verified": bool(
+            resultado["broker_identity_verified"]),
+        "broker_identity_fingerprint": resultado[
+            "broker_identity_fingerprint"],
+        "read_methods": list(resultado.get("read_methods") or ()),
+        "provider_mutating_tools_exposed": bool(
+            resultado.get("provider_mutating_tools_exposed")),
+        "sem_trade_declarado": True,
+        "sem_saque_declarado": True,
+        "credential_fingerprint": resultado["credential_fingerprint"],
+        "verificada_em": agora,
+        "aviso": (
+            "acesso de leitura comprovado; o token do provedor também anuncia "
+            "ferramentas mutáveis, que o DZ23 não expõe — permissões mínimas "
+            "continuam bloqueadas"
+            if resultado.get("provider_mutating_tools_exposed") else
+            "acesso de leitura comprovado; ausência de trade/saque foi "
+            "declarada pelo proprietário e deve ser conferida também no "
+            "painel da corretora"),
+    }
+    esc = _escola_of(req)
+    esc["armazem"].salvar(esc["tenant_id"], _CHAVE_PREPARACAO_REAL, prova)
+    return {"ok": True, "preparacao": _prova_publica(prova, True),
+            "aviso": prova["aviso"]}
+
+
+@app.post("/v1/live/preparacao-execucao")
+async def live_preparacao_execucao(req: Request, _=Depends(auth),
+                                   __=Depends(require_plan)):
+    """Comprova a chave LIVE por leitura, sem construir o executor de ordens."""
+    body = await _json_body(req)
+    conta = str(body.get("conta") or "").strip()
+    broker_account_id = str(body.get("broker_account_id") or "").strip()
+    confirma_conta_regular_unica = (
+        body.get("confirmo_conta_regular_unica") is True)
+    if not conta:
+        raise HTTPException(422, "identifique a conta REAL que será preparada")
+    if body.get("confirmo_trade") is not True:
+        raise HTTPException(
+            422, "confirme que esta chave separada possui permissão de trade")
+    if body.get("confirmo_sem_movimentacao") is not True:
+        raise HTTPException(
+            422, "confirme que a chave LIVE não possui permissão de saque")
+
+    cfg = load_cfg(request_tenant(req))
+    exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    if not broker_account_id and not (
+            exchange == "iq_option" and confirma_conta_regular_unica):
+        raise HTTPException(
+            422, "informe o identificador real exibido pela corretora")
+    credenciais_ok, faltando = _credenciais_live_prontas(cfg)
+    if not credenciais_ok:
+        raise HTTPException(
+            409, "credencial de execução REAL incompleta: "
+                 + ", ".join(faltando))
+    prova_leitura, leitura_valida = _prova_leitura_real(req, cfg)
+    if not (leitura_valida and prova_leitura
+            and prova_leitura.get("authenticated_read") is True
+            and prova_leitura.get("broker_identity_verified") is True
+            and prova_leitura.get("sem_trade_declarado") is True
+            and prova_leitura.get("sem_saque_declarado") is True
+            and prova_leitura.get("provider_mutating_tools_exposed") is not True
+            and str(prova_leitura.get("conta") or "").strip() == conta):
+        raise HTTPException(
+            409, "faça primeiro a prova somente leitura vigente para esta conta")
+
+    env_live = _env_live_execution(cfg)
+    live_fingerprint = live_execution_credential_fingerprint(env_live)
+    if hmac.compare_digest(
+            live_fingerprint,
+            testnet_credential_fingerprint(_env_testnet(cfg))):
+        raise HTTPException(
+            409, "a credencial de execução REAL deve ser diferente da TESTNET")
+    if hmac.compare_digest(
+            live_fingerprint,
+            read_only_credential_fingerprint(_env_leitura_real(cfg))):
+        raise HTTPException(
+            409, "a credencial de execução REAL deve ser diferente da chave "
+                 "somente leitura")
+
+    if broker_account_id:
+        identidade_lida = broker_identity_fingerprint(
+            _env_leitura_real(cfg), broker_account_id)
+        if not hmac.compare_digest(
+                identidade_lida,
+                str(prova_leitura.get("broker_identity_fingerprint") or "")):
+            raise HTTPException(
+                409, "o identificador informado não corresponde à conta da "
+                     "prova somente leitura")
+        env_live["LIVE_EXECUTION_ACCOUNT_ID"] = broker_account_id
+    else:
+        env_live["LIVE_EXECUTION_ACCOUNT_ID"] = ""
+        env_live["IQ_OPTION_CONFIRM_UNIQUE_REGULAR_ACCOUNT"] = True
+    try:
+        if exchange == "iq_option":
+            resultado = await probe_iq_option_live_execution_account_async(
+                env_live)
+        else:
+            resultado = probe_live_execution_account(env_live)
+    except (BrokerSecurityError, IqOptionExecutionPreparationError) as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+    if (exchange == "iq_option" and not hmac.compare_digest(
+            str(resultado.get("broker_identity_fingerprint") or ""),
+            str(prova_leitura.get("broker_identity_fingerprint") or ""))):
+        raise HTTPException(
+            409, "a credencial LIVE não corresponde à conta da prova somente "
+                 "leitura")
+
+    prova = {
+        "schema": _SCHEMA_PREPARACAO_EXECUCAO,
+        "exchange": resultado["exchange"],
+        "conta": conta,
+        "authenticated_read": bool(resultado["authenticated_read"]),
+        "broker_identity_verified": bool(
+            resultado["broker_identity_verified"]),
+        "broker_identity_fingerprint": resultado[
+            "broker_identity_fingerprint"],
+        "credential_fingerprint": resultado["credential_fingerprint"],
+        "read_methods": list(resultado.get("read_methods") or ()),
+        "trade_tools_verified": list(
+            resultado.get("trade_tools_verified") or ()),
+        "trade_habilitado_declarado": True,
+        "sem_saque_declarado": True,
+        "read_only_credential_fingerprint": prova_leitura[
+            "credential_fingerprint"],
+        "read_only_broker_identity_fingerprint": prova_leitura[
+            "broker_identity_fingerprint"],
+        "verificada_em": datetime.now(timezone.utc).isoformat(),
+    }
+    esc = _escola_of(req)
+    esc["armazem"].salvar(
+        esc["tenant_id"], _CHAVE_PREPARACAO_EXECUCAO, prova)
+    return {
+        "ok": True,
+        "preparacao": _prova_execucao_publica(prova, True),
+        "aviso": ("chave LIVE autenticada somente por consultas; nenhuma "
+                  "ordem foi enviada e o modo LIVE permanece bloqueado"),
+    }
+
+
+@app.post("/v1/live/homologacao-iq-option/preparar-conta-treino")
+async def preparar_conta_treino_iq_option(
+        req: Request, _=Depends(auth), __=Depends(require_plan)):
+    """Resolve a conta de treino sem executar ferramenta mutavel.
+
+    Esta prova nao satisfaz a homologacao: ela apenas fixa, sem expor o ID,
+    qual saldo de treinamento podera receber um fill explicitamente autorizado
+    e posteriormente reconciliado.
+    """
+    body = await _json_body(req)
+    if body.get("confirmo_conta_treinamento_unica") is not True:
+        raise HTTPException(
+            422, "confirme explicitamente a conta de treinamento unica")
+    tid = request_tenant(req)
+    cfg = load_cfg(tid)
+    if str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower() != "iq_option":
+        raise HTTPException(409, "selecione IQ Option antes desta preparacao")
+    if str(cfg.get("TRADINGAGENTS_BROKER_MODE") or "").strip().lower() != "testnet":
+        raise HTTPException(
+            409, "a conta de treinamento so pode ser preparada em TESTNET")
+    try:
+        account = await resolve_iq_option_training_account_async(
+            _env_live_execution(cfg))
+    except IqOptionTrainingAccountError as exc:
+        raise HTTPException(
+            409, f"conta de treinamento IQ Option recusada: {exc}"[:400]) \
+            from exc
+    public = account.public_proof()
+    allowed_public_fields = (
+        "exchange", "account_kind", "mcp_server", "authenticated_read",
+        "read_methods", "trade_tools_verified", "credential_fingerprint",
+    )
+    proof = {
+        **{key: public[key] for key in allowed_public_fields if key in public},
+        "schema": _SCHEMA_PREPARACAO_IQ_TREINO,
+        "tenant_id": tid,
+        "verificada_em": datetime.now(timezone.utc).isoformat(),
+        "ordem_enviada": False,
+        "homologacao_concluida": False,
+    }
+    esc = _escola_of(req)
+    esc["armazem"].salvar(tid, _CHAVE_PREPARACAO_IQ_TREINO, proof)
+    return {
+        "ok": True,
+        "preparacao": proof,
+        "ordem_enviada": False,
+        "homologacao_concluida": False,
+        "aviso": (
+            "conta de treinamento identificada por leitura; nenhum fill foi "
+            "executado e a homologacao continua pendente"),
+    }
+
+
+def _preparacao_iq_treino_valida(request: Request, cfg: dict) -> bool:
+    """Vincula o consentimento mutável à leitura passiva mais recente."""
+    esc = _escola_of(request)
+    proof = esc["armazem"].carregar(
+        esc["tenant_id"], _CHAVE_PREPARACAO_IQ_TREINO)
+    if not isinstance(proof, dict):
+        return False
+    current = live_execution_credential_fingerprint(
+        _env_live_execution(cfg))
+    observed = str(proof.get("credential_fingerprint") or "")
+    return bool(
+        proof.get("schema") == _SCHEMA_PREPARACAO_IQ_TREINO
+        and proof.get("exchange") == "iq_option"
+        and proof.get("account_kind") == "training"
+        and proof.get("authenticated_read") is True
+        and _fingerprint_sha256_valido(observed)
+        and hmac.compare_digest(observed, current)
+        and _horario_testnet_valido(proof.get("verificada_em"))
+    )
+
+
+def _confirmacao_treino(body: dict, field: str) -> str:
+    if body.get(field) is not True:
+        raise HTTPException(422, "confirmação explícita de treinamento ausente")
+    phrase = str(body.get("frase_confirmacao") or "").strip()
+    if not hmac.compare_digest(phrase, TRAINING_CONFIRM_PHRASE):
+        raise HTTPException(422, "frase explícita de treinamento inválida")
+    return phrase
+
+
+@app.post("/v1/live/homologacao-iq-option/executar-conta-treino")
+async def executar_conta_treino_iq_option(
+        req: Request, _=Depends(auth), __=Depends(require_plan)):
+    """Envia no máximo uma aposta de uma unidade, nunca na conta regular."""
+    body = await _json_body(req)
+    phrase = _confirmacao_treino(body, "confirmo_uma_ordem_treinamento")
+    tid = request_tenant(req)
+    cfg = load_cfg(tid)
+    if not _preparacao_iq_treino_valida(req, cfg):
+        raise HTTPException(
+            409, "prepare novamente a conta de treinamento desta credencial")
+    esc = _escola_of(req)
+    try:
+        runtime = await build_iq_option_training_homologation_runtime(
+            env=_env_live_execution(cfg),
+            tenant_id=esc["tenant_id"],
+            store=esc["armazem"],
+            confirmation_phrase=phrase,
+        )
+        intent = runtime.submit(
+            client_order_id=body.get("client_order_id"),
+            instrument=body.get("instrument"),
+            direction=body.get("direction"),
+            amount=body.get("amount"),
+            expiration=body.get("expiration"),
+            min_profit_percent=body.get("min_profit_percent"),
+        )
+    except IqOptionTrainingHomologationError as exc:
+        raise HTTPException(
+            409, f"homologação IQ Option recusada: {exc}"[:400]) from exc
+    position_fingerprint = hashlib.sha256(
+        f"iq_option\0training\0{intent.position_id}".encode()
+    ).hexdigest()
+    return {
+        "ok": True,
+        "state": intent.state.value,
+        "amount": "1",
+        "position_fingerprint": position_fingerprint,
+        "homologacao_concluida": False,
+        "mesa_live_liberada": MESA_LIVE_LIBERADA,
+        "aviso": "ordem de treinamento enviada; reconciliação ainda obrigatória",
+    }
+
+
+@app.post("/v1/live/homologacao-iq-option/reconciliar-conta-treino")
+async def reconciliar_conta_treino_iq_option(
+        req: Request, _=Depends(auth), __=Depends(require_plan)):
+    """Certifica apenas o resultado terminal retornado pelo histórico MCP."""
+    body = await _json_body(req)
+    phrase = _confirmacao_treino(
+        body, "confirmo_reconciliacao_treinamento")
+    tid = request_tenant(req)
+    cfg = load_cfg(tid)
+    if not _preparacao_iq_treino_valida(req, cfg):
+        raise HTTPException(
+            409, "prepare novamente a conta de treinamento desta credencial")
+    esc = _escola_of(req)
+    try:
+        runtime = await build_iq_option_training_homologation_runtime(
+            env=_env_live_execution(cfg),
+            tenant_id=esc["tenant_id"],
+            store=esc["armazem"],
+            confirmation_phrase=phrase,
+        )
+        proof = runtime.reconcile_and_certify(body.get("client_order_id"))
+    except IqOptionTrainingHomologationError as exc:
+        raise HTTPException(
+            409, f"reconciliação IQ Option recusada: {exc}"[:400]) from exc
+    return {
+        "ok": True,
+        "homologacao": {
+            "schema": proof["schema"],
+            "exchange": proof["exchange"],
+            "mode": proof["mode"],
+            "filled_external_order": proof["filled_external_order"],
+            "reconciled": proof["reconciled"],
+            "verified_at": proof["verified_at"],
+        },
+        "mesa_live_liberada": MESA_LIVE_LIBERADA,
+    }
+
+
+def _live_status_payload(request: Request) -> dict:
     """Diz, sem rodeio, se este inquilino pode operar dinheiro real e o que
     falta para poder."""
     cfg = load_cfg(request_tenant(request))
-    d = _DESKS.get(request_tenant(request))
-    frase_ok = (cfg.get("LIVE_TRADING_CONFIRM") or "").strip() == LIVE_CONFIRM_PHRASE
+    credenciais_execucao_ok, credenciais_execucao_faltando = (
+        _credenciais_execucao_prontas(cfg))
+    prova_leitura, prova_valida = _prova_leitura_real(request, cfg)
+    prova_execucao, prova_execucao_valida = _prova_execucao_live(request, cfg)
+    prova_testnet, prova_testnet_valida = _prova_testnet(request, cfg)
+    acesso_leitura_ok = bool(
+        prova_valida and prova_leitura.get("authenticated_read"))
+    permissoes_minimas_ok = bool(
+        acesso_leitura_ok and prova_leitura.get("sem_trade_declarado")
+        and prova_leitura.get("sem_saque_declarado")
+        and prova_leitura.get("provider_mutating_tools_exposed") is not True)
+    identidade_ok = bool(
+        acesso_leitura_ok
+        and prova_leitura.get("broker_identity_verified") is True)
+    certificacoes = _certificacoes_real(
+        request, cfg, prova_leitura, prova_valida)
+    pilotos_no_contexto = certificacoes
+    risco_certificado = any(p["risco_compativel"] for p in certificacoes)
+    reconciliacao = _reconciliacao_para_prontidao(request_tenant(request))
+    parada_desarmada = _parada_desarmada_para_prontidao(
+        request_tenant(request))
+    recuperacao_local = _recuperacao_local_para_prontidao()
+    recuperacao_postgres = _recuperacao_postgres_para_prontidao()
+    observabilidade = _observabilidade_para_prontidao()
     checklist = [
-        {"item": "Frase de autorização digitada", "pronto": frase_ok,
-         "acao": f"Digite exatamente: {LIVE_CONFIRM_PHRASE}"},
+        {"item": "Confirmação LIVE reservada para o momento da ativação",
+         "pronto": True,
+         "categoria": "acao_do_proprietario",
+         "acao": ("A frase não é armazenada. Digite-a somente ao liberar o "
+                  "agente específico para a conta confirmada")},
         {"item": "Chaves da corretora configuradas",
-         "pronto": bool(cfg.get("EXCHANGE_API_KEY") and cfg.get("EXCHANGE_API_SECRET")),
-         "acao": "Cole a chave e o segredo da sua corretora"},
-        {"item": "Permissões da chave da corretora comprovadas (somente leitura)",
-         "pronto": False,
-         "acao": ("Comprove que a chave só lê (sem saque e sem trade) com uma "
-                  "consulta real autorizada — preparação ainda não registrada")},
+         "pronto": credenciais_execucao_ok,
+         "categoria": "acao_do_proprietario",
+         "acao": ("Credenciais completas para a corretora selecionada"
+                  if credenciais_execucao_ok else
+                  "Informe: " + ", ".join(credenciais_execucao_faltando))},
+        {"item": "Acesso REAL de leitura recente e permissões mínimas registradas",
+         "pronto": permissoes_minimas_ok,
+         "categoria": "prova_externa",
+         "acao": (
+             "O token IQ ainda anuncia ferramentas mutáveis no provedor. O "
+             "DZ23 chama apenas list_balances, mas o gate exige um token com "
+             "escopo read-only verificável antes de considerar permissões "
+             "mínimas prontas"
+             if prova_leitura and prova_leitura.get(
+                 "provider_mutating_tools_exposed") is True else
+             "Use uma chave REAL separada, sem trade e sem saque; o servidor "
+             "fará apenas consultas autenticadas e exigirá renovação da prova "
+             "a cada 24 horas. Confira as permissões também no painel da "
+             "corretora")},
         {"item": "Identidade da conta REAL confirmada",
-         "pronto": False,
-         "acao": ("Confirme, com consulta autorizada, que a conta cadastrada é "
-                  "a conta real pretendida — preparação ainda não registrada")},
+         "pronto": identidade_ok,
+         "categoria": "prova_externa",
+         "acao": ("Informe o ID real exibido pela corretora; ele será "
+                  "comparado em memória e somente um hash será persistido")},
+        {"item": "Credencial de execução REAL separada e comprovada",
+         "pronto": prova_execucao_valida,
+         "categoria": "prova_externa",
+         "acao": ("Salve uma chave LIVE distinta da TESTNET e da chave de "
+                  "leitura, com trade e sem saque; o servidor confirmará por "
+                  "consultas que ela pertence à mesma conta REAL")},
+        {"item": "Estratégia e conta com piloto autorizado vigente",
+         "pronto": bool(pilotos_no_contexto),
+         "categoria": "acao_do_proprietario",
+         "acao": ("Forme o agente na Escola Central deste contexto, configure "
+                  "capital e perdas e faça a autorização explícita do piloto")},
+        {"item": "Limites globais compatíveis com o piloto autorizado",
+         "pronto": risco_certificado,
+         "categoria": "controle_operacional",
+         "acao": ("Defina os tetos globais dentro do capital e da perda diária "
+                  "autorizados para ao menos um piloto desta conta")},
         {"item": "Teto por ordem definido",
          "pronto": _teto_positivo(cfg, "LIVE_MAX_ORDER_VALUE"),
+         "categoria": "acao_do_proprietario",
          "acao": "Defina LIVE_MAX_ORDER_VALUE (número finito maior que zero)"},
         {"item": "Perda máxima diária definida",
          "pronto": _teto_positivo(cfg, "LIVE_MAX_DAILY_LOSS"),
+         "categoria": "acao_do_proprietario",
          "acao": "Defina LIVE_MAX_DAILY_LOSS (número finito maior que zero)"},
-        {"item": "Modo da corretora em LIVE",
+        {"item": "Ativação do modo LIVE somente na etapa final",
          "pronto": (cfg.get("TRADINGAGENTS_BROKER_MODE") or "") == "live",
-         "acao": "Troque o modo da corretora para LIVE"},
+         "categoria": "liberacao_de_codigo",
+         "acao": ("Durante a preparação, mantenha PAPER/TESTNET. Na ativação "
+                  "final auditada, o modo muda para LIVE junto com o selo de "
+                  "código e a confirmação do proprietário")},
         {"item": "Já operou em testnet",
-         "pronto": _fill_de_corretora_externa(d),
+         "pronto": prova_testnet_valida,
+         "categoria": "prova_externa",
          "acao": ("Rode a mesa com a corretora TESTNET (CCXT) e veja uma ordem "
-                  "preenchida de verdade — ordem PAPER (simulada neste PC) "
-                  "não conta")},
+                  "preenchida de verdade; depois reconcilie. A prova fica "
+                  "vinculada à corretora — PAPER e teste em outra corretora "
+                  "não contam")},
+        {"item": "Reconciliação financeira atual sem pendências",
+         "pronto": reconciliacao["seguro"],
+         "categoria": "prova_externa",
+         "acao": ("Reconcilie ordens, posições, caixa e livro-razão; relatório "
+                  "ausente, antigo ou divergente nunca vira aprovação")},
+        {"item": "Parada de emergência desarmada e disponível",
+         "pronto": parada_desarmada,
+         "categoria": "controle_operacional",
+         "acao": ("Resolva a causa da parada, reconcilie o estado e libere-a "
+                  "explicitamente antes de qualquer operação")},
+        {"item": "Backup local restaurado e verificado recentemente",
+         "pronto": recuperacao_local["valida"],
+         "categoria": "controle_operacional",
+         "acao": ("Gere o backup e execute scripts/verify_local_restore.py; "
+                  "a prova vale por 30 dias e não substitui o restore do "
+                  "PostgreSQL externo")},
+        {"item": "Backup PostgreSQL restaurado e verificado recentemente",
+         "pronto": recuperacao_postgres["valida"],
+         "categoria": "controle_operacional",
+         "acao": (
+             "Não aplicável: esta instalação não usa PostgreSQL externo"
+             if not recuperacao_postgres["necessaria"] else
+             "Pare as escritas, forneça um banco vazio e distinto em "
+             "POSTGRES_RESTORE_DATABASE_URL e execute "
+             "scripts/verify_postgres_restore.py; a prova vale por 30 dias")},
+        {"item": "Observabilidade contínua e alerta externo comprovados",
+         "pronto": observabilidade["valida"],
+         "categoria": "controle_operacional",
+         "acao": ("Configure o monitor externo e execute "
+                  "scripts/verify_observability_window.py por ao menos 1 hora; "
+                  "a prova vale por 24 horas e nunca autoriza LIVE")},
         # O selo de CÓDIGO da mesa (ADR-006). Sem ele, mesmo com todos os
         # itens acima verdes, a mesa recusa arrancar em LIVE — e é bom que
         # recuse: o painel nunca é a última fechadura de dinheiro real.
         {"item": "Liberação de código para operar dinheiro real na mesa",
          "pronto": MESA_LIVE_LIBERADA,
+         "categoria": "liberacao_de_codigo",
          "acao": ("Indisponível neste lançamento: exige liberação de código "
                   "auditada do dono (ADR-006); a mesa recusa corretora LIVE "
                   "sem ela — mantenha o modo em testnet")},
     ]
     faltam = [i for i in checklist if not i["pronto"]]
+    estado_de_liberacao = _estado_de_liberacao_real(checklist)
+    sala_real = _resumo_sala_real(request)
+    agentes_ativaveis = [
+        {"agent_id": p.get("agent_id"),
+         "estrategia": p.get("estrategia"),
+         "versao": p.get("versao"),
+         "conta": p.get("conta")}
+        for p in certificacoes
+        if p.get("risco_compativel") is True
+    ]
+    ativacao_final_disponivel = bool(
+        MESA_LIVE_LIBERADA
+        and estado_de_liberacao["pre_requisitos_sem_selo_concluidos"]
+        and (cfg.get("TRADINGAGENTS_BROKER_MODE") or "") != "live"
+        and agentes_ativaveis
+    )
     return {"pode_operar_real": not faltam, "checklist": checklist,
             "pendencias": len(faltam),
+            "estado_de_liberacao": estado_de_liberacao,
+            "ativacao_final": {
+                "disponivel": ativacao_final_disponivel,
+                "exige_confirmacao_no_momento_da_acao": True,
+                "agentes": (agentes_ativaveis
+                            if ativacao_final_disponivel else []),
+            },
+            "sala_real": sala_real,
+            "preparacao_leitura": _prova_publica(prova_leitura, prova_valida),
+            "preparacao_execucao": _prova_execucao_publica(
+                prova_execucao, prova_execucao_valida),
+            "homologacao_testnet": prova_testnet,
+            "reconciliacao": reconciliacao,
+            "recuperacao_local": recuperacao_local,
+            "recuperacao_postgresql": recuperacao_postgres,
+            "observabilidade_operacional": observabilidade,
+            "certificacoes_estrategia_conta": certificacoes,
+            "pilotos_autorizados_no_contexto": [
+                {"agent_id": p.get("agent_id"),
+                 "estrategia": p.get("estrategia"),
+                 "versao": p.get("versao"), "conta": p.get("conta")}
+                for p in pilotos_no_contexto],
             "aviso": ("Dinheiro real: perdas são suas e irreversíveis. O "
                       "sistema não promete lucro.")}
+
+
+@app.get("/v1/live/status")
+def live_status(request: Request, _=Depends(auth)):
+    """Checklist detalhado da preparação para dinheiro real."""
+    return _live_status_payload(request)
+
+
+@app.post("/v1/live/ativar/{agent_id}")
+async def live_ativar_mesa(agent_id: str, req: Request, _=Depends(auth),
+                           __=Depends(require_plan)):
+    """Ato final do dono, disponível somente após liberação auditada.
+
+    A rota não existe como atalho de configuração: exige todos os controles
+    prévios, seleciona um piloto já autorizado para a conta exata e cria a
+    mesa LIVE ainda com reconciliação obrigatória. Nenhuma ordem é enviada.
+    """
+    if not MESA_LIVE_LIBERADA:
+        raise HTTPException(
+            409, "LIVE indisponível: MESA_LIVE_LIBERADA=False; exige mudança "
+                 "de código auditada e decisão explícita do proprietário")
+    body = await _json_body(req)
+    if str(body.get("frase") or "").strip() != LIVE_CONFIRM_PHRASE:
+        raise HTTPException(422, f"repita exatamente: {LIVE_CONFIRM_PHRASE}")
+    conta_confirmada = str(body.get("conta") or "").strip()
+    if not conta_confirmada:
+        raise HTTPException(422, "confirme a conta REAL exata desta ativação")
+    tid = request_tenant(req)
+    cfg = load_cfg(tid)
+    exchange = str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").strip().lower()
+    broker = str(
+        cfg.get("TRADINGAGENTS_DESK_BROKER") or "").strip().lower()
+    if exchange != "iq_option" and broker != "ccxt":
+        raise HTTPException(409, "a ativação LIVE exige o executor CCXT")
+    if str(cfg.get("TRADINGAGENTS_BROKER_MODE") or "testnet").lower() != "testnet":
+        raise HTTPException(
+            409, "prepare e reconcilie a mesa em TESTNET antes da ativação")
+
+    prontidao = _live_status_payload(req)
+    estado = prontidao.get("estado_de_liberacao") or {}
+    if estado.get("pre_requisitos_sem_selo_concluidos") is not True:
+        raise HTTPException(409, {
+            "erro": "pré-requisitos operacionais ainda não concluídos",
+            "bloqueios": estado.get("bloqueios_por_categoria") or {},
+        })
+    certificacao = next((p for p in (
+        prontidao.get("certificacoes_estrategia_conta") or ())
+        if p.get("agent_id") == agent_id
+        and p.get("conta") == conta_confirmada
+        and p.get("risco_compativel") is True), None)
+    if certificacao is None:
+        raise HTTPException(
+            409, "o agente não possui piloto vigente e risco compatível "
+                 "para a conta REAL confirmada")
+    d_anterior = _DESKS.get(tid)
+    if d_anterior and d_anterior["scheduler"].running:
+        raise HTTPException(
+            409, "pare a mesa TESTNET antes de ativar a mesa LIVE")
+    esc = _escola_of(req)
+    sup = _supervisor_of(req)
+    piloto = sup.de(agent_id)
+    prova, prova_valida = _prova_leitura_real(req, cfg)
+    if piloto is None or not _prova_real_serve_piloto(
+            prova, prova_valida, piloto):
+        raise HTTPException(
+            409, "a prova somente leitura já não corresponde ao piloto e à conta")
+    prova_execucao, prova_execucao_valida = _prova_execucao_live(req, cfg)
+    if not (prova_execucao_valida and prova_execucao
+            and str(prova_execucao.get("conta") or "").strip()
+            == conta_confirmada):
+        raise HTTPException(
+            409, "a credencial de execução REAL não possui prova vigente "
+                 "para a conta confirmada")
+    ativacao = {
+        "schema": _SCHEMA_ATIVACAO_LIVE,
+        "tenant_id": tid,
+        "exchange": str(cfg.get("TRADINGAGENTS_EXCHANGE") or "").lower(),
+        "conta": conta_confirmada,
+        "agent_id": agent_id,
+        "authorization_id": piloto.authorization_id,
+        "execution_credential_fingerprint": (
+            live_execution_credential_fingerprint(
+                _env_live_execution(cfg))),
+        "execution_proof_verified_at": prova_execucao.get("verificada_em"),
+        "autorizada_em": datetime.now(timezone.utc).isoformat(),
+        "valida": True,
+    }
+    cfg_live = {**cfg, "TRADINGAGENTS_BROKER_MODE": "live"}
+    cfg_live.pop("LIVE_TRADING_CONFIRM", None)
+    if exchange == "iq_option":
+        try:
+            nova_iq = await _build_iq_binary_runtime(
+                cfg=cfg,
+                tenant_id=tid,
+                authorization=piloto,
+                store=esc["armazem"],
+                confirmation_phrase=str(body.get("frase") or "").strip(),
+            )
+        except IqOptionBinaryRuntimeError as exc:
+            raise HTTPException(
+                409, f"runtime binário IQ Option recusado: {exc}"[:400]) from exc
+        nova = None
+    else:
+        try:
+            nova = _desk_boot(tid, cfg_override=cfg_live,
+                              live_activation=ativacao)
+        except BrokerSecurityError as exc:
+            raise HTTPException(
+                409, f"mesa LIVE recusada: {exc}"[:400]) from exc
+        nova_iq = None
+    # Só persiste a decisão depois que a composição segura foi construída.
+    esc["armazem"].salvar(tid, _CHAVE_ATIVACAO_LIVE,
+                           {k: v for k, v in ativacao.items() if k != "valida"})
+    save_cfg(cfg_live, tid)
+    if exchange == "iq_option":
+        _DESKS.pop(tid, None)
+        _IQ_BINARY_RUNTIMES[tid] = nova_iq
+    else:
+        _IQ_BINARY_RUNTIMES.pop(tid, None)
+        _DESKS[tid] = nova
+    return {
+        "ok": True,
+        "modo": "live",
+        "runtime": (
+            "iq_option_binary" if exchange == "iq_option" else "ccxt"),
+        "agent_id": agent_id,
+        "conta": conta_confirmada,
+        "envio_real_habilitado": False,
+        "reconciliacao_obrigatoria": True,
+        "proxima_acao": (
+            "reconcilie ordens, posições e caixa; somente depois o PLAY "
+            "reavaliará todos os gates"),
+    }
+
+
+@app.post("/v1/live/desativar")
+def live_desativar_mesa(request: Request, _=Depends(auth),
+                        __=Depends(require_plan)):
+    """Volta para TESTNET e revoga o mandato global sem apagar evidências."""
+    tid = request_tenant(request)
+    _IQ_BINARY_RUNTIMES.pop(tid, None)
+    d = _DESKS.get(tid)
+    if d and d.get("scheduler") and d["scheduler"].running:
+        d["scheduler"].stop()
+    esc = _escola_of(request)
+    esc["armazem"].salvar(tid, _CHAVE_ATIVACAO_LIVE, {
+        "schema": _SCHEMA_ATIVACAO_LIVE,
+        "tenant_id": tid,
+        "revogada_em": datetime.now(timezone.utc).isoformat(),
+        "motivo": "desativada explicitamente pelo proprietário",
+    })
+    cfg = load_cfg(tid)
+    cfg["TRADINGAGENTS_BROKER_MODE"] = "testnet"
+    save_cfg(cfg, tid)
+    _desk_reset(tid)
+    return {"ok": True, "modo": "testnet", "envio_real_habilitado": False}
+
+
+@app.get("/v1/operational-readiness")
+def operational_readiness(request: Request, _=Depends(auth)):
+    """Preflight autenticado por tenant, somente leitura e fail-closed.
+
+    Esta rota consolida o contrato que o status público não pode revelar. Ela
+    não altera configuração, não concede mandato e não possui caminho de ordem.
+    """
+    dinheiro_real = _live_status_payload(request)
+    envio_real = bool(
+        dinheiro_real.get("pode_operar_real") and MESA_LIVE_LIBERADA)
+    return {
+        "schema": "dz23.operational-readiness/1",
+        "escopo": "INQUILINO_AUTENTICADO",
+        "status": "ready" if envio_real else "blocked",
+        "modo_atual": "LIVE" if envio_real else "PAPER",
+        "invariantes": {
+            "consulta_envia_ordens": False,
+            "selo_de_codigo_live": MESA_LIVE_LIBERADA,
+            "envio_real_habilitado": envio_real,
+            "exige_confirmacao_no_momento_da_acao": True,
+        },
+        "dinheiro_real": dinheiro_real,
+    }
 
 
 @app.post("/v1/live/parada-emergencia")
@@ -4163,6 +6369,7 @@ def live_emergency(request: Request, _=Depends(auth)):
     tid = request_tenant(request)
     parada = _parada(tid)
     parada.acionar("acionada pelo painel", por=tid)
+    _IQ_BINARY_RUNTIMES.pop(tid, None)
     d = _DESKS.get(tid)
     if d is None:
         return {"ok": True, "parado": True, "a_encerrar": [],
@@ -4208,6 +6415,7 @@ async def live_resume(req: Request, _=Depends(auth)):
     except KillSwitchError as exc:
         raise HTTPException(409, str(exc)) from None
     _DESKS.pop(tid, None)          # reconstrói limpo no próximo uso
+    _IQ_BINARY_RUNTIMES.pop(tid, None)
     return {"ok": True, "liberado": True,
             "aviso": "envios liberados; confira os tetos antes de retomar"}
 
@@ -5099,6 +7307,9 @@ def desk_reconciliar(request: Request, _=Depends(auth)):
         consultar_ordens_abertas=(consultar_ordens_abertas if tem_abertas
                                   else None),
         consultar_caixa=consultar_caixa if tem_caixa else None)
+    prova_testnet = _registrar_prova_testnet(request, d, resultado)
     return {**resultado,
+            **({"homologacao_testnet": prova_testnet}
+               if prova_testnet is not None else {}),
             "acao": ("portão liberado: pode operar" if resultado["seguro"] else
                      "confira as divergências na corretora antes de operar")}

@@ -38,6 +38,25 @@ class FakeExchange:
         return rows
 
 
+class FakePagedExchange:
+    """Histórico maior que o limite de uma única resposta da corretora."""
+
+    def __init__(self, n=2600):
+        self.calls = 0
+        self.rows = []
+        for i in range(n):
+            open_at = NOW - timedelta(hours=n - 1 - i)
+            self.rows.append([
+                int(open_at.timestamp() * 1000), 100, 101, 99,
+                100 + i / 100, 10])
+
+    def fetch_ohlcv(self, symbol, timeframe="1h", since=None, limit=1000):
+        self.calls += 1
+        candidatas = self.rows if since is None else [
+            row for row in self.rows if row[0] >= since]
+        return candidatas[:limit]
+
+
 class TestCutoffEVelaEmFormacao:
     def test_open_candle_is_discarded_and_cutoff_is_close_time(self):
         feed = PublicMarketFeed("binance", client=FakeExchange(n=40))
@@ -101,6 +120,55 @@ class TestCacheCompartilhado:
         assert ex.calls == 2
 
 
+class TestHistoricoPaginado:
+    def test_busca_varias_paginas_sem_duplicar_e_descarta_vela_aberta(self):
+        ex = FakePagedExchange(n=2600)
+        feed = PublicMarketFeed("binance", client=ex)
+        snap = feed.historical_snapshot(
+            "BTC/USDT", "1h", limit=2200, now=NOW, page_size=500)
+        assert ex.calls >= 5
+        assert len(snap.closes) == 2200
+        assert snap.cutoff == NOW
+        assert snap.quality == "ok"
+        assert len(set(snap.closes)) == 2200
+
+    def test_historico_incompleto_e_degradado_sem_inventar_velas(self):
+        ex = FakePagedExchange(n=120)
+        feed = PublicMarketFeed("binance", client=ex)
+        snap = feed.historical_snapshot(
+            "BTC/USDT", "1h", limit=500, now=NOW, page_size=100)
+        assert len(snap.closes) == 119
+        assert snap.quality == "degraded: apenas 119/500 velas fechadas"
+
+    def test_historico_completo_mas_velho_falha_fechado(self):
+        ex = FakePagedExchange(n=100)
+        chamadas = 0
+
+        def pagina_antiga(_symbol, _timeframe="1h", _since=None, limit=99):
+            nonlocal chamadas
+            chamadas += 1
+            return ex.rows[:limit] if chamadas == 1 else []
+
+        ex.fetch_ohlcv = pagina_antiga
+        feed = PublicMarketFeed("binance", client=ex)
+        snap = feed.historical_snapshot(
+            "BTC/USDT", "1h", limit=99, now=NOW + timedelta(days=10),
+            page_size=99)
+        assert len(snap.closes) == 99
+        assert snap.quality.startswith("degraded: dado histórico atrasado")
+
+    def test_close_malformado_e_descartado_sem_abortar_historico(self):
+        ex = FakePagedExchange(n=120)
+        ex.rows[10][4] = "nao-e-numero"
+        feed = PublicMarketFeed("binance", client=ex)
+
+        snap = feed.historical_snapshot(
+            "BTC/USDT", "1h", limit=120, now=NOW, page_size=120)
+
+        assert len(snap.closes) == 118
+        assert snap.quality == "degraded: apenas 118/120 velas fechadas"
+
+
 class TestEscolhaDeCorretora:
     def test_default_is_paper_never_external(self):
         broker, mode = build_desk_broker({}, final_state={})
@@ -110,13 +178,28 @@ class TestEscolhaDeCorretora:
         from tradingagents.brokers.ccxt_bridge import BrokerSecurityError
         with pytest.raises(BrokerSecurityError, match="testnet"):
             build_desk_broker({"TRADINGAGENTS_DESK_BROKER": "ccxt",
-                               "TRADINGAGENTS_EXCHANGE": "binance"}, final_state={})
+                               "TRADINGAGENTS_EXCHANGE": "binance",
+                               "EXCHANGE_CREDENTIAL_EXCHANGE": "binance"},
+                              final_state={})
+
+    def test_ccxt_recusa_credencial_de_outra_corretora_antes_da_rede(self):
+        from tradingagents.brokers.ccxt_bridge import BrokerSecurityError
+        with pytest.raises(BrokerSecurityError, match="não está vinculada"):
+            build_desk_broker({
+                "TRADINGAGENTS_DESK_BROKER": "ccxt",
+                "TRADINGAGENTS_EXCHANGE": "bybit",
+                "EXCHANGE_CREDENTIAL_EXCHANGE": "binance",
+                "TRADINGAGENTS_BROKER_MODE": "testnet",
+                "EXCHANGE_API_KEY": "binance-key",
+                "EXCHANGE_API_SECRET": "binance-secret",
+            }, final_state={})
 
     def test_ccxt_testnet_builds_and_reports_mode(self, tmp_path):
         broker, mode = build_desk_broker(
             {"TRADINGAGENTS_DESK_BROKER": "ccxt", "TRADINGAGENTS_EXCHANGE": "binance",
              "TRADINGAGENTS_BROKER_MODE": "testnet", "EXCHANGE_API_KEY": "k",
-             "EXCHANGE_API_SECRET": "s"},
+             "EXCHANGE_API_SECRET": "s",
+             "EXCHANGE_CREDENTIAL_EXCHANGE": "binance"},
             final_state={}, journal_path=str(tmp_path / "j.jsonl"))
         assert mode == "testnet" and broker.status()["sandbox"] is True
 
@@ -125,7 +208,8 @@ class TestEscolhaDeCorretora:
         broker, _ = build_desk_broker(
             {"TRADINGAGENTS_DESK_BROKER": "ccxt", "TRADINGAGENTS_EXCHANGE": "binance",
              "TRADINGAGENTS_BROKER_MODE": "testnet", "EXCHANGE_API_KEY": "k",
-             "EXCHANGE_API_SECRET": "s"},
+             "EXCHANGE_API_SECRET": "s",
+             "EXCHANGE_CREDENTIAL_EXCHANGE": "binance"},
             final_state={}, journal_path=str(tmp_path / "j.jsonl"))
         called = {"n": 0}
         broker.bridge._ex.create_order = lambda *a, **k: called.__setitem__("n", 1)
@@ -137,7 +221,8 @@ class TestEscolhaDeCorretora:
         broker, _ = build_desk_broker(
             {"TRADINGAGENTS_DESK_BROKER": "ccxt", "TRADINGAGENTS_EXCHANGE": "binance",
              "TRADINGAGENTS_BROKER_MODE": "testnet", "EXCHANGE_API_KEY": "k",
-             "EXCHANGE_API_SECRET": "s"},
+             "EXCHANGE_API_SECRET": "s",
+             "EXCHANGE_CREDENTIAL_EXCHANGE": "binance"},
             final_state={}, journal_path=str(tmp_path / "j.jsonl"))
         sent = []
         broker.bridge.submit_order = lambda *a, **k: (

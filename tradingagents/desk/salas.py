@@ -19,8 +19,9 @@ Arquitetura definitiva do DZ23: **uma escola, muitas salas**.
   certificam um contexto novo — a formatura antiga não se estende.
 - Corretoras novas entram por ADAPTADOR HOMOLOGADO (registro explícito com
   versão e mercados suportados). Sem adaptador, não há sala — nada de
-  improviso. IQ Option é registrada como laboratório experimental: métricas
-  próprias, modo paper e jamais elegível a operação real.
+  improviso. As nove corretoras CCXT do catálogo possuem sala; a IQ Option
+  segue laboratório PAPER, mas pode entrar na preparação REAL bloqueada por
+  usar a integração MCP oficial. Nenhum desses registros habilita LIVE.
 - Classes de ativo (E6) são a camada de POLÍTICA de multimercado: moeda,
   lote, tick, sessão/feriado (fail-closed fora do pregão), liquidação e
   taxas (ver `mercados.py`). A classe é dimensão NOVA da sala: as chaves
@@ -66,13 +67,15 @@ class AdaptadorDeCorretora:
     mercados: tuple[str, ...]
     versao: str = "1"
     laboratorio: bool = False          # experimental: métricas próprias, sem LIVE
+    preparacao_real: bool = False      # fila bloqueada; não concede execução
 
     def suporta(self, mercado: str) -> bool:
         return mercado in self.mercados
 
     def como_dict(self) -> dict:
         return {"nome": self.nome, "mercados": list(self.mercados),
-                "versao": self.versao, "laboratorio": self.laboratorio}
+                "versao": self.versao, "laboratorio": self.laboratorio,
+                "preparacao_real": self.preparacao_real}
 
 
 ADAPTADORES: dict[str, AdaptadorDeCorretora] = {}
@@ -115,17 +118,26 @@ def corretoras_homologadas() -> list[dict]:
 
 
 def _homologar(nome: str, mercados: tuple[str, ...], *,
-               laboratorio: bool = False) -> None:
+               laboratorio: bool = False,
+               preparacao_real: bool = False) -> None:
     registrar_adaptador(AdaptadorDeCorretora(nome, mercados,
-                                             laboratorio=laboratorio))
+                                             laboratorio=laboratorio,
+                                             preparacao_real=preparacao_real))
 
 
 _homologar("binance", ("spot", "futuros"))
 _homologar("bybit", ("spot", "futuros"))
 _homologar("okx", ("spot", "futuros"))
-# IQ Option: laboratório experimental independente — mercado e métrica
-# próprios (taxa de acerto vs payout estressado), jamais elegível a LIVE.
-_homologar("iq_option", ("opcoes_binarias",), laboratorio=True)
+_homologar("coinbase", ("spot",))
+_homologar("gateio", ("spot",))
+_homologar("kraken", ("spot",))
+_homologar("kucoin", ("spot",))
+_homologar("mercadobitcoin", ("spot",))
+_homologar("bitget", ("spot",))
+# IQ Option: laboratório independente, com mercado e métrica próprios. O MCP
+# oficial permite preparação REAL bloqueada; esta camada segue sem executor LIVE.
+_homologar("iq_option", ("opcoes_binarias",), laboratorio=True,
+           preparacao_real=True)
 
 
 # ---------------------------------------------------------------- contextos
@@ -548,8 +560,10 @@ class RegistroDeSalas:
         if contexto.mercado != "opcoes_binarias" and contexto.payout is not None:
             raise SalaError(f"payout só faz sentido em opções binárias "
                             f"(mercado atual: {contexto.mercado})")
-        if contexto.payout is not None and contexto.payout <= 0:
-            raise SalaError("payout precisa ser positivo")
+        if (contexto.payout is not None
+                and (not contexto.payout.is_finite()
+                     or contexto.payout <= 0 or contexto.payout > 1)):
+            raise SalaError("payout precisa ser finito e estar entre 0 e 1")
         if contexto.classe:
             try:
                 cl = classe_de(contexto.classe)
@@ -751,11 +765,12 @@ class EscolaCentral:
     def elegivel_para_live(self, estrategia: str, versao: str = "1", *,
                            contexto: ContextoDeCertificacao) -> tuple[bool, str]:
         """FORMADO neste contexto ⇒ elegível ao PROCESSO de autorização.
-        Nunca ativa nada — e laboratórios jamais são elegíveis."""
+        Nunca ativa nada. Laboratório só entra quando o adaptador declara
+        preparação REAL; isso não concede executor LIVE."""
         ad = ADAPTADORES.get((contexto.corretora or "").strip().lower())
-        if ad is not None and ad.laboratorio:
+        if ad is not None and ad.laboratorio and not ad.preparacao_real:
             return False, (f"{ad.nome} é laboratório experimental: métricas "
-                           "próprias e jamais elegível a operação real")
+                           "próprias e sem integração de preparação REAL")
         chave = contexto.chave
         if chave not in self._escolas and chave not in self._catalogo:
             return False, ("nenhuma evidência neste contexto de certificação "

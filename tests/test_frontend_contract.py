@@ -106,6 +106,73 @@ def test_config_page_exposes_the_desk_feed_toggle():
     assert "Fonte de dados" in html
 
 
+def test_iq_option_exposes_explicit_payout_only_for_its_school_room():
+    html = (ROOT / "service/static/index.html").read_text(encoding="utf-8")
+    assert 'id="TRADINGAGENTS_DESK_PAYOUT"' in html
+    assert "'TRADINGAGENTS_DESK_PAYOUT'" in html
+    assert 'min="0.01"' in html and 'max="1"' in html
+    assert "grupoDeskPayout" in html
+    assert "classList.toggle('hide',!iq)" in html
+
+
+def test_iq_option_read_only_flow_confirms_unique_regular_account_without_id():
+    html = (ROOT / "service/static/index.html").read_text(encoding="utf-8")
+    assert "confirmo_conta_regular_unica" in html
+    assert "uma única conta REAL regular" in html
+    assert "balance_id da conta regular exibido pela IQ Option" not in html
+
+
+def test_config_exposes_required_live_risk_limits_without_suggested_values():
+    html = (ROOT / "service/static/index.html").read_text(encoding="utf-8")
+    for key in (
+        "TRADINGAGENTS_DESK_TETO_EXPOSICAO",
+        "LIVE_MAX_ORDER_VALUE",
+        "LIVE_MAX_DAILY_LOSS",
+    ):
+        assert f'id="{key}"' in html
+        assert f"'{key}'" in html, f"{key} fora de CFG_KEYS"
+    assert 'id="LIVE_MAX_ORDER_VALUE" value=' not in html
+    assert 'id="LIVE_MAX_DAILY_LOSS" value=' not in html
+    assert 'id="TRADINGAGENTS_DESK_TETO_EXPOSICAO" value=' not in html
+
+
+def test_pilot_limits_require_owner_values_without_financial_defaults():
+    html = (ROOT / "service/static/index.html").read_text(encoding="utf-8")
+    for default in (
+        "Capital máximo do piloto (não libera LIVE):','100'",
+        "Perda máxima diária:','10'",
+        "Perda máxima total:','30'",
+        "Prazo em dias (1 a 365):','30'",
+    ):
+        assert default not in html
+    assert "Informe todos os limites do piloto" in html
+
+
+def test_iq_option_possui_token_live_separado_e_preparo_sem_ordem():
+    html = (ROOT / "service/static/index.html").read_text(encoding="utf-8")
+    assert 'id="IQ_OPTION_MCP_LIVE_BEARER_TOKEN"' in html
+    assert "IQ_OPTION_MCP_LIVE_BEARER_TOKEN" in html
+    assert "confirmo_conta_regular_unica" in html
+    trecho = html.split("async function brokerPrepararExecucao()", 1)[1]
+    trecho = trecho.split("async function catalogoCarregar()", 1)[0]
+    assert "ainda não possui executor LIVE" not in trecho
+    assert "/v1/live/preparacao-execucao" in trecho
+    assert "confirmo_trade:true" in trecho
+
+
+def test_painel_expoe_homologacao_iq_training_sem_liberar_live():
+    html = (ROOT / "service/static/index.html").read_text(encoding="utf-8")
+    assert 'id="grupoIqTreino"' in html
+    assert "function iqTreinoPreparar" in html
+    assert "function iqTreinoExecutar" in html
+    assert "function iqTreinoReconciliar" in html
+    assert "/v1/live/homologacao-iq-option/preparar-conta-treino" in html
+    assert "/v1/live/homologacao-iq-option/executar-conta-treino" in html
+    assert "/v1/live/homologacao-iq-option/reconciliar-conta-treino" in html
+    assert "amount:'1'" in html
+    assert "execução continua bloqueada para dinheiro real" in html
+
+
 def test_painel_tem_saida_do_aplicativo():
     # C009: sem console, o usuário só fecharia o app pelo Gerenciador de
     # Tarefas. O painel do dono precisa de um botão que encerra o servidor,

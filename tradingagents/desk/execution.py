@@ -107,6 +107,8 @@ class OrderRecord:
     fills_unresolved: bool = False
     external_id: str | None = None
     external_client_id: str = ""
+    testnet_exchange: str = ""
+    testnet_credential_fingerprint: str = ""
     note: str = ""
     # TRILHA TEMPORAL (MO-2-C): carimbos ISO-8601 UTC por estágio —
     # criada → enviada → reconhecida → primeiro fill → terminal. Vazio =
@@ -1478,6 +1480,8 @@ class ExecutionCoordinator:
                          avg_price: Decimal = Decimal("0"),
                          fees: Decimal = Decimal("0"), external_id: str = "",
                          external_client_id: str = "",
+                         testnet_exchange: str = "",
+                         testnet_credential_fingerprint: str = "",
                          note: str = "", seen_fills=None,
                          execution_intent=None,
                          criada_em: str = "", enviada_em: str = "",
@@ -1499,6 +1503,8 @@ class ExecutionCoordinator:
         rec.fees = fees
         rec.external_id = external_id
         rec.external_client_id = external_client_id
+        rec.testnet_exchange = testnet_exchange
+        rec.testnet_credential_fingerprint = testnet_credential_fingerprint
         rec.fingerprint = fingerprint
         rec.note = note
         rec.criada_em = criada_em
@@ -1520,12 +1526,18 @@ class ExecutionCoordinator:
         return rec
 
     def _novo_registro(self, ei, coid: str, fingerprint: str) -> OrderRecord:
+        testnet_exchange = str(
+            getattr(self.broker, "testnet_exchange", "") or "")
+        testnet_fingerprint = str(getattr(
+            self.broker, "testnet_credential_fingerprint", "") or "")
         rec = self._montar_registro(
             order_id=f"ord-{len(self.orders) + 1}", state=OrderState.SUBMITTING,
             instrument=ei.instrument, side=ei.side.value, quantity=ei.quantity,
             client_order_id=coid, fingerprint=fingerprint,
             agent_id=ei.agent_id, reservation_id=ei.reservation_id,
             provenance=ei.provenance, cost_basis_ref=ei.cost_basis_ref,
+            testnet_exchange=testnet_exchange,
+            testnet_credential_fingerprint=testnet_fingerprint,
             execution_intent=ei)
         rec.carimbar_criacao()          # ordem NOVA: criada agora (MO-2-C)
         self.orders[rec.order_id] = rec
@@ -1761,6 +1773,11 @@ class ExecutionCoordinator:
                 # reinício: sem ela a reconciliação pós-restart consultaria
                 # um id que a corretora nunca viu (auditoria FIN-3).
                 "external_client_id": r.external_client_id,
+                # Origem do fill TESTNET: sem estes campos, uma ordem antiga
+                # poderia homologar outra corretora ou outra credencial.
+                "testnet_exchange": getattr(r, "testnet_exchange", ""),
+                "testnet_credential_fingerprint": getattr(
+                    r, "testnet_credential_fingerprint", ""),
                 "nota": r.note,
                 "instrumento": r.instrumento,
                 "quantidade": str(r.quantidade),
@@ -1951,6 +1968,9 @@ class ExecutionCoordinator:
             fees=Decimal(str(od.get("fees") or 0)),
             external_id=od.get("external_id", ""),
             external_client_id=od.get("external_client_id", ""),
+            testnet_exchange=od.get("testnet_exchange", ""),
+            testnet_credential_fingerprint=od.get(
+                "testnet_credential_fingerprint", ""),
             note=od.get("nota", ""),
             seen_fills=od.get("fills_vistos") or [],
             criada_em=od.get("criada_em", ""),

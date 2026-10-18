@@ -1,0 +1,165 @@
+{
+  "schema": "dz23-corretoras-publicas-v1",
+  "gerado_em": "2026-10-17T07:52:36.741082+00:00",
+  "revisao_codigo": "e9a357a211b1f11c9d9ac03fc979546b03521749-dirty",
+  "somente_leitura": true,
+  "credenciais_usadas": false,
+  "ordens_enviadas": false,
+  "total": 9,
+  "funcionando": 9,
+  "resultados": [
+    {
+      "id": "binance",
+      "name": "Binance",
+      "ccxt_id": "binance",
+      "status": "PUBLIC_READ_OK",
+      "ok": true,
+      "symbol": "BTC/USDT",
+      "timeframe": "1h",
+      "candles": 3,
+      "latency_ms": 4267,
+      "read_only": true,
+      "credentials_used": false,
+      "methods": [
+        "fetch_ticker",
+        "fetch_ohlcv"
+      ]
+    },
+    {
+      "id": "bybit",
+      "name": "Bybit",
+      "ccxt_id": "bybit",
+      "status": "PUBLIC_READ_OK",
+      "ok": true,
+      "symbol": "BTC/USDT",
+      "timeframe": "1h",
+      "candles": 3,
+      "latency_ms": 7704,
+      "read_only": true,
+      "credentials_used": false,
+      "methods": [
+        "fetch_ticker",
+        "fetch_ohlcv"
+      ]
+    },
+    {
+      "id": "okx",
+      "name": "OKX",
+      "ccxt_id": "okx",
+      "status": "PUBLIC_READ_OK",
+      "ok": true,
+      "symbol": "BTC/USDT",
+      "timeframe": "1h",
+      "candles": 3,
+      "latency_ms": 3375,
+      "read_only": true,
+      "credentials_used": false,
+      "methods": [
+        "fetch_ticker",
+        "fetch_ohlcv"
+      ]
+    },
+    {
+      "id": "coinbase",
+      "name": "Coinbase Exchange",
+      "ccxt_id": "coinbaseexchange",
+      "status": "PUBLIC_READ_OK",
+      "ok": true,
+      "symbol": "BTC/USD",
+      "timeframe": "1h",
+      "candles": 3,
+      "latency_ms": 985,
+      "read_only": true,
+      "credentials_used": false,
+      "methods": [
+        "fetch_ticker",
+        "fetch_ohlcv"
+      ]
+    },
+    {
+      "id": "gateio",
+      "name": "Gate.io",
+      "ccxt_id": "gate",
+      "status": "PUBLIC_READ_OK",
+      "ok": true,
+      "symbol": "BTC/USDT",
+      "timeframe": "1h",
+      "candles": 3,
+      "latency_ms": 20563,
+      "read_only": true,
+      "credentials_used": false,
+      "methods": [
+        "fetch_ticker",
+        "fetch_ohlcv"
+      ]
+    },
+    {
+      "id": "kraken",
+      "name": "Kraken",
+      "ccxt_id": "kraken",
+      "status": "PUBLIC_READ_OK",
+      "ok": true,
+      "symbol": "BTC/USD",
+      "timeframe": "1h",
+      "candles": 3,
+      "latency_ms": 3468,
+      "read_only": true,
+      "credentials_used": false,
+      "methods": [
+        "fetch_ticker",
+        "fetch_ohlcv"
+      ]
+    },
+    {
+      "id": "kucoin",
+      "name": "KuCoin",
+      "ccxt_id": "kucoin",
+      "status": "PUBLIC_READ_OK",
+      "ok": true,
+      "symbol": "BTC/USDT",
+      "timeframe": "1h",
+      "candles": 3,
+      "latency_ms": 2922,
+      "read_only": true,
+      "credentials_used": false,
+      "methods": [
+        "fetch_ticker",
+        "fetch_ohlcv"
+      ]
+    },
+    {
+      "id": "mercadobitcoin",
+      "name": "Mercado Bitcoin",
+      "ccxt_id": "mercado",
+      "status": "PUBLIC_READ_OK",
+      "ok": true,
+      "symbol": "BTC/BRL",
+      "timeframe": "1h",
+      "candles": 3,
+      "latency_ms": 2282,
+      "read_only": true,
+      "credentials_used": false,
+      "methods": [
+        "fetch_ticker",
+        "fetch_ohlcv"
+      ]
+    },
+    {
+      "id": "bitget",
+      "name": "Bitget",
+      "ccxt_id": "bitget",
+      "status": "PUBLIC_READ_OK",
+      "ok": true,
+      "symbol": "BTC/USDT",
+      "timeframe": "1h",
+      "candles": 3,
+      "latency_ms": 4173,
+      "read_only": true,
+      "credentials_used": false,
+      "methods": [
+        "fetch_ticker",
+        "fetch_ohlcv"
+      ]
+    }
+  ]
+}
