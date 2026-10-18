@@ -14,6 +14,10 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  actions: read
+  contents: read
+
 jobs:
   test:
     name: tests (py${{ matrix.python-version }})
@@ -74,6 +78,18 @@ jobs:
         # The repo is fully clean under the strict select, so we lint everything
         # (results/ and worklog/ are excluded via pyproject extend-exclude).
         run: uv run ruff check .
+
+  ci-evidence:
+    name: CI evidence integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify every current CI-green claim against GitHub Actions
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          python scripts/verify_ci_evidence.py
+          --repository "${{ github.repository }}"
 
   dependency-audit:
     name: dependency audit
