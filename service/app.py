@@ -701,6 +701,11 @@ def _segredos_do_disco(do_disco: dict, tenant_id: str, path: Path) -> None:
     for chave in SECRETish:
         valor = do_disco.get(chave)
         if not segredos_em_repouso.e_cifrado(valor):
+            # Um reenvio explícito pode substituir um blob DPAPI que era
+            # ilegível neste host por um valor utilizável no POSIX.  Sem
+            # limpar o registro aqui, a API continuaria mostrando o alerta
+            # antigo apesar de a configuração nova já estar salva.
+            registry.pop(chave, None)
             continue
         try:
             do_disco[chave] = segredos_em_repouso.decifrar(valor)
