@@ -701,6 +701,11 @@ def _segredos_do_disco(do_disco: dict, tenant_id: str, path: Path) -> None:
     for chave in SECRETish:
         valor = do_disco.get(chave)
         if not segredos_em_repouso.e_cifrado(valor):
+            # Valor em claro (ou recém-recolado): não há blob ilegível a
+            # declarar. Sem este pop, um segredo regravado continuava
+            # aparecendo como "ilegível" no painel — o aviso era do valor
+            # antigo, não do atual (falha visível em POSIX, sem DPAPI).
+            registry.pop(chave, None)
             continue
         try:
             do_disco[chave] = segredos_em_repouso.decifrar(valor)
