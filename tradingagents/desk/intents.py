@@ -53,6 +53,10 @@ class ExecutionIntent:
     # a posição. Nunca autoriza a venda — só mede o resultado.
     cost_basis_ref: Decimal = Decimal("0")
     metadata: dict = field(default_factory=dict)
+    # Stop protetivo da entrada como fração NEGATIVA do preço executado.
+    # Viaja na intenção porque é o executor que converte em preço absoluto
+    # depois do fill — usar o preço do sinal erraria pelo slippage.
+    stop_pct: Decimal | None = None
 
     def __post_init__(self):
         if not self.instrument:
@@ -66,6 +70,13 @@ class ExecutionIntent:
             raise IntentInvalid("entrada só existe como compra neste sistema")
         if self.kind is Kind.EXIT and self.side is not Side.SELL:
             raise IntentInvalid("saída só existe como venda neste sistema")
+        if self.stop_pct is not None:
+            if self.kind is not Kind.ENTRY:
+                raise IntentInvalid("stop protetivo só existe em entrada")
+            if not (Decimal("-1") < self.stop_pct < Decimal("0")):
+                raise IntentInvalid(
+                    f"stop_pct inválido ({self.stop_pct}); precisa estar "
+                    "entre -1 e 0")
 
     @property
     def is_exit(self) -> bool:
@@ -109,6 +120,7 @@ def from_order_intent(order_intent, provenance: dict | None = None
         provenance=provenance if provenance is not None else order_intent.provenance,
         reservation_id=reserva.reservation_id,
         reserved_amount=reserva.amount,
+        stop_pct=getattr(reserva, "stop_pct", None),
     )
 
 

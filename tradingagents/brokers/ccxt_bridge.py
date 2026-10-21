@@ -253,3 +253,76 @@ class CCXTBridge:
                        "client_order_id": coid,
                        "order_id": order.get("id")})
         return {"client_order_id": coid, "order": order}
+
+    def submit_protective_stop(self, final_state: dict, *, job_id: str,
+                               symbol: str, amount: float,
+                               stop_price: Decimal,
+                               order_type: str | None = None) -> dict:
+        """Stop de VENDA para uma posição comprada — DEPOIS do fill.
+
+        O gate de capital roda antes de qualquer rede, exatamente como no
+        envio. O tipo é configurável porque o CCXT não unifica stop em spot:
+        `stop_loss_limit` (padrão) ou `stop_market`. Exchange que não suportar
+        o tipo recusa; o executor então encerra a posição por segurança — não
+        existe posição aberta "protegida" só na memória.
+        """
+        assert_secure_for_capital(final_state)  # incontornável, sem flag
+        if not (isinstance(amount, (int, float)) and amount > 0):
+            raise ValueError("amount deve ser > 0")
+        try:
+            stop_dec = Decimal(str(stop_price))
+        except (ArithmeticError, ValueError, TypeError) as exc:
+            raise ValueError("stop_price inválido") from exc
+        if not stop_dec.is_finite() or stop_dec <= 0:
+            raise ValueError("stop_price deve ser > 0")
+        if self.mode == "live":
+            self._assert_live_limits(symbol, "sell", Decimal(str(amount)))
+
+        tipo = (order_type
+                or os.environ.get("TRADINGAGENTS_STOP_ORDER_TYPE")
+                or "stop_loss_limit").strip().lower()
+        if tipo not in ("stop_loss_limit", "stop_market"):
+            raise BrokerSecurityError(
+                "TRADINGAGENTS_STOP_ORDER_TYPE deve ser stop_loss_limit ou "
+                f"stop_market (recebido: {tipo!r})")
+        try:
+            offset = Decimal(os.environ.get(
+                "TRADINGAGENTS_STOP_LIMIT_OFFSET_PCT") or "0.005")
+        except (ArithmeticError, ValueError):
+            offset = Decimal("0.005")
+        if not (Decimal("0") <= offset < Decimal("0.1")):
+            offset = Decimal("0.005")
+        limit_price = (stop_dec * (Decimal("1") - offset)).quantize(
+            Decimal("0.00000001"))
+
+        coid = self.client_order_id(job_id, symbol, "sell")
+        params = {"stopPrice": float(stop_dec), "timeInForce": "GTC"}
+        if (os.environ.get("TRADINGAGENTS_STOP_REDUCE_ONLY") or "").strip().lower() in {
+                "1", "true", "sim", "yes", "on"}:
+            # Só faz sentido em derivativos; em spot a exchange recusa e o
+            # executor encerra a posição. Declarado, não adivinhado.
+            params["reduceOnly"] = True
+        if self._ex.id == "okx":
+            params["clOrdId"] = coid[:32]
+        else:
+            params["clientOrderId"] = coid
+        preco_limite = float(limit_price) if tipo == "stop_loss_limit" else None
+        self._journal({"ts": time.time(), "event": "stop_submit_attempt",
+                       "exchange": self.exchange_name, "symbol": symbol,
+                       "side": "sell", "amount": amount,
+                       "stop_price": str(stop_dec), "order_type": tipo,
+                       "client_order_id": coid, "job_id": job_id})
+        try:
+            order = self._ex.create_order(symbol, tipo, "sell", amount,
+                                          preco_limite, params)
+        except Exception as exc:
+            self._journal({"ts": time.time(), "event": "stop_submit_error",
+                           "client_order_id": coid,
+                           "error": f"{type(exc).__name__}: {exc}"[:500]})
+            raise
+        self._journal({"ts": time.time(), "event": "stop_submit_ok",
+                       "client_order_id": coid,
+                       "order_id": order.get("id"),
+                       "stop_price": str(stop_dec)})
+        return {"client_order_id": coid, "order": order,
+                "stop_price": str(stop_dec)}

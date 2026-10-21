@@ -1,4 +1,6 @@
 """Marco broker CCXT: fail-closed, gate incontornável, idempotência, redação."""
+from decimal import Decimal
+
 import pytest
 
 from tradingagents.brokers.ccxt_bridge import (
@@ -241,3 +243,55 @@ class TestDocumentacaoDeRiscoExiste:
                      "LIVE_MAX_DAILY_LOSS", "PARADA DE EMERGÊNCIA",
                      "não fecha posições sozinho", "irreversíveis"):
             assert item in doc, f"faltou no guia: {item}"
+
+
+class TestProtectiveStop:
+    """P0-1: stop de VENDA passa pelo mesmo gate e pelos mesmos tetos."""
+
+    def test_stop_is_sell_with_stop_price(self, tmp_path):
+        b = CCXTBridge(env=_env(), journal_path=tmp_path / "j.jsonl")
+        sent = {}
+        b._ex.create_order = lambda sym, typ, side, amt, price, params: (
+            sent.update(symbol=sym, type=typ, side=side, amount=amt,
+                        price=price, params=params)
+            or {"id": "stop-1", "status": "open"})
+        out = b.submit_protective_stop(
+            SECURE_STATE, job_id="j-stop", symbol="BTC/USDT",
+            amount=0.001, stop_price=Decimal("90"))
+        assert sent["side"] == "sell"
+        assert sent["type"] == "stop_loss_limit"
+        assert sent["params"]["stopPrice"] == 90.0
+        assert out["order"]["id"] == "stop-1"
+        assert "stop_submit_ok" in (tmp_path / "j.jsonl").read_text()
+
+    def test_stop_gate_is_mandatory(self, tmp_path):
+        b = CCXTBridge(env=_env(), journal_path=tmp_path / "j.jsonl")
+        chamou = {"n": 0}
+        b._ex.create_order = lambda *a, **k: chamou.__setitem__("n", 1)
+        with pytest.raises(InsecureTransportError):
+            b.submit_protective_stop({}, job_id="j-stop", symbol="BTC/USDT",
+                                      amount=0.001, stop_price=Decimal("90"))
+        assert chamou["n"] == 0
+
+    def test_stop_rejects_unknown_order_type(self, tmp_path):
+        b = CCXTBridge(env=_env(), journal_path=tmp_path / "j.jsonl")
+        with pytest.raises(BrokerSecurityError, match="STOP_ORDER_TYPE"):
+            b.submit_protective_stop(
+                SECURE_STATE, job_id="j-stop", symbol="BTC/USDT",
+                amount=0.001, stop_price=Decimal("90"), order_type="market")
+
+    def test_stop_honors_live_order_ceiling(self, tmp_path):
+        from tradingagents.brokers.ccxt_bridge import LIVE_CONFIRM_PHRASE
+        b = CCXTBridge(
+            env=_env(TRADINGAGENTS_BROKER_MODE="live",
+                     LIVE_TRADING_CONFIRM=LIVE_CONFIRM_PHRASE,
+                     LIVE_MAX_ORDER_VALUE="50", LIVE_MAX_DAILY_LOSS="25"),
+            journal_path=tmp_path / "j.jsonl")
+        b._ex.fetch_ticker = lambda symbol: {"last": 100}
+        chamou = {"n": 0}
+        b._ex.create_order = lambda *a, **k: chamou.__setitem__("n", 1)
+        with pytest.raises(BrokerSecurityError, match="teto"):
+            b.submit_protective_stop(
+                SECURE_STATE, job_id="j-stop", symbol="BTC/USDT",
+                amount=1.0, stop_price=Decimal("90"))
+        assert chamou["n"] == 0

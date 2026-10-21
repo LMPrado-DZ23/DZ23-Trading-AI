@@ -6,6 +6,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Breaking changes within the 0.x line are called out explicitly.
 
+## [Unreleased]
+
+### Added
+
+- Exchange-side protective stop after an entry fill. The strategy's
+  `ExitPolicy.stop` travels as `stop_pct` through `TradeProposal`,
+  `RiskReservation` and `ExecutionIntent`; the coordinator converts it to an
+  absolute price on the **fill** and asks the broker to place a sell stop.
+  `OrderRecord` persists `stop_pct`, `stop_price` and `stop_order_id`, and the
+  desk status exposes them.
+- `CCXTBridge.submit_protective_stop` uses the same capital gate and LIVE
+  ceilings as a normal order. The stop type is configurable through
+  `TRADINGAGENTS_STOP_ORDER_TYPE` (`stop_loss_limit` by default, or
+  `stop_market`); an exchange that rejects it causes the position to be closed
+  immediately.
+- Ambiguous stop submissions (timeout) put the OMS in
+  `UNKNOWN_RECONCILIATION_REQUIRED` and do **not** sell again — the stop may
+  already exist.
+- MCP server (`mcp_server.py`) for the DS Bot and other MCP clients:
+  read-only status/risk/positions/cycles/live-checklist tools, plus
+  `run_paper_cycle`, which is opt-in (`DZ23_MCP_ENABLE_CYCLE=1`) and refuses
+  any mode other than PAPER. No order tool exists. See `docs/MCP-DSBOT.md`.
+- `docs/PLANO-MELHORIAS-2026-10.md` records what was delivered, what already
+  existed (DPAPI secrets, per-order provenance, LIVE seal) and the external
+  dependencies (testnet credentials, OOS evidence, independent audit).
+
+### Security
+
+- A failed non-ambiguous stop placement closes the position in the same call
+  instead of leaving it open protected only in memory.
+- The MCP process never returns the API token and has no tool that can change
+  configuration, place an order or enable LIVE.
+
+### Tests
+
+- New broker tests cover the stop gate, order type validation and the LIVE
+  order ceiling.
+- New execution tests cover stop placement after fill, fail-safe close,
+  ambiguous-stop handling and persistence across restore.
+- New MCP tests cover auth, structured API errors, disabled cycle, refusal
+  outside PAPER and the PAPER happy path.
+
+**LIVE remains blocked by policy.** These changes do not open the LIVE seal and
+do not replace testnet homologation.
+
 ## [0.5.0] — 2026-10-14
 
 Release candidate prepared for independent audit. Consolidates the governed

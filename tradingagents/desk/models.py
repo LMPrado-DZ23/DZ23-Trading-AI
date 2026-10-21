@@ -166,6 +166,10 @@ class TradeProposal:
     snapshot_cutoff: datetime | None = None
     created_at: datetime = field(default_factory=utcnow)
     schema: str = SCHEMA
+    # Fração NEGATIVA do preço de entrada (ex.: -0.01), a MESMA da
+    # ExitPolicy. O executor converte em preço absoluto no fill e coloca o
+    # stop na exchange; None = estratégia sem stop protetivo.
+    stop_pct: Decimal | None = None
 
     def is_actionable(self, now: datetime | None = None) -> bool:
         now = now or utcnow()
@@ -211,6 +215,10 @@ class RiskReservation:
     # (notional) que dimensiona a quantidade; a cobertura dura é alvo+folga.
     # Sem separar os dois, a folga autorizava gasto que ninguém reservou.
     buffer_amount: Decimal = Decimal("0")
+    # Stop protetivo declarado pela estratégia (fração negativa). Viaja com a
+    # reserva porque é ela que autoriza a ordem: o stop não pode ser
+    # "esquecido" entre a decisão e o envio.
+    stop_pct: Decimal | None = None
 
     @property
     def target_amount(self) -> Decimal:
