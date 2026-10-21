@@ -1,0 +1,285 @@
+{
+  "exchange": "binance",
+  "timeframe": "1h",
+  "dias": 365,
+  "gerado_em": "2026-10-21T16:16:46+00:00",
+  "ativos": {
+    "BTC/USDT": {
+      "velas_fechadas": 8759,
+      "traders": [
+        {
+          "trader": "trader-trend",
+          "estrategia": "trend_following",
+          "velas": 6589,
+          "operacoes": 65,
+          "abstencoes": 6524,
+          "retorno_bruto_total": "-0.00035600932408535569894188005",
+          "custo_total": "0.1950000000000000000000000002",
+          "retorno_liquido_total": "-0.1953560093240853556989418802",
+          "retorno_medio": "-0.003005477066524390087676028926",
+          "taxa_acerto": 0.3692,
+          "pior_sequencia_perda": "-0.3360604501472999771955530554",
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 65,
+            "acerto": 0.369,
+            "retorno_bruto": "-0.04%",
+            "custo_pago": "19.50%",
+            "retorno_liquido": "-19.54%",
+            "retorno_medio_por_operacao": "-0.301%",
+            "pior_sequencia": "-33.61%",
+            "ressalvas": [
+              "os custos consumiram mais da metade do resultado bruto"
+            ],
+            "resumo": "REPROVADA: -19.54% líquidos em 65 operações — os custos (19.50%) comeram o resultado",
+            "aviso": "teste sobre o passado; não prevê o futuro"
+          }
+        },
+        {
+          "trader": "trader-reversion",
+          "estrategia": "mean_reversion",
+          "velas": 5625,
+          "operacoes": 153,
+          "abstencoes": 5472,
+          "retorno_bruto_total": "-0.2031558630084466869506808332",
+          "custo_total": "0.4590000000000000000000000002",
+          "retorno_liquido_total": "-0.6621558630084466869506808334",
+          "retorno_medio": "-0.004327816098094422790527325708",
+          "taxa_acerto": 0.3529,
+          "pior_sequencia_perda": "-0.7516194129140681616449009836",
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 153,
+            "acerto": 0.353,
+            "retorno_bruto": "-20.32%",
+            "custo_pago": "45.90%",
+            "retorno_liquido": "-66.22%",
+            "retorno_medio_por_operacao": "-0.433%",
+            "pior_sequencia": "-75.16%",
+            "ressalvas": [
+              "os custos consumiram mais da metade do resultado bruto"
+            ],
+            "resumo": "REPROVADA: -66.22% líquidos em 153 operações — os custos (45.90%) comeram o resultado",
+            "aviso": "teste sobre o passado; não prevê o futuro"
+          }
+        },
+        {
+          "trader": "trader-breakout",
+          "estrategia": "breakout",
+          "velas": 8179,
+          "operacoes": 16,
+          "abstencoes": 8163,
+          "retorno_bruto_total": "0.04869892090246666020937001037",
+          "custo_total": "0.04800000000000000000000000000",
+          "retorno_liquido_total": "0.00069892090246666020937001037",
+          "retorno_medio": "0.00004368255640416626308562564812",
+          "taxa_acerto": 0.375,
+          "pior_sequencia_perda": "-0.09936148724564363228148585195",
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 16,
+            "acerto": 0.375,
+            "retorno_bruto": "4.87%",
+            "custo_pago": "4.80%",
+            "retorno_liquido": "0.07%",
+            "retorno_medio_por_operacao": "0.004%",
+            "pior_sequencia": "-9.94%",
+            "ressalvas": [
+              "amostra pequena: 16 operações",
+              "os custos consumiram mais da metade do resultado bruto"
+            ],
+            "resumo": "REPROVADA: +0.07% líquidos em 16 operações — os custos (4.80%) comeram o resultado",
+            "aviso": "teste sobre o passado; não prevê o futuro"
+          }
+        }
+      ]
+    },
+    "ETH/USDT": {
+      "velas_fechadas": 8759,
+      "traders": [
+        {
+          "trader": "trader-trend",
+          "estrategia": "trend_following",
+          "velas": 6196,
+          "operacoes": 101,
+          "abstencoes": 6095,
+          "retorno_bruto_total": "-0.03094765233951273364328341253",
+          "custo_total": "0.3030000000000000000000000002",
+          "retorno_liquido_total": "-0.3339476523395127336432834127",
+          "retorno_medio": "-0.003306412399401116174685974383",
+          "taxa_acerto": 0.3762,
+          "pior_sequencia_perda": "-0.4182301020507861419674491858",
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 101,
+            "acerto": 0.376,
+            "retorno_bruto": "-3.09%",
+            "custo_pago": "30.30%",
+            "retorno_liquido": "-33.39%",
+            "retorno_medio_por_operacao": "-0.331%",
+            "pior_sequencia": "-41.82%",
+            "ressalvas": [
+              "os custos consumiram mais da metade do resultado bruto"
+            ],
+            "resumo": "REPROVADA: -33.39% líquidos em 101 operações — os custos (30.30%) comeram o resultado",
+            "aviso": "teste sobre o passado; não prevê o futuro"
+          }
+        },
+        {
+          "trader": "trader-reversion",
+          "estrategia": "mean_reversion",
+          "velas": 5523,
+          "operacoes": 195,
+          "abstencoes": 5328,
+          "retorno_bruto_total": "-0.2112181628815501599436290729",
+          "custo_total": "0.5849999999999999999999999998",
+          "retorno_liquido_total": "-0.7962181628815501599436290727",
+          "retorno_medio": "-0.004083170066059231589454508065",
+          "taxa_acerto": 0.3846,
+          "pior_sequencia_perda": "-0.9776603662928956323747214344",
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 195,
+            "acerto": 0.385,
+            "retorno_bruto": "-21.12%",
+            "custo_pago": "58.50%",
+            "retorno_liquido": "-79.62%",
+            "retorno_medio_por_operacao": "-0.408%",
+            "pior_sequencia": "-97.77%",
+            "ressalvas": [
+              "os custos consumiram mais da metade do resultado bruto"
+            ],
+            "resumo": "REPROVADA: -79.62% líquidos em 195 operações — os custos (58.50%) comeram o resultado",
+            "aviso": "teste sobre o passado; não prevê o futuro"
+          }
+        },
+        {
+          "trader": "trader-breakout",
+          "estrategia": "breakout",
+          "velas": 8079,
+          "operacoes": 28,
+          "abstencoes": 8051,
+          "retorno_bruto_total": "0.08390039690004959890921850605",
+          "custo_total": "0.08400000000000000000000000014",
+          "retorno_liquido_total": "-0.00009960309995040109078149409",
+          "retorno_medio": "-0.000003557253569657181813624788929",
+          "taxa_acerto": 0.4286,
+          "pior_sequencia_perda": "-0.1607923745244884515249957768",
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 28,
+            "acerto": 0.429,
+            "retorno_bruto": "8.39%",
+            "custo_pago": "8.40%",
+            "retorno_liquido": "-0.01%",
+            "retorno_medio_por_operacao": "-0.000%",
+            "pior_sequencia": "-16.08%",
+            "ressalvas": [
+              "os custos consumiram mais da metade do resultado bruto"
+            ],
+            "resumo": "REPROVADA: -0.01% líquidos em 28 operações — os custos (8.40%) comeram o resultado",
+            "aviso": "teste sobre o passado; não prevê o futuro"
+          }
+        }
+      ]
+    },
+    "SOL/USDT": {
+      "velas_fechadas": 8759,
+      "traders": [
+        {
+          "trader": "trader-trend",
+          "estrategia": "trend_following",
+          "velas": 5825,
+          "operacoes": 122,
+          "abstencoes": 5703,
+          "retorno_bruto_total": "-0.4183770737222608469160181196",
+          "custo_total": "0.3660000000000000000000000000",
+          "retorno_liquido_total": "-0.7843770737222608469160181196",
+          "retorno_medio": "-0.006429320276411974155049328849",
+          "taxa_acerto": 0.3361,
+          "pior_sequencia_perda": "-0.9154331442129485351512975050",
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 122,
+            "acerto": 0.336,
+            "retorno_bruto": "-41.84%",
+            "custo_pago": "36.60%",
+            "retorno_liquido": "-78.44%",
+            "retorno_medio_por_operacao": "-0.643%",
+            "pior_sequencia": "-91.54%",
+            "ressalvas": [
+              "os custos consumiram mais da metade do resultado bruto"
+            ],
+            "resumo": "REPROVADA: -78.44% líquidos em 122 operações — os custos (36.60%) comeram o resultado",
+            "aviso": "teste sobre o passado; não prevê o futuro"
+          }
+        },
+        {
+          "trader": "trader-reversion",
+          "estrategia": "mean_reversion",
+          "velas": 5339,
+          "operacoes": 219,
+          "abstencoes": 5120,
+          "retorno_bruto_total": "-0.05137151110541304811563799170",
+          "custo_total": "0.6570000000000000000000000003",
+          "retorno_liquido_total": "-0.7083715111054130481156379920",
+          "retorno_medio": "-0.003234573110070379215139899507",
+          "taxa_acerto": 0.3881,
+          "pior_sequencia_perda": "-0.9957441248249425877640915728",
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 219,
+            "acerto": 0.388,
+            "retorno_bruto": "-5.14%",
+            "custo_pago": "65.70%",
+            "retorno_liquido": "-70.84%",
+            "retorno_medio_por_operacao": "-0.323%",
+            "pior_sequencia": "-99.57%",
+            "ressalvas": [
+              "os custos consumiram mais da metade do resultado bruto"
+            ],
+            "resumo": "REPROVADA: -70.84% líquidos em 219 operações — os custos (65.70%) comeram o resultado",
+            "aviso": "teste sobre o passado; não prevê o futuro"
+          }
+        },
+        {
+          "trader": "trader-breakout",
+          "estrategia": "breakout",
+          "velas": 7932,
+          "operacoes": 40,
+          "abstencoes": 7892,
+          "retorno_bruto_total": "0.1175981607462895721136208554",
+          "custo_total": "0.1200000000000000000000000000",
+          "retorno_liquido_total": "-0.00240183925371042788637914464",
+          "retorno_medio": "-0.000060045981342760697159478616",
+          "taxa_acerto": 0.425,
+          "pior_sequencia_perda": "-0.1446786862913115416904763665",
+          "veredito": {
+            "conclusivo": false,
+            "aprovada": false,
+            "operacoes": 40,
+            "acerto": 0.425,
+            "retorno_bruto": "11.76%",
+            "custo_pago": "12.00%",
+            "retorno_liquido": "-0.24%",
+            "retorno_medio_por_operacao": "-0.006%",
+            "pior_sequencia": "-14.47%",
+            "ressalvas": [
+              "os custos consumiram mais da metade do resultado bruto"
+            ],
+            "resumo": "REPROVADA: -0.24% líquidos em 40 operações — os custos (12.00%) comeram o resultado",
+            "aviso": "teste sobre o passado; não prevê o futuro"
+          }
+        }
+      ]
+    }
+  }
+}

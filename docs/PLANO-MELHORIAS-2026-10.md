@@ -57,7 +57,7 @@ continua vivo na corretora (reconciliação de stop) também é P1.
 | Item | Estado | O que falta |
 |---|---|---|
 | Homologar testnet | `BLOCKED_BY_EXTERNAL_DEPENDENCY` | Chaves testnet do dono; uma ordem preenchida e reconciliada; validar o tipo de stop aceito pela exchange |
-| Evidência OOS real | Pendente | Rodar walk-forward com dados reais e publicar números líquidos de custo |
+| Evidência OOS real | **Concluída — 9/9 reprovadas** | Ver `docs/mission/OOS-REAL-2026-10-21.md` |
 | Reconciliação de stop | P1 | Consultar periodicamente o `stop_order_id` e re-colocar/alertar se sumir |
 | Alertas 24/7 | Parcial | Telegram/webhook e serviço Windows/Linux; Web Push físico não homologado |
 | Auditoria independente + assinatura de código | `BLOCKED_BY_EXTERNAL_DEPENDENCY` | Revisão externa e certificado |
@@ -72,6 +72,14 @@ uv run pytest -q
 uv run pytest tests/test_mcp_server.py tests/test_broker_ccxt.py \
   tests/test_desk_execucao.py -q
 ```
+
+## Evidência OOS real (2026-10-21)
+
+`tools/oos_real.py` baixa OHLCV público e roda os 3 traders homologados com
+custos. Resultado em `docs/mission/OOS-REAL-2026-10-21.md`: **9 de 9
+combinações reprovadas** no líquido (365 dias, 1h, BTC/ETH/SOL). O breakout
+fica perto de zero; trend e reversion perdem com o custo acumulado. Isso não
+autoriza LIVE — orienta a próxima hipótese, não um ajuste de parâmetro.
 
 ## Ordem recomendada
 
