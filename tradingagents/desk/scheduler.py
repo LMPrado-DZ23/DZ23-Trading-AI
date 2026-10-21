@@ -205,6 +205,19 @@ class DeskScheduler:
         snaps, discarded = self.fresh_snapshots()
         out = {"descartados": discarded, "ordens": [], "encerradas": [],
                "resumo": "sem dados elegíveis"}
+        # PROTEÇÃO PRIMEIRO: antes de avaliar entrada nova, confere se o stop
+        # das posições compradas continua vivo na corretora. Um stop sumido
+        # bloqueia risco novo; cancelado é recolocado uma vez.
+        if executar:
+            try:
+                problemas_stop = self.coordinator.verificar_stops()
+                if problemas_stop:
+                    out.setdefault("stops", []).extend(problemas_stop)
+                    self.state.errors += len(problemas_stop)
+            except Exception as exc:
+                self.state.errors += 1
+                out.setdefault("erros", []).append(
+                    f"reconciliação de stop: {type(exc).__name__}: {exc}"[:160])
         if snaps:
             report = self.orchestrator.run_cycle(snaps, self.price_provider())
             if executar:

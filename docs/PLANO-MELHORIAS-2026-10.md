@@ -58,7 +58,7 @@ continua vivo na corretora (reconciliação de stop) também é P1.
 |---|---|---|
 | Homologar testnet | `BLOCKED_BY_EXTERNAL_DEPENDENCY` | Chaves testnet do dono; uma ordem preenchida e reconciliada; validar o tipo de stop aceito pela exchange |
 | Evidência OOS real | **Concluída — 9/9 reprovadas** | Ver `docs/mission/OOS-REAL-2026-10-21.md` |
-| Reconciliação de stop | P1 | Consultar periodicamente o `stop_order_id` e re-colocar/alertar se sumir |
+| Reconciliação de stop | **Implementada** | A cada ciclo: cancelado/expirado recoloca uma vez; executado ou desconhecido bloqueia risco novo |
 | Alertas 24/7 | Parcial | Telegram/webhook e serviço Windows/Linux; Web Push físico não homologado |
 | Auditoria independente + assinatura de código | `BLOCKED_BY_EXTERNAL_DEPENDENCY` | Revisão externa e certificado |
 | Selo LIVE | `BLOCKED_BY_POLICY` | Decisão explícita após os itens acima |

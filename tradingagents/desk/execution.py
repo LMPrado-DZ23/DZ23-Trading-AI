@@ -1167,6 +1167,69 @@ class ExecutionCoordinator:
         raise ProtectiveStopError(
             f"stop não colocado; posição encerrada por segurança: {motivo}")
 
+    def verificar_stops(self) -> list[dict]:
+        """Confere se o stop de cada posição comprada continua vivo.
+
+        - aberto/novo/parcial: ok;
+        - cancelado/expirado/rejeitado: recoloca UMA vez com preço e qtd;
+        - executado ou estado desconhecido: bloqueia risco novo
+          (`exigir_reconciliacao`) — proteção não se presume.
+        """
+        status_fn = getattr(self.broker, "stop_status", None)
+        place = getattr(self.broker, "place_protective_stop", None)
+        if not callable(status_fn):
+            return []                    # PAPER/dublê sem contrato de stop
+        problemas: list[dict] = []
+        for rec in list(self.orders.values()):
+            if not (rec.state is OrderState.FILLED
+                    and rec.lado == "buy" and rec.stop_order_id):
+                continue
+            try:
+                st = status_fn(rec.stop_order_id, rec.instrumento)
+            except Exception as exc:
+                motivo = (f"stop {rec.stop_order_id} ilegível: "
+                          f"{type(exc).__name__}: {exc}"[:200])
+                self.exigir_reconciliacao(motivo)
+                problemas.append({"ordem": rec.order_id, "problema": motivo})
+                continue
+            status = str((st or {}).get("status") or "").lower()
+            if status in {"open", "new", "partially_filled", "triggered"}:
+                continue
+            if status in {"closed", "filled"}:
+                motivo = (f"stop {rec.stop_order_id} executado; a posição pode "
+                          "ter sido encerrada — conciliar fills/PnL")
+                self.exigir_reconciliacao(motivo)
+                problemas.append({"ordem": rec.order_id, "problema": motivo})
+                continue
+            if (status in {"canceled", "cancelled", "expired", "rejected"}
+                    and callable(place)):
+                try:
+                    out = place(
+                        f"{rec.client_order_id or rec.order_id}:stop-retry",
+                        rec.instrumento, rec.filled_qty, rec.stop_price,
+                        **({"final_state": rec.procedencia}
+                           if rec.procedencia else {}))
+                    novo_id = str((out or {}).get("id")
+                                  or (out or {}).get("client_order_id") or "")
+                    if not novo_id:
+                        raise RuntimeError("corretora não devolveu id do stop")
+                except Exception as exc:
+                    motivo = (f"stop {rec.stop_order_id} {status} e recolocação "
+                              f"falhou: {type(exc).__name__}: {exc}"[:220])
+                    self.exigir_reconciliacao(motivo)
+                    problemas.append({"ordem": rec.order_id, "problema": motivo})
+                    continue
+                rec.stop_order_id = novo_id
+                rec.note = (rec.note + f" | stop recolocado ({status})"
+                            ).strip(" |")[:400]
+                self.oms_version += 1
+                continue
+            motivo = (f"stop {rec.stop_order_id} em estado desconhecido "
+                      f"({status!r})")
+            self.exigir_reconciliacao(motivo)
+            problemas.append({"ordem": rec.order_id, "problema": motivo})
+        return problemas
+
     @staticmethod
     def _fills_da_resposta(result: dict) -> list[dict]:
         """Extrai execuções INDIVIDUAIS da resposta do envio, se houver.
