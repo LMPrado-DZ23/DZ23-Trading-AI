@@ -15,6 +15,7 @@ from tradingagents.desk.execution import (
     OrderState,
     PaperBroker,
     PositionGuardian,
+    ProtectiveStopError,
     fingerprint,
 )
 from tradingagents.desk.ledger import Ledger, LedgerError
@@ -32,20 +33,21 @@ def mandate(**kw):
     return DeskMandate(**base)
 
 
-def proposal(pct="0.10"):
+def proposal(pct="0.10", stop_pct=None):
     return TradeProposal(agent_id="trader-trend", strategy="trend_following",
                          instrument=INSTR, action=Action.BUY, reason="teste",
                          desired_exposure_pct=Decimal(pct),
+                         stop_pct=stop_pct,
                          valid_until=utcnow() + timedelta(minutes=5))
 
 
-def setup(price="100", broker=None):
+def setup(price="100", broker=None, stop_pct=None, pct="0.10"):
     m = mandate()
     risk = RiskEngine(m)
     ledger = Ledger(opening_cash=m.capital)
     coord = ExecutionCoordinator(m, ledger, risk, worker_id="w1",
                                  broker=broker or PaperBroker(Decimal(price)))
-    res = risk.reserve(proposal(), Decimal(price))
+    res = risk.reserve(proposal(pct=pct, stop_pct=stop_pct), Decimal(price))
     intent = risk.intent(res, Action.BUY, Mode.PAPER, "w1", idempotency_key="idem-0001")
     return m, risk, ledger, coord, intent
 
@@ -260,3 +262,71 @@ class TestCenario14Contabilidade:
         # caixa 800 + sobra 19 + posição 180 = 999 (1 de taxa saiu)
         assert led.equity() == Decimal("999")
         assert led.balance("FEES:USDT") == Decimal("1")
+
+
+class TestProtectiveStop:
+    """P0-1: o fill da entrada precisa deixar stop na exchange."""
+
+    def test_entry_places_exchange_stop_after_fill(self):
+        m, risk, ledger, coord, intent = setup(stop_pct=Decimal("-0.01"))
+        rec = coord.submit(intent)
+        assert rec.state is OrderState.FILLED
+        assert rec.stop_pct == Decimal("-0.01")
+        assert rec.stop_price == Decimal("99.00000000")
+        assert rec.stop_order_id.startswith("paper-stop")
+        assert f"{intent.idempotency_key}:stop" in coord.broker.submitted
+        assert ledger.open_positions_detail()          # posição segue aberta
+
+    def test_stop_failure_closes_position_instead_of_leaving_it_naked(self):
+        class BrokerSemStop(PaperBroker):
+            def place_protective_stop(self, *a, **k):
+                raise RuntimeError("exchange recusou o stop")
+
+        m, risk, ledger, coord, intent = setup(
+            stop_pct=Decimal("-0.01"), broker=BrokerSemStop(Decimal("100")))
+        with pytest.raises(ProtectiveStopError, match="encerrada"):
+            coord.submit(intent)
+        assert ledger.open_positions_detail() == {}     # não ficou nua
+        assert "STOP FALHOU" in next(iter(coord.orders.values())).note
+
+    def test_ambiguous_stop_blocks_new_risk_without_double_sell(self):
+        class BrokerStopAmbiguo(PaperBroker):
+            def place_protective_stop(self, *a, **k):
+                raise BrokerTimeout("timeout no stop")
+
+        m, risk, ledger, coord, intent = setup(
+            stop_pct=Decimal("-0.01"), broker=BrokerStopAmbiguo(Decimal("100")))
+        with pytest.raises(ProtectiveStopError, match="ambíguo"):
+            coord.submit(intent)
+        assert coord.reconciliacao_pendente is True
+        assert next(iter(coord.orders.values())).state is (
+            OrderState.UNKNOWN_RECONCILIATION_REQUIRED)
+        # vender de novo com o stop possivelmente vivo seria venda dupla
+        assert ledger.open_positions_detail()
+
+    def test_stop_metadata_survives_restore(self):
+        m, risk, ledger, coord, intent = setup(stop_pct=Decimal("-0.02"))
+        rec = coord.submit(intent)
+        doc = ExecutionCoordinator._ordem_para_doc(rec)
+        restaurado = coord._ordem_de_doc(doc)
+        assert restaurado.stop_pct == rec.stop_pct
+        assert restaurado.stop_price == rec.stop_price
+        assert restaurado.stop_order_id == rec.stop_order_id
+
+    def test_emergency_close_uses_total_cost_basis(self):
+        """Custo do lote é total; passar preço unitário inflaria o PnL."""
+        class BrokerSemStop(PaperBroker):
+            def place_protective_stop(self, *a, **k):
+                raise RuntimeError("exchange recusou o stop")
+
+        m, risk, ledger, coord, intent = setup(
+            price="100", pct="0.25", stop_pct=Decimal("-0.01"),
+            broker=BrokerSemStop(Decimal("100")))
+        with pytest.raises(ProtectiveStopError):
+            coord.submit(intent)
+        # qtd 2.5; compra e venda a 100 -> PnL bruto ZERO. Se o custo passado
+        # fosse o preço unitário, o livro inventaria 150 de lucro.
+        pnl = ledger.attribution().get("trader-trend", Decimal("0"))
+        assert pnl == Decimal("0")
+        assert ledger.balance("FEES:USDT") > Decimal("0")
+        assert ledger.open_positions_detail() == {}

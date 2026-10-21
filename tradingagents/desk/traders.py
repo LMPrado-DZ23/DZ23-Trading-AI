@@ -231,7 +231,11 @@ class BaseTrader:
             instrument=snap.instrument, action=Action.BUY, reason=reason,
             desired_exposure_pct=Decimal(pct), confidence=Decimal(conf),
             valid_until=default_expiry(10), invalidation=invalidation,
-            snapshot_cutoff=snap.cutoff)
+            snapshot_cutoff=snap.cutoff,
+            # A MESMA política de saída que o backtest usa. O executor
+            # converte esta fração em preço absoluto no fill e a envia à
+            # exchange como stop protetivo.
+            stop_pct=self.exit_policy.stop)
 
 
 class TrendTrader(BaseTrader):

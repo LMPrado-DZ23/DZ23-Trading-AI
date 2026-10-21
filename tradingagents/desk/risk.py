@@ -210,6 +210,13 @@ class RiskEngine:
         pct = min(proposal.desired_exposure_pct, self.mandate.max_position_pct)
         if pct <= 0:
             raise RiskVeto("exposição desejada nula")
+        stop_pct = proposal.stop_pct
+        if stop_pct is not None:
+            if not (Decimal("-1") < stop_pct < Decimal("0")):
+                raise RiskVeto(
+                    f"stop_pct inválido ({stop_pct}); precisa estar entre -1 e 0")
+            if price * (Decimal("1") + stop_pct) <= 0:
+                raise RiskVeto("stop protetivo resultaria em preço <= 0")
         with self._lock:  # atômico: duas propostas não travam o mesmo capital
             # Posições ABERTAS contam para o limite: uma posição preenchida
             # sem reserva continua sendo uma posição.
@@ -240,7 +247,8 @@ class RiskEngine:
                 instrument=proposal.instrument, amount=amount, quantity=qty,
                 buffer_amount=folga,
                 mandate_version=self.mandate.version, expires_at=default_expiry(10),
-                agent_id=agent_id or proposal.agent_id)
+                agent_id=agent_id or proposal.agent_id,
+                stop_pct=stop_pct)
             self._reservations[res.reservation_id] = res
             return res
 

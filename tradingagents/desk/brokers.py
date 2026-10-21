@@ -309,6 +309,43 @@ class CCXTDeskBroker:
         self.submitted[client_order_id] = result
         return result
 
+    def place_protective_stop(self, client_order_id: str, instrument: str,
+                              quantity: Decimal, stop_price: Decimal,
+                              final_state: dict | None = None) -> dict:
+        """Coloca o stop protetivo DEPOIS do fill da entrada.
+
+        A classificação de erro é a mesma do envio: se a requisição pode ter
+        chegado, o resultado é AMBÍGUO (BrokerTimeout) — nunca "rejeitado",
+        porque encerrar a posição nesse caso poderia vender duas vezes.
+        """
+        chave = f"{client_order_id}:stop"
+        if chave in self.submitted:
+            return self.submitted[chave]
+        estado = final_state if final_state is not None else self.final_state
+        coid_ex = self._client_order_id_da_corretora(chave, instrument, "sell")
+        try:
+            out = self.bridge.submit_protective_stop(
+                estado, job_id=chave, symbol=instrument,
+                amount=float(quantity), stop_price=Decimal(str(stop_price)))
+        except BrokerTimeout:
+            raise
+        except Exception as exc:
+            if _pode_ter_chegado(exc):
+                raise BrokerTimeout(
+                    f"stop ambíguo ({type(exc).__name__}): a corretora pode "
+                    "ter recebido a ordem — reconciliar antes de encerrar",
+                    external_client_id=coid_ex) from exc
+            raise BrokerAdapterError(f"{type(exc).__name__}: {exc}"[:300]) from exc
+        order = out.get("order") or {}
+        result = {
+            "id": order.get("id") or out.get("client_order_id"),
+            "status": order.get("status") or "open",
+            "stop_price": str(stop_price),
+            "external_client_id": out.get("client_order_id") or coid_ex,
+        }
+        self.submitted[chave] = result
+        return result
+
     def status(self) -> dict:
         return self.bridge.status()
 

@@ -701,6 +701,11 @@ def _segredos_do_disco(do_disco: dict, tenant_id: str, path: Path) -> None:
     for chave in SECRETish:
         valor = do_disco.get(chave)
         if not segredos_em_repouso.e_cifrado(valor):
+            # Valor em claro (ou recém-recolado): não há blob ilegível a
+            # declarar. Sem este pop, um segredo regravado continuava
+            # aparecendo como "ilegível" no painel — o aviso era do valor
+            # antigo, não do atual (falha visível em POSIX, sem DPAPI).
+            registry.pop(chave, None)
             continue
         try:
             do_disco[chave] = segredos_em_repouso.decifrar(valor)
@@ -2932,6 +2937,9 @@ def desk_status(request: Request, _=Depends(auth), __=Depends(require_plan)):
         "orders": [{"id": r.order_id, "instrumento": r.instrumento,
                     "estado": r.state.value, "qtd": str(r.filled_qty),
                     "preco": str(r.avg_price), "nota": r.note,
+                    "stop_price": (str(r.stop_price)
+                                   if r.stop_price is not None else ""),
+                    "stop_order_id": r.stop_order_id,
                     "criada_em": r.criada_em, "enviada_em": r.enviada_em,
                     "reconhecida_em": r.reconhecida_em,
                     "primeiro_fill_em": r.primeiro_fill_em,

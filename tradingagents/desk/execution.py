@@ -66,6 +66,14 @@ class BrokerTimeout(Exception):
         self.external_client_id = external_client_id
 
 
+class ProtectiveStopError(RuntimeError):
+    """O stop protetivo não pôde ser colocado na exchange.
+
+    A posição foi encerrada na mesma chamada (fail-safe) ou ficou em estado
+    incerto — em nenhum caso ela segue aberta e "protegida" só na memória.
+    """
+
+
 def fingerprint(intent: OrderIntent) -> str:
     canonical = json.dumps({
         "instrument": intent.reservation.instrument,
@@ -106,6 +114,12 @@ class OrderRecord:
     external_id: str | None = None
     external_client_id: str = ""
     note: str = ""
+    # Stop protetivo: fração declarada pela estratégia, preço calculado sobre
+    # o fill e id da ordem de stop na exchange. Vazio = nunca colocado —
+    # estado visível no painel, nunca presumido.
+    stop_pct: Decimal | None = None
+    stop_price: Decimal | None = None
+    stop_order_id: str = ""
     # TRILHA TEMPORAL (MO-2-C): carimbos ISO-8601 UTC por estágio —
     # criada → enviada → reconhecida → primeiro fill → terminal. Vazio =
     # desconhecido (registro antigo); nunca se inventa carimbo retroativo.
@@ -276,6 +290,26 @@ class PaperBroker:
                              "fee": {"cost": fee,
                                      "currency": self.fee_currency}}]}
         self.submitted[client_order_id] = order
+        return order
+
+    def place_protective_stop(self, client_order_id: str, instrument: str,
+                              quantity: Decimal, stop_price: Decimal,
+                              final_state: dict | None = None) -> dict:
+        """Registra a intenção de stop no simulador.
+
+        O PAPER não tem exchange para disparar o stop; a saída continua sendo
+        avaliada pelo ciclo. Este contrato existe para o caminho de execução
+        ser o MESMO do testnet/live (e para o registro ficar auditável).
+        """
+        chave = f"{client_order_id}:stop"
+        if chave in self.submitted:
+            return self.submitted[chave]
+        if quantity <= 0 or stop_price <= 0:
+            raise ValueError("stop protetivo exige quantidade e preço positivos")
+        order = {"id": f"paper-stop-{len(self.submitted) + 1}",
+                 "status": "open", "type": "stop_loss_limit",
+                 "amount": quantity, "stopPrice": stop_price}
+        self.submitted[chave] = order
         return order
 
 
@@ -819,6 +853,12 @@ class ExecutionCoordinator:
         rec.carimbar_transicao(OrderState.FILLED if alvo and rec.filled_qty >= alvo
                                else OrderState.PARTIALLY_FILLED)
         self.oms_version += 1
+        # Fills que chegam pela RECONCILIAÇÃO também precisam de stop. O
+        # caminho normal já chama isto depois do loop; aqui cobre o assíncrono.
+        # `stop_order_id` torna a chamada idempotente.
+        if (lado == "buy" and rec.filled_qty > 0
+                and getattr(rec, "execution_intent", None) is not None):
+            self._ensure_protective_stop(rec, rec.execution_intent)
         return True
 
     def _custo_proporcional(self, instrumento: str, quantidade: Decimal,
@@ -1042,7 +1082,90 @@ class ExecutionCoordinator:
         # 7. FILLS individualizados: ACK não é execução
         for fill in self._fills_da_resposta(resultado):
             self.aplicar_fill(rec, side=ei.side.value, **fill)
+        # 8. STOP PROTETIVO — o fill não termina o trabalho. Sem uma ordem de
+        # stop na exchange, a posição fica nua se o processo morrer; o
+        # "guardião" em memória não é stop.
+        self._ensure_protective_stop(rec, ei)
         return rec
+
+    def _ensure_protective_stop(self, rec: OrderRecord, ei) -> None:
+        """Coloca o stop na exchange logo após o fill da entrada.
+
+        Fail-safe: se o stop não puder ser colocado, a posição é encerrada na
+        mesma chamada; se nem isso for possível, o OMS entra em estado
+        incerto e a reconciliação assume. Nunca se presume proteção.
+        """
+        from .intents import Kind
+        if ei.kind is not Kind.ENTRY or ei.stop_pct is None:
+            return
+        if rec.filled_qty <= 0:
+            return                      # ACK sem fill: ainda não há posição
+        if rec.stop_order_id:
+            return                      # idempotente
+        rec.stop_pct = ei.stop_pct
+        rec.stop_price = (rec.avg_price * (Decimal("1") + ei.stop_pct)).quantize(
+            Decimal("0.00000001"))
+        if rec.stop_price <= 0:
+            self._falhar_stop(rec, ei, f"stop calculado <= 0 ({rec.stop_price})")
+            return
+
+        place = getattr(self.broker, "place_protective_stop", None)
+        if not callable(place):
+            # Broker sem contrato de stop (dublês antigos). O papel continua
+            # funcionando, mas o estado fica explícito no registro.
+            rec.note = (rec.note + " | broker sem stop na exchange").strip(" |")
+            return
+
+        try:
+            out = place(
+                ei.client_order_id or rec.order_id,
+                ei.instrument, rec.filled_qty, rec.stop_price,
+                **({"final_state": ei.provenance} if ei.provenance else {}))
+        except BrokerTimeout as exc:
+            # O stop PODE existir. Encerrar agora poderia vender duas vezes
+            # quando ele disparar; o correto é bloquear e reconciliar.
+            self.marcar_incerta(
+                rec, f"stop protetivo em estado ambíguo: {exc}")
+            raise ProtectiveStopError(
+                f"stop protetivo não confirmado (ambíguo): {exc}") from exc
+        except Exception as exc:
+            self._falhar_stop(rec, ei, f"{type(exc).__name__}: {exc}")
+            return
+
+        status = str((out or {}).get("status") or "").strip().lower()
+        if status in {"rejected", "canceled", "cancelled", "expired"}:
+            self._falhar_stop(rec, ei, f"stop rejeitado pela exchange ({status})")
+            return
+
+        rec.stop_order_id = str((out or {}).get("id")
+                                or (out or {}).get("client_order_id") or "")
+        rec.note = (rec.note + f" | stop {rec.stop_price} na exchange").strip(" |")
+        self.oms_version += 1
+
+    def _falhar_stop(self, rec: OrderRecord, ei, motivo: str) -> None:
+        """Stop não colocado: encerra a posição e propaga o incidente."""
+        rec.note = (rec.note + f" | STOP FALHOU: {motivo}")[:300]
+        self.oms_version += 1
+        detalhe = self.ledger.open_positions_detail().get(ei.instrument) or {}
+        # `fill_sell` recebe o custo TOTAL do lote, não o preço unitário.
+        # Passar avg_price aqui inflaria o PnL de uma posição com qtd > 1.
+        custo_total = Decimal(str(
+            detalhe.get("custo_total") or (rec.avg_price * rec.filled_qty)))
+        try:
+            fechamento = self.close_position(
+                instrument=ei.instrument, quantity=rec.filled_qty,
+                price=rec.avg_price, cost_basis=custo_total,
+                agent_id=ei.agent_id, provenance=ei.provenance)
+        except Exception as exc:
+            self.marcar_incerta(
+                rec, f"stop falhou e o encerramento de segurança também: {exc}")
+            raise ProtectiveStopError(
+                f"stop não colocado e posição NÃO encerrada: {motivo}") from exc
+        rec.note = (rec.note
+                    + f" | posição encerrada por segurança: {fechamento.get('estado')}"
+                    )[:400]
+        raise ProtectiveStopError(
+            f"stop não colocado; posição encerrada por segurança: {motivo}")
 
     @staticmethod
     def _fills_da_resposta(result: dict) -> list[dict]:
@@ -1266,6 +1389,9 @@ class ExecutionCoordinator:
                          external_client_id: str = "",
                          note: str = "", seen_fills=None,
                          execution_intent=None,
+                         stop_pct: Decimal | None = None,
+                         stop_price: Decimal | None = None,
+                         stop_order_id: str = "",
                          criada_em: str = "", enviada_em: str = "",
                          reconhecida_em: str = "", primeiro_fill_em: str = "",
                          terminal_em: str = "",
@@ -1287,6 +1413,9 @@ class ExecutionCoordinator:
         rec.external_client_id = external_client_id
         rec.fingerprint = fingerprint
         rec.note = note
+        rec.stop_pct = stop_pct
+        rec.stop_price = stop_price
+        rec.stop_order_id = stop_order_id
         rec.criada_em = criada_em
         rec.enviada_em = enviada_em
         rec.reconhecida_em = reconhecida_em
@@ -1312,7 +1441,7 @@ class ExecutionCoordinator:
             client_order_id=coid, fingerprint=fingerprint,
             agent_id=ei.agent_id, reservation_id=ei.reservation_id,
             provenance=ei.provenance, cost_basis_ref=ei.cost_basis_ref,
-            execution_intent=ei)
+            execution_intent=ei, stop_pct=ei.stop_pct)
         rec.carimbar_criacao()          # ordem NOVA: criada agora (MO-2-C)
         self.orders[rec.order_id] = rec
         self._by_key[coid] = rec.order_id
@@ -1559,6 +1688,11 @@ class ExecutionCoordinator:
                 # referência no reinício: prejuízo de 10 viraria "lucro" do
                 # valor inteiro da venda.
                 "custo_referencia": str(getattr(r, "cost_basis_ref", "") or ""),
+                # Stop protetivo: sobrevive ao reinício para o painel e para
+                # a verificação de que a posição aberta TEM stop na exchange.
+                "stop_pct": (str(r.stop_pct) if r.stop_pct is not None else ""),
+                "stop_price": (str(r.stop_price) if r.stop_price is not None else ""),
+                "stop_order_id": r.stop_order_id,
                 # Carimbos do OMS (MO-2-C): a trilha temporal sobrevive ao
                 # reinício; documento antigo sem eles reidrata com "" (nunca
                 # inventa carimbo retroativo).
@@ -1718,6 +1852,8 @@ class ExecutionCoordinator:
         except (KeyError, ValueError):
             return None
         ref = od.get("custo_referencia")
+        stop_pct_raw = od.get("stop_pct")
+        stop_price_raw = od.get("stop_price")
         return self._montar_registro(
             order_id=od.get("order_id", ""), state=estado,
             instrument=od.get("instrumento", ""), side=od.get("lado", ""),
@@ -1735,6 +1871,11 @@ class ExecutionCoordinator:
             external_client_id=od.get("external_client_id", ""),
             note=od.get("nota", ""),
             seen_fills=od.get("fills_vistos") or [],
+            stop_pct=(Decimal(str(stop_pct_raw))
+                      if stop_pct_raw not in (None, "") else None),
+            stop_price=(Decimal(str(stop_price_raw))
+                        if stop_price_raw not in (None, "") else None),
+            stop_order_id=od.get("stop_order_id", ""),
             criada_em=od.get("criada_em", ""),
             enviada_em=od.get("enviada_em", ""),
             reconhecida_em=od.get("reconhecida_em", ""),
