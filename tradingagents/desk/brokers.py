@@ -346,6 +346,27 @@ class CCXTDeskBroker:
         self.submitted[chave] = result
         return result
 
+    def stop_status(self, order_id: str, instrument: str) -> dict:
+        """Read-only do stop na corretora. Não envia nada.
+
+        Erro de leitura é `BrokerAdapterError` (estado desconhecido); o
+        coordenador trata como incerteza e bloqueia risco novo.
+        """
+        if not order_id:
+            raise BrokerAdapterError("stop sem identificador na corretora")
+        try:
+            order = self.bridge.fetch_order(order_id, instrument)
+        except Exception as exc:
+            raise BrokerAdapterError(
+                f"consulta do stop falhou: {type(exc).__name__}: {exc}"[:300]
+            ) from exc
+        return {
+            "id": order.get("id") or order_id,
+            "status": str(order.get("status") or "unknown").lower(),
+            "filled": order.get("filled") or 0,
+            "average": order.get("average") or order.get("price") or 0,
+        }
+
     def status(self) -> dict:
         return self.bridge.status()
 

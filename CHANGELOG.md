@@ -28,6 +28,11 @@ Breaking changes within the 0.x line are called out explicitly.
   read-only status/risk/positions/cycles/live-checklist tools, plus
   `run_paper_cycle`, which is opt-in (`DZ23_MCP_ENABLE_CYCLE=1`) and refuses
   any mode other than PAPER. No order tool exists. See `docs/MCP-DSBOT.md`.
+- Stop liveness reconciliation: every autonomous cycle checks the exchange
+  stop for each filled long. A canceled/expired/rejected stop is re-placed
+  once with the same price and filled quantity; an executed stop or an
+  unreadable/unknown status blocks new risk until reconciliation. PAPER is
+  unaffected (no exchange stop status to query).
 - `docs/PLANO-MELHORIAS-2026-10.md` records what was delivered, what already
   existed (DPAPI secrets, per-order provenance, LIVE seal) and the external
   dependencies (testnet credentials, OOS evidence, independent audit).

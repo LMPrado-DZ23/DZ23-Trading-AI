@@ -295,3 +295,9 @@ class TestProtectiveStop:
                 SECURE_STATE, job_id="j-stop", symbol="BTC/USDT",
                 amount=1.0, stop_price=Decimal("90"))
         assert chamou["n"] == 0
+
+    def test_fetch_order_is_read_only(self, tmp_path):
+        b = CCXTBridge(env=_env(), journal_path=tmp_path / "j.jsonl")
+        b._ex.fetch_order = lambda oid, sym: {"id": oid, "status": "open"}
+        out = b.fetch_order("stop-1", "BTC/USDT")
+        assert out["status"] == "open"

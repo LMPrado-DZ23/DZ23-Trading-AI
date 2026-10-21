@@ -326,3 +326,23 @@ class CCXTBridge:
                        "stop_price": str(stop_dec)})
         return {"client_order_id": coid, "order": order,
                 "stop_price": str(stop_dec)}
+
+    def fetch_order(self, order_id: str, symbol: str) -> dict:
+        """Consulta READ-ONLY de uma ordem (para reconciliação do stop).
+
+        Não envia nada e não exige o gate de capital; a resposta é do lado
+        da corretora e não substitui o estado do OMS.
+        """
+        if not order_id:
+            raise ValueError("order_id vazio — não há o que consultar")
+        try:
+            order = self._ex.fetch_order(order_id, symbol)
+        except Exception as exc:
+            self._journal({"ts": time.time(), "event": "fetch_order_error",
+                           "order_id": order_id, "symbol": symbol,
+                           "error": f"{type(exc).__name__}: {exc}"[:500]})
+            raise
+        self._journal({"ts": time.time(), "event": "fetch_order_ok",
+                       "order_id": order_id, "symbol": symbol,
+                       "status": (order or {}).get("status")})
+        return order or {}

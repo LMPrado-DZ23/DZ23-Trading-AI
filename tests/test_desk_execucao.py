@@ -330,3 +330,68 @@ class TestProtectiveStop:
         assert pnl == Decimal("0")
         assert ledger.balance("FEES:USDT") > Decimal("0")
         assert ledger.open_positions_detail() == {}
+
+
+class TestStopReconciliation:
+    """P1: o stop precisa continuar vivo depois do ciclo que o criou."""
+
+    class BrokerComStatus(PaperBroker):
+        def __init__(self, price, *, status="canceled", fail=False):
+            super().__init__(price)
+            self.status = status
+            self.fail = fail
+            self.recolocado = []
+
+        def stop_status(self, order_id, instrument):
+            if self.fail:
+                raise RuntimeError("consulta indisponível")
+            return {"id": order_id, "status": self.status}
+
+        def place_protective_stop(self, *a, **k):
+            self.recolocado.append((a, k))
+            return super().place_protective_stop(*a, **k)
+
+    def test_canceled_stop_is_replaced_once(self):
+        broker = self.BrokerComStatus(Decimal("100"), status="canceled")
+        m, risk, ledger, coord, intent = setup(
+            stop_pct=Decimal("-0.01"), broker=broker)
+        rec = coord.submit(intent)
+        antigo = rec.stop_order_id
+        problemas = coord.verificar_stops()
+        assert problemas == []
+        assert rec.stop_order_id and rec.stop_order_id != antigo
+        retries = [a for a in broker.recolocado if "stop-retry" in a[0][0]]
+        assert len(retries) == 1
+        assert "recolocado" in rec.note
+
+    def test_executed_stop_blocks_new_risk(self):
+        broker = self.BrokerComStatus(Decimal("100"), status="closed")
+        m, risk, ledger, coord, intent = setup(
+            stop_pct=Decimal("-0.01"), broker=broker)
+        coord.submit(intent)
+        problemas = coord.verificar_stops()
+        assert problemas and "executado" in problemas[0]["problema"]
+        assert coord.reconciliacao_pendente is True
+
+    def test_unknown_stop_status_blocks_new_risk(self):
+        broker = self.BrokerComStatus(Decimal("100"), status="mystery")
+        m, risk, ledger, coord, intent = setup(
+            stop_pct=Decimal("-0.01"), broker=broker)
+        coord.submit(intent)
+        problemas = coord.verificar_stops()
+        assert problemas and "desconhecido" in problemas[0]["problema"]
+        assert coord.reconciliacao_pendente is True
+
+    def test_read_error_blocks_new_risk(self):
+        broker = self.BrokerComStatus(Decimal("100"), fail=True)
+        m, risk, ledger, coord, intent = setup(
+            stop_pct=Decimal("-0.01"), broker=broker)
+        coord.submit(intent)
+        problemas = coord.verificar_stops()
+        assert problemas and "ilegível" in problemas[0]["problema"]
+        assert coord.reconciliacao_pendente is True
+
+    def test_broker_without_stop_status_is_ignored(self):
+        m, risk, ledger, coord, intent = setup(stop_pct=Decimal("-0.01"))
+        coord.submit(intent)
+        assert coord.verificar_stops() == []
