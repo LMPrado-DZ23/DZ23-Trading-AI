@@ -51,7 +51,7 @@ dev = [
     # Leitura de TOML nos testes: stdlib `tomllib` só a partir do 3.11.
     "tomli>=2.0.1; python_version < '3.11'",
     # Servidor MCP do DS Bot / clientes MCP (testes de contrato).
-    "mcp>=1.2,<2",
+    "mcp>=1.2,<3",
 ]
 # Amazon Bedrock support (AWS SigV4 auth + boto3). Optional so the core install
 # stays lean: pip install "tradingagents[bedrock]".
@@ -81,7 +81,7 @@ push = [
 # Read-only por padrão; ciclo PAPER só com DZ23_MCP_ENABLE_CYCLE=1.
 #   pip install "tradingagents[mcp]"
 mcp = [
-    "mcp>=1.2,<2",
+    "mcp>=1.2,<3",
 ]
 
 [project.scripts]
