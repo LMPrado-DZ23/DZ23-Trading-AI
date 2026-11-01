@@ -116,7 +116,7 @@ jobs:
           name: dz23-windows-x64
           path: dist
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/DZ23-Trading-AI-Setup-v*.exe
