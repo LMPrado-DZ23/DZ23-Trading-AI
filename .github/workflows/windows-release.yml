@@ -50,7 +50,7 @@ jobs:
           # Grava com finais de linha LF: `sha256sum -c` no Linux/macOS falha com CRLF.
           [System.IO.File]::WriteAllText("dist/SHA256SUMS.txt", ($linhas -join "`n"), [System.Text.UTF8Encoding]::new($false))
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dz23-windows-x64
           path: |
@@ -97,7 +97,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "aceite no bundle falhou (exit $LASTEXITCODE)" }
       - name: Upload evidências do aceite no bundle
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: aceite-td5-bundle-evidencias
           path: docs/mission/evidence/v8-td5-exe/
